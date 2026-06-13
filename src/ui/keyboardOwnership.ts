@@ -7,7 +7,7 @@ export const commanderShortcutsDisabledProps = {
 } as const;
 const commanderShortcutsEnabledProps = {};
 
-export type CommanderKeyboardOwner = 'operation-dialog' | 'menu-popover' | 'context-menu';
+export type CommanderKeyboardOwner = 'operation-dialog' | 'menu-popover' | 'context-menu' | 'filter-prompt';
 
 const activeCommanderKeyboardOwnerCounts = new Map<CommanderKeyboardOwner, number>();
 

@@ -29,6 +29,7 @@
 | 구현 설계 | [`implementation/full-scope-test-spec.md`](implementation/full-scope-test-spec.md) | 전체 기준 기능 검증 전략 |
 | 구현 설계 | [`implementation/design-consistency-report.md`](implementation/design-consistency-report.md) | 설계 문서 간 정합성/상충 검토 |
 | 구현 설계 | [`implementation/ralplan-consensus-plan.md`](implementation/ralplan-consensus-plan.md) | RALPLAN 의사결정/ADR/후속 실행 가이드 |
+| 구현 설계 | [`implementation/implementation-todo.md`](implementation/implementation-todo.md) | 현재 구현 완료 내용과 남은 실제 파일 커맨드 구현 TODO |
 
 ## 2. 권장 읽기 순서
 

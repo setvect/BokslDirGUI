@@ -29,8 +29,11 @@ export type DialogKind =
   | 'externalEditor'
   | 'shellCommand';
 
+export type DialogExecutionMode = 'atomicCommand' | 'longRunningOperation' | 'unsupportedPreview';
+
 export interface OperationDialogDraft {
   dialogKind: DialogKind;
+  executionMode: DialogExecutionMode;
   actionId: ActionId;
   title: string;
   description: string;
@@ -100,7 +103,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       return;
     }
 
-    if (!isOperationBackedDialog(dialog.dialogKind)) {
+    if (!isLongRunningDialog(dialog.dialogKind)) {
       const error = appError(
         'unsupported',
         dialog.dialogKind === 'shellCommand'
@@ -217,6 +220,7 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
   const backendExecutionStubbed = isBackendExecutionStubbed(dialogKind);
   return {
     dialogKind,
+    executionMode: dialogExecutionModeForDialog(dialogKind),
     actionId: request.action.id as ActionId,
     title,
     description: descriptionForDialog(dialogKind, request),
@@ -298,41 +302,67 @@ const descriptionForDialog = (dialogKind: DialogKind, request: OpenDialogRequest
   }
 };
 
-type OperationBackedDialogKind =
+type LongRunningDialogKind =
   | 'copy'
   | 'move'
   | 'trash'
   | 'deletePermanent'
-  | 'rename'
-  | 'createDir'
   | 'archiveCreate'
   | 'archiveExtract';
 
-const OPERATION_BACKED_DIALOGS: readonly OperationBackedDialogKind[] = [
+type AtomicCommandDialogKind =
+  | 'rename'
+  | 'createDir'
+  | 'properties'
+  | 'archivePreview'
+  | 'externalOpenDefault'
+  | 'externalReveal'
+  | 'externalEditor';
+
+const LONG_RUNNING_DIALOGS: readonly LongRunningDialogKind[] = [
   'copy',
   'move',
   'trash',
   'deletePermanent',
-  'rename',
-  'createDir',
   'archiveCreate',
   'archiveExtract',
 ];
 
-const isOperationBackedDialog = (dialogKind: DialogKind): dialogKind is OperationBackedDialogKind =>
-  OPERATION_BACKED_DIALOGS.includes(dialogKind as OperationBackedDialogKind);
+const ATOMIC_COMMAND_DIALOGS: readonly AtomicCommandDialogKind[] = [
+  'rename',
+  'createDir',
+  'properties',
+  'archivePreview',
+  'externalOpenDefault',
+  'externalReveal',
+  'externalEditor',
+];
+
+const isLongRunningDialog = (dialogKind: DialogKind): dialogKind is LongRunningDialogKind =>
+  LONG_RUNNING_DIALOGS.includes(dialogKind as LongRunningDialogKind);
+
+const isAtomicCommandDialog = (dialogKind: DialogKind): dialogKind is AtomicCommandDialogKind =>
+  ATOMIC_COMMAND_DIALOGS.includes(dialogKind as AtomicCommandDialogKind);
+
+export const dialogExecutionModeForDialog = (dialogKind: DialogKind): DialogExecutionMode => {
+  if (isLongRunningDialog(dialogKind)) {
+    return 'longRunningOperation';
+  }
+  if (isAtomicCommandDialog(dialogKind)) {
+    return 'atomicCommand';
+  }
+  return 'unsupportedPreview';
+};
 
 const isBackendExecutionStubbed = (dialogKind: DialogKind) =>
-  isOperationBackedDialog(dialogKind);
+  dialogExecutionModeForDialog(dialogKind) !== 'unsupportedPreview';
 
-const operationKindForDialog = (dialogKind: OperationBackedDialogKind): OperationKind => {
-  const mapping: Record<OperationBackedDialogKind, OperationKind> = {
+const operationKindForDialog = (dialogKind: LongRunningDialogKind): OperationKind => {
+  const mapping: Record<LongRunningDialogKind, OperationKind> = {
     copy: 'copy',
     move: 'move',
     trash: 'trash',
     deletePermanent: 'delete',
-    rename: 'rename',
-    createDir: 'createDir',
     archiveCreate: 'archiveCreate',
     archiveExtract: 'archiveExtract',
   };

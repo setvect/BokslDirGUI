@@ -7,7 +7,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   ACTIONS,
   ariaKeyShortcutsFromRegistry,
@@ -22,25 +22,45 @@ import {
   type ActionId,
   type AppAction,
 } from '../actions/registry';
-import type { DirectoryListing, FileEntry, PanelId } from '../domain/types';
+import type { DirectoryListing, FileEntry, PanelId, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { dialogKindForAction, useOperationStore } from '../operations/operationStore';
 import { actionNeedsConcreteSources, createActionContext, filterEnabledActions } from './actionContext';
-import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './commanderFixture';
+import { createTauriPanelDataSource, type PanelDataSource } from './panelDataSource';
+import {
+  clampFocusedIndex,
+  createPanelStates,
+  focusedEntryOf,
+  markPanelError,
+  markPanelLoading,
+  panelCanGoBack,
+  panelCanGoForward,
+  PANEL_IDS,
+  parentNavigationEntryOf,
+  parentPathOf,
+  replacePanelListing,
+  selectedConcreteEntriesOf,
+  type PanelNavigationState,
+  type PanelStateById,
+} from './panelState';
 import { entryIcon, formatModified, formatSize, summarizeEntries } from './format';
 import {
   commanderKeyboardIsSuspended,
   useCommanderKeyboardBoundaryProps,
 } from './keyboardOwnership';
 
-interface PanelUiState {
-  focusedIndex: number;
-  selectedPaths: string[];
-}
-
 const KEYBOARD_PAGE_STEP = 12;
 const FOCUSABLE_ROW_TAB_INDEX = -1;
 const KEYBOARD_SEQUENCE_TIMEOUT_MS = 900;
+const DEFAULT_DATA_SOURCE = createTauriPanelDataSource();
+
+type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selectedPaths'>>;
+
+interface CommanderShellProps {
+  dataSource?: PanelDataSource;
+  initialFocusIndex?: Partial<Record<PanelId, number>>;
+  initialSelectedPaths?: Partial<Record<PanelId, string[]>>;
+}
 
 interface KeyboardRuntime {
   context: ActionContext;
@@ -50,36 +70,60 @@ interface KeyboardRuntime {
   handleAction(action: AppAction): void;
 }
 
-export function CommanderShell() {
+interface ListPanelOptions {
+  pushHistory?: boolean;
+  replaceBack?: string[];
+  replaceForward?: string[];
+  preserveSelection?: boolean;
+  preserveFocusPath?: string | null;
+  focusPath?: string | null;
+  sort?: SortSpec;
+  filter?: string | null;
+  showHidden?: boolean;
+}
+
+export function CommanderShell({
+  dataSource = DEFAULT_DATA_SOURCE,
+  initialFocusIndex,
+  initialSelectedPaths,
+}: CommanderShellProps) {
   const openOperationDialog = useOperationStore((state) => state.openDialog);
   const operationDialogOpen = useOperationStore((state) => Boolean(state.dialog));
   const shellRef = useRef<HTMLElement>(null);
   const shortcutSequenceRef = useRef<readonly string[]>([]);
   const shortcutSequenceTimeoutRef = useRef<number | null>(null);
   const keyboardRuntimeRef = useRef<KeyboardRuntime | null>(null);
+  const navigationRequestRef = useRef<Record<PanelId, number>>({ left: 0, right: 0 });
   const [activePanel, setActivePanel] = useState<PanelId>('right');
-  const [panelState, setPanelState] = useState<Record<PanelId, PanelUiState>>({
+  const [panelState, setPanelState] = useState<PanelStateById>(() => createPanelStates(dataSource.initialListings, {
     left: {
-      focusedIndex: INITIAL_FOCUS_INDEX.left,
-      selectedPaths: INITIAL_SELECTED_PATHS.left,
+      focusedIndex: initialFocusIndex?.left,
+      selectedPaths: initialSelectedPaths?.left,
     },
     right: {
-      focusedIndex: INITIAL_FOCUS_INDEX.right,
-      selectedPaths: INITIAL_SELECTED_PATHS.right,
+      focusedIndex: initialFocusIndex?.right,
+      selectedPaths: initialSelectedPaths?.right,
     },
-  });
+  }));
   const [overlayMessage, setOverlayMessage] = useState<string | null>(null);
+  const [filterPromptPanel, setFilterPromptPanel] = useState<PanelId | null>(null);
 
-  const updatePanel = (panelId: PanelId, next: Partial<PanelUiState>) => {
-    setPanelState((current) => ({
-      ...current,
-      [panelId]: { ...current[panelId], ...next },
-    }));
+  const updatePanel = (panelId: PanelId, next: PanelUiPatch) => {
+    setPanelState((current) => {
+      const panel = current[panelId];
+      const focusedIndex = next.focusedIndex === undefined
+        ? panel.focusedIndex
+        : clampFocusedIndex(next.focusedIndex, panel.listing.entries.length);
+      return {
+        ...current,
+        [panelId]: { ...panel, ...next, focusedIndex },
+      };
+    });
   };
 
   const focusEntry = (panelId: PanelId, index: number) => {
-    const entryCount = SAMPLE_LISTINGS[panelId].entries.length;
-    const focusedIndex = clamp(index, 0, Math.max(0, entryCount - 1));
+    const entryCount = panelState[panelId].listing.entries.length;
+    const focusedIndex = clampFocusedIndex(index, entryCount);
     setActivePanel(panelId);
     updatePanel(panelId, { focusedIndex });
   };
@@ -89,7 +133,7 @@ export function CommanderShell() {
   };
 
   const focusBoundaryEntry = (boundary: 'first' | 'last') => {
-    const entryCount = SAMPLE_LISTINGS[activePanel].entries.length;
+    const entryCount = panelState[activePanel].listing.entries.length;
     focusEntry(activePanel, boundary === 'first' ? 0 : entryCount - 1);
   };
 
@@ -99,8 +143,143 @@ export function CommanderShell() {
     setOverlayMessage(`활성 패널 전환: ${nextPanel.toUpperCase()}`);
   };
 
+  const beginPanelRequest = (panelId: PanelId) => {
+    navigationRequestRef.current[panelId] += 1;
+    return navigationRequestRef.current[panelId];
+  };
+
+  const isCurrentPanelRequest = (panelId: PanelId, requestId: number) =>
+    navigationRequestRef.current[panelId] === requestId;
+
+  const listPanel = async (panelId: PanelId, path: string, options: ListPanelOptions = {}) => {
+    const requestId = beginPanelRequest(panelId);
+    const requestPanel = panelState[panelId];
+    const sort = options.sort ?? requestPanel.sort;
+    const filter = Object.hasOwn(options, 'filter') ? options.filter ?? null : requestPanel.filter;
+    const showHidden = options.showHidden ?? requestPanel.showHidden;
+
+    setActivePanel(panelId);
+    setPanelState((current) => ({
+      ...current,
+      [panelId]: {
+        ...markPanelLoading(current[panelId]),
+        sort,
+        filter,
+        showHidden,
+      },
+    }));
+
+    const result = await dataSource.listDir({ panelId, path, showHidden, sort, filter });
+    if (!isCurrentPanelRequest(panelId, requestId)) {
+      return;
+    }
+    if (!result.ok) {
+      setPanelState((current) => ({
+        ...current,
+        [panelId]: markPanelError(current[panelId], result.error),
+      }));
+      setOverlayMessage(`목록 읽기 실패: ${result.error.messageKey}${result.error.path ? ` · ${result.error.path}` : ''}`);
+      shellRef.current?.focus({ preventScroll: true });
+      return;
+    }
+
+    setPanelState((current) => ({
+      ...current,
+      [panelId]: {
+        ...replacePanelListing(current[panelId], { ...result.data, sort, filter }, {
+          pushHistory: options.pushHistory,
+          replaceBack: options.replaceBack,
+          replaceForward: options.replaceForward,
+          preserveSelection: options.preserveSelection,
+          preserveFocusPath: options.preserveFocusPath,
+          focusPath: options.focusPath,
+        }),
+        showHidden,
+      },
+    }));
+    setOverlayMessage(null);
+    shellRef.current?.focus({ preventScroll: true });
+  };
+
+  const gotoPanelPath = async (panelId: PanelId, path: string) => {
+    const requestId = beginPanelRequest(panelId);
+    setActivePanel(panelId);
+    setPanelState((current) => ({ ...current, [panelId]: markPanelLoading(current[panelId]) }));
+    const result = await dataSource.gotoPath({ panelId, path });
+    if (!isCurrentPanelRequest(panelId, requestId)) {
+      return;
+    }
+    if (!result.ok) {
+      setPanelState((current) => ({ ...current, [panelId]: markPanelError(current[panelId], result.error) }));
+      setOverlayMessage(`직접 이동 실패: ${result.error.messageKey}`);
+      return;
+    }
+    setPanelState((current) => ({
+      ...current,
+      [panelId]: {
+        ...replacePanelListing(current[panelId], result.data, { pushHistory: true }),
+        showHidden: false,
+      },
+    }));
+    setOverlayMessage(`Path · goto_path · ${result.data.path}`);
+  };
+
+  const refreshPanel = (panelId: PanelId) => {
+    const panel = panelState[panelId];
+    void listPanel(panelId, panel.path, {
+      preserveSelection: true,
+      preserveFocusPath: focusedEntryOf(panel)?.path,
+    });
+  };
+
+  const navigateUp = (panelId: PanelId) => {
+    const panel = panelState[panelId];
+    const parentEntry = parentNavigationEntryOf(panel);
+    const targetPath = parentEntry?.path ?? parentPathOf(panel.path);
+    void listPanel(panelId, targetPath, {
+      pushHistory: targetPath !== panel.path,
+      focusPath: panel.path,
+    });
+  };
+
+  const navigateBack = (panelId: PanelId) => {
+    const panel = panelState[panelId];
+    const targetPath = panel.historyBack.at(-1);
+    if (!targetPath) {
+      setOverlayMessage('뒤로 이동할 history가 없습니다.');
+      return;
+    }
+    void listPanel(panelId, targetPath, {
+      replaceBack: panel.historyBack.slice(0, -1),
+      replaceForward: [panel.path, ...panel.historyForward],
+    });
+  };
+
+  const navigateForward = (panelId: PanelId) => {
+    const panel = panelState[panelId];
+    const targetPath = panel.historyForward[0];
+    if (!targetPath) {
+      setOverlayMessage('앞으로 이동할 history가 없습니다.');
+      return;
+    }
+    void listPanel(panelId, targetPath, {
+      replaceBack: [...panel.historyBack, panel.path],
+      replaceForward: panel.historyForward.slice(1),
+    });
+  };
+
+  const applySort = (panelId: PanelId, sort: SortSpec) => {
+    const panel = panelState[panelId];
+    void listPanel(panelId, panel.path, {
+      sort,
+      preserveSelection: true,
+      preserveFocusPath: focusedEntryOf(panel)?.path,
+    });
+  };
+
   const toggleFocusedSelection = (panelId: PanelId) => {
-    const focusedEntry = SAMPLE_LISTINGS[panelId].entries[panelState[panelId].focusedIndex];
+    const panel = panelState[panelId];
+    const focusedEntry = focusedEntryOf(panel);
     if (!focusedEntry || focusedEntry.isVirtual) {
       setOverlayMessage('가상 항목은 선택 대상으로 표시하지 않습니다.');
       return;
@@ -124,7 +303,7 @@ export function CommanderShell() {
 
   const selectAllEntries = (panelId: PanelId) => {
     updatePanel(panelId, {
-      selectedPaths: SAMPLE_LISTINGS[panelId].entries
+      selectedPaths: panelState[panelId].listing.entries
         .filter((entry) => !entry.isVirtual)
         .map((entry) => entry.path),
     });
@@ -135,7 +314,7 @@ export function CommanderShell() {
   };
 
   const invertSelection = (panelId: PanelId) => {
-    const concretePaths = SAMPLE_LISTINGS[panelId].entries
+    const concretePaths = panelState[panelId].listing.entries
       .filter((entry) => !entry.isVirtual)
       .map((entry) => entry.path);
     const currentSelection = new Set(panelState[panelId].selectedPaths);
@@ -147,7 +326,18 @@ export function CommanderShell() {
   const selectEntry = (panelId: PanelId, index: number, entry: FileEntry, additive: boolean) => {
     setActivePanel(panelId);
     setPanelState((current) => {
-      const selected = current[panelId].selectedPaths;
+      const panel = current[panelId];
+      if (entry.isVirtual) {
+        return {
+          ...current,
+          [panelId]: {
+            ...panel,
+            focusedIndex: index,
+          },
+        };
+      }
+
+      const selected = panel.selectedPaths;
       const selectedPaths = additive
         ? selected.includes(entry.path)
           ? selected.filter((path) => path !== entry.path)
@@ -157,6 +347,7 @@ export function CommanderShell() {
       return {
         ...current,
         [panelId]: {
+          ...panel,
           focusedIndex: index,
           selectedPaths,
         },
@@ -166,11 +357,15 @@ export function CommanderShell() {
 
   const openEntry = (panelId: PanelId, entry: FileEntry) => {
     setActivePanel(panelId);
-    setOverlayMessage(
-      entry.kind === 'directory'
-        ? `디렉터리 진입 예정: ${entry.name} · list_dir 경계 연결 대기`
-        : `기본 앱 열기 예정: ${entry.name} · open_default 확인 대기`,
-    );
+    if (entry.kind === 'directory') {
+      void listPanel(panelId, entry.path, {
+        pushHistory: true,
+        preserveSelection: false,
+      });
+      return;
+    }
+
+    setOverlayMessage(`기본 앱 열기 예정: ${entry.name} · open_default 확인 대기`);
   };
 
   const handleAction = (action: AppAction, panelOverride = activePanel, sourceOverride?: FileEntry[]) => {
@@ -180,11 +375,11 @@ export function CommanderShell() {
       return;
     }
 
-    const panelListing = SAMPLE_LISTINGS[panelOverride];
+    const panel = panelState[panelOverride];
+    const panelListing = panel.listing;
     const oppositePanel = oppositePanelOf(panelOverride);
-    const panelSelection = panelState[panelOverride].selectedPaths;
-    const focusedEntry = panelListing.entries[panelState[panelOverride].focusedIndex];
-    const selectedEntries = panelListing.entries.filter((entry) => panelSelection.includes(entry.path) && !entry.isVirtual);
+    const focusedEntry = focusedEntryOf(panel);
+    const selectedEntries = selectedConcreteEntriesOf(panel);
     const focusedConcreteSource = focusedEntry && !focusedEntry.isVirtual ? [focusedEntry] : [];
     const sources = (sourceOverride ?? (selectedEntries.length > 0 ? selectedEntries : focusedConcreteSource)).filter(
       (entry) => !entry.isVirtual,
@@ -193,6 +388,36 @@ export function CommanderShell() {
     const actionTargetEntry = sourceOverride?.[0] ?? focusedEntry;
     if (actionId === 'nav.enter' && actionTargetEntry) {
       openEntry(panelOverride, actionTargetEntry);
+      return;
+    }
+
+    if (actionId === 'nav.up') {
+      navigateUp(panelOverride);
+      return;
+    }
+
+    if (actionId === 'nav.back') {
+      navigateBack(panelOverride);
+      return;
+    }
+
+    if (actionId === 'nav.forward') {
+      navigateForward(panelOverride);
+      return;
+    }
+
+    if (actionId === 'nav.refresh') {
+      refreshPanel(panelOverride);
+      return;
+    }
+
+    if (actionId === 'nav.gotoPath') {
+      setOverlayMessage('Path · goto_path · 주소 입력 UI 연결 대기');
+      return;
+    }
+
+    if (actionId === 'nav.locations') {
+      setOverlayMessage('Locations · list_locations · 위치 팔레트 연결 대기');
       return;
     }
 
@@ -219,6 +444,43 @@ export function CommanderShell() {
       return;
     }
 
+    if (actionId === 'view.sortName' || actionId === 'view.sortSize' || actionId === 'view.sortDate' || actionId === 'view.sortExt') {
+      applySort(panelOverride, { ...panel.sort, field: sortFieldForAction(actionId), direction: 'asc' });
+      return;
+    }
+
+    if (actionId === 'view.reverseSort') {
+      applySort(panelOverride, {
+        ...panel.sort,
+        direction: panel.sort.direction === 'asc' ? 'desc' : 'asc',
+      });
+      return;
+    }
+
+    if (actionId === 'filter.start') {
+      setFilterPromptPanel(panelOverride);
+      setOverlayMessage(null);
+      return;
+    }
+
+    if (actionId === 'filter.clear') {
+      void listPanel(panelOverride, panel.path, {
+        filter: null,
+        preserveSelection: true,
+        preserveFocusPath: focusedEntry?.path,
+      });
+      return;
+    }
+
+    if (actionId === 'view.toggleHidden') {
+      void listPanel(panelOverride, panel.path, {
+        showHidden: !panel.showHidden,
+        preserveSelection: true,
+        preserveFocusPath: focusedEntry?.path,
+      });
+      return;
+    }
+
     if (dialogKindForAction(actionId)) {
       if (actionNeedsConcreteSources(actionId) && sources.length === 0) {
         setOverlayMessage(`${labelForAction(action)} · 가상 항목은 파일 작업 대상이 될 수 없습니다.`);
@@ -229,7 +491,7 @@ export function CommanderShell() {
         action,
         panelId: panelOverride,
         sources,
-        targetDir: SAMPLE_LISTINGS[oppositePanel].path,
+        targetDir: panelState[oppositePanel].path,
         workingDir: panelListing.path,
       });
       return;
@@ -238,18 +500,32 @@ export function CommanderShell() {
     setOverlayMessage(`${labelForAction(action)} · ${action.runPath}`);
   };
 
-  const activeListing = SAMPLE_LISTINGS[activePanel];
-  const activeFocusedEntry = activeListing.entries[panelState[activePanel].focusedIndex] ?? null;
-  const activeSelectedCount = activeListing.entries.filter(
-    (entry) => panelState[activePanel].selectedPaths.includes(entry.path) && !entry.isVirtual,
-  ).length;
+  const applyFilter = (panelId: PanelId, filterValue: string) => {
+    const panel = panelState[panelId];
+    const filter = filterValue.trim() || null;
+    setFilterPromptPanel(null);
+    void listPanel(panelId, panel.path, {
+      filter,
+      preserveSelection: true,
+      preserveFocusPath: focusedEntryOf(panel)?.path,
+    });
+  };
+
+  const cancelFilter = () => {
+    setFilterPromptPanel(null);
+    shellRef.current?.focus({ preventScroll: true });
+  };
+
+  const activeListing = panelState[activePanel].listing;
+  const activeFocusedEntry = focusedEntryOf(panelState[activePanel]);
+  const activeSelectedCount = selectedConcreteEntriesOf(panelState[activePanel]).length;
   const context = createActionContext({
     activePanel,
     focusedEntry: activeFocusedEntry,
     selectedCount: activeSelectedCount,
     hasOppositePanel: true,
     shellCommandEnabled: false,
-    operationBusy: false,
+    operationBusy: panelState.left.loading || panelState.right.loading,
   });
   const activeRowDomId = rowDomId(activePanel, panelState[activePanel].focusedIndex);
   const ariaKeyShortcuts = ariaKeyShortcutsFromRegistry();
@@ -260,6 +536,53 @@ export function CommanderShell() {
     focusBoundaryEntry,
     handleAction,
   };
+
+  useEffect(() => {
+    if (!dataSource.loadInitialOnMount) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    setPanelState((current) => ({
+      left: markPanelLoading(current.left),
+      right: markPanelLoading(current.right),
+    }));
+
+    const requestIds: Record<PanelId, number> = {
+      left: beginPanelRequest('left'),
+      right: beginPanelRequest('right'),
+    };
+
+    void dataSource.loadInitialListings().then((results) => {
+      if (cancelled) {
+        return;
+      }
+      setPanelState((current) => {
+        const next = { ...current };
+        for (const panelId of PANEL_IDS) {
+          if (!isCurrentPanelRequest(panelId, requestIds[panelId])) {
+            continue;
+          }
+          const result = results[panelId];
+          const panel = current[panelId];
+          next[panelId] = result.ok
+            ? {
+                ...replacePanelListing(panel, result.data, {
+                  preserveSelection: true,
+                  preserveFocusPath: focusedEntryOf(panel)?.path,
+                }),
+                showHidden: panel.showHidden,
+              }
+            : markPanelError(panel, result.error);
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dataSource]);
 
   useEffect(() => {
     shellRef.current?.focus({ preventScroll: true });
@@ -365,29 +688,44 @@ export function CommanderShell() {
       <TopMenuBar context={context} onOpenAction={(action) => handleAction(action)} />
       <section className="panel-zone" aria-label="dual file panels">
         <FilePanel
-          listing={SAMPLE_LISTINGS.left}
+          panel={panelState.left}
           active={activePanel === 'left'}
-          state={panelState.left}
           onActivate={() => setActivePanel('left')}
           onStateChange={(next) => updatePanel('left', next)}
           onEntrySelect={(index, entry, additive) => selectEntry('left', index, entry, additive)}
           onEntryOpen={(entry) => openEntry('left', entry)}
           onOpenAction={(action, sources) => handleAction(action, 'left', sources)}
+          onNavigateBack={() => navigateBack('left')}
+          onNavigateForward={() => navigateForward('left')}
+          onNavigateUp={() => navigateUp('left')}
+          onRefresh={() => refreshPanel('left')}
+          onGotoPath={() => void gotoPanelPath('left', panelState.left.path)}
         />
         <FilePanel
-          listing={SAMPLE_LISTINGS.right}
+          panel={panelState.right}
           active={activePanel === 'right'}
-          state={panelState.right}
           onActivate={() => setActivePanel('right')}
           onStateChange={(next) => updatePanel('right', next)}
           onEntrySelect={(index, entry, additive) => selectEntry('right', index, entry, additive)}
           onEntryOpen={(entry) => openEntry('right', entry)}
           onOpenAction={(action, sources) => handleAction(action, 'right', sources)}
+          onNavigateBack={() => navigateBack('right')}
+          onNavigateForward={() => navigateForward('right')}
+          onNavigateUp={() => navigateUp('right')}
+          onRefresh={() => refreshPanel('right')}
+          onGotoPath={() => void gotoPanelPath('right', panelState.right.path)}
         />
       </section>
-      <BottomStatusStrip listing={SAMPLE_LISTINGS[activePanel]} activePanel={activePanel} selectedCount={context.selectedCount} />
+      <BottomStatusStrip listing={activeListing} activePanel={activePanel} selectedCount={context.selectedCount} />
       <HotkeyStrip />
       <OverlayHost message={overlayMessage} onDismiss={() => setOverlayMessage(null)} />
+      {filterPromptPanel ? (
+        <FilterPrompt
+          panel={panelState[filterPromptPanel]}
+          onApply={(filterValue) => applyFilter(filterPromptPanel, filterValue)}
+          onCancel={cancelFilter}
+        />
+      ) : null}
       <OperationDialogHost />
     </main>
   );
@@ -453,22 +791,40 @@ function MenuPopoverContent({ root, actions, context, onOpenAction }: {
 }
 
 interface FilePanelProps {
-  listing: DirectoryListing;
+  panel: PanelNavigationState;
   active: boolean;
-  state: PanelUiState;
   onActivate(): void;
-  onStateChange(next: Partial<PanelUiState>): void;
+  onStateChange(next: PanelUiPatch): void;
   onEntrySelect(index: number, entry: FileEntry, additive: boolean): void;
   onEntryOpen(entry: FileEntry): void;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
+  onNavigateBack(): void;
+  onNavigateForward(): void;
+  onNavigateUp(): void;
+  onRefresh(): void;
+  onGotoPath(): void;
 }
 
-function FilePanel({ listing, active, state, onActivate, onStateChange, onEntrySelect, onEntryOpen, onOpenAction }: FilePanelProps) {
+function FilePanel({
+  panel,
+  active,
+  onActivate,
+  onStateChange,
+  onEntrySelect,
+  onEntryOpen,
+  onOpenAction,
+  onNavigateBack,
+  onNavigateForward,
+  onNavigateUp,
+  onRefresh,
+  onGotoPath,
+}: FilePanelProps) {
+  const { listing } = panel;
   const tableColumns = useMemo<ColumnDef<FileEntry>[]>(
     () => [
       {
         id: 'name',
-        header: 'Name ▲',
+        header: `Name ${panel.sort.field === 'name' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => (
           <span className={`entry-name entry-kind-${row.original.kind}`}>
             <span className="entry-icon" aria-hidden="true">{entryIcon(row.original.kind)}</span>
@@ -478,16 +834,16 @@ function FilePanel({ listing, active, state, onActivate, onStateChange, onEntryS
       },
       {
         id: 'size',
-        header: 'Size',
+        header: `Size ${panel.sort.field === 'size' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => formatSize(row.original),
       },
       {
         id: 'modified',
-        header: 'Modified',
+        header: `Modified ${panel.sort.field === 'modifiedAt' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => formatModified(row.original.modifiedAt),
       },
     ],
-    [],
+    [panel.sort.direction, panel.sort.field],
   );
 
   const table = useReactTable({
@@ -514,8 +870,10 @@ function FilePanel({ listing, active, state, onActivate, onStateChange, onEntryS
   const summary = summarizeEntries(listing.entries);
 
   useEffect(() => {
-    virtualizer.scrollToIndex(state.focusedIndex, { align: 'auto' });
-  }, [state.focusedIndex, virtualizer]);
+    if (rows.length > 0) {
+      virtualizer.scrollToIndex(panel.focusedIndex, { align: 'auto' });
+    }
+  }, [panel.focusedIndex, rows.length, virtualizer]);
 
   return (
     <section
@@ -524,8 +882,15 @@ function FilePanel({ listing, active, state, onActivate, onStateChange, onEntryS
       aria-current={active ? 'true' : undefined}
       onMouseDown={onActivate}
     >
-      <PanelHeader listing={listing} active={active} />
-      <PathControls listing={listing} />
+      <PanelHeader panel={panel} active={active} />
+      <PathControls
+        panel={panel}
+        onNavigateBack={onNavigateBack}
+        onNavigateForward={onNavigateForward}
+        onNavigateUp={onNavigateUp}
+        onRefresh={onRefresh}
+        onGotoPath={onGotoPath}
+      />
       <div className="file-table" role="table" aria-rowcount={listing.entries.length}>
         <div className="file-table-head" role="rowgroup">
           {table.getHeaderGroups().map((headerGroup) => (
@@ -539,55 +904,73 @@ function FilePanel({ listing, active, state, onActivate, onStateChange, onEntryS
           ))}
         </div>
         <div ref={scrollRef} className="file-table-scroll" role="rowgroup">
-          <div className="file-table-virtual-space" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-            {renderedRows.map((virtualRow) => {
-              const row = rows[virtualRow.index];
-              const entry = row.original;
-              const focused = virtualRow.index === state.focusedIndex;
-              const selected = state.selectedPaths.includes(entry.path);
-              return (
-                <ContextMenu.Root key={row.id}>
-                  <ContextMenu.Trigger asChild>
-                    <div
-                      id={rowDomId(listing.panelId, virtualRow.index)}
-                      role="row"
-                      tabIndex={FOCUSABLE_ROW_TAB_INDEX}
-                      aria-rowindex={virtualRow.index + 1}
-                      aria-selected={selected}
-                      aria-current={focused ? 'true' : undefined}
-                      className={`file-table-row file-row ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''}`}
-                      style={{ transform: `translateY(${virtualRow.start}px)` }}
-                      onClick={(event) => onEntrySelect(virtualRow.index, entry, event.metaKey || event.ctrlKey)}
-                      onDoubleClick={() => onEntryOpen(entry)}
-                      onFocus={() => onStateChange({ focusedIndex: virtualRow.index })}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <span key={cell.id} role="cell" className={`file-cell file-cell-${cell.column.id}`}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </span>
-                      ))}
-                    </div>
-                  </ContextMenu.Trigger>
-                  <ContextMenu.Portal>
-                    <EntryContextMenuContent
-                      entry={entry}
-                      listing={listing}
-                      selectedCount={state.selectedPaths.length}
-                      onOpenAction={onOpenAction}
-                    />
-                  </ContextMenu.Portal>
-                </ContextMenu.Root>
-              );
-            })}
-          </div>
+          {panel.error || rows.length === 0 ? (
+            <PanelMessageRow panel={panel} />
+          ) : (
+            <div className="file-table-virtual-space" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+              {renderedRows.map((virtualRow) => {
+                const row = rows[virtualRow.index];
+                const entry = row.original;
+                const focused = virtualRow.index === panel.focusedIndex;
+                const selected = panel.selectedPaths.includes(entry.path);
+                return (
+                  <ContextMenu.Root key={row.id}>
+                    <ContextMenu.Trigger asChild>
+                      <div
+                        id={rowDomId(listing.panelId, virtualRow.index)}
+                        role="row"
+                        tabIndex={FOCUSABLE_ROW_TAB_INDEX}
+                        aria-rowindex={virtualRow.index + 1}
+                        aria-selected={selected}
+                        aria-current={focused ? 'true' : undefined}
+                        className={`file-table-row file-row ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''}`}
+                        style={{ transform: `translateY(${virtualRow.start}px)` }}
+                        onClick={(event) => onEntrySelect(virtualRow.index, entry, event.metaKey || event.ctrlKey)}
+                        onDoubleClick={() => onEntryOpen(entry)}
+                        onFocus={() => onStateChange({ focusedIndex: virtualRow.index })}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <span key={cell.id} role="cell" className={`file-cell file-cell-${cell.column.id}`}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </span>
+                        ))}
+                      </div>
+                    </ContextMenu.Trigger>
+                    <ContextMenu.Portal>
+                      <EntryContextMenuContent
+                        entry={entry}
+                        listing={listing}
+                        selectedCount={panel.selectedPaths.length}
+                        onOpenAction={onOpenAction}
+                      />
+                    </ContextMenu.Portal>
+                  </ContextMenu.Root>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
       <footer className="panel-status">
         <span>{summary.files} files, {summary.dirs} dirs</span>
-        <span>{state.selectedPaths.length} selected</span>
+        <span>{panel.selectedPaths.length} selected</span>
         <span>{active ? 'ACTIVE' : 'TARGET'}</span>
       </footer>
     </section>
+  );
+}
+
+function PanelMessageRow({ panel }: { panel: PanelNavigationState }) {
+  let message = 'Empty directory';
+  if (panel.loading) {
+    message = 'Loading directory...';
+  } else if (panel.error) {
+    message = `Error: ${panel.error.messageKey}`;
+  }
+  return (
+    <div className="file-table-message" role="row" aria-live="polite">
+      <span role="cell">{message}</span>
+    </div>
   );
 }
 
@@ -624,24 +1007,39 @@ function EntryContextMenuContent({ entry, listing, selectedCount, onOpenAction }
   );
 }
 
-function PanelHeader({ listing, active }: { listing: DirectoryListing; active: boolean }) {
+function PanelHeader({ panel, active }: { panel: PanelNavigationState; active: boolean }) {
   return (
     <header className="panel-header">
-      <span className="panel-path" title={listing.path}>· {shortenPath(listing.path)}</span>
+      <span className="panel-path" title={panel.path}>· {shortenPath(panel.path)}</span>
       <span className={`panel-marker ${active ? 'active' : ''}`}>{active ? 'ACTIVE' : 'PASSIVE'}</span>
+      {panel.loading ? <span className="panel-loading">LOADING</span> : null}
     </header>
   );
 }
 
-function PathControls({ listing }: { listing: DirectoryListing }) {
+function PathControls({
+  panel,
+  onNavigateBack,
+  onNavigateForward,
+  onNavigateUp,
+  onRefresh,
+  onGotoPath,
+}: {
+  panel: PanelNavigationState;
+  onNavigateBack(): void;
+  onNavigateForward(): void;
+  onNavigateUp(): void;
+  onRefresh(): void;
+  onGotoPath(): void;
+}) {
   return (
-    <div className="path-controls" aria-label={`${listing.panelId} navigation controls`}>
-      <button type="button">◀</button>
-      <button type="button">▶</button>
-      <button type="button">↑</button>
-      <button type="button">⟳</button>
-      <span className="path-input" title={listing.path}>{listing.path}</span>
-      <button type="button">⌘</button>
+    <div className="path-controls" aria-label={`${panel.listing.panelId} navigation controls`}>
+      <button type="button" aria-label="Back" disabled={!panelCanGoBack(panel)} onClick={onNavigateBack}>◀</button>
+      <button type="button" aria-label="Forward" disabled={!panelCanGoForward(panel)} onClick={onNavigateForward}>▶</button>
+      <button type="button" aria-label="Up" onClick={onNavigateUp}>↑</button>
+      <button type="button" aria-label="Refresh" onClick={onRefresh}>⟳</button>
+      <span className="path-input" title={panel.path}>{panel.path}</span>
+      <button type="button" aria-label="Go to path" onClick={onGotoPath}>⌘</button>
     </div>
   );
 }
@@ -673,6 +1071,54 @@ function HotkeyStrip() {
   );
 }
 
+
+
+function FilterPrompt({ panel, onApply, onCancel }: {
+  panel: PanelNavigationState;
+  onApply(filterValue: string): void;
+  onCancel(): void;
+}) {
+  const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('filter-prompt');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState(panel.filter ?? '');
+
+  useEffect(() => {
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    onApply(value);
+  };
+
+  return (
+    <div className="filter-dialog" role="dialog" aria-label="filter entries" {...keyboardBoundaryProps}>
+      <form className="filter-form" onSubmit={handleSubmit}>
+        <label>
+          <span>Filter · {panel.path}</span>
+          <input
+            ref={inputRef}
+            aria-label="Filter pattern"
+            value={value}
+            onChange={(event) => setValue(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                onCancel();
+              }
+            }}
+          />
+        </label>
+        <div className="filter-actions">
+          <button type="submit">Apply filter</button>
+          {panel.filter ? <button type="button" onClick={() => onApply('')}>Clear filter</button> : null}
+          <button type="button" onClick={onCancel}>Cancel</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function OverlayHost({ message, onDismiss }: { message: string | null; onDismiss(): void }) {
   return (
     <div className="overlay-host" aria-live="polite">
@@ -694,17 +1140,30 @@ export const contextMenuActions = (entry: FileEntry, context: ActionContext) => 
   return filterEnabledActions(actions, context, entry);
 };
 
+type SortActionId = 'view.sortName' | 'view.sortSize' | 'view.sortDate' | 'view.sortExt';
+
+const sortFieldForAction = (actionId: SortActionId): SortSpec['field'] => {
+  const mapping: Record<SortActionId, SortSpec['field']> = {
+    'view.sortName': 'name',
+    'view.sortSize': 'size',
+    'view.sortDate': 'modifiedAt',
+    'view.sortExt': 'extension',
+  };
+  return mapping[actionId];
+};
+
+const sortMarker = (direction: SortSpec['direction']) => (direction === 'asc' ? '▲' : '▼');
+
 const shortenPath = (path: string) => {
-  const parts = path.split('/').filter(Boolean);
+  const normalized = path.replace(/\\/g, '/');
+  const parts = normalized.split('/').filter(Boolean);
   if (parts.length <= 4) {
-    return `/${parts.join('/')}`;
+    return normalized.startsWith('/') ? `/${parts.join('/')}` : parts.join('/');
   }
   return `/${parts.slice(0, 2).join('/')}/…/${parts.slice(-2).join('/')}`;
 };
 
 const oppositePanelOf = (panelId: PanelId): PanelId => (panelId === 'left' ? 'right' : 'left');
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const rowDomId = (panelId: PanelId, index: number) => `commander-row-${panelId}-${index}`;
 

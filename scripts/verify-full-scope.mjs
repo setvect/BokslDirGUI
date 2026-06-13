@@ -103,6 +103,27 @@ addCheck(
   'Hotkey strip must not parse display labels locally',
 );
 addCheck(
+  'commander shell uses panel data-source seam instead of fixture listings',
+  commanderShell.includes('PanelDataSource') && !commanderShell.includes('SAMPLE_LISTINGS'),
+  'Real listing UI must be provider-backed, not fixture-backed in core rendering',
+);
+addCheck(
+  'commander shell wires panel navigation to listDir state flow',
+  commanderShell.includes('listPanel') && commanderShell.includes('historyBack') && commanderShell.includes('showHidden'),
+  'Entry open/refresh/history/sort/hidden state must feed list_dir requests',
+);
+addCheck(
+  'commander shell guards stale async panel navigation results',
+  commanderShell.includes('navigationRequestRef') && commanderShell.includes('isCurrentPanelRequest'),
+  'Older list_dir responses must not overwrite newer panel state',
+);
+addCheck(
+  'commander shell exposes real filter input path',
+  commanderShell.includes('FilterPrompt') && commanderShell.includes('Filter pattern') && commanderShell.includes("Object.hasOwn(options, 'filter')"),
+  'filter.start/filter.clear must send explicit non-null/null filter values to list_dir',
+);
+
+addCheck(
   'action registry exposes shortcut collision invariant',
   registry.includes('keyboardBindingCollisions') && registry.includes('hasLongerCandidate'),
   'Keyboard binding collisions and prefix sequences must be explicit',
@@ -119,6 +140,8 @@ for (const dialogKind of ['copy', 'move', 'trash', 'deletePermanent', 'rename', 
 }
 addCheck('operation store uses backend stub policy boundary', operationStore.includes('backendExecutionStubbed'), 'Stub policy applies to safe and destructive file mutation shells');
 addCheck('operation store removed danger-only stub flag', !operationStore.includes('destructiveExecutionStubbed'), 'Stub policy must not hide safe mutation stubs');
+addCheck('operation store separates atomic command execution mode', operationStore.includes("'atomicCommand'") && operationStore.includes('dialogExecutionModeForDialog'), 'Atomic commands must not be queued as long-running progress');
+addCheck('operation store separates long-running operation execution mode', operationStore.includes("'longRunningOperation'") && operationStore.includes('LONG_RUNNING_DIALOGS'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
 for (const conflictState of ['lastConflictDecision', 'applyAllConflictDecision', 'allOverwrite', 'allSkip']) {
   addCheck(`operation conflict model includes ${conflictState}`, operationStore.includes(conflictState), 'Conflict apply-all decisions are explicit');
 }
@@ -145,6 +168,16 @@ const tauriClient = read('src/tauri/client.ts');
 for (const token of ['TauriResult', 'BACKEND_IMPLEMENTED_COMMANDS', 'unsupportedCommandError', 'normalizeInvokeError']) {
   addCheck(`tauri client exposes ${token}`, tauriClient.includes(token), 'Frontend wrappers must distinguish unsupported vs failed commands');
 }
+
+const panelState = read('src/ui/panelState.ts');
+const panelDataSource = read('src/ui/panelDataSource.ts');
+for (const token of ['PanelNavigationState', 'historyBack', 'historyForward', 'showHidden', 'loading', 'error']) {
+  addCheck(`panel state includes ${token}`, panelState.includes(token), 'Panel state abstraction owns real navigation state');
+}
+for (const token of ['PanelDataSource', 'PanelInitialLoadResult', 'createTauriPanelDataSource', 'createPreviewPanelDataSource', 'createFixturePanelDataSource', 'listDir', 'loadInitialListings']) {
+  addCheck(`panel data source includes ${token}`, panelDataSource.includes(token), 'UI can swap fixture and Tauri-backed listing providers');
+}
+addCheck('panel data source defaults to strict Tauri startup', panelDataSource.includes('fallbackToInitialOnUnavailable = false'), 'Browser preview fallback must be explicit, not production default');
 
 const commanderFixture = read('src/ui/commanderFixture.ts');
 addCheck('commander fixture avoids developer home paths', !commanderFixture.includes('/Users/'), 'Sample data must be portable');

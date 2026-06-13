@@ -17,6 +17,7 @@
 | `full-scope-test-spec.md` | 전체 기준 기능 검증 전략 | 완료 판정 기준 |
 | `design-consistency-report.md` | 문서 간 정합성/상충 검토 | 설계 품질 게이트 |
 | `ralplan-consensus-plan.md` | RALPLAN 의사결정/ADR/후속 실행 가이드 | 거버넌스 기록 |
+| `implementation-todo.md` | 현재 구현 완료 내용과 남은 실제 파일 커맨드 구현 TODO | 후속 구현 실행 순서 기준 |
 
 ## 구현 착수 순서 권장
 

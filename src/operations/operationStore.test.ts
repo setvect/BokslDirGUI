@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ACTION_BY_ID } from '../actions/registry';
 import type { FileEntry } from '../domain/types';
-import { canTransitionOperation, dialogKindForAction, useOperationStore } from './operationStore';
+import { canTransitionOperation, dialogExecutionModeForDialog, dialogKindForAction, useOperationStore } from './operationStore';
 
 const sampleEntry: FileEntry = {
   path: '/tmp/source.txt',
@@ -91,6 +91,18 @@ describe('operation store', () => {
     expect(progress?.kind).toBe('copy');
     expect(progress?.state).toBe('queued');
     expect(progress?.totalFiles).toBe(1);
+  });
+
+
+  it('routes atomic command dialogs separately from long-running operation progress', () => {
+    expect(dialogExecutionModeForDialog('createDir')).toBe('atomicCommand');
+    expect(dialogExecutionModeForDialog('copy')).toBe('longRunningOperation');
+
+    openAction('file.mkdir');
+    useOperationStore.getState().confirmDialog();
+
+    expect(useOperationStore.getState().progress).toBeNull();
+    expect(useOperationStore.getState().lastError?.messageKey).toBe('errors.commandNotConnected');
   });
 
   it('keeps shell command disabled until preview token policy is enabled', () => {

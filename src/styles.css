@@ -149,6 +149,27 @@ button {
   color: var(--cyan);
 }
 
+
+.panel-loading {
+  color: var(--green);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.path-controls button:disabled {
+  border-color: #2a2a2a;
+  color: #555;
+}
+
+.file-table-message {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-height: var(--row-height);
+  padding: 0 10px;
+  color: var(--muted);
+}
+
 .path-controls {
   display: grid;
   grid-template-columns: repeat(4, 26px) minmax(0, 1fr) 26px;
@@ -336,7 +357,8 @@ button {
 
 .menu-popover,
 .context-menu,
-.transient-overlay {
+.transient-overlay,
+.filter-dialog {
   z-index: 20;
   min-width: 260px;
   border: 1px solid var(--line-strong);
@@ -424,6 +446,49 @@ button {
   border: 1px solid #3d3d3d;
   background: #2b2b2b;
   color: #f2f2f2;
+}
+
+.filter-dialog {
+  position: absolute;
+  top: 94px;
+  left: 50%;
+  z-index: 22;
+  width: min(620px, 70vw);
+  padding: 12px;
+  transform: translateX(-50%);
+}
+
+.filter-form {
+  display: grid;
+  gap: 10px;
+}
+
+.filter-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.filter-form input {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  background: #151515;
+  color: var(--text);
+  font: inherit;
+  padding: 7px 9px;
+}
+
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.filter-actions button {
+  border: 1px solid #3d3d3d;
+  background: #2b2b2b;
+  color: #f2f2f2;
+  padding: 5px 10px;
 }
 
 @media (max-width: 1180px) {
