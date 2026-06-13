@@ -1,0 +1,376 @@
+import { create } from 'zustand';
+import type {
+  AppError,
+  ConflictDecision,
+  ConflictPrompt,
+  FileEntry,
+  OperationKind,
+  OperationProgress,
+  OperationState,
+  OperationSummary,
+  PanelId,
+  ShellCommandPreview,
+} from '../domain/types';
+import type { ActionId, AppAction, DangerLevel } from '../actions/registry';
+
+export type DialogKind =
+  | 'copy'
+  | 'move'
+  | 'trash'
+  | 'deletePermanent'
+  | 'rename'
+  | 'createDir'
+  | 'properties'
+  | 'archivePreview'
+  | 'archiveCreate'
+  | 'archiveExtract'
+  | 'externalOpenDefault'
+  | 'externalReveal'
+  | 'externalEditor'
+  | 'shellCommand';
+
+export interface OperationDialogDraft {
+  dialogKind: DialogKind;
+  actionId: ActionId;
+  title: string;
+  description: string;
+  panelId: PanelId;
+  sources: FileEntry[];
+  targetDir: string | null;
+  dangerLevel: DangerLevel;
+  defaultDecision: ConflictDecision;
+  primaryLabel: string;
+  cancelLabel: string;
+  commandPath: string;
+  backendExecutionStubbed: boolean;
+  backendExecutionStubReasonKey: string | null;
+  shellPreview: ShellCommandPreview | null;
+}
+
+export interface OpenDialogRequest {
+  action: AppAction;
+  panelId: PanelId;
+  sources: FileEntry[];
+  targetDir: string | null;
+  workingDir: string;
+}
+
+export interface OperationStoreState {
+  dialog: OperationDialogDraft | null;
+  progress: OperationProgress | null;
+  conflictPrompt: ConflictPrompt | null;
+  summary: OperationSummary | null;
+  lastError: AppError | null;
+  lastConflictDecision: ConflictDecision | null;
+  applyAllConflictDecision: Extract<ConflictDecision, 'allOverwrite' | 'allSkip'> | null;
+  openDialog(request: OpenDialogRequest): void;
+  confirmDialog(): void;
+  resolveConflict(decision: ConflictDecision): void;
+  cancelOperation(): void;
+  closeDialog(): void;
+  clearSummary(): void;
+}
+
+export const useOperationStore = create<OperationStoreState>((set, get) => ({
+  dialog: null,
+  progress: null,
+  conflictPrompt: null,
+  summary: null,
+  lastError: null,
+  lastConflictDecision: null,
+  applyAllConflictDecision: null,
+  openDialog: (request) => {
+    const dialogKind = dialogKindForAction(request.action.id as ActionId);
+    if (!dialogKind) {
+      return;
+    }
+    set({
+      dialog: buildDialogDraft(dialogKind, request),
+      progress: null,
+      conflictPrompt: null,
+      summary: null,
+      lastError: null,
+      lastConflictDecision: null,
+      applyAllConflictDecision: null,
+    });
+  },
+  confirmDialog: () => {
+    const dialog = get().dialog;
+    if (!dialog) {
+      return;
+    }
+
+    if (!isOperationBackedDialog(dialog.dialogKind)) {
+      const error = appError(
+        'unsupported',
+        dialog.dialogKind === 'shellCommand'
+          ? 'errors.shellCommandDisabled'
+          : 'errors.commandNotConnected',
+        dialog.targetDir,
+        true,
+      );
+      set({
+        lastError: error,
+        summary: null,
+        progress: null,
+      });
+      return;
+    }
+
+    const operationId = `preview-${dialog.dialogKind}-${Date.now()}`;
+    const operationKind = operationKindForDialog(dialog.dialogKind);
+    set({
+      progress: {
+        operationId,
+        kind: operationKind,
+        state: 'queued',
+        totalFiles: dialog.sources.length || 1,
+        completedFiles: 0,
+        totalBytes: null,
+        completedBytes: 0,
+        currentPath: dialog.sources[0]?.path ?? dialog.targetDir,
+        bytesPerSecond: null,
+        etaSeconds: null,
+        recentErrorCount: 0,
+      },
+      summary: null,
+    });
+  },
+  resolveConflict: (decision) => {
+    const prompt = get().conflictPrompt;
+    const progress = get().progress;
+    if (!prompt || !progress) {
+      return;
+    }
+    if (decision === 'cancel') {
+      set({
+        progress: { ...progress, state: 'cancelled' },
+        summary: {
+          operationId: progress.operationId,
+          kind: progress.kind,
+          state: 'cancelled',
+          completedFiles: progress.completedFiles,
+          failedFiles: 0,
+          errors: [],
+        },
+        conflictPrompt: null,
+        lastConflictDecision: decision,
+        applyAllConflictDecision: null,
+      });
+      return;
+    }
+    set({
+      progress: { ...progress, state: 'running' },
+      conflictPrompt: null,
+      lastConflictDecision: decision,
+      applyAllConflictDecision: decision === 'allOverwrite' || decision === 'allSkip' ? decision : null,
+    });
+  },
+  cancelOperation: () => {
+    const progress = get().progress;
+    if (!progress) {
+      set({ dialog: null, conflictPrompt: null });
+      return;
+    }
+    set({
+      progress: { ...progress, state: 'cancelled' },
+      conflictPrompt: null,
+      summary: {
+        operationId: progress.operationId,
+        kind: progress.kind,
+        state: 'cancelled',
+        completedFiles: progress.completedFiles,
+        failedFiles: 0,
+        errors: [],
+      },
+    });
+  },
+  closeDialog: () => set({ dialog: null, progress: null, conflictPrompt: null, lastError: null }),
+  clearSummary: () => set({ summary: null, lastError: null }),
+}));
+
+export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
+  const mapping: Partial<Record<ActionId, DialogKind>> = {
+    'file.copy': 'copy',
+    'file.move': 'move',
+    'file.trash': 'trash',
+    'file.deletePermanent': 'deletePermanent',
+    'file.rename': 'rename',
+    'file.mkdir': 'createDir',
+    'file.properties': 'properties',
+    'archive.preview': 'archivePreview',
+    'archive.list': 'archivePreview',
+    'archive.extract': 'archiveExtract',
+    'archive.create': 'archiveCreate',
+    'external.openDefault': 'externalOpenDefault',
+    'external.reveal': 'externalReveal',
+    'external.openEditor': 'externalEditor',
+    'external.runShellCommand': 'shellCommand',
+  };
+  return mapping[actionId] ?? null;
+};
+
+const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): OperationDialogDraft => {
+  const title = titleForDialog(dialogKind);
+  const isPermanentDelete = dialogKind === 'deletePermanent';
+  const isShell = dialogKind === 'shellCommand';
+  const backendExecutionStubbed = isBackendExecutionStubbed(dialogKind);
+  return {
+    dialogKind,
+    actionId: request.action.id as ActionId,
+    title,
+    description: descriptionForDialog(dialogKind, request),
+    panelId: request.panelId,
+    sources: request.sources,
+    targetDir: targetForDialog(dialogKind, request),
+    dangerLevel: request.action.dangerLevel,
+    defaultDecision: isPermanentDelete ? 'cancel' : 'skip',
+    primaryLabel: isPermanentDelete ? '영구 삭제 확인' : isShell ? 'Preview disabled' : '확인',
+    cancelLabel: isPermanentDelete ? '취소(기본)' : '취소',
+    commandPath: request.action.runPath,
+    backendExecutionStubbed,
+    backendExecutionStubReasonKey: backendExecutionStubbed
+      ? 'operations.backendExecution.stubbedUntilCommandWiring'
+      : null,
+    shellPreview: isShell ? disabledShellPreview(request.workingDir) : null,
+  };
+};
+
+const targetForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
+  if (dialogKind === 'copy' || dialogKind === 'move' || dialogKind === 'archiveExtract') {
+    return request.targetDir;
+  }
+  if (dialogKind === 'createDir') {
+    return request.workingDir;
+  }
+  return request.sources[0]?.path ?? request.workingDir;
+};
+
+const titleForDialog = (dialogKind: DialogKind) => {
+  const titles: Record<DialogKind, string> = {
+    copy: 'Copy to opposite panel',
+    move: 'Move to opposite panel',
+    trash: 'Move to Trash',
+    deletePermanent: 'Permanent Delete',
+    rename: 'Rename Entry',
+    createDir: 'Create Directory',
+    properties: 'Properties',
+    archivePreview: 'Archive Preview',
+    archiveCreate: 'Create Archive',
+    archiveExtract: 'Extract Archive',
+    externalOpenDefault: 'Open with Default App',
+    externalReveal: 'Reveal in File Manager',
+    externalEditor: 'Open in External Editor',
+    shellCommand: 'Run Shell Command',
+  };
+  return titles[dialogKind];
+};
+
+const descriptionForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
+  const count = request.sources.length;
+  switch (dialogKind) {
+    case 'copy':
+      return `${count}개 항목을 반대 패널로 복사할 준비를 합니다. 실제 I/O 실행은 아직 stub입니다.`;
+    case 'move':
+      return `${count}개 항목 이동은 destructive 작업입니다. Rust validation 연결 전까지 실행하지 않습니다.`;
+    case 'trash':
+      return `${count}개 항목을 휴지통으로 보내기 전에 확인합니다. 자동 영구 삭제 전환은 금지됩니다.`;
+    case 'deletePermanent':
+      return `${count}개 항목 영구 삭제는 되돌릴 수 없습니다. 기본 동작은 취소입니다.`;
+    case 'rename':
+      return '새 이름 입력과 중복/권한 검증을 위한 다이얼로그 셸입니다.';
+    case 'createDir':
+      return '현재 패널 경로에 새 폴더 이름을 입력하는 다이얼로그 셸입니다.';
+    case 'archivePreview':
+      return '압축 파일 목록 미리보기 shell입니다. 7z는 fixture gate 통과 전 완료로 보지 않습니다.';
+    case 'archiveCreate':
+      return `${count}개 항목 압축 생성 shell입니다. password는 로그/이벤트에 남기지 않습니다.`;
+    case 'archiveExtract':
+      return '압축 해제 target은 Rust에서 normalize하고 zip-slip을 차단해야 합니다.';
+    case 'externalOpenDefault':
+    case 'externalReveal':
+    case 'externalEditor':
+      return '외부 앱 실행은 명시 확인과 실패 메시지 표시를 거친 뒤 command boundary에 연결됩니다.';
+    case 'shellCommand':
+      return 'Shell command는 기본 비활성입니다. prepare_shell_command preview/confirmToken 경계를 통과해야 실행됩니다.';
+    case 'properties':
+      return '선택 항목의 metadata/properties를 표시하는 shell입니다.';
+  }
+};
+
+type OperationBackedDialogKind =
+  | 'copy'
+  | 'move'
+  | 'trash'
+  | 'deletePermanent'
+  | 'rename'
+  | 'createDir'
+  | 'archiveCreate'
+  | 'archiveExtract';
+
+const OPERATION_BACKED_DIALOGS: readonly OperationBackedDialogKind[] = [
+  'copy',
+  'move',
+  'trash',
+  'deletePermanent',
+  'rename',
+  'createDir',
+  'archiveCreate',
+  'archiveExtract',
+];
+
+const isOperationBackedDialog = (dialogKind: DialogKind): dialogKind is OperationBackedDialogKind =>
+  OPERATION_BACKED_DIALOGS.includes(dialogKind as OperationBackedDialogKind);
+
+const isBackendExecutionStubbed = (dialogKind: DialogKind) =>
+  isOperationBackedDialog(dialogKind);
+
+const operationKindForDialog = (dialogKind: OperationBackedDialogKind): OperationKind => {
+  const mapping: Record<OperationBackedDialogKind, OperationKind> = {
+    copy: 'copy',
+    move: 'move',
+    trash: 'trash',
+    deletePermanent: 'delete',
+    rename: 'rename',
+    createDir: 'createDir',
+    archiveCreate: 'archiveCreate',
+    archiveExtract: 'archiveExtract',
+  };
+  return mapping[dialogKind];
+};
+
+const disabledShellPreview = (workingDir: string): ShellCommandPreview => ({
+  confirmToken: 'disabled',
+  expiresAt: new Date(0).toISOString(),
+  fingerprint: `disabled:${workingDir}`,
+  requiresConfirmation: true,
+  policy: {
+    enabled: false,
+    reasonKey: 'settings.external.shellCommand.disabledByDefault',
+  },
+});
+
+const appError = (code: string, messageKey: string, path: string | null, recoverable: boolean): AppError => ({
+  code,
+  messageKey,
+  path,
+  details: null,
+  recoverable,
+});
+
+export const allowedOperationTransitions: Record<OperationState, OperationState[]> = {
+  idle: ['validating'],
+  validating: ['scanning', 'failed', 'cancelled'],
+  scanning: ['queued', 'failed', 'cancelled'],
+  queued: ['running', 'cancelled'],
+  running: ['waitingForConflict', 'completed', 'completedWithErrors', 'failed', 'cancelling'],
+  waitingForConflict: ['running', 'cancelled', 'cancelling'],
+  cancelling: ['cancelled', 'completedWithErrors'],
+  completed: [],
+  completedWithErrors: [],
+  failed: [],
+  cancelled: [],
+};
+
+export const canTransitionOperation = (from: OperationState, to: OperationState) =>
+  allowedOperationTransitions[from].includes(to);

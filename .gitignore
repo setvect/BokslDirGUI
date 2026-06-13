@@ -37,3 +37,6 @@ src-tauri/target/
 # Electron packaging artifacts (if selected later)
 out/
 release/
+
+# Tauri generated schemas
+src-tauri/gen/
