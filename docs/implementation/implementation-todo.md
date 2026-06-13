@@ -147,24 +147,26 @@
 
 ## 2. Safe mutation TODO — create/rename부터 연결
 
+> 구현 메모(2026-06-13): `create_dir`와 `rename_entry`를 Rust command로 등록했고, frontend `BACKEND_IMPLEMENTED_COMMANDS`와 CommanderShell atomic executor 경로를 연결했다. create/rename 다이얼로그는 이름 입력과 client-side validation을 제공하며, Rust command는 parent/source validation, child name validation, overwrite 차단을 최종 검증한다. `rename_entry`는 symlink target이 아니라 화면에 보이는 source entry 자체를 rename하며, 지원 OS에서는 no-replace rename primitive로 overwrite race를 줄인다. 성공 후 active panel을 refresh하고 새/변경 항목에 focus를 맞춘다.
+
 ### 2.1 `create_dir`
 
-- [ ] Rust `create_dir` command 구현: parent canonicalization, invalid name 차단, existing path 충돌 처리.
-- [ ] `tauriClient.BACKEND_IMPLEMENTED_COMMANDS` 또는 command capability source of truth에 `create_dir` 추가.
-- [ ] `OperationDialogHost`/`operationStore`에서 createDir를 atomic command path로 실행하고 성공 후 panel refresh를 호출한다.
-- [ ] Create Directory dialog에 이름 입력 field와 validation 표시 추가.
-- [ ] 성공 후 active panel refresh 및 새 폴더 focused row 이동.
-- [ ] 실패 시 recoverable AppError 표시.
-- [ ] Tests: Rust temp fixture create success/existing/permission-invalid; React dialog validation; full-scope command alignment.
+- [x] Rust `create_dir` command 구현: parent canonicalization, invalid name 차단, existing path 충돌 처리.
+- [x] `tauriClient.BACKEND_IMPLEMENTED_COMMANDS` 또는 command capability source of truth에 `create_dir` 추가.
+- [x] `OperationDialogHost`/`operationStore`에서 createDir를 atomic command path로 실행하고 성공 후 panel refresh를 호출한다.
+- [x] Create Directory dialog에 이름 입력 field와 validation 표시 추가.
+- [x] 성공 후 active panel refresh 및 새 폴더 focused row 이동.
+- [x] 실패 시 recoverable AppError 표시.
+- [x] Tests: Rust temp fixture create success/existing/invalid-name; React dialog validation; full-scope command alignment.
 
 ### 2.2 `rename_entry`
 
-- [ ] Rust `rename_entry` command 구현: 같은 parent 내 rename, cross-volume move 금지, overwrite 금지 기본값.
-- [ ] `tauriClient.BACKEND_IMPLEMENTED_COMMANDS` 또는 command capability source of truth에 `rename_entry` 추가.
-- [ ] `OperationDialogHost`/`operationStore`에서 rename을 atomic command path로 실행하고 성공 후 panel refresh를 호출한다.
-- [ ] Rename dialog에 새 이름 입력 field와 중복/invalid validation 표시 추가.
-- [ ] 성공 후 panel refresh 및 renamed row focus 유지.
-- [ ] Tests: Rust rename success/existing/invalid/virtual-target 차단; React dialog flow.
+- [x] Rust `rename_entry` command 구현: 같은 parent 내 rename, cross-volume move 금지, overwrite 금지 기본값.
+- [x] `tauriClient.BACKEND_IMPLEMENTED_COMMANDS` 또는 command capability source of truth에 `rename_entry` 추가.
+- [x] `OperationDialogHost`/`operationStore`에서 rename을 atomic command path로 실행하고 성공 후 panel refresh를 호출한다.
+- [x] Rename dialog에 새 이름 입력 field와 중복/invalid validation 표시 추가.
+- [x] 성공 후 panel refresh 및 renamed row focus 유지.
+- [x] Tests: Rust rename success/existing/invalid/virtual-target 차단; React dialog flow.
 
 ## 3. 장시간 파일 작업 TODO — copy/move/delete/trash
 
@@ -283,4 +285,3 @@
 - 기본 후속: `$ultragoal` — 위 TODO를 순차 goal로 분해해 ledger/checkpoint 기반으로 진행.
 - 병렬 후속: `$ultragoal` + `$team` — Rust operation service, React panel state, tests를 분리해 병렬 구현.
 - fallback: `$ralph` — 단일 owner가 한 기능 축을 끝까지 밀어야 할 때만 명시적으로 선택.
-

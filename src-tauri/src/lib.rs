@@ -199,6 +199,16 @@ fn list_locations() -> CommandResult<LocationList> {
     navigation::list_locations()
 }
 
+#[tauri::command]
+fn create_dir(parent: String, name: String) -> CommandResult<FileEntry> {
+    mutation::create_dir(&parent, &name)
+}
+
+#[tauri::command]
+fn rename_entry(path: String, new_name: String) -> CommandResult<FileEntry> {
+    mutation::rename_entry(&path, &new_name)
+}
+
 mod navigation {
     use super::*;
 
@@ -318,6 +328,203 @@ mod navigation {
         let raw = PathBuf::from(path);
         raw.canonicalize()
             .map_err(|error| map_io_error(error, Some(&raw)))
+    }
+}
+
+mod mutation {
+    use super::*;
+
+    pub(super) fn create_dir(parent: &str, name: &str) -> CommandResult<FileEntry> {
+        let parent = navigation::canonical_existing_path(parent)?;
+        if !parent.is_dir() {
+            return Err(AppError::new(
+                "not_directory",
+                "errors.notDirectory",
+                Some(&parent),
+                true,
+            ));
+        }
+
+        let safe_name = validate_child_name(name, Some(&parent))?;
+        let target = parent.join(safe_name);
+        if path_is_occupied(&target) {
+            return Err(AppError::new(
+                "already_exists",
+                "errors.alreadyExists",
+                Some(&target),
+                true,
+            ));
+        }
+
+        fs::create_dir(&target).map_err(|error| map_io_error(error, Some(&target)))?;
+        file_entry_from_path(&target, false)
+    }
+
+    pub(super) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntry> {
+        let raw_source = PathBuf::from(path);
+        let raw_parent = raw_source.parent().ok_or_else(|| {
+            AppError::new("invalid_path", "errors.invalidPath", Some(&raw_source), true)
+        })?;
+        let source_name = raw_source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| AppError::new("invalid_name", "errors.invalidName", Some(&raw_source), true))?;
+        let source_name = validate_child_name(source_name, Some(&raw_source))?;
+        let parent = navigation::canonical_existing_path(&raw_parent.to_string_lossy())?;
+        if !parent.is_dir() {
+            return Err(AppError::new(
+                "not_directory",
+                "errors.notDirectory",
+                Some(&parent),
+                true,
+            ));
+        }
+        let source = parent.join(source_name);
+        fs::symlink_metadata(&source).map_err(|error| map_io_error(error, Some(&source)))?;
+        let safe_name = validate_child_name(new_name, Some(&parent))?;
+        let target = parent.join(safe_name);
+
+        if target == source {
+            return file_entry_from_path(&source, false);
+        }
+
+        if path_is_occupied(&target) {
+            return Err(AppError::new(
+                "already_exists",
+                "errors.alreadyExists",
+                Some(&target),
+                true,
+            ));
+        }
+
+        rename_no_replace(&source, &target).map_err(|error| map_io_error(error, Some(&target)))?;
+        file_entry_from_path(&target, false)
+    }
+
+    fn validate_child_name<'a>(name: &'a str, path: Option<&Path>) -> CommandResult<&'a str> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+            return Err(AppError::new(
+                "invalid_name",
+                "errors.invalidName",
+                path,
+                true,
+            ));
+        }
+        if trimmed.contains('\0') || trimmed.contains('/') || trimmed.contains('\\') {
+            return Err(AppError::new(
+                "invalid_name",
+                "errors.invalidName",
+                path,
+                true,
+            )
+            .with_detail("name", trimmed));
+        }
+        if Path::new(trimmed).components().count() != 1 {
+            return Err(AppError::new(
+                "invalid_name",
+                "errors.invalidName",
+                path,
+                true,
+            )
+            .with_detail("name", trimmed));
+        }
+        Ok(trimmed)
+    }
+
+    fn path_is_occupied(path: &Path) -> bool {
+        fs::symlink_metadata(path).is_ok()
+    }
+
+    #[cfg(target_os = "macos")]
+    fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
+        use std::ffi::CString;
+        use std::os::raw::{c_char, c_int};
+        use std::os::unix::ffi::OsStrExt;
+
+        extern "C" {
+            fn renamex_np(from: *const c_char, to: *const c_char, flags: c_int) -> c_int;
+        }
+
+        const RENAME_EXCL: c_int = 0x00000004;
+        let source = CString::new(source.as_os_str().as_bytes())?;
+        let target = CString::new(target.as_os_str().as_bytes())?;
+        let result = unsafe { renamex_np(source.as_ptr(), target.as_ptr(), RENAME_EXCL) };
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
+        use std::ffi::CString;
+        use std::os::raw::{c_char, c_long};
+        use std::os::unix::ffi::OsStrExt;
+
+        extern "C" {
+            fn syscall(num: c_long, ...) -> c_long;
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        const SYS_RENAMEAT2: c_long = 316;
+        #[cfg(target_arch = "aarch64")]
+        const SYS_RENAMEAT2: c_long = 276;
+        #[cfg(target_arch = "x86")]
+        const SYS_RENAMEAT2: c_long = 353;
+        #[cfg(target_arch = "arm")]
+        const SYS_RENAMEAT2: c_long = 382;
+        const AT_FDCWD: c_long = -100;
+        const RENAME_NOREPLACE: c_long = 1;
+
+        let source = CString::new(source.as_os_str().as_bytes())?;
+        let target = CString::new(target.as_os_str().as_bytes())?;
+        let result = unsafe {
+            syscall(
+                SYS_RENAMEAT2,
+                AT_FDCWD,
+                source.as_ptr() as *const c_char,
+                AT_FDCWD,
+                target.as_ptr() as *const c_char,
+                RENAME_NOREPLACE,
+            )
+        };
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+
+    #[cfg(windows)]
+    fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
+        use std::os::windows::ffi::OsStrExt;
+
+        extern "system" {
+            fn MoveFileExW(existing: *const u16, new_name: *const u16, flags: u32) -> i32;
+        }
+
+        const MOVEFILE_WRITE_THROUGH: u32 = 0x00000008;
+        let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+        let target: Vec<u16> = target.as_os_str().encode_wide().chain(Some(0)).collect();
+        let result = unsafe { MoveFileExW(source.as_ptr(), target.as_ptr(), MOVEFILE_WRITE_THROUGH) };
+        if result != 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "android", windows)))]
+    fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
+        if path_is_occupied(target) {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "target already exists",
+            ));
+        }
+        fs::rename(source, target)
     }
 }
 
@@ -506,6 +713,7 @@ fn mime_from_extension(extension: &str) -> Option<&'static str> {
 fn map_io_error(error: io::Error, path: Option<&Path>) -> AppError {
     let (code, message_key, recoverable) = match error.kind() {
         io::ErrorKind::NotFound => ("not_found", "errors.notFound", true),
+        io::ErrorKind::AlreadyExists => ("already_exists", "errors.alreadyExists", true),
         io::ErrorKind::PermissionDenied => ("permission_denied", "errors.permissionDenied", true),
         io::ErrorKind::InvalidInput => ("invalid_path", "errors.invalidPath", true),
         _ => ("io_error", "errors.io", false),
@@ -526,7 +734,9 @@ pub fn run() {
             get_metadata,
             watch_path,
             goto_path,
-            list_locations
+            list_locations,
+            create_dir,
+            rename_entry
         ])
         .run(tauri::generate_context!())
         .expect("failed to run BokslDirGUI Tauri application");
@@ -651,5 +861,145 @@ mod tests {
 
         assert_eq!(ack.panel_id, PanelId::Left);
         assert!(ack.version > 0);
+    }
+
+    #[test]
+    fn create_dir_creates_child_with_validated_name() {
+        let fixture = TempFixture::new();
+        let created = create_dir(
+            fixture.root.to_string_lossy().into_owned(),
+            "new-folder".to_string(),
+        )
+        .expect("directory should be created");
+
+        assert_eq!(created.name, "new-folder");
+        assert_eq!(created.kind, EntryKind::Directory);
+        assert!(fixture.root.join("new-folder").is_dir());
+    }
+
+    #[test]
+    fn create_dir_rejects_existing_and_nested_names() {
+        let fixture = TempFixture::new();
+
+        let existing = create_dir(
+            fixture.root.to_string_lossy().into_owned(),
+            "folder".to_string(),
+        )
+        .expect_err("existing directory should fail");
+        assert_eq!(existing.code, "already_exists");
+        assert!(existing.recoverable);
+
+        let invalid = create_dir(
+            fixture.root.to_string_lossy().into_owned(),
+            "nested/folder".to_string(),
+        )
+        .expect_err("path separator should fail");
+        assert_eq!(invalid.code, "invalid_name");
+    }
+
+    #[test]
+    fn rename_entry_renames_within_same_parent_without_overwrite() {
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+
+        let renamed = rename_entry(
+            source.to_string_lossy().into_owned(),
+            "beta.txt".to_string(),
+        )
+        .expect("rename should succeed");
+
+        assert_eq!(renamed.name, "beta.txt");
+        assert!(fixture.root.join("beta.txt").is_file());
+        assert!(!source.exists());
+    }
+
+    #[test]
+    fn rename_entry_rejects_existing_and_invalid_names() {
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+
+        let existing = rename_entry(
+            source.to_string_lossy().into_owned(),
+            "archive.7z".to_string(),
+        )
+        .expect_err("rename overwrite should fail");
+        assert_eq!(existing.code, "already_exists");
+
+        let invalid = rename_entry(
+            source.to_string_lossy().into_owned(),
+            "../escape.txt".to_string(),
+        )
+        .expect_err("path traversal should fail");
+        assert_eq!(invalid.code, "invalid_name");
+        assert!(source.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_entry_rejects_dangling_symlink_target() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+        let dangling = fixture.root.join("dangling-link");
+        symlink(fixture.root.join("missing-target"), &dangling)
+            .expect("dangling symlink should be created");
+
+        let error = rename_entry(
+            source.to_string_lossy().into_owned(),
+            "dangling-link".to_string(),
+        )
+        .expect_err("rename should not overwrite dangling symlink path");
+
+        assert_eq!(error.code, "already_exists");
+        assert!(source.exists());
+        assert!(fs::symlink_metadata(dangling).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_entry_renames_symlink_entry_not_target() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = TempFixture::new();
+        let target = fixture.root.join("alpha.txt");
+        let link = fixture.root.join("alpha-link");
+        let renamed_link = fixture.root.join("renamed-link");
+        symlink(&target, &link).expect("symlink source should be created");
+
+        let renamed = rename_entry(
+            link.to_string_lossy().into_owned(),
+            "renamed-link".to_string(),
+        )
+        .expect("symlink entry rename should succeed");
+
+        assert_eq!(renamed.name, "renamed-link");
+        assert_eq!(renamed.kind, EntryKind::Symlink);
+        assert!(target.exists(), "target file must not be renamed");
+        assert!(fs::symlink_metadata(&link).is_err());
+        assert!(fs::symlink_metadata(&renamed_link).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_entry_renames_dangling_symlink_source_entry() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = TempFixture::new();
+        let link = fixture.root.join("dangling-source");
+        let renamed_link = fixture.root.join("renamed-dangling-source");
+        symlink(fixture.root.join("missing-target"), &link)
+            .expect("dangling symlink source should be created");
+
+        let renamed = rename_entry(
+            link.to_string_lossy().into_owned(),
+            "renamed-dangling-source".to_string(),
+        )
+        .expect("dangling symlink source entry rename should succeed");
+
+        assert_eq!(renamed.name, "renamed-dangling-source");
+        assert_eq!(renamed.kind, EntryKind::Symlink);
+        assert!(fs::symlink_metadata(&link).is_err());
+        assert!(fs::symlink_metadata(&renamed_link).is_ok());
     }
 }

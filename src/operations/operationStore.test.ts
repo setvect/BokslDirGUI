@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTION_BY_ID } from '../actions/registry';
 import type { FileEntry } from '../domain/types';
 import { canTransitionOperation, dialogExecutionModeForDialog, dialogKindForAction, useOperationStore } from './operationStore';
@@ -94,15 +94,90 @@ describe('operation store', () => {
   });
 
 
-  it('routes atomic command dialogs separately from long-running operation progress', () => {
+  it('routes atomic command dialogs separately from long-running operation progress', async () => {
     expect(dialogExecutionModeForDialog('createDir')).toBe('atomicCommand');
     expect(dialogExecutionModeForDialog('copy')).toBe('longRunningOperation');
 
     openAction('file.mkdir');
-    useOperationStore.getState().confirmDialog();
+    useOperationStore.getState().updateDialogInput('new-folder');
+    await useOperationStore.getState().confirmDialog();
 
     expect(useOperationStore.getState().progress).toBeNull();
     expect(useOperationStore.getState().lastError?.messageKey).toBe('errors.commandNotConnected');
+  });
+
+  it('validates safe mutation names before running atomic commands', async () => {
+    openAction('file.mkdir');
+
+    useOperationStore.getState().updateDialogInput('nested/folder');
+    await useOperationStore.getState().confirmDialog();
+
+    expect(useOperationStore.getState().progress).toBeNull();
+    expect(useOperationStore.getState().lastError).toMatchObject({
+      code: 'invalid_name',
+      messageKey: 'errors.invalidName',
+    });
+  });
+
+  it('runs connected createDir atomic commands without queuing progress', async () => {
+    const action = ACTION_BY_ID.get('file.mkdir');
+    if (!action) {
+      throw new Error('file.mkdir action is required');
+    }
+    const created = { ...sampleEntry, path: '/tmp/new-folder', name: 'new-folder', kind: 'directory' as const };
+    const atomicExecutor = vi.fn(async () => ({ ok: true as const, data: created }));
+    const onAtomicSuccess = vi.fn();
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'left',
+      sources: [],
+      targetDir: null,
+      workingDir: '/tmp',
+      atomicExecutor,
+      onAtomicSuccess,
+    });
+    useOperationStore.getState().updateDialogInput('new-folder');
+
+    await useOperationStore.getState().confirmDialog();
+
+    expect(atomicExecutor).toHaveBeenCalledOnce();
+    expect(onAtomicSuccess).toHaveBeenCalledWith(created, expect.objectContaining({ dialogKind: 'createDir' }));
+    expect(useOperationStore.getState().dialog).toBeNull();
+    expect(useOperationStore.getState().progress).toBeNull();
+    expect(useOperationStore.getState().lastError).toBeNull();
+  });
+
+  it('prevents duplicate atomic submissions while the first command is pending', async () => {
+    const action = ACTION_BY_ID.get('file.mkdir');
+    if (!action) {
+      throw new Error('file.mkdir action is required');
+    }
+    const created = { ...sampleEntry, path: '/tmp/new-folder', name: 'new-folder', kind: 'directory' as const };
+    let resolveCommand: (value: { ok: true; data: FileEntry }) => void = () => {
+      throw new Error('pending command resolver was not initialized');
+    };
+    const atomicExecutor = vi.fn(() => new Promise<{ ok: true; data: FileEntry }>((resolve) => {
+      resolveCommand = resolve;
+    }));
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'left',
+      sources: [],
+      targetDir: null,
+      workingDir: '/tmp',
+      atomicExecutor,
+    });
+    useOperationStore.getState().updateDialogInput('new-folder');
+
+    const firstSubmit = useOperationStore.getState().confirmDialog();
+    expect(useOperationStore.getState().dialog?.atomicPending).toBe(true);
+    await useOperationStore.getState().confirmDialog();
+
+    expect(atomicExecutor).toHaveBeenCalledOnce();
+    resolveCommand({ ok: true, data: created });
+    await firstSubmit;
+
+    expect(useOperationStore.getState().dialog).toBeNull();
   });
 
   it('keeps shell command disabled until preview token policy is enabled', () => {

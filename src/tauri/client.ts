@@ -69,6 +69,8 @@ export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.watchPath,
   COMMANDS.gotoPath,
   COMMANDS.listLocations,
+  COMMANDS.createDir,
+  COMMANDS.renameEntry,
 ] as const satisfies readonly TauriCommandName[];
 
 const implementedCommandSet = new Set<TauriCommandName>(BACKEND_IMPLEMENTED_COMMANDS);

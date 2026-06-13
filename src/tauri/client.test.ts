@@ -33,8 +33,12 @@ describe('Tauri command names', () => {
       'watch_path',
       'goto_path',
       'list_locations',
+      'create_dir',
+      'rename_entry',
     ]);
     expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.startCopy)).toBe(false);
   });
 

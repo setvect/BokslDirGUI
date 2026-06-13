@@ -23,8 +23,12 @@ describe('full-scope verification harness', () => {
       COMMANDS.watchPath,
       COMMANDS.gotoPath,
       COMMANDS.listLocations,
+      COMMANDS.createDir,
+      COMMANDS.renameEntry,
     ]);
     expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(false);
 
     const result = await tauriClient.startDelete({ targets: ['/demo/file.txt'], mode: 'trash' });

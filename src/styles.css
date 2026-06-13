@@ -610,6 +610,32 @@ button {
   padding: 9px 10px;
 }
 
+.operation-field {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #303030;
+  padding: 10px;
+  background: #181818;
+}
+
+.operation-field span:first-child {
+  color: var(--muted);
+}
+
+.operation-field input {
+  width: 100%;
+  border: 1px solid #3e3e3e;
+  background: #101010;
+  color: #f4f4f4;
+  padding: 7px 9px;
+  font: inherit;
+}
+
+.operation-field input:focus {
+  border-color: var(--cyan);
+  outline: none;
+}
+
 .operation-error {
   margin: 0;
   border: 1px solid #6e2f2f;
@@ -650,6 +676,11 @@ button {
 .dialog-button.primary {
   border-color: var(--blue);
   background: var(--blue-dim);
+}
+
+.dialog-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .dialog-button:hover {

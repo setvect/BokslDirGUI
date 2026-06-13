@@ -48,7 +48,19 @@ export interface OperationDialogDraft {
   backendExecutionStubbed: boolean;
   backendExecutionStubReasonKey: string | null;
   shellPreview: ShellCommandPreview | null;
+  inputLabel: string | null;
+  inputValue: string;
+  validationErrorKey: string | null;
+  atomicPending: boolean;
+  atomicExecutor: AtomicCommandExecutor | null;
+  onAtomicSuccess: AtomicCommandSuccessHandler | null;
 }
+
+export type AtomicCommandExecutor = (
+  dialog: OperationDialogDraft,
+) => Promise<{ ok: true; data: FileEntry } | { ok: false; error: AppError }>;
+
+export type AtomicCommandSuccessHandler = (entry: FileEntry, dialog: OperationDialogDraft) => void;
 
 export interface OpenDialogRequest {
   action: AppAction;
@@ -56,6 +68,8 @@ export interface OpenDialogRequest {
   sources: FileEntry[];
   targetDir: string | null;
   workingDir: string;
+  atomicExecutor?: AtomicCommandExecutor;
+  onAtomicSuccess?: AtomicCommandSuccessHandler;
 }
 
 export interface OperationStoreState {
@@ -67,7 +81,8 @@ export interface OperationStoreState {
   lastConflictDecision: ConflictDecision | null;
   applyAllConflictDecision: Extract<ConflictDecision, 'allOverwrite' | 'allSkip'> | null;
   openDialog(request: OpenDialogRequest): void;
-  confirmDialog(): void;
+  updateDialogInput(value: string): void;
+  confirmDialog(): Promise<void>;
   resolveConflict(decision: ConflictDecision): void;
   cancelOperation(): void;
   closeDialog(): void;
@@ -97,9 +112,73 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       applyAllConflictDecision: null,
     });
   },
-  confirmDialog: () => {
+  updateDialogInput: (value) => {
     const dialog = get().dialog;
     if (!dialog) {
+      return;
+    }
+    set({
+      dialog: {
+        ...dialog,
+        inputValue: value,
+        validationErrorKey: validateDialogInput(dialog.dialogKind, value),
+      },
+      lastError: null,
+    });
+  },
+  confirmDialog: async () => {
+    const dialog = get().dialog;
+    if (!dialog) {
+      return;
+    }
+
+    if (dialog.executionMode === 'atomicCommand') {
+      if (dialog.atomicPending) {
+        return;
+      }
+      const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue);
+      if (validationErrorKey) {
+        set({
+          dialog: { ...dialog, validationErrorKey },
+          lastError: appError('invalid_name', validationErrorKey, dialog.targetDir, true),
+          summary: null,
+          progress: null,
+        });
+        return;
+      }
+      if (!dialog.atomicExecutor) {
+        set({
+          lastError: appError('unsupported', 'errors.commandNotConnected', dialog.targetDir, true),
+          summary: null,
+          progress: null,
+        });
+        return;
+      }
+
+      set({
+        dialog: { ...dialog, atomicPending: true },
+        lastError: null,
+      });
+
+      const result = await dialog.atomicExecutor(dialog);
+      if (!result.ok) {
+        set((current) => ({
+          dialog: current.dialog ? { ...current.dialog, atomicPending: false } : null,
+          lastError: result.error,
+          summary: null,
+          progress: null,
+        }));
+        return;
+      }
+
+      dialog.onAtomicSuccess?.(result.data, dialog);
+      set({
+        dialog: null,
+        progress: null,
+        conflictPrompt: null,
+        summary: null,
+        lastError: null,
+      });
       return;
     }
 
@@ -217,7 +296,8 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
   const title = titleForDialog(dialogKind);
   const isPermanentDelete = dialogKind === 'deletePermanent';
   const isShell = dialogKind === 'shellCommand';
-  const backendExecutionStubbed = isBackendExecutionStubbed(dialogKind);
+  const backendExecutionStubbed = isBackendExecutionStubbed(dialogKind, request);
+  const inputValue = initialInputValueForDialog(dialogKind, request);
   return {
     dialogKind,
     executionMode: dialogExecutionModeForDialog(dialogKind),
@@ -237,6 +317,12 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
       ? 'operations.backendExecution.stubbedUntilCommandWiring'
       : null,
     shellPreview: isShell ? disabledShellPreview(request.workingDir) : null,
+    inputLabel: inputLabelForDialog(dialogKind),
+    inputValue,
+    validationErrorKey: validateDialogInput(dialogKind, inputValue),
+    atomicPending: false,
+    atomicExecutor: request.atomicExecutor ?? null,
+    onAtomicSuccess: request.onAtomicSuccess ?? null,
   };
 };
 
@@ -354,8 +440,48 @@ export const dialogExecutionModeForDialog = (dialogKind: DialogKind): DialogExec
   return 'unsupportedPreview';
 };
 
-const isBackendExecutionStubbed = (dialogKind: DialogKind) =>
-  dialogExecutionModeForDialog(dialogKind) !== 'unsupportedPreview';
+const CONNECTABLE_SAFE_MUTATIONS: readonly DialogKind[] = ['createDir', 'rename'];
+
+const isBackendExecutionStubbed = (dialogKind: DialogKind, request: OpenDialogRequest) => {
+  if (isLongRunningDialog(dialogKind)) {
+    return true;
+  }
+  if (CONNECTABLE_SAFE_MUTATIONS.includes(dialogKind)) {
+    return !request.atomicExecutor;
+  }
+  return dialogExecutionModeForDialog(dialogKind) === 'atomicCommand';
+};
+
+const inputLabelForDialog = (dialogKind: DialogKind) => {
+  if (dialogKind === 'createDir') {
+    return '새 폴더 이름';
+  }
+  if (dialogKind === 'rename') {
+    return '새 이름';
+  }
+  return null;
+};
+
+const initialInputValueForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
+  if (dialogKind === 'rename') {
+    return request.sources[0]?.name ?? '';
+  }
+  return '';
+};
+
+const validateDialogInput = (dialogKind: DialogKind, value: string) => {
+  if (dialogKind !== 'createDir' && dialogKind !== 'rename') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '.' || trimmed === '..') {
+    return 'errors.invalidName';
+  }
+  if (trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('\0')) {
+    return 'errors.invalidName';
+  }
+  return null;
+};
 
 const operationKindForDialog = (dialogKind: LongRunningDialogKind): OperationKind => {
   const mapping: Record<LongRunningDialogKind, OperationKind> = {

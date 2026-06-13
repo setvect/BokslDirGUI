@@ -9,6 +9,7 @@ export function OperationDialogHost() {
   const summary = useOperationStore((state) => state.summary);
   const lastError = useOperationStore((state) => state.lastError);
   const confirmDialog = useOperationStore((state) => state.confirmDialog);
+  const updateDialogInput = useOperationStore((state) => state.updateDialogInput);
   const resolveConflict = useOperationStore((state) => state.resolveConflict);
   const cancelOperation = useOperationStore((state) => state.cancelOperation);
   const closeDialog = useOperationStore((state) => state.closeDialog);
@@ -55,6 +56,25 @@ export function OperationDialogHost() {
                   실제 파일 변경은 아직 연결하지 않았습니다. 이 shell은 확인/상태/오류 UX만 검증합니다.
                   {dialog.backendExecutionStubReasonKey ? ` (${dialog.backendExecutionStubReasonKey})` : null}
                 </p>
+              ) : null}
+              {dialog.inputLabel ? (
+                <label className="operation-field">
+                  <span>{dialog.inputLabel}</span>
+                  <input
+                    aria-label={dialog.inputLabel}
+                    value={dialog.inputValue}
+                    onChange={(event) => updateDialogInput(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void confirmDialog();
+                      }
+                    }}
+                  />
+                  {dialog.validationErrorKey ? (
+                    <span className="operation-error" role="alert">{dialog.validationErrorKey}</span>
+                  ) : null}
+                </label>
               ) : null}
               {dialog.shellPreview ? (
                 <div className="operation-section operation-shell-preview">
@@ -103,7 +123,14 @@ export function OperationDialogHost() {
                   <button type="button" className="dialog-button secondary" onClick={closeDialog}>닫기</button>
                 </Dialog.Close>
                 <button type="button" className="dialog-button secondary" onClick={cancelOperation}>{dialog.cancelLabel}</button>
-                <button type="button" className="dialog-button primary" onClick={confirmDialog}>{dialog.primaryLabel}</button>
+                <button
+                  type="button"
+                  className="dialog-button primary"
+                  disabled={Boolean(dialog.validationErrorKey) || dialog.atomicPending}
+                  onClick={() => void confirmDialog()}
+                >
+                  {dialog.atomicPending ? '실행 중…' : dialog.primaryLabel}
+                </button>
               </div>
             </>
           ) : null}

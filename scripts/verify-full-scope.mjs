@@ -122,6 +122,16 @@ addCheck(
   commanderShell.includes('FilterPrompt') && commanderShell.includes('Filter pattern') && commanderShell.includes("Object.hasOwn(options, 'filter')"),
   'filter.start/filter.clear must send explicit non-null/null filter values to list_dir',
 );
+addCheck(
+  'commander shell wires safe mutation atomic executors',
+  commanderShell.includes('atomicExecutorForAction') && commanderShell.includes('mutationClient.createDir') && commanderShell.includes('mutationClient.renameEntry'),
+  'create_dir/rename_entry must execute through explicit atomic command adapters',
+);
+addCheck(
+  'commander shell refreshes and focuses after safe mutation',
+  commanderShell.includes('focusPath: entry.path') && commanderShell.includes('onAtomicSuccess'),
+  'Safe mutation success must refresh the active panel and focus the changed row',
+);
 
 addCheck(
   'action registry exposes shortcut collision invariant',
@@ -142,15 +152,21 @@ addCheck('operation store uses backend stub policy boundary', operationStore.inc
 addCheck('operation store removed danger-only stub flag', !operationStore.includes('destructiveExecutionStubbed'), 'Stub policy must not hide safe mutation stubs');
 addCheck('operation store separates atomic command execution mode', operationStore.includes("'atomicCommand'") && operationStore.includes('dialogExecutionModeForDialog'), 'Atomic commands must not be queued as long-running progress');
 addCheck('operation store separates long-running operation execution mode', operationStore.includes("'longRunningOperation'") && operationStore.includes('LONG_RUNNING_DIALOGS'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
+addCheck('operation store validates safe mutation names', operationStore.includes('validateDialogInput') && operationStore.includes('errors.invalidName'), 'create_dir/rename_entry dialog names must be validated before Rust command execution');
+addCheck('operation store exposes atomic executor seam', operationStore.includes('AtomicCommandExecutor') && operationStore.includes('onAtomicSuccess'), 'Connected atomic commands must use request/response execution, not progress stubs');
+addCheck('operation store guards duplicate atomic submissions', operationStore.includes('atomicPending') && operationStore.includes('if (dialog.atomicPending)'), 'create_dir/rename_entry dialogs must not submit duplicate filesystem requests while pending');
 for (const conflictState of ['lastConflictDecision', 'applyAllConflictDecision', 'allOverwrite', 'allSkip']) {
   addCheck(`operation conflict model includes ${conflictState}`, operationStore.includes(conflictState), 'Conflict apply-all decisions are explicit');
 }
 
 const rustLib = read('src-tauri/src/lib.rs');
-for (const command of ['list_dir', 'get_metadata', 'watch_path', 'goto_path', 'list_locations']) {
+for (const command of ['list_dir', 'get_metadata', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry']) {
   addCheck(`rust handler includes ${command}`, rustLib.includes(command), 'read-only command bridge');
 }
 addCheck('rust list_dir normalizes filter once', rustLib.includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
+addCheck('rust safe mutation validates child names', rustLib.includes('validate_child_name') && rustLib.includes('already_exists'), 'create_dir/rename_entry must reject invalid names and overwrites');
+addCheck('rust rename preserves source entry identity for symlinks', rustLib.includes('rename_entry_renames_symlink_entry_not_target') && rustLib.includes('fs::symlink_metadata(&source)'), 'rename_entry must rename the visible entry, not a symlink target');
+addCheck('rust rename uses no-replace abstraction', rustLib.includes('rename_no_replace') && rustLib.includes('RENAME_EXCL') && rustLib.includes('RENAME_NOREPLACE'), 'rename_entry overwrite prevention must not depend only on check-then-rename');
 
 const tauriConf = JSON.parse(read('src-tauri/tauri.conf.json'));
 addCheck(
@@ -168,6 +184,7 @@ const tauriClient = read('src/tauri/client.ts');
 for (const token of ['TauriResult', 'BACKEND_IMPLEMENTED_COMMANDS', 'unsupportedCommandError', 'normalizeInvokeError']) {
   addCheck(`tauri client exposes ${token}`, tauriClient.includes(token), 'Frontend wrappers must distinguish unsupported vs failed commands');
 }
+addCheck('tauri client marks safe mutation handlers implemented', tauriClient.includes('COMMANDS.createDir') && tauriClient.includes('COMMANDS.renameEntry'), 'create_dir/rename_entry frontend capability must match Rust handler registration');
 
 const panelState = read('src/ui/panelState.ts');
 const panelDataSource = read('src/ui/panelDataSource.ts');

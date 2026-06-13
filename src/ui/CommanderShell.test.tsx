@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import { ACTION_BY_ID } from '../actions/registry';
 import { useOperationStore } from '../operations/operationStore';
 import { CommanderShell } from './CommanderShell';
@@ -19,16 +20,22 @@ afterEach(() => {
   cleanup();
 });
 
-const commanderElement = (dataSource: PanelDataSource = createFixturePanelDataSource()) => (
+const commanderElement = (
+  dataSource: PanelDataSource = createFixturePanelDataSource(),
+  mutationClient?: ComponentProps<typeof CommanderShell>['mutationClient'],
+) => (
   <CommanderShell
     dataSource={dataSource}
+    mutationClient={mutationClient}
     initialFocusIndex={INITIAL_FOCUS_INDEX}
     initialSelectedPaths={INITIAL_SELECTED_PATHS}
   />
 );
 
-const renderCommander = (dataSource: PanelDataSource = createFixturePanelDataSource()) =>
-  render(commanderElement(dataSource));
+const renderCommander = (
+  dataSource: PanelDataSource = createFixturePanelDataSource(),
+  mutationClient?: ComponentProps<typeof CommanderShell>['mutationClient'],
+) => render(commanderElement(dataSource, mutationClient));
 
 describe('CommanderShell', () => {
   it('renders a TUI-faithful dual-panel commander canvas', () => {
@@ -277,6 +284,82 @@ describe('CommanderShell', () => {
 
     expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
     expect(screen.getByText('file.copy')).toBeTruthy();
+  });
+
+  it('creates a directory through the connected atomic command path and refreshes focus', async () => {
+    const user = userEvent.setup();
+    const created = { ...testEntry(SAMPLE_LISTINGS.right.path, 'New Folder'), kind: 'directory' as const };
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir').mockImplementation(async (input) => ({
+      ok: true as const,
+      data: createDirectoryListing(
+        input.panelId,
+        input.path,
+        [created, testEntry(input.path, 'sibling.txt')],
+        input.sort,
+        input.filter,
+        7,
+      ),
+    }));
+    const mutationClient = {
+      createDir: vi.fn(async () => ({ ok: true as const, data: created })),
+      renameEntry: vi.fn(async () => ({ ok: true as const, data: created })),
+    };
+    const { container } = renderCommander(dataSource, mutationClient);
+
+    await user.keyboard('a');
+    const input = await screen.findByLabelText('새 폴더 이름');
+    await user.type(input, 'New Folder');
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(mutationClient.createDir).toHaveBeenCalledWith({
+      parent: SAMPLE_LISTINGS.right.path,
+      name: 'New Folder',
+    }));
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      path: SAMPLE_LISTINGS.right.path,
+    })));
+    expect(await screen.findByText('New Folder')).toBeTruthy();
+    expect(focusedRowText(container)).toContain('New Folder');
+  });
+
+  it('renames the focused entry through the connected atomic command path and keeps row focus', async () => {
+    const user = userEvent.setup();
+    const renamed = { ...testEntry(SAMPLE_LISTINGS.right.path, 'renamed-entry') };
+    const original = SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right];
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir').mockImplementation(async (input) => ({
+      ok: true as const,
+      data: createDirectoryListing(
+        input.panelId,
+        input.path,
+        [renamed, testEntry(input.path, 'other.txt')],
+        input.sort,
+        input.filter,
+        8,
+      ),
+    }));
+    const mutationClient = {
+      createDir: vi.fn(async () => ({ ok: true as const, data: renamed })),
+      renameEntry: vi.fn(async () => ({ ok: true as const, data: renamed })),
+    };
+    const { container } = renderCommander(dataSource, mutationClient);
+
+    await user.keyboard('{F2}');
+    const input = await screen.findByLabelText('새 이름');
+    await user.clear(input);
+    await user.type(input, 'renamed-entry');
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(mutationClient.renameEntry).toHaveBeenCalledWith({
+      path: original.path,
+      newName: 'renamed-entry',
+    }));
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      path: SAMPLE_LISTINGS.right.path,
+    })));
+    expect(await screen.findByText('renamed-entry')).toBeTruthy();
+    expect(focusedRowText(container)).toContain('renamed-entry');
   });
 
   it('dispatches registry sequence shortcuts without web text focus', async () => {

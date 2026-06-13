@@ -24,7 +24,8 @@ import {
 } from '../actions/registry';
 import type { DirectoryListing, FileEntry, PanelId, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
-import { dialogKindForAction, useOperationStore } from '../operations/operationStore';
+import { dialogKindForAction, useOperationStore, type AtomicCommandExecutor } from '../operations/operationStore';
+import { tauriClient } from '../tauri/client';
 import { actionNeedsConcreteSources, createActionContext, filterEnabledActions } from './actionContext';
 import { createTauriPanelDataSource, type PanelDataSource } from './panelDataSource';
 import {
@@ -58,8 +59,14 @@ type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selecte
 
 interface CommanderShellProps {
   dataSource?: PanelDataSource;
+  mutationClient?: SafeMutationClient;
   initialFocusIndex?: Partial<Record<PanelId, number>>;
   initialSelectedPaths?: Partial<Record<PanelId, string[]>>;
+}
+
+interface SafeMutationClient {
+  createDir(input: { parent: string; name: string }): ReturnType<typeof tauriClient.createDir>;
+  renameEntry(input: { path: string; newName: string }): ReturnType<typeof tauriClient.renameEntry>;
 }
 
 interface KeyboardRuntime {
@@ -84,6 +91,7 @@ interface ListPanelOptions {
 
 export function CommanderShell({
   dataSource = DEFAULT_DATA_SOURCE,
+  mutationClient = tauriClient,
   initialFocusIndex,
   initialSelectedPaths,
 }: CommanderShellProps) {
@@ -493,6 +501,14 @@ export function CommanderShell({
         sources,
         targetDir: panelState[oppositePanel].path,
         workingDir: panelListing.path,
+        atomicExecutor: atomicExecutorForAction(actionId, mutationClient),
+        onAtomicSuccess: (entry) => {
+          void listPanel(panelOverride, panelListing.path, {
+            preserveSelection: false,
+            focusPath: entry.path,
+          });
+          setOverlayMessage(`${labelForAction(action)} 완료: ${entry.name}`);
+        },
       });
       return;
     }
@@ -1166,6 +1182,21 @@ const shortenPath = (path: string) => {
 const oppositePanelOf = (panelId: PanelId): PanelId => (panelId === 'left' ? 'right' : 'left');
 
 const rowDomId = (panelId: PanelId, index: number) => `commander-row-${panelId}-${index}`;
+
+const atomicExecutorForAction = (
+  actionId: ActionId,
+  mutationClient: SafeMutationClient,
+): AtomicCommandExecutor | undefined => {
+  if (actionId === 'file.mkdir') {
+    return (dialog) =>
+      mutationClient.createDir({ parent: dialog.targetDir ?? '', name: dialog.inputValue.trim() });
+  }
+  if (actionId === 'file.rename') {
+    return (dialog) =>
+      mutationClient.renameEntry({ path: dialog.sources[0]?.path ?? '', newName: dialog.inputValue.trim() });
+  }
+  return undefined;
+};
 
 interface MovementHandlers {
   moveFocusedEntry(delta: number): void;

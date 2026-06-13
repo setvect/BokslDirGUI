@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTION_BY_ID } from '../actions/registry';
 import type { FileEntry } from '../domain/types';
 import { OperationDialogHost } from './OperationDialogHost';
@@ -54,7 +55,7 @@ describe('OperationDialogHost', () => {
     expect(screen.getByText('start_move')).toBeTruthy();
   });
 
-  it('also warns when safe file-mutation dialogs are backend stubs', () => {
+  it('warns when unconnected file-mutation dialogs are backend stubs', () => {
     const action = ACTION_BY_ID.get('file.copy');
     if (!action) {
       throw new Error('file.copy action is required');
@@ -72,6 +73,66 @@ describe('OperationDialogHost', () => {
     expect(screen.getByText('Copy to opposite panel')).toBeTruthy();
     expect(screen.getByText(/실제 파일 변경은 아직 연결하지 않았습니다/)).toBeTruthy();
     expect(screen.getByText(/operations.backendExecution.stubbedUntilCommandWiring/)).toBeTruthy();
+  });
+
+  it('renders connected create directory input validation without stub warning', async () => {
+    const user = userEvent.setup();
+    const action = ACTION_BY_ID.get('file.mkdir');
+    if (!action) {
+      throw new Error('file.mkdir action is required');
+    }
+    const atomicExecutor = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...sampleEntry, path: '/tmp/New Folder', name: 'New Folder', kind: 'directory' as const },
+    }));
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'right',
+      sources: [],
+      targetDir: null,
+      workingDir: '/tmp',
+      atomicExecutor,
+    });
+
+    render(<OperationDialogHost />);
+
+    expect(screen.getByText('Create Directory')).toBeTruthy();
+    expect(screen.queryByText(/실제 파일 변경은 아직 연결하지 않았습니다/)).toBeNull();
+    const input = screen.getByLabelText('새 폴더 이름');
+    expect(screen.getByText('errors.invalidName')).toBeTruthy();
+    await user.type(input, 'New Folder');
+
+    expect(screen.queryByText('errors.invalidName')).toBeNull();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    expect(atomicExecutor).toHaveBeenCalledOnce();
+  });
+
+  it('disables the primary button while an atomic command is pending', async () => {
+    const user = userEvent.setup();
+    const action = ACTION_BY_ID.get('file.mkdir');
+    if (!action) {
+      throw new Error('file.mkdir action is required');
+    }
+    const atomicExecutor = vi.fn(() => new Promise<{ ok: true; data: FileEntry }>(() => {}));
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'right',
+      sources: [],
+      targetDir: null,
+      workingDir: '/tmp',
+      atomicExecutor,
+    });
+
+    render(<OperationDialogHost />);
+
+    await user.type(screen.getByLabelText('새 폴더 이름'), 'New Folder');
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    const pendingButton = await screen.findByRole('button', { name: '실행 중…' });
+    expect(pendingButton).toHaveProperty('disabled', true);
+    await user.click(pendingButton);
+    expect(atomicExecutor).toHaveBeenCalledOnce();
   });
 
   it('renders conflict resolution choices when an operation waits for conflict', () => {
