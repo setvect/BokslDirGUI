@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTIONS,
   ACTION_BY_ID,
+  actionForKeyboardShortcut,
+  ariaKeyShortcutsFromRegistry,
   isActionAvailable,
+  keyboardBindingCollisions,
   labelForAction,
+  matchKeyboardShortcut,
   menuRootsFromRegistry,
+  shortcutLabelForAction,
   type ActionContext,
   type ActionId,
 } from './registry';
@@ -93,4 +98,66 @@ describe('action registry', () => {
     expect(isActionAvailable(archivePreview, baseContext)).toBe(false);
     expect(isActionAvailable(archivePreview, { ...baseContext, focusedEntryKind: 'archive' })).toBe(true);
   });
+
+  it('derives keyboard shortcut dispatch from explicit keyboardBindings metadata', () => {
+    expect(actionForKeyboardShortcut(key('Tab'))?.id).toBe('panel.switchActive');
+    expect(actionForKeyboardShortcut(key('Enter'))?.id).toBe('nav.enter');
+    expect(actionForKeyboardShortcut(key('h'))?.id).toBe('nav.up');
+    expect(actionForKeyboardShortcut(key('y'))?.id).toBe('file.copy');
+    expect(actionForKeyboardShortcut(key('F5'))?.id).toBe('file.copy');
+    expect(actionForKeyboardShortcut(key('D', { shiftKey: true }))?.id).toBe('file.deletePermanent');
+    expect(actionForKeyboardShortcut(key('Delete', { shiftKey: true }))?.id).toBe('file.deletePermanent');
+    expect(actionForKeyboardShortcut(key('a', { ctrlKey: true }))?.id).toBe('selection.all');
+    expect(ACTION_BY_ID.get('archive.preview')?.shortcutLabel).toBe('Enter on archive');
+    expect(ACTION_BY_ID.get('archive.preview')?.keyboardBindings).toBeUndefined();
+  });
+
+  it('supports sequence shortcuts without parsing display-only shortcut labels', () => {
+    const pendingGo = matchKeyboardShortcut(key('g'));
+    expect(pendingGo.status).toBe('pending');
+    expect(actionForKeyboardShortcut(key('p'), pendingGo.sequence)?.id).toBe('nav.gotoPath');
+
+    const pendingSort = matchKeyboardShortcut(key('s'));
+    expect(pendingSort.status).toBe('pending');
+    expect(actionForKeyboardShortcut(key('n'), pendingSort.sequence)?.id).toBe('view.sortName');
+  });
+
+  it('derives aria shortcut hints from dispatchable single-key bindings only', () => {
+    const ariaShortcuts = ariaKeyShortcutsFromRegistry();
+    expect(ariaShortcuts).toContain('Tab');
+    expect(ariaShortcuts).toContain('Enter');
+    expect(ariaShortcuts).toContain('Control+A');
+    expect(ariaShortcuts).not.toContain('Enter on archive');
+    expect(ariaShortcuts).not.toContain('g p');
+  });
+
+  it('keeps exact keyboard binding collisions out of the registry', () => {
+    expect(keyboardBindingCollisions()).toEqual([]);
+  });
+
+  it('keeps prefix sequence shortcuts reachable with timeout disambiguation metadata', () => {
+    const pendingTab = matchKeyboardShortcut(key('t'));
+    expect(pendingTab.status).toBe('pending');
+
+    const pendingBookmark = matchKeyboardShortcut(key('b'), pendingTab.sequence);
+    expect(pendingBookmark.status).toBe('pending');
+    expect(pendingBookmark.action?.id).toBe('bookmark.list');
+    expect(actionForKeyboardShortcut(key('a'), pendingBookmark.sequence)?.id).toBe('bookmark.add');
+  });
+
+  it('keeps hotkey strip shortcut formatting behind a registry helper', () => {
+    expect(shortcutLabelForAction(ACTION_BY_ID.get('file.copy')!)).toBe('y');
+    expect(shortcutLabelForAction(ACTION_BY_ID.get('archive.preview')!)).toBe('Enter on archive');
+  });
+});
+
+const key = (
+  value: string,
+  modifiers: Partial<Pick<KeyboardEvent, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>> = {},
+) => ({
+  key: value,
+  altKey: modifiers.altKey ?? false,
+  ctrlKey: modifiers.ctrlKey ?? false,
+  metaKey: modifiers.metaKey ?? false,
+  shiftKey: modifiers.shiftKey ?? false,
 });

@@ -7,14 +7,17 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ACTIONS,
+  ariaKeyShortcutsFromRegistry,
   actionsForMenu,
   hotkeyStripActionsFromRegistry,
   isActionAvailable,
   labelForAction,
+  matchKeyboardShortcut,
   menuRootsFromRegistry,
+  shortcutLabelForAction,
   type ActionContext,
   type ActionId,
   type AppAction,
@@ -25,14 +28,35 @@ import { dialogKindForAction, useOperationStore } from '../operations/operationS
 import { actionNeedsConcreteSources, createActionContext, filterEnabledActions } from './actionContext';
 import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './commanderFixture';
 import { entryIcon, formatModified, formatSize, summarizeEntries } from './format';
+import {
+  commanderKeyboardIsSuspended,
+  useCommanderKeyboardBoundaryProps,
+} from './keyboardOwnership';
 
 interface PanelUiState {
   focusedIndex: number;
   selectedPaths: string[];
 }
 
+const KEYBOARD_PAGE_STEP = 12;
+const FOCUSABLE_ROW_TAB_INDEX = -1;
+const KEYBOARD_SEQUENCE_TIMEOUT_MS = 900;
+
+interface KeyboardRuntime {
+  context: ActionContext;
+  operationDialogOpen: boolean;
+  moveFocusedEntry(delta: number): void;
+  focusBoundaryEntry(boundary: 'first' | 'last'): void;
+  handleAction(action: AppAction): void;
+}
+
 export function CommanderShell() {
   const openOperationDialog = useOperationStore((state) => state.openDialog);
+  const operationDialogOpen = useOperationStore((state) => Boolean(state.dialog));
+  const shellRef = useRef<HTMLElement>(null);
+  const shortcutSequenceRef = useRef<readonly string[]>([]);
+  const shortcutSequenceTimeoutRef = useRef<number | null>(null);
+  const keyboardRuntimeRef = useRef<KeyboardRuntime | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId>('right');
   const [panelState, setPanelState] = useState<Record<PanelId, PanelUiState>>({
     left: {
@@ -51,6 +75,73 @@ export function CommanderShell() {
       ...current,
       [panelId]: { ...current[panelId], ...next },
     }));
+  };
+
+  const focusEntry = (panelId: PanelId, index: number) => {
+    const entryCount = SAMPLE_LISTINGS[panelId].entries.length;
+    const focusedIndex = clamp(index, 0, Math.max(0, entryCount - 1));
+    setActivePanel(panelId);
+    updatePanel(panelId, { focusedIndex });
+  };
+
+  const moveFocusedEntry = (delta: number) => {
+    focusEntry(activePanel, panelState[activePanel].focusedIndex + delta);
+  };
+
+  const focusBoundaryEntry = (boundary: 'first' | 'last') => {
+    const entryCount = SAMPLE_LISTINGS[activePanel].entries.length;
+    focusEntry(activePanel, boundary === 'first' ? 0 : entryCount - 1);
+  };
+
+  const switchActivePanel = () => {
+    const nextPanel = oppositePanelOf(activePanel);
+    setActivePanel(nextPanel);
+    setOverlayMessage(`활성 패널 전환: ${nextPanel.toUpperCase()}`);
+  };
+
+  const toggleFocusedSelection = (panelId: PanelId) => {
+    const focusedEntry = SAMPLE_LISTINGS[panelId].entries[panelState[panelId].focusedIndex];
+    if (!focusedEntry || focusedEntry.isVirtual) {
+      setOverlayMessage('가상 항목은 선택 대상으로 표시하지 않습니다.');
+      return;
+    }
+
+    setActivePanel(panelId);
+    setPanelState((current) => {
+      const selectedPaths = current[panelId].selectedPaths.includes(focusedEntry.path)
+        ? current[panelId].selectedPaths.filter((path) => path !== focusedEntry.path)
+        : [...current[panelId].selectedPaths, focusedEntry.path];
+
+      return {
+        ...current,
+        [panelId]: {
+          ...current[panelId],
+          selectedPaths,
+        },
+      };
+    });
+  };
+
+  const selectAllEntries = (panelId: PanelId) => {
+    updatePanel(panelId, {
+      selectedPaths: SAMPLE_LISTINGS[panelId].entries
+        .filter((entry) => !entry.isVirtual)
+        .map((entry) => entry.path),
+    });
+  };
+
+  const clearSelection = (panelId: PanelId) => {
+    updatePanel(panelId, { selectedPaths: [] });
+  };
+
+  const invertSelection = (panelId: PanelId) => {
+    const concretePaths = SAMPLE_LISTINGS[panelId].entries
+      .filter((entry) => !entry.isVirtual)
+      .map((entry) => entry.path);
+    const currentSelection = new Set(panelState[panelId].selectedPaths);
+    updatePanel(panelId, {
+      selectedPaths: concretePaths.filter((path) => !currentSelection.has(path)),
+    });
   };
 
   const selectEntry = (panelId: PanelId, index: number, entry: FileEntry, additive: boolean) => {
@@ -84,8 +175,13 @@ export function CommanderShell() {
 
   const handleAction = (action: AppAction, panelOverride = activePanel, sourceOverride?: FileEntry[]) => {
     const actionId = action.id as ActionId;
+    if (actionId === 'panel.switchActive') {
+      switchActivePanel();
+      return;
+    }
+
     const panelListing = SAMPLE_LISTINGS[panelOverride];
-    const oppositePanel = panelOverride === 'left' ? 'right' : 'left';
+    const oppositePanel = oppositePanelOf(panelOverride);
     const panelSelection = panelState[panelOverride].selectedPaths;
     const focusedEntry = panelListing.entries[panelState[panelOverride].focusedIndex];
     const selectedEntries = panelListing.entries.filter((entry) => panelSelection.includes(entry.path) && !entry.isVirtual);
@@ -93,6 +189,35 @@ export function CommanderShell() {
     const sources = (sourceOverride ?? (selectedEntries.length > 0 ? selectedEntries : focusedConcreteSource)).filter(
       (entry) => !entry.isVirtual,
     );
+
+    const actionTargetEntry = sourceOverride?.[0] ?? focusedEntry;
+    if (actionId === 'nav.enter' && actionTargetEntry) {
+      openEntry(panelOverride, actionTargetEntry);
+      return;
+    }
+
+    if (actionId === 'selection.toggle') {
+      toggleFocusedSelection(panelOverride);
+      return;
+    }
+
+    if (actionId === 'selection.all') {
+      selectAllEntries(panelOverride);
+      setOverlayMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      return;
+    }
+
+    if (actionId === 'selection.clear') {
+      clearSelection(panelOverride);
+      setOverlayMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      return;
+    }
+
+    if (actionId === 'selection.invert') {
+      invertSelection(panelOverride);
+      setOverlayMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      return;
+    }
 
     if (dialogKindForAction(actionId)) {
       if (actionNeedsConcreteSources(actionId) && sources.length === 0) {
@@ -126,9 +251,117 @@ export function CommanderShell() {
     shellCommandEnabled: false,
     operationBusy: false,
   });
+  const activeRowDomId = rowDomId(activePanel, panelState[activePanel].focusedIndex);
+  const ariaKeyShortcuts = ariaKeyShortcutsFromRegistry();
+  keyboardRuntimeRef.current = {
+    context,
+    operationDialogOpen,
+    moveFocusedEntry,
+    focusBoundaryEntry,
+    handleAction,
+  };
+
+  useEffect(() => {
+    shellRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  useEffect(() => {
+    const clearShortcutSequence = () => {
+      shortcutSequenceRef.current = [];
+      if (shortcutSequenceTimeoutRef.current) {
+        window.clearTimeout(shortcutSequenceTimeoutRef.current);
+        shortcutSequenceTimeoutRef.current = null;
+      }
+    };
+
+    const runShortcutAction = (shortcutAction: AppAction) => {
+      const runtime = keyboardRuntimeRef.current;
+      if (!runtime || runtime.operationDialogOpen || commanderKeyboardIsSuspended(document.activeElement)) {
+        clearShortcutSequence();
+        return;
+      }
+
+      if (!isActionAvailable(shortcutAction, runtime.context)) {
+        setOverlayMessage(`${labelForAction(shortcutAction)} · 현재 컨텍스트에서는 사용할 수 없습니다.`);
+        shellRef.current?.focus({ preventScroll: true });
+        return;
+      }
+
+      runtime.handleAction(shortcutAction);
+      shellRef.current?.focus({ preventScroll: true });
+    };
+
+    const holdShortcutSequence = (sequence: readonly string[], pendingAction: AppAction | null) => {
+      shortcutSequenceRef.current = sequence;
+      if (shortcutSequenceTimeoutRef.current) {
+        window.clearTimeout(shortcutSequenceTimeoutRef.current);
+      }
+      shortcutSequenceTimeoutRef.current = window.setTimeout(() => {
+        shortcutSequenceRef.current = [];
+        shortcutSequenceTimeoutRef.current = null;
+        if (pendingAction) {
+          runShortcutAction(pendingAction);
+        }
+      }, KEYBOARD_SEQUENCE_TIMEOUT_MS);
+    };
+
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      const runtime = keyboardRuntimeRef.current;
+      if (!runtime || event.defaultPrevented) {
+        return;
+      }
+
+      if (runtime.operationDialogOpen || commanderKeyboardIsSuspended(event.target)) {
+        clearShortcutSequence();
+        return;
+      }
+
+      const handledByMovement = handleMovementKey(event, {
+        moveFocusedEntry: runtime.moveFocusedEntry,
+        focusBoundaryEntry: runtime.focusBoundaryEntry,
+      });
+      if (handledByMovement) {
+        clearShortcutSequence();
+        shellRef.current?.focus({ preventScroll: true });
+        return;
+      }
+
+      const shortcutMatch = matchKeyboardShortcut(event, shortcutSequenceRef.current);
+      if (shortcutMatch.status === 'none') {
+        clearShortcutSequence();
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (shortcutMatch.status === 'pending') {
+        holdShortcutSequence(shortcutMatch.sequence, shortcutMatch.action);
+        shellRef.current?.focus({ preventScroll: true });
+        return;
+      }
+
+      clearShortcutSequence();
+      runShortcutAction(shortcutMatch.action);
+    };
+
+    document.addEventListener('keydown', handleDocumentKeyDown, { capture: true });
+    return () => {
+      document.removeEventListener('keydown', handleDocumentKeyDown, { capture: true });
+      clearShortcutSequence();
+    };
+  }, []);
 
   return (
-    <main className="commander-shell" aria-label="BokslDirGUI file commander shell">
+    <main
+      ref={shellRef}
+      className="commander-shell"
+      role="application"
+      tabIndex={0}
+      aria-label="BokslDirGUI file commander shell"
+      aria-activedescendant={activeRowDomId}
+      aria-keyshortcuts={`${ariaKeyShortcuts} ArrowUp ArrowDown PageUp PageDown Home End`}
+    >
       <TopMenuBar context={context} onOpenAction={(action) => handleAction(action)} />
       <section className="panel-zone" aria-label="dual file panels">
         <FilePanel
@@ -176,21 +409,12 @@ function TopMenuBar({ context, onOpenAction }: TopMenuBarProps) {
             <Popover.Root key={root}>
               <Popover.Trigger className="menu-trigger">{root}</Popover.Trigger>
               <Popover.Portal>
-                <Popover.Content className="menu-popover" sideOffset={4} align="start">
-                  <div className="menu-popover-title">{root}</div>
-                  {actions.map((action) => (
-                    <button
-                      key={action.id}
-                      type="button"
-                      className="menu-item"
-                      disabled={!isActionAvailable(action, context)}
-                      onClick={() => onOpenAction(action)}
-                    >
-                      <span>{labelForAction(action)}</span>
-                      <kbd>{action.defaultShortcut ?? '·'}</kbd>
-                    </button>
-                  ))}
-                </Popover.Content>
+                <MenuPopoverContent
+                  root={root}
+                  actions={actions}
+                  context={context}
+                  onOpenAction={onOpenAction}
+                />
               </Popover.Portal>
             </Popover.Root>
           );
@@ -198,6 +422,33 @@ function TopMenuBar({ context, onOpenAction }: TopMenuBarProps) {
       </nav>
       <time className="clock" dateTime="2026-06-13T19:31:00+09:00">2026-06-13 19:31</time>
     </header>
+  );
+}
+
+function MenuPopoverContent({ root, actions, context, onOpenAction }: {
+  root: string;
+  actions: readonly AppAction[];
+  context: ActionContext;
+  onOpenAction(action: AppAction): void;
+}) {
+  const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('menu-popover');
+
+  return (
+    <Popover.Content className="menu-popover" sideOffset={4} align="start" {...keyboardBoundaryProps}>
+      <div className="menu-popover-title">{root}</div>
+      {actions.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          className="menu-item"
+          disabled={!isActionAvailable(action, context)}
+          onClick={() => onOpenAction(action)}
+        >
+          <span>{labelForAction(action)}</span>
+          <kbd>{shortcutLabelForAction(action)}</kbd>
+        </button>
+      ))}
+    </Popover.Content>
   );
 }
 
@@ -262,10 +513,15 @@ function FilePanel({ listing, active, state, onActivate, onStateChange, onEntryS
       }));
   const summary = summarizeEntries(listing.entries);
 
+  useEffect(() => {
+    virtualizer.scrollToIndex(state.focusedIndex, { align: 'auto' });
+  }, [state.focusedIndex, virtualizer]);
+
   return (
     <section
       className={`file-panel ${active ? 'is-active' : ''}`}
       aria-label={`${listing.panelId} panel ${listing.path}`}
+      aria-current={active ? 'true' : undefined}
       onMouseDown={onActivate}
     >
       <PanelHeader listing={listing} active={active} />
@@ -293,9 +549,12 @@ function FilePanel({ listing, active, state, onActivate, onStateChange, onEntryS
                 <ContextMenu.Root key={row.id}>
                   <ContextMenu.Trigger asChild>
                     <div
+                      id={rowDomId(listing.panelId, virtualRow.index)}
                       role="row"
-                      tabIndex={focused ? 0 : -1}
+                      tabIndex={FOCUSABLE_ROW_TAB_INDEX}
+                      aria-rowindex={virtualRow.index + 1}
                       aria-selected={selected}
+                      aria-current={focused ? 'true' : undefined}
                       className={`file-table-row file-row ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''}`}
                       style={{ transform: `translateY(${virtualRow.start}px)` }}
                       onClick={(event) => onEntrySelect(virtualRow.index, entry, event.metaKey || event.ctrlKey)}
@@ -310,29 +569,12 @@ function FilePanel({ listing, active, state, onActivate, onStateChange, onEntryS
                     </div>
                   </ContextMenu.Trigger>
                   <ContextMenu.Portal>
-                    <ContextMenu.Content className="context-menu">
-                      <ContextMenu.Label className="context-label">{entry.name}</ContextMenu.Label>
-                      {contextMenuActions(
-                        entry,
-                        createActionContext({
-                          activePanel: listing.panelId,
-                          focusedEntry: entry,
-                          selectedCount: entry.isVirtual ? 0 : Math.max(state.selectedPaths.length, 1),
-                          hasOppositePanel: true,
-                          shellCommandEnabled: false,
-                          operationBusy: false,
-                        }),
-                      ).map((action) => (
-                        <ContextMenu.Item
-                          key={action.id}
-                          className="context-item"
-                          onSelect={() => onOpenAction(action, [entry])}
-                        >
-                          <span>{labelForAction(action)}</span>
-                          <kbd>{action.defaultShortcut ?? '·'}</kbd>
-                        </ContextMenu.Item>
-                      ))}
-                    </ContextMenu.Content>
+                    <EntryContextMenuContent
+                      entry={entry}
+                      listing={listing}
+                      selectedCount={state.selectedPaths.length}
+                      onOpenAction={onOpenAction}
+                    />
                   </ContextMenu.Portal>
                 </ContextMenu.Root>
               );
@@ -346,6 +588,39 @@ function FilePanel({ listing, active, state, onActivate, onStateChange, onEntryS
         <span>{active ? 'ACTIVE' : 'TARGET'}</span>
       </footer>
     </section>
+  );
+}
+
+function EntryContextMenuContent({ entry, listing, selectedCount, onOpenAction }: {
+  entry: FileEntry;
+  listing: DirectoryListing;
+  selectedCount: number;
+  onOpenAction(action: AppAction, sources: FileEntry[]): void;
+}) {
+  const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('context-menu');
+  const context = createActionContext({
+    activePanel: listing.panelId,
+    focusedEntry: entry,
+    selectedCount: entry.isVirtual ? 0 : Math.max(selectedCount, 1),
+    hasOppositePanel: true,
+    shellCommandEnabled: false,
+    operationBusy: false,
+  });
+
+  return (
+    <ContextMenu.Content className="context-menu" {...keyboardBoundaryProps}>
+      <ContextMenu.Label className="context-label">{entry.name}</ContextMenu.Label>
+      {contextMenuActions(entry, context).map((action) => (
+        <ContextMenu.Item
+          key={action.id}
+          className="context-item"
+          onSelect={() => onOpenAction(action, [entry])}
+        >
+          <span>{labelForAction(action)}</span>
+          <kbd>{shortcutLabelForAction(action)}</kbd>
+        </ContextMenu.Item>
+      ))}
+    </ContextMenu.Content>
   );
 }
 
@@ -387,7 +662,7 @@ function HotkeyStrip() {
   return (
     <footer className="hotkey-strip" aria-label="hotkey hints">
       {hotkeyStripActionsFromRegistry().map((action) => {
-        const shortcut = action.defaultShortcut?.split('/')[0] ?? '·';
+        const shortcut = shortcutLabelForAction(action);
         return (
           <span className="hotkey" key={action.id}>
             <kbd>{shortcut}</kbd>:<span>{action.hotkeyLabel}</span>
@@ -425,4 +700,35 @@ const shortenPath = (path: string) => {
     return `/${parts.join('/')}`;
   }
   return `/${parts.slice(0, 2).join('/')}/…/${parts.slice(-2).join('/')}`;
+};
+
+const oppositePanelOf = (panelId: PanelId): PanelId => (panelId === 'left' ? 'right' : 'left');
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const rowDomId = (panelId: PanelId, index: number) => `commander-row-${panelId}-${index}`;
+
+interface MovementHandlers {
+  moveFocusedEntry(delta: number): void;
+  focusBoundaryEntry(boundary: 'first' | 'last'): void;
+}
+
+const handleMovementKey = (event: KeyboardEvent, handlers: MovementHandlers) => {
+  const keyHandlers: Partial<Record<string, () => void>> = {
+    ArrowUp: () => handlers.moveFocusedEntry(-1),
+    ArrowDown: () => handlers.moveFocusedEntry(1),
+    PageUp: () => handlers.moveFocusedEntry(-KEYBOARD_PAGE_STEP),
+    PageDown: () => handlers.moveFocusedEntry(KEYBOARD_PAGE_STEP),
+    Home: () => handlers.focusBoundaryEntry('first'),
+    End: () => handlers.focusBoundaryEntry('last'),
+  };
+  const handler = keyHandlers[event.key];
+  if (!handler) {
+    return false;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  handler();
+  return true;
 };

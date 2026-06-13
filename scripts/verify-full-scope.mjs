@@ -84,6 +84,34 @@ for (const forbidden of ['MENU_ROOTS', 'ACTION_LABELS']) {
 for (const selector of ['menuRootsFromRegistry', 'hotkeyStripActionsFromRegistry', 'isActionAvailable']) {
   addCheck(`commander shell uses registry selector ${selector}`, commanderShell.includes(selector), 'No parallel hardcoded action surface in shell');
 }
+for (const token of ["document.addEventListener('keydown'", 'handleMovementKey', 'commanderKeyboardIsSuspended', 'aria-keyshortcuts', 'FOCUSABLE_ROW_TAB_INDEX = -1']) {
+  addCheck(`commander shell includes keyboard control ${token}`, commanderShell.includes(token), 'Keyboard-first commander control must override web-page defaults');
+}
+addCheck(
+  'commander shell dispatches shortcuts through registry metadata',
+  commanderShell.includes('matchKeyboardShortcut') && registry.includes('keyboardBindings'),
+  'Keyboard shortcuts must stay derived from the action registry',
+);
+addCheck(
+  'commander shell derives aria shortcuts from registry metadata',
+  commanderShell.includes('ariaKeyShortcutsFromRegistry') && registry.includes('ariaKeyShortcutsFromRegistry'),
+  'Keyboard a11y hints must stay aligned with dispatchable bindings',
+);
+addCheck(
+  'commander shell delegates hotkey display formatting to registry helper',
+  commanderShell.includes('shortcutLabelForAction') && !commanderShell.includes("defaultShortcut?.split('/')"),
+  'Hotkey strip must not parse display labels locally',
+);
+addCheck(
+  'action registry exposes shortcut collision invariant',
+  registry.includes('keyboardBindingCollisions') && registry.includes('hasLongerCandidate'),
+  'Keyboard binding collisions and prefix sequences must be explicit',
+);
+
+const keyboardOwnership = read('src/ui/keyboardOwnership.ts');
+for (const token of ['COMMANDER_SHORTCUTS_DISABLED_SELECTOR', 'commanderShortcutsDisabledProps', 'elementOwnsNativeKeyboardActivation', 'commanderKeyboardIsSuspended']) {
+  addCheck(`keyboard ownership helper includes ${token}`, keyboardOwnership.includes(token), 'Commander shortcut ownership marker is centralized');
+}
 
 const operationStore = read('src/operations/operationStore.ts');
 for (const dialogKind of ['copy', 'move', 'trash', 'deletePermanent', 'rename', 'createDir', 'archiveCreate', 'archiveExtract', 'externalEditor', 'shellCommand']) {

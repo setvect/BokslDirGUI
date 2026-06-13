@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useOperationStore } from './operationStore';
+import { useCommanderKeyboardBoundaryProps } from '../ui/keyboardOwnership';
 
 export function OperationDialogHost() {
   const dialog = useOperationStore((state) => state.dialog);
@@ -11,12 +12,13 @@ export function OperationDialogHost() {
   const resolveConflict = useOperationStore((state) => state.resolveConflict);
   const cancelOperation = useOperationStore((state) => state.cancelOperation);
   const closeDialog = useOperationStore((state) => state.closeDialog);
+  const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('operation-dialog', Boolean(dialog));
 
   return (
     <Dialog.Root open={Boolean(dialog)} onOpenChange={(open) => { if (!open) closeDialog(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="operation-dialog">
+        <Dialog.Content className="operation-dialog" {...keyboardBoundaryProps}>
           {dialog ? (
             <>
               <Dialog.Title className="operation-title">{dialog.title}</Dialog.Title>
