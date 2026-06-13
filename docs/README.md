@@ -10,6 +10,7 @@
 
 | 영역 | 문서 | 역할 |
 | --- | --- | --- |
+| 목업/프로토타입 | [`../mockups/clickable-prototype/README.md`](../mockups/clickable-prototype/README.md) | TUI-faithful 클릭 프로토타입, 실행/검증 방법, 목업 안전 경계 |
 | 요구사항 | [`requirements/README.md`](requirements/README.md) | 제품 목표, 근거 원칙, 우선순위 맵 |
 | 요구사항 | [`requirements/01-core-experience.md`](requirements/01-core-experience.md) | 앱 시작, 듀얼 패널, 파일 목록, 탐색, 선택, 정렬/필터 |
 | 요구사항 | [`requirements/02-file-operations.md`](requirements/02-file-operations.md) | 복사/이동/삭제/새 폴더/이름 변경/속성/압축/외부 앱 |
@@ -44,3 +45,9 @@
 - 파일 시스템 변경 작업은 Rust command/service 계층에서 검증하고 실행한다.
 - 메뉴, 단축키, 컨텍스트 메뉴, 도움말은 같은 action registry를 참조한다.
 - 설계 문서 변경 시 관련 요구사항, API, 컴포넌트, 테스트 명세, 정합성 보고서를 함께 갱신한다.
+
+## 4. 목업/프로토타입 참고
+
+현재 GUI 방향 검증용 클릭 목업은 [`mockups/clickable-prototype`](../mockups/clickable-prototype/README.md)에 있다. 이 목업은 TUI 파일 커맨더 정체성을 GUI로 옮기는 방향을 확인하기 위한 참고 산출물이며, 실제 파일 시스템 작업이나 생산 코드 구조로 재사용하는 것을 전제하지 않는다.
+
+구현 설계에서 화면 밀도, 듀얼 패널 우선순위, 하단 hotkey strip, overlay 기반 메뉴/다이얼로그 흐름을 판단할 때 참고한다. 단, 최종 구현 계약은 `docs/implementation/`의 API, 컴포넌트, 상태 머신, 테스트 명세를 우선한다.
