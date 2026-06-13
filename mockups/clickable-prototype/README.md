@@ -1,115 +1,136 @@
-# BokslDirGUI 클릭 프로토타입
+# BokslDirGUI TUI-faithful clickable prototype
 
-이 디렉토리는 `BokslDirGUI`의 1차 GUI 목업입니다. 산출물 기준은 deep-interview spec인 `.omx/specs/deep-interview-mockup-scope.md`를 따릅니다.
+이 디렉토리는 BokslDirGUI의 브라우저 기반 클릭 목업입니다. 최신 방향은 `.omx/specs/deep-interview-file-commander-visual-direction.md`를 따릅니다.
 
-## 목적
+핵심 목표는 **현대식 파일 관리자 dashboard**가 아니라, 기존 터미널 BokslDir의 정체성을 거의 그대로 GUI로 옮긴 **파일커맨더형 dual-panel canvas**를 검증하는 것입니다.
 
-구현 언어와 GUI 프레임워크를 확정하기 전에, 기존 TUI 기반 BokslDir의 정체성인 **듀얼 패널 파일 매니저**를 데스크톱 GUI에서 어떻게 보이게 할지 검증합니다.
+> 이 목업은 일회성 UX 검증 산출물입니다. `app.js`는 DOM-only 클릭 흐름을 보여주기 위한 state machine이며, 실제 앱의 파일 시스템 계층·상태관리·컴포넌트 아키텍처 청사진으로 재사용하지 않습니다.
 
-이 프로토타입은 정적 이미지가 아니라 브라우저에서 눌러볼 수 있는 HTML/CSS/JavaScript 목업입니다.
+## Prototype quarantine
 
-> 이 디렉토리는 **일회성 UX 검증 산출물**입니다. `app.js`의 DOM state machine은 목업 클릭 흐름을 보여주기 위한 것이며, 실제 앱의 파일 시스템 계층·상태관리·컴포넌트 아키텍처 청사진으로 재사용하지 않습니다.
+이 목업은 **생산 코드 seed가 아닙니다**.
+
+- `app.js`의 중앙 command/router/state-machine 구조는 클릭 가능한 목업을 빠르게 검증하기 위한 장치입니다.
+- 실제 Electron/Tauri/웹 앱 구현 시 이 파일을 모듈화하거나 추출하지 않습니다.
+- production 구현은 별도의 app boundary, filesystem boundary, state model, accessibility strategy를 새로 설계해야 합니다.
+- 이 디렉토리에서 허용되는 동작은 fixture 기반 DOM state 변경뿐입니다.
+- HTML template에 runtime 값이 들어갈 때는 `escapeHtml`을 통과해야 하며, 이 규칙은 `verify.mjs`에서 marker/check로 확인합니다.
 
 ## 열기
 
-macOS:
+```bash
+python3 -m http.server 4171 --bind 127.0.0.1 --directory mockups/clickable-prototype
+# 브라우저에서 http://127.0.0.1:4171/ 접속
+```
+
+파일을 직접 열 수도 있습니다.
 
 ```bash
 open mockups/clickable-prototype/index.html
 ```
 
-공통:
+## 시각 방향
 
-```bash
-python3 -m http.server 4173 --directory mockups/clickable-prototype
-# 브라우저에서 http://localhost:4173 접속
-```
-
-또는 브라우저에서 `mockups/clickable-prototype/index.html` 파일을 직접 열어도 됩니다.
+- 상단은 TUI처럼 얇은 메뉴바만 유지합니다.
+- 기본 화면의 대부분은 좌/우 파일 패널이 차지합니다.
+- 파일 목록은 행 높이를 낮춘 dense table로 표시합니다.
+- 사이드바, 미리보기, 작업 큐, 큰 툴바는 기본 화면에 고정하지 않습니다.
+- 보조 기능은 메뉴, context menu, dialog, transient overlay로만 나타납니다.
+- 패널 하단에는 패널별 status row를 두고, 앱 최하단에는 hotkey strip만 둡니다.
+- 전체 tone은 monospace/terminal-style line structure를 기준으로 합니다.
 
 ## 포함 범위
 
-- 메인 데스크톱 앱 shell
-  - 메뉴바: 파일, 편집, 보기, 도구, 설정, 도움말
-  - 툴바/액션바: 복사, 이동, 삭제, 새 폴더, 새로고침, 필터, 압축
-  - 좌/우 듀얼 패널과 활성/대상 패널 표시
-  - 패널별 탭, Breadcrumb, 주소 입력 영역
-  - 파일 리스트, 선택 상태, 정렬/필터/숨김 상태 표시
-  - 상태바와 토스트 메시지
-- 사이드바
-  - 홈, 데스크톱, 문서, 다운로드, 북마크, 최근 폴더, 볼륨 샘플
-- 미리보기 패널
-  - 선택 항목에 따른 더미 미리보기
-- 작업 큐 패널
-  - 대기/진행/완료/실패 상태 샘플
-- 컨텍스트 메뉴
-  - 파일/폴더 메뉴: 열기, 기본 앱 열기, 복사, 이동, 이름 변경, 삭제, 경로 복사, 속성 보기
-  - 빈 영역 메뉴: 새 폴더, 붙여넣기 샘플, 새로고침, 현재 폴더 속성
-- 파일 작업 다이얼로그
-  - 확인 → 충돌 처리 → 진행률 → 완료/오류 요약
-- 설정 화면
-  - 테마, 언어, 아이콘, 파일 크기, 외부 편집기, 단축키 보기 구조
-- 도움말 화면
-  - 키보드 중심 UX와 GUI 메뉴/마우스 경로 안내
+- 기본 shell
+  - `[복슬Dir]` brand, File/Edit/View/Settings/Help menu
+  - 좌/우 dual file panel
+  - compact path header
+  - dense file table
+  - active/target panel indicator
+  - bottom status bar + hotkey strip
+- transient GUI affordances
+  - 상단 메뉴 popover
+  - 파일/빈 영역 context menu
+  - copy/move/delete/rename/archive/new-folder/properties dialog flow
+  - conflict/progress/complete/error dialog states
+  - preview/info overlay
+  - queue overlay
+  - locations/go-to overlay
+  - about/settings/filter/help overlays
+- mouse/keyboard validation
+  - click selection
+  - multi/range selection sample
+  - double-click open sample
+  - right-click context menu
+  - `Tab`, `?`, `/`, `y`, `x`, `d`, `a`, `r`, `z`, `i`, `g`, `q`, `F1`
 
-## 제외 범위
+## 제외 범위 / 비목표
 
 - 실제 파일 복사/이동/삭제/이름 변경/압축/휴지통 동작
 - 실제 파일 시스템 읽기/쓰기/권한 확인
-- 설정 저장, 설정 파일 검증, 단축키 충돌 검증, 재시작 후 복원
-- 파일 내용 검색, 일괄 이름 변경, 폴더 비교/동기화, 디스크 사용량, 파일 비교
-- 플랫폼별 파일 연결/패키징/권한 예외 처리의 세부 구현
+- 실제 preview, search, sync, compare, batch rename, disk usage 구현
+- 설정 저장, 단축키 충돌 검증, 앱 재시작 후 복원
+- persistent left sidebar
+- persistent right inspector/preview/task queue
+- large always-visible toolbar
+- card-heavy dashboard UI
+- Finder/Explorer 스타일의 일반 데스크톱 파일 관리자 재해석
 
-## 더미 데이터와 안전 보장
+## 안전 보장
 
-이 프로토타입은 DOM 상태만 변경합니다.
+이 목업은 DOM 상태만 변경합니다.
 
-- `fetch`, `localStorage`, `indexedDB`, File System Access API, Node `fs` 같은 실제 I/O 또는 저장 API를 사용하지 않습니다.
+- `fetch`, `XMLHttpRequest`, `localStorage`, `sessionStorage`, `indexedDB`, File System Access API, Node `fs`를 사용하지 않습니다.
 - 파일명, 경로, 크기, 날짜, 작업 큐는 모두 샘플입니다.
-- 화면에 보이는 경로는 `/데모/...` 형식의 가상 경로만 사용하며 실제 사용자 홈 경로, 개인 이름, 민감 파일명은 포함하지 않습니다.
+- 화면에 보이는 경로는 `/데모/...` 가상 경로입니다.
 - 버튼을 눌러도 실제 파일은 생성/수정/삭제되지 않습니다.
 
-## 상호작용 맵
+## 참고 시각 자료
 
-| 영역 | 가능한 클릭/키보드 흐름 | 기대 결과 |
-| --- | --- | --- |
-| 좌/우 패널 | 패널 클릭, `Tab` | 활성 패널과 대상 패널 표시가 전환됨 |
-| 사이드바 | 빠른 위치 클릭 | 활성 패널의 경로가 더미 경로로 변경됨 |
-| Breadcrumb/주소 | breadcrumb 클릭, 주소 입력 후 `Enter` | 경로 이동 또는 주소 입력 토스트 표시 |
-| 파일 리스트 | 단일 클릭, Shift 클릭, Cmd/Ctrl 클릭 | 단일/범위/다중 선택 샘플 표시 |
-| 파일 리스트 | 더블클릭 | 폴더 진입 또는 기본 앱 열기 샘플 토스트 |
-| 파일 리스트 | 항목 우클릭 | 파일/폴더 컨텍스트 메뉴 표시 |
-| 파일 패널 빈 영역 | 빈 영역 우클릭 | 새 폴더/붙여넣기/새로고침 컨텍스트 메뉴 표시 |
-| 툴바/컨텍스트 메뉴 | 복사/이동/삭제 | 파일 작업 다이얼로그 표시 |
-| 파일 작업 다이얼로그 | 더미 작업 시작 | 충돌 → 진행률 → 완료/오류 상태 전환 |
-| 미리보기/작업 큐 | 토글 버튼 | 패널 접기/펼치기 샘플 |
-| 설정/도움말 | 메뉴 버튼 | 오버레이 화면 열기/닫기 |
-| 테마/언어 | Dark/Light, KO/EN | 더미 테마/언어 상태 변경 |
+기존 TUI reference는 원 프로젝트의 사용자 매뉴얼 이미지입니다.
 
-## 검증 체크리스트
+- `/Users/boksl/IdeaProjects/BokslDir/docs/images/user-manual/01-main-dual-panel.png`
+- `/Users/boksl/IdeaProjects/BokslDir/docs/images/user-manual/02-menu.png`
+- `/Users/boksl/IdeaProjects/BokslDir/docs/images/user-manual/03-copy-dialog.png`
+- `/Users/boksl/IdeaProjects/BokslDir/docs/images/user-manual/04-archive-compress.png`
+- `/Users/boksl/IdeaProjects/BokslDir/docs/images/user-manual/05-about-dialog.png`
 
-- [ ] 메인 화면에서 듀얼 패널, 활성 패널, 대상 패널 개념이 보인다.
-- [ ] 메뉴바/툴바/상태바/토스트가 데스크톱 앱처럼 배치되어 있다.
-- [ ] 사이드바, 탭, Breadcrumb, 파일 리스트, 미리보기, 작업 큐가 한 화면 안에서 함께 보인다.
-- [ ] 파일/폴더 항목 우클릭 메뉴와 빈 영역 우클릭 메뉴를 각각 열 수 있다.
-- [ ] 복사/이동/삭제 흐름이 확인, 충돌, 진행률, 완료/오류 상태로 이어진다.
-- [ ] 설정 화면은 구조만 보여주며 저장/검증 세부 구현을 하지 않는다.
-- [ ] 도움말 화면은 키보드와 GUI 조작 경로를 함께 보여준다.
-- [ ] 한글 UI와 한글 파일명 샘플이 표시된다.
-- [ ] 실제 파일 시스템 접근이나 변경 코드가 없다.
+이번 목업의 headless 확인 스크린샷은 `temp/browser-check/` 아래에 생성했습니다. `temp/`는 gitignore 대상입니다.
+
+## 로컬 검증
+
+```bash
+node mockups/clickable-prototype/verify.mjs
+```
+
+검증 항목:
+
+- 두 개의 `.file-panel` 존재
+- `.panel-zone`, `.hotkey-strip`, `.menu-popover`, `.transient-overlay`, `.context-menu`, `#operation-dialog` 존재
+- 기본 markup에 persistent sidebar/inspector/large toolbar 없음
+- dense file rows 개수 기준 충족
+- terminal/monospace CSS 기준 충족
+- `app.js` syntax check 통과
+- 금지된 파일/네트워크/저장 API 문자열 없음
 
 ## 파일 구조
 
 ```text
 mockups/clickable-prototype/
-├── index.html   # 목업 DOM 구조
-├── styles.css   # 데스크톱 GUI 시각 스타일과 반응형 상태
-├── app.js       # DOM-only 클릭 흐름/state machine
-└── README.md    # 사용법, 범위, 검증 체크리스트
+├── index.html   # TUI-faithful mockup DOM
+├── styles.css   # terminal/commander visual style
+├── app.js       # DOM-only interaction state machine
+├── verify.mjs   # local verification checks
+└── README.md    # usage, scope, acceptance criteria
 ```
 
-## 다음 단계 후보
+## 수용 기준
 
-- 브라우저에서 시각 QA를 진행한다.
-- UI가 마음에 들면 Electron/Tauri/웹뷰 후보 프레임워크와 매핑할 컴포넌트 목록을 만든다.
-- 실제 파일 작업 계층은 별도 설계/검증 후 구현한다.
+- [ ] 첫 화면에서 좌/우 패널이 시각 영역 대부분을 차지한다.
+- [ ] sidebar/inspector/queue/large toolbar가 기본 화면에 고정되어 있지 않다.
+- [ ] 파일 row가 dense하고 “만들다 만 여백” 느낌이 없다.
+- [ ] 패널별 status row와 최하단 hotkey strip이 겹치지 않고 TUI 정체성을 만든다.
+- [ ] 메뉴와 작업 다이얼로그는 panel canvas 위에 overlay로 나타난다.
+- [ ] preview/queue/locations/settings/about/filter/help는 기본 레이아웃을 밀지 않는다.
+- [ ] 한글 파일명과 한글/영문 혼합 commander label이 표시된다.
+- [ ] 실제 파일 시스템 접근 또는 변경 코드가 없다.
