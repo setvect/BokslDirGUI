@@ -1,4 +1,5 @@
 import { invoke, type InvokeArgs } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import type {
   ActionResult,
   AppError,
@@ -6,11 +7,14 @@ import type {
   CancelAck,
   ConflictAck,
   ConflictDecision,
+  ConflictPrompt,
   DirectoryListing,
   FileEntry,
   FileMetadata,
   LocationList,
+  OperationProgress,
   OperationStarted,
+  OperationSummary,
   Settings,
   ShellCommandPreview,
   ShellCommandResult,
@@ -63,6 +67,19 @@ export interface StartFileOperationInput {
   policy: ConflictDecision;
 }
 
+export interface DeleteOperationInput {
+  targets: string[];
+  mode: 'trash' | 'permanent';
+  confirmToken?: string;
+}
+
+export interface OperationEventHandlers {
+  progress?(progress: OperationProgress): void;
+  conflict?(prompt: ConflictPrompt): void;
+  summary?(summary: OperationSummary): void;
+  error?(error: AppError): void;
+}
+
 export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.listDir,
   COMMANDS.getMetadata,
@@ -71,6 +88,11 @@ export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.listLocations,
   COMMANDS.createDir,
   COMMANDS.renameEntry,
+  COMMANDS.startCopy,
+  COMMANDS.startMove,
+  COMMANDS.startDelete,
+  COMMANDS.cancelOperation,
+  COMMANDS.resolveConflict,
 ] as const satisfies readonly TauriCommandName[];
 
 const implementedCommandSet = new Set<TauriCommandName>(BACKEND_IMPLEMENTED_COMMANDS);
@@ -155,7 +177,7 @@ export const tauriClient = {
   renameEntry: (input: { path: string; newName: string }) => invokeCommand<FileEntry>(COMMANDS.renameEntry, input),
   startCopy: (input: StartFileOperationInput) => invokeCommand<OperationStarted>(COMMANDS.startCopy, input),
   startMove: (input: StartFileOperationInput) => invokeCommand<OperationStarted>(COMMANDS.startMove, input),
-  startDelete: (input: { targets: string[]; mode: 'trash' | 'permanent' }) =>
+  startDelete: (input: DeleteOperationInput) =>
     invokeCommand<OperationStarted>(COMMANDS.startDelete, input),
   cancelOperation: (input: { operationId: string }) => invokeCommand<CancelAck>(COMMANDS.cancelOperation, input),
   resolveConflict: (input: { operationId: string; decision: ConflictDecision }) =>
@@ -176,4 +198,17 @@ export const tauriClient = {
     invokeCommand<ShellCommandResult>(COMMANDS.runShellCommand, input),
   loadSettings: () => invokeCommand<Settings>(COMMANDS.loadSettings),
   saveSettings: (input: { patch: Partial<Settings> }) => invokeCommand<Settings>(COMMANDS.saveSettings, input),
+  listenOperationEvents: async (handlers: OperationEventHandlers) => {
+    const unlisten = await Promise.all([
+      listen<OperationProgress>('operation_progress', (event) => handlers.progress?.(event.payload)),
+      listen<ConflictPrompt>('operation_conflict', (event) => handlers.conflict?.(event.payload)),
+      listen<OperationSummary>('operation_summary', (event) => handlers.summary?.(event.payload)),
+      listen<AppError>('operation_error', (event) => handlers.error?.(event.payload)),
+    ]);
+    return () => {
+      for (const cleanup of unlisten) {
+        cleanup();
+      }
+    };
+  },
 };

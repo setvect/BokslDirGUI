@@ -170,34 +170,36 @@
 
 ## 3. 장시간 파일 작업 TODO — copy/move/delete/trash
 
+상태: 2026-06-13 구현 반영. copy/move/delete/trash는 Rust operation service와 Tauri event stream으로 연결했다. archive create/extract는 같은 long-running dialog 모델을 유지하되 실제 압축 구현은 5번 archive TODO에서 별도 완료한다.
+
 ### 3.1 operation backend architecture
 
-- [ ] Long-running operation 전용 adapter를 atomic command path와 분리한다.
-  - Acceptance: copy/move/delete/archive만 operation service를 사용하고, create/rename/settings/external은 request/response path를 사용한다.
-- [ ] Rust operation service 설계/구현: operation id, queue, progress event, cancellation token, conflict prompt channel.
-- [ ] Tauri event contract 추가: `operation_progress`, `operation_conflict`, `operation_summary`.
-- [ ] frontend operation store가 실제 event stream을 구독하도록 연결.
-- [ ] `OperationState` 전이가 실제 backend state와 일치하도록 정합성 테스트 추가.
+- [x] Long-running operation 전용 adapter를 atomic command path와 분리한다.
+  - Acceptance: copy/move/delete/trash는 operation service를 사용하고, create/rename은 request/response atomic command path를 사용한다. archive는 long-running dialog 모델만 유지하고 실제 service 연결은 archive TODO에서 처리한다.
+- [x] Rust operation service 설계/구현: operation id, background worker handoff, queued/running/progress state, cancellation token registry, conflict prompt wait/resolve channel.
+- [x] Tauri event contract 추가: `operation_progress`, `operation_conflict`, `operation_summary`(`operation_completed` 호환 event도 emit).
+- [x] frontend operation store가 실제 event stream을 구독하도록 연결.
+- [x] `OperationState` 전이가 실제 backend state와 일치하도록 정합성 테스트 추가.
 
 ### 3.2 `start_copy`
 
-- [ ] Rust recursive copy 구현: file/dir/symlink 정책 명시, metadata preservation 범위 결정.
-- [ ] conflict decision `skip/overwrite/allSkip/allOverwrite/cancel` 적용.
-- [ ] progress bytes/files 계산과 cancel 처리.
-- [ ] Tests: temp fixture copy file/dir/conflict/cancel; UI progress/conflict flow.
+- [x] Rust recursive copy 구현: file/dir/symlink 정책 명시, metadata preservation은 현재 파일 내용/디렉터리/Unix symlink entry 보존 범위로 제한.
+- [x] conflict decision `skip/overwrite/allSkip/allOverwrite/cancel` 적용.
+- [x] progress bytes/files 계산과 cancel 처리.
+- [x] Tests: temp fixture copy file/dir/conflict/cancel; UI progress/conflict flow.
 
 ### 3.3 `start_move`
 
-- [ ] same filesystem rename fast-path와 cross-device copy+delete fallback 정책 구현.
-- [ ] move conflict/cancel/partial failure summary 구현.
-- [ ] Tests: move file/dir/conflict/cancel; cross-device는 추상 service mock으로 검증.
+- [x] same filesystem rename fast-path와 cross-device copy+delete fallback 정책 구현.
+- [x] move conflict/cancel/partial failure summary 구현.
+- [x] Tests: move file/dir/conflict/cancel; cross-device는 error classifier로 fallback 정책 검증.
 
 ### 3.4 `start_delete` / trash / permanent delete
 
-- [ ] Trash 구현 dependency 결정: OS별 native trash 또는 검증된 crate 사용.
-- [ ] `trash` mode는 휴지통 실패 시 permanent delete로 자동 전환하지 않는다.
-- [ ] `permanent` mode는 기본 취소, 명시 확인 token, 대상 요약을 요구한다.
-- [ ] Tests: trash success/failure, permanent confirm required, virtual/system path guard.
+- [x] Trash 구현 dependency 결정: 새 dependency 없이 OS별 safe trash directory adapter를 우선 사용하고, 테스트는 `BOKSLDIRGUI_TRASH_DIR` fixture로 격리한다.
+- [x] `trash` mode는 휴지통 실패 시 permanent delete로 자동 전환하지 않는다.
+- [x] `permanent` mode는 기본 취소, 사용자 입력 확인 문구와 명시 confirm token(`PERMANENT_DELETE`), 대상 guard를 요구한다.
+- [x] Tests: trash success/failure policy, permanent confirm required, virtual/system path guard.
 
 ## 4. Properties / external integration TODO
 

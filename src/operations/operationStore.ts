@@ -6,6 +6,7 @@ import type {
   FileEntry,
   OperationKind,
   OperationProgress,
+  OperationStarted,
   OperationState,
   OperationSummary,
   PanelId,
@@ -52,8 +53,13 @@ export interface OperationDialogDraft {
   inputValue: string;
   validationErrorKey: string | null;
   atomicPending: boolean;
+  operationPending: boolean;
   atomicExecutor: AtomicCommandExecutor | null;
+  longRunningExecutor: LongRunningOperationExecutor | null;
+  cancelExecutor: LongRunningCancelExecutor | null;
+  conflictResolver: ConflictResolver | null;
   onAtomicSuccess: AtomicCommandSuccessHandler | null;
+  onOperationSummary: OperationSummaryHandler | null;
 }
 
 export type AtomicCommandExecutor = (
@@ -62,6 +68,14 @@ export type AtomicCommandExecutor = (
 
 export type AtomicCommandSuccessHandler = (entry: FileEntry, dialog: OperationDialogDraft) => void;
 
+export type LongRunningOperationExecutor = (
+  dialog: OperationDialogDraft,
+) => Promise<{ ok: true; data: OperationStarted } | { ok: false; error: AppError }>;
+
+export type LongRunningCancelExecutor = (operationId: string) => Promise<unknown>;
+export type ConflictResolver = (operationId: string, decision: ConflictDecision) => Promise<unknown>;
+export type OperationSummaryHandler = (summary: OperationSummary, dialog: OperationDialogDraft) => void;
+
 export interface OpenDialogRequest {
   action: AppAction;
   panelId: PanelId;
@@ -69,7 +83,11 @@ export interface OpenDialogRequest {
   targetDir: string | null;
   workingDir: string;
   atomicExecutor?: AtomicCommandExecutor;
+  longRunningExecutor?: LongRunningOperationExecutor;
+  cancelExecutor?: LongRunningCancelExecutor;
+  conflictResolver?: ConflictResolver;
   onAtomicSuccess?: AtomicCommandSuccessHandler;
+  onOperationSummary?: OperationSummaryHandler;
 }
 
 export interface OperationStoreState {
@@ -83,6 +101,11 @@ export interface OperationStoreState {
   openDialog(request: OpenDialogRequest): void;
   updateDialogInput(value: string): void;
   confirmDialog(): Promise<void>;
+  applyOperationStarted(started: OperationStarted): void;
+  applyOperationProgress(progress: OperationProgress): void;
+  applyOperationConflict(prompt: ConflictPrompt): void;
+  applyOperationSummary(summary: OperationSummary): void;
+  applyOperationError(error: AppError): void;
   resolveConflict(decision: ConflictDecision): void;
   cancelOperation(): void;
   closeDialog(): void;
@@ -199,6 +222,37 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       return;
     }
 
+    if (dialog.longRunningExecutor) {
+      if (dialog.operationPending) {
+        return;
+      }
+      const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue);
+      if (validationErrorKey) {
+        set({
+          dialog: { ...dialog, validationErrorKey },
+          lastError: appError('confirmation_required', validationErrorKey, dialog.targetDir, true),
+          summary: null,
+          progress: null,
+        });
+        return;
+      }
+      set({ dialog: { ...dialog, operationPending: true }, lastError: null, summary: null });
+      const result = await dialog.longRunningExecutor(dialog);
+      if (!result.ok) {
+        set((current) => ({
+          dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
+          lastError: result.error,
+          summary: null,
+        }));
+        return;
+      }
+      get().applyOperationStarted(result.data);
+      set((current) => ({
+        dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
+      }));
+      return;
+    }
+
     const operationId = `preview-${dialog.dialogKind}-${Date.now()}`;
     const operationKind = operationKindForDialog(dialog.dialogKind);
     set({
@@ -218,20 +272,117 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       summary: null,
     });
   },
+  applyOperationStarted: (started) => {
+    const currentProgress = get().progress;
+    if (currentProgress?.operationId === started.operationId && isTerminalState(currentProgress.state)) {
+      return;
+    }
+    set({
+      progress: {
+        operationId: started.operationId,
+        kind: started.kind,
+        state: started.state,
+        totalFiles: null,
+        completedFiles: 0,
+        totalBytes: null,
+        completedBytes: 0,
+        currentPath: null,
+        bytesPerSecond: null,
+        etaSeconds: null,
+        recentErrorCount: 0,
+      },
+      lastError: null,
+    });
+  },
+  applyOperationProgress: (progress) => {
+    const current = get().progress;
+    if (current && (current.operationId !== progress.operationId || isTerminalState(current.state))) {
+      return;
+    }
+    set({ progress, lastError: null });
+  },
+  applyOperationConflict: (prompt) => {
+    const progress = get().progress;
+    if (progress && (progress.operationId !== prompt.operationId || isTerminalState(progress.state))) {
+      return;
+    }
+    set((current) => ({
+      conflictPrompt: prompt,
+      progress: current.progress
+        ? { ...current.progress, operationId: prompt.operationId, state: 'waitingForConflict' }
+        : null,
+    }));
+  },
+  applyOperationSummary: (summary) => {
+    const currentProgress = get().progress;
+    if (currentProgress && currentProgress.operationId !== summary.operationId) {
+      return;
+    }
+    const dialog = get().dialog;
+    dialog?.onOperationSummary?.(summary, dialog);
+    set((current) => ({
+      summary,
+      conflictPrompt: current.conflictPrompt?.operationId === summary.operationId ? null : current.conflictPrompt,
+      progress: current.progress && current.progress.operationId === summary.operationId
+        ? { ...current.progress, state: summary.state, completedFiles: summary.completedFiles, recentErrorCount: summary.failedFiles }
+        : current.progress ?? {
+          operationId: summary.operationId,
+          kind: summary.kind,
+          state: summary.state,
+          totalFiles: summary.completedFiles + summary.failedFiles,
+          completedFiles: summary.completedFiles,
+          totalBytes: null,
+          completedBytes: 0,
+          currentPath: null,
+          bytesPerSecond: null,
+          etaSeconds: null,
+          recentErrorCount: summary.failedFiles,
+        },
+      dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
+      lastError: summary.errors[0] ?? null,
+    }));
+  },
+  applyOperationError: (error) => {
+    set((current) => ({
+      lastError: error,
+      dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
+    }));
+  },
   resolveConflict: (decision) => {
     const prompt = get().conflictPrompt;
     const progress = get().progress;
-    if (!prompt || !progress) {
+    if (!prompt) {
       return;
     }
+    const operationId = prompt.operationId;
+    const dialogKind = get().dialog?.dialogKind;
+    const kind = progress?.kind ?? (dialogKind && isLongRunningDialog(dialogKind)
+      ? operationKindForDialog(dialogKind)
+      : 'copy');
+    const completedFiles = progress?.completedFiles ?? 0;
+    void get().dialog?.conflictResolver?.(operationId, decision);
     if (decision === 'cancel') {
       set({
-        progress: { ...progress, state: 'cancelled' },
+        progress: progress
+          ? { ...progress, state: 'cancelled' }
+          : {
+            operationId,
+            kind,
+            state: 'cancelled',
+            totalFiles: null,
+            completedFiles,
+            totalBytes: null,
+            completedBytes: 0,
+            currentPath: prompt.source.path,
+            bytesPerSecond: null,
+            etaSeconds: null,
+            recentErrorCount: 0,
+          },
         summary: {
-          operationId: progress.operationId,
-          kind: progress.kind,
+          operationId,
+          kind,
           state: 'cancelled',
-          completedFiles: progress.completedFiles,
+          completedFiles,
           failedFiles: 0,
           errors: [],
         },
@@ -242,7 +393,21 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       return;
     }
     set({
-      progress: { ...progress, state: 'running' },
+      progress: progress
+        ? { ...progress, state: 'running' }
+        : {
+          operationId,
+          kind,
+          state: 'running',
+          totalFiles: null,
+          completedFiles,
+          totalBytes: null,
+          completedBytes: 0,
+          currentPath: prompt.source.path,
+          bytesPerSecond: null,
+          etaSeconds: null,
+          recentErrorCount: 0,
+        },
       conflictPrompt: null,
       lastConflictDecision: decision,
       applyAllConflictDecision: decision === 'allOverwrite' || decision === 'allSkip' ? decision : null,
@@ -254,8 +419,9 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       set({ dialog: null, conflictPrompt: null });
       return;
     }
+    void get().dialog?.cancelExecutor?.(progress.operationId);
     set({
-      progress: { ...progress, state: 'cancelled' },
+      progress: { ...progress, state: 'cancelling' },
       conflictPrompt: null,
       summary: {
         operationId: progress.operationId,
@@ -321,8 +487,13 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
     inputValue,
     validationErrorKey: validateDialogInput(dialogKind, inputValue),
     atomicPending: false,
+    operationPending: false,
     atomicExecutor: request.atomicExecutor ?? null,
+    longRunningExecutor: request.longRunningExecutor ?? null,
+    cancelExecutor: request.cancelExecutor ?? null,
+    conflictResolver: request.conflictResolver ?? null,
     onAtomicSuccess: request.onAtomicSuccess ?? null,
+    onOperationSummary: request.onOperationSummary ?? null,
   };
 };
 
@@ -360,9 +531,9 @@ const descriptionForDialog = (dialogKind: DialogKind, request: OpenDialogRequest
   const count = request.sources.length;
   switch (dialogKind) {
     case 'copy':
-      return `${count}개 항목을 반대 패널로 복사할 준비를 합니다. 실제 I/O 실행은 아직 stub입니다.`;
+      return `${count}개 항목을 반대 패널로 복사합니다. 충돌 정책과 진행률은 operation event로 추적합니다.`;
     case 'move':
-      return `${count}개 항목 이동은 destructive 작업입니다. Rust validation 연결 전까지 실행하지 않습니다.`;
+      return `${count}개 항목 이동은 destructive 작업입니다. 같은 파일시스템은 rename fast-path를 우선합니다.`;
     case 'trash':
       return `${count}개 항목을 휴지통으로 보내기 전에 확인합니다. 자동 영구 삭제 전환은 금지됩니다.`;
     case 'deletePermanent':
@@ -441,8 +612,12 @@ export const dialogExecutionModeForDialog = (dialogKind: DialogKind): DialogExec
 };
 
 const CONNECTABLE_SAFE_MUTATIONS: readonly DialogKind[] = ['createDir', 'rename'];
+const CONNECTABLE_LONG_RUNNING_OPERATIONS: readonly DialogKind[] = ['copy', 'move', 'trash', 'deletePermanent'];
 
 const isBackendExecutionStubbed = (dialogKind: DialogKind, request: OpenDialogRequest) => {
+  if (CONNECTABLE_LONG_RUNNING_OPERATIONS.includes(dialogKind)) {
+    return !request.longRunningExecutor;
+  }
   if (isLongRunningDialog(dialogKind)) {
     return true;
   }
@@ -459,6 +634,9 @@ const inputLabelForDialog = (dialogKind: DialogKind) => {
   if (dialogKind === 'rename') {
     return '새 이름';
   }
+  if (dialogKind === 'deletePermanent') {
+    return '영구 삭제 확인 문구(PERMANENT_DELETE)';
+  }
   return null;
 };
 
@@ -470,10 +648,13 @@ const initialInputValueForDialog = (dialogKind: DialogKind, request: OpenDialogR
 };
 
 const validateDialogInput = (dialogKind: DialogKind, value: string) => {
+  const trimmed = value.trim();
+  if (dialogKind === 'deletePermanent') {
+    return trimmed === 'PERMANENT_DELETE' ? null : 'errors.confirmationRequired';
+  }
   if (dialogKind !== 'createDir' && dialogKind !== 'rename') {
     return null;
   }
-  const trimmed = value.trim();
   if (!trimmed || trimmed === '.' || trimmed === '..') {
     return 'errors.invalidName';
   }
@@ -482,6 +663,9 @@ const validateDialogInput = (dialogKind: DialogKind, value: string) => {
   }
   return null;
 };
+
+const isTerminalState = (state: OperationState) =>
+  state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';
 
 const operationKindForDialog = (dialogKind: LongRunningDialogKind): OperationKind => {
   const mapping: Record<LongRunningDialogKind, OperationKind> = {

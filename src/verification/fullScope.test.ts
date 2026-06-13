@@ -25,17 +25,23 @@ describe('full-scope verification harness', () => {
       COMMANDS.listLocations,
       COMMANDS.createDir,
       COMMANDS.renameEntry,
+      COMMANDS.startCopy,
+      COMMANDS.startMove,
+      COMMANDS.startDelete,
+      COMMANDS.cancelOperation,
+      COMMANDS.resolveConflict,
     ]);
     expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(false);
+    expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(false);
 
-    const result = await tauriClient.startDelete({ targets: ['/demo/file.txt'], mode: 'trash' });
+    const result = await tauriClient.archiveCreate({ sources: ['/demo/file.txt'], targetArchive: '/demo/file.zip', format: 'zip' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('unsupported');
-      expect(result.error.details).toMatchObject({ command: COMMANDS.startDelete });
+      expect(result.error.details).toMatchObject({ command: COMMANDS.archiveCreate });
     }
   });
 

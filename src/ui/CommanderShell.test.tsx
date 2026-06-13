@@ -23,10 +23,12 @@ afterEach(() => {
 const commanderElement = (
   dataSource: PanelDataSource = createFixturePanelDataSource(),
   mutationClient?: ComponentProps<typeof CommanderShell>['mutationClient'],
+  operationClient?: ComponentProps<typeof CommanderShell>['operationClient'],
 ) => (
   <CommanderShell
     dataSource={dataSource}
     mutationClient={mutationClient}
+    operationClient={operationClient}
     initialFocusIndex={INITIAL_FOCUS_INDEX}
     initialSelectedPaths={INITIAL_SELECTED_PATHS}
   />
@@ -35,7 +37,8 @@ const commanderElement = (
 const renderCommander = (
   dataSource: PanelDataSource = createFixturePanelDataSource(),
   mutationClient?: ComponentProps<typeof CommanderShell>['mutationClient'],
-) => render(commanderElement(dataSource, mutationClient));
+  operationClient?: ComponentProps<typeof CommanderShell>['operationClient'],
+) => render(commanderElement(dataSource, mutationClient, operationClient));
 
 describe('CommanderShell', () => {
   it('renders a TUI-faithful dual-panel commander canvas', () => {
@@ -284,6 +287,31 @@ describe('CommanderShell', () => {
 
     expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
     expect(screen.getByText('file.copy')).toBeTruthy();
+  });
+
+
+
+  it('starts connected long-running copy through the operation client', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-ui', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-move-ui', kind: 'move' as const, state: 'queued' as const } })),
+      startDelete: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-delete-ui', kind: 'delete' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-ui', state: 'cancelling' as const } })),
+      resolveConflict: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-ui', decision: 'skip' as const } })),
+    };
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+    await user.keyboard('y');
+    expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: expect.any(Array),
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+    expect(useOperationStore.getState().progress).toMatchObject({ operationId: 'op-copy-ui', kind: 'copy' });
   });
 
   it('creates a directory through the connected atomic command path and refreshes focus', async () => {

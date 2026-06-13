@@ -5,7 +5,10 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -150,6 +153,111 @@ impl AppError {
 
 type CommandResult<T> = Result<T, AppError>;
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum OperationKind {
+    Copy,
+    Move,
+    Delete,
+    Trash,
+    Rename,
+    CreateDir,
+    ArchiveCreate,
+    ArchiveExtract,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum OperationState {
+    Idle,
+    Validating,
+    Scanning,
+    Queued,
+    WaitingForConflict,
+    Running,
+    Cancelling,
+    Completed,
+    CompletedWithErrors,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum ConflictDecision {
+    Overwrite,
+    Skip,
+    AllOverwrite,
+    AllSkip,
+    Cancel,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum DeleteMode {
+    Trash,
+    Permanent,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct OperationStarted {
+    operation_id: String,
+    kind: OperationKind,
+    state: OperationState,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct OperationProgress {
+    operation_id: String,
+    kind: OperationKind,
+    state: OperationState,
+    total_files: Option<u64>,
+    completed_files: u64,
+    total_bytes: Option<u64>,
+    completed_bytes: u64,
+    current_path: Option<String>,
+    bytes_per_second: Option<u64>,
+    eta_seconds: Option<u64>,
+    recent_error_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ConflictPrompt {
+    operation_id: String,
+    source: FileEntry,
+    destination: FileEntry,
+    default_decision: ConflictDecision,
+    available_decisions: Vec<ConflictDecision>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct OperationSummary {
+    operation_id: String,
+    kind: OperationKind,
+    state: OperationState,
+    completed_files: u64,
+    failed_files: u64,
+    errors: Vec<AppError>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ConflictAck {
+    operation_id: String,
+    decision: ConflictDecision,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct CancelAck {
+    operation_id: String,
+    state: OperationState,
+}
+
 #[tauri::command]
 fn health_check() -> &'static str {
     "ok"
@@ -207,6 +315,49 @@ fn create_dir(parent: String, name: String) -> CommandResult<FileEntry> {
 #[tauri::command]
 fn rename_entry(path: String, new_name: String) -> CommandResult<FileEntry> {
     mutation::rename_entry(&path, &new_name)
+}
+
+#[tauri::command]
+fn start_copy(
+    app: tauri::AppHandle,
+    sources: Vec<String>,
+    target_dir: String,
+    policy: ConflictDecision,
+) -> CommandResult<OperationStarted> {
+    operation::start_copy(Some(&app), sources, target_dir, policy)
+}
+
+#[tauri::command]
+fn start_move(
+    app: tauri::AppHandle,
+    sources: Vec<String>,
+    target_dir: String,
+    policy: ConflictDecision,
+) -> CommandResult<OperationStarted> {
+    operation::start_move(Some(&app), sources, target_dir, policy)
+}
+
+#[tauri::command]
+fn start_delete(
+    app: tauri::AppHandle,
+    targets: Vec<String>,
+    mode: DeleteMode,
+    confirm_token: Option<String>,
+) -> CommandResult<OperationStarted> {
+    operation::start_delete(Some(&app), targets, mode, confirm_token.as_deref())
+}
+
+#[tauri::command]
+fn cancel_operation(operation_id: String) -> CommandResult<CancelAck> {
+    operation::cancel_operation(operation_id)
+}
+
+#[tauri::command]
+fn resolve_conflict(
+    operation_id: String,
+    decision: ConflictDecision,
+) -> CommandResult<ConflictAck> {
+    operation::resolve_conflict(operation_id, decision)
 }
 
 mod navigation {
@@ -278,7 +429,10 @@ mod navigation {
             .extension()
             .and_then(|value| value.to_str())
             .map(|value| value.to_string());
-        let mime_type = extension.as_deref().and_then(mime_from_extension).map(str::to_string);
+        let mime_type = extension
+            .as_deref()
+            .and_then(mime_from_extension)
+            .map(str::to_string);
         Ok(FileMetadata {
             absolute_path: display_path(&path),
             extension,
@@ -363,12 +517,24 @@ mod mutation {
     pub(super) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntry> {
         let raw_source = PathBuf::from(path);
         let raw_parent = raw_source.parent().ok_or_else(|| {
-            AppError::new("invalid_path", "errors.invalidPath", Some(&raw_source), true)
+            AppError::new(
+                "invalid_path",
+                "errors.invalidPath",
+                Some(&raw_source),
+                true,
+            )
         })?;
         let source_name = raw_source
             .file_name()
             .and_then(|value| value.to_str())
-            .ok_or_else(|| AppError::new("invalid_name", "errors.invalidName", Some(&raw_source), true))?;
+            .ok_or_else(|| {
+                AppError::new(
+                    "invalid_name",
+                    "errors.invalidName",
+                    Some(&raw_source),
+                    true,
+                )
+            })?;
         let source_name = validate_child_name(source_name, Some(&raw_source))?;
         let parent = navigation::canonical_existing_path(&raw_parent.to_string_lossy())?;
         if !parent.is_dir() {
@@ -412,32 +578,26 @@ mod mutation {
             ));
         }
         if trimmed.contains('\0') || trimmed.contains('/') || trimmed.contains('\\') {
-            return Err(AppError::new(
-                "invalid_name",
-                "errors.invalidName",
-                path,
-                true,
-            )
-            .with_detail("name", trimmed));
+            return Err(
+                AppError::new("invalid_name", "errors.invalidName", path, true)
+                    .with_detail("name", trimmed),
+            );
         }
         if Path::new(trimmed).components().count() != 1 {
-            return Err(AppError::new(
-                "invalid_name",
-                "errors.invalidName",
-                path,
-                true,
-            )
-            .with_detail("name", trimmed));
+            return Err(
+                AppError::new("invalid_name", "errors.invalidName", path, true)
+                    .with_detail("name", trimmed),
+            );
         }
         Ok(trimmed)
     }
 
-    fn path_is_occupied(path: &Path) -> bool {
+    pub(super) fn path_is_occupied(path: &Path) -> bool {
         fs::symlink_metadata(path).is_ok()
     }
 
     #[cfg(target_os = "macos")]
-    fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
+    pub(super) fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
         use std::ffi::CString;
         use std::os::raw::{c_char, c_int};
         use std::os::unix::ffi::OsStrExt;
@@ -458,7 +618,7 @@ mod mutation {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
+    pub(super) fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
         use std::ffi::CString;
         use std::os::raw::{c_char, c_long};
         use std::os::unix::ffi::OsStrExt;
@@ -498,7 +658,7 @@ mod mutation {
     }
 
     #[cfg(windows)]
-    fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
+    pub(super) fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
         use std::os::windows::ffi::OsStrExt;
 
         extern "system" {
@@ -508,7 +668,8 @@ mod mutation {
         const MOVEFILE_WRITE_THROUGH: u32 = 0x00000008;
         let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
         let target: Vec<u16> = target.as_os_str().encode_wide().chain(Some(0)).collect();
-        let result = unsafe { MoveFileExW(source.as_ptr(), target.as_ptr(), MOVEFILE_WRITE_THROUGH) };
+        let result =
+            unsafe { MoveFileExW(source.as_ptr(), target.as_ptr(), MOVEFILE_WRITE_THROUGH) };
         if result != 0 {
             Ok(())
         } else {
@@ -516,8 +677,13 @@ mod mutation {
         }
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "android", windows)))]
-    fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "android",
+        windows
+    )))]
+    pub(super) fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
         if path_is_occupied(target) {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
@@ -527,6 +693,8 @@ mod mutation {
         fs::rename(source, target)
     }
 }
+
+mod operation;
 
 fn parent_virtual_entry(parent: &Path) -> FileEntry {
     FileEntry {
@@ -549,7 +717,11 @@ fn file_entry_from_path(path: &Path, is_virtual: bool) -> CommandResult<FileEntr
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_else(|| display_path(path));
     let kind = classify_entry(path, &metadata);
-    let size_bytes = if metadata.is_file() { Some(metadata.len()) } else { None };
+    let size_bytes = if metadata.is_file() {
+        Some(metadata.len())
+    } else {
+        None
+    };
 
     Ok(FileEntry {
         path: display_path(path),
@@ -589,9 +761,11 @@ fn is_archive_path(path: &Path) -> bool {
         return false;
     };
     let lowered = name.to_lowercase();
-    [".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.zst", ".7z", ".rar"]
-        .iter()
-        .any(|suffix| lowered.ends_with(suffix))
+    [
+        ".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.zst", ".7z", ".rar",
+    ]
+    .iter()
+    .any(|suffix| lowered.ends_with(suffix))
 }
 
 #[cfg(unix)]
@@ -611,16 +785,30 @@ fn format_permissions(metadata: &fs::Metadata) -> String {
     let mode = metadata.permissions().mode();
     let mut out = String::new();
     out.push(if metadata.is_dir() { 'd' } else { '-' });
-    for bit in [0o400, 0o200, 0o100, 0o040, 0o020, 0o010, 0o004, 0o002, 0o001] {
+    for bit in [
+        0o400, 0o200, 0o100, 0o040, 0o020, 0o010, 0o004, 0o002, 0o001,
+    ] {
         out.push(match bit {
             0o400 | 0o040 | 0o004 => {
-                if mode & bit != 0 { 'r' } else { '-' }
+                if mode & bit != 0 {
+                    'r'
+                } else {
+                    '-'
+                }
             }
             0o200 | 0o020 | 0o002 => {
-                if mode & bit != 0 { 'w' } else { '-' }
+                if mode & bit != 0 {
+                    'w'
+                } else {
+                    '-'
+                }
             }
             _ => {
-                if mode & bit != 0 { 'x' } else { '-' }
+                if mode & bit != 0 {
+                    'x'
+                } else {
+                    '-'
+                }
             }
         });
     }
@@ -651,14 +839,19 @@ fn sort_entries(entries: &mut [FileEntry], sort: &SortSpec) {
 
         let ordering = match sort.field {
             SortField::Name => left.name.to_lowercase().cmp(&right.name.to_lowercase()),
-            SortField::Size => left.size_bytes.unwrap_or(0).cmp(&right.size_bytes.unwrap_or(0)),
+            SortField::Size => left
+                .size_bytes
+                .unwrap_or(0)
+                .cmp(&right.size_bytes.unwrap_or(0)),
             SortField::ModifiedAt => left.modified_at.cmp(&right.modified_at),
             SortField::Extension => extension_of(&left.name).cmp(&extension_of(&right.name)),
         };
 
         match sort.direction {
             SortDirection::Asc => ordering.then_with(|| left.name.cmp(&right.name)),
-            SortDirection::Desc => reverse_ordering(ordering).then_with(|| right.name.cmp(&left.name)),
+            SortDirection::Desc => {
+                reverse_ordering(ordering).then_with(|| right.name.cmp(&left.name))
+            }
         }
     });
 }
@@ -718,7 +911,8 @@ fn map_io_error(error: io::Error, path: Option<&Path>) -> AppError {
         io::ErrorKind::InvalidInput => ("invalid_path", "errors.invalidPath", true),
         _ => ("io_error", "errors.io", false),
     };
-    AppError::new(code, message_key, path, recoverable).with_detail("ioKind", format!("{:?}", error.kind()))
+    AppError::new(code, message_key, path, recoverable)
+        .with_detail("ioKind", format!("{:?}", error.kind()))
 }
 
 fn display_path(path: &Path) -> String {
@@ -736,7 +930,12 @@ pub fn run() {
             goto_path,
             list_locations,
             create_dir,
-            rename_entry
+            rename_entry,
+            start_copy,
+            start_move,
+            start_delete,
+            cancel_operation,
+            resolve_conflict
         ])
         .run(tauri::generate_context!())
         .expect("failed to run BokslDirGUI Tauri application");
@@ -750,6 +949,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
     static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
+    static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     struct TempFixture {
         root: PathBuf,
@@ -767,8 +967,10 @@ mod tests {
                 std::process::id()
             ));
             fs::create_dir_all(root.join("folder")).expect("fixture folder should be created");
-            let mut file = File::create(root.join("alpha.txt")).expect("fixture file should be created");
-            file.write_all(b"hello").expect("fixture file should be written");
+            let mut file =
+                File::create(root.join("alpha.txt")).expect("fixture file should be created");
+            file.write_all(b"hello")
+                .expect("fixture file should be written");
             File::create(root.join("archive.7z")).expect("archive fixture should be created");
             File::create(root.join(".hidden")).expect("hidden fixture should be created");
             Self { root }
@@ -800,10 +1002,22 @@ mod tests {
 
         assert_eq!(listing.panel_id, PanelId::Left);
         assert!(Path::new(&listing.path).is_absolute());
-        assert!(listing.entries.iter().any(|entry| entry.name == ".." && entry.is_virtual));
-        assert!(listing.entries.iter().any(|entry| entry.name == "folder" && entry.kind == EntryKind::Directory));
-        assert!(listing.entries.iter().any(|entry| entry.name == "alpha.txt" && entry.kind == EntryKind::File));
-        assert!(listing.entries.iter().any(|entry| entry.name == "archive.7z" && entry.kind == EntryKind::Archive));
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.name == ".." && entry.is_virtual));
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.name == "folder" && entry.kind == EntryKind::Directory));
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.name == "alpha.txt" && entry.kind == EntryKind::File));
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.name == "archive.7z" && entry.kind == EntryKind::Archive));
         assert!(!listing.entries.iter().any(|entry| entry.name == ".hidden"));
     }
 
@@ -820,14 +1034,23 @@ mod tests {
         .expect("listing should succeed");
 
         assert!(listing.entries.iter().any(|entry| entry.name == ".hidden"));
-        assert!(!listing.entries.iter().any(|entry| entry.name == "alpha.txt"));
+        assert!(!listing
+            .entries
+            .iter()
+            .any(|entry| entry.name == "alpha.txt"));
     }
 
     #[test]
     fn get_metadata_reports_file_details() {
         let fixture = TempFixture::new();
-        let metadata = get_metadata(fixture.root.join("alpha.txt").to_string_lossy().into_owned())
-            .expect("metadata should succeed");
+        let metadata = get_metadata(
+            fixture
+                .root
+                .join("alpha.txt")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("metadata should succeed");
 
         assert_eq!(metadata.entry.name, "alpha.txt");
         assert_eq!(metadata.entry.size_bytes, Some(5));
@@ -838,8 +1061,14 @@ mod tests {
     #[test]
     fn invalid_path_returns_typed_error() {
         let fixture = TempFixture::new();
-        let error = get_metadata(fixture.root.join("missing.txt").to_string_lossy().into_owned())
-            .expect_err("missing file should fail");
+        let error = get_metadata(
+            fixture
+                .root
+                .join("missing.txt")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect_err("missing file should fail");
 
         assert_eq!(error.code, "not_found");
         assert_eq!(error.message_key, "errors.notFound");
@@ -1001,5 +1230,294 @@ mod tests {
         assert_eq!(renamed.kind, EntryKind::Symlink);
         assert!(fs::symlink_metadata(&link).is_err());
         assert!(fs::symlink_metadata(&renamed_link).is_ok());
+    }
+
+    #[test]
+    fn start_copy_recursively_copies_files_and_directories() {
+        let fixture = TempFixture::new();
+        let target = fixture.root.join("copy-target");
+        fs::create_dir_all(&target).expect("target directory should be created");
+        let nested = fixture.root.join("folder/nested.txt");
+        fs::write(&nested, b"nested").expect("nested fixture should be written");
+
+        let started = operation::start_copy(
+            None,
+            vec![fixture.root.join("folder").to_string_lossy().into_owned()],
+            target.to_string_lossy().into_owned(),
+            ConflictDecision::Skip,
+        )
+        .expect("copy should start");
+
+        assert_eq!(started.kind, OperationKind::Copy);
+        assert_eq!(started.state, OperationState::Queued);
+        assert_eq!(
+            fs::read(target.join("folder/nested.txt")).expect("copied file should exist"),
+            b"nested"
+        );
+    }
+
+    #[test]
+    fn start_copy_applies_conflict_skip_and_overwrite_policies() {
+        let fixture = TempFixture::new();
+        let target = fixture.root.join("copy-conflict-target");
+        fs::create_dir_all(&target).expect("target directory should be created");
+        fs::write(target.join("alpha.txt"), b"old").expect("conflict target should be written");
+
+        operation::start_copy(
+            None,
+            vec![fixture
+                .root
+                .join("alpha.txt")
+                .to_string_lossy()
+                .into_owned()],
+            target.to_string_lossy().into_owned(),
+            ConflictDecision::Skip,
+        )
+        .expect("copy skip should start");
+        assert_eq!(
+            fs::read(target.join("alpha.txt")).expect("target should remain"),
+            b"old"
+        );
+
+        operation::start_copy(
+            None,
+            vec![fixture
+                .root
+                .join("alpha.txt")
+                .to_string_lossy()
+                .into_owned()],
+            target.to_string_lossy().into_owned(),
+            ConflictDecision::Overwrite,
+        )
+        .expect("copy overwrite should start");
+        assert_eq!(
+            fs::read(target.join("alpha.txt")).expect("target should be overwritten"),
+            b"hello"
+        );
+    }
+
+    #[test]
+    fn start_copy_can_cancel_before_copying_work() {
+        let fixture = TempFixture::new();
+        let target = fixture.root.join("cancel-target");
+        fs::create_dir_all(&target).expect("target directory should be created");
+
+        let summary = operation::start_copy_cancel_after_for_test(
+            vec![fixture
+                .root
+                .join("alpha.txt")
+                .to_string_lossy()
+                .into_owned()],
+            target.to_string_lossy().into_owned(),
+            ConflictDecision::Overwrite,
+            0,
+        );
+
+        assert_eq!(summary.state, OperationState::Cancelled);
+        assert!(!target.join("alpha.txt").exists());
+    }
+
+    #[test]
+    fn start_move_renames_to_target_directory() {
+        let fixture = TempFixture::new();
+        let target = fixture.root.join("move-target");
+        fs::create_dir_all(&target).expect("target directory should be created");
+        let source = fixture.root.join("alpha.txt");
+
+        let started = operation::start_move(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            target.to_string_lossy().into_owned(),
+            ConflictDecision::Skip,
+        )
+        .expect("move should start");
+
+        assert_eq!(started.kind, OperationKind::Move);
+        assert!(!source.exists());
+        assert_eq!(
+            fs::read(target.join("alpha.txt")).expect("moved file should exist"),
+            b"hello"
+        );
+    }
+
+    #[test]
+    fn start_copy_to_same_directory_overwrite_is_noop_not_delete() {
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+
+        operation::start_copy(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            fixture.root.to_string_lossy().into_owned(),
+            ConflictDecision::Overwrite,
+        )
+        .expect("same-directory copy should be accepted as no-op");
+
+        assert_eq!(fs::read(&source).expect("source must remain"), b"hello");
+    }
+
+    #[test]
+    fn start_copy_to_same_directory_all_overwrite_is_noop_not_delete() {
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+
+        operation::start_copy(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            fixture.root.to_string_lossy().into_owned(),
+            ConflictDecision::AllOverwrite,
+        )
+        .expect("same-directory copy should be accepted as no-op");
+
+        assert_eq!(fs::read(&source).expect("source must remain"), b"hello");
+    }
+    #[test]
+    fn start_move_to_same_directory_overwrite_is_noop_not_delete() {
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+
+        operation::start_move(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            fixture.root.to_string_lossy().into_owned(),
+            ConflictDecision::Overwrite,
+        )
+        .expect("same-directory move should be accepted as no-op");
+
+        assert_eq!(fs::read(&source).expect("source must remain"), b"hello");
+    }
+
+    #[test]
+    fn start_move_to_same_directory_all_overwrite_is_noop_not_delete() {
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+
+        operation::start_move(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            fixture.root.to_string_lossy().into_owned(),
+            ConflictDecision::AllOverwrite,
+        )
+        .expect("same-directory move should be accepted as no-op");
+
+        assert_eq!(fs::read(&source).expect("source must remain"), b"hello");
+    }
+    #[test]
+    fn start_delete_requires_confirm_token_for_permanent_delete() {
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+
+        let error = operation::start_delete(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            DeleteMode::Permanent,
+            None,
+        )
+        .expect_err("permanent delete should require confirmation token");
+
+        assert_eq!(error.code, "confirmation_required");
+        assert!(source.exists());
+    }
+
+    #[test]
+    fn start_delete_permanently_removes_confirmed_targets() {
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+
+        let started = operation::start_delete(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            DeleteMode::Permanent,
+            Some("PERMANENT_DELETE"),
+        )
+        .expect("confirmed permanent delete should start");
+
+        assert_eq!(started.kind, OperationKind::Delete);
+        assert!(!source.exists());
+    }
+
+    #[test]
+    fn start_delete_trash_moves_without_permanent_fallback() {
+        let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+        let fixture = TempFixture::new();
+        let trash_dir = fixture.root.join("trash-fixture");
+        fs::create_dir_all(&trash_dir).expect("trash fixture should be created");
+        env::set_var("BOKSLDIRGUI_TRASH_DIR", &trash_dir);
+        let source = fixture.root.join("alpha.txt");
+
+        let started = operation::start_delete(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            DeleteMode::Trash,
+            None,
+        )
+        .expect("trash delete should start");
+        env::remove_var("BOKSLDIRGUI_TRASH_DIR");
+
+        assert_eq!(started.kind, OperationKind::Trash);
+        assert!(!source.exists());
+        assert!(fs::read_dir(&trash_dir)
+            .expect("trash dir should be readable")
+            .flatten()
+            .any(|entry| entry.file_name().to_string_lossy().contains("alpha.txt")));
+    }
+
+    #[test]
+    fn start_delete_trash_failure_keeps_source_without_permanent_fallback() {
+        let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+        let fixture = TempFixture::new();
+        let invalid_trash = fixture.root.join("not-a-trash-directory");
+        fs::write(&invalid_trash, b"file blocks trash directory")
+            .expect("blocking file should be written");
+        env::set_var("BOKSLDIRGUI_TRASH_DIR", &invalid_trash);
+        let source = fixture.root.join("alpha.txt");
+
+        let started = operation::start_delete(
+            None,
+            vec![source.to_string_lossy().into_owned()],
+            DeleteMode::Trash,
+            None,
+        )
+        .expect("trash operation should be accepted and report failure by summary event");
+        env::remove_var("BOKSLDIRGUI_TRASH_DIR");
+
+        assert_eq!(started.kind, OperationKind::Trash);
+        assert!(
+            source.exists(),
+            "trash failure must not fall back to permanent deletion"
+        );
+    }
+    #[test]
+    fn delete_guard_rejects_protected_root_path() {
+        let error = operation::start_delete(
+            None,
+            vec!["/".to_string()],
+            DeleteMode::Permanent,
+            Some("PERMANENT_DELETE"),
+        )
+        .expect_err("root delete should be rejected");
+
+        assert_eq!(error.code, "invalid_path");
+    }
+
+    #[test]
+    fn delete_guard_rejects_platform_protected_paths() {
+        for protected in ["/System", "/bin", "/usr", "/Users"] {
+            let error = operation::guard_delete_target(Path::new(protected))
+                .expect_err("protected OS path should be rejected");
+            assert_eq!(error.code, "invalid_path");
+        }
+    }
+
+    #[test]
+    fn resolve_conflict_feeds_backend_wait_channel() {
+        let resolved =
+            operation::conflict_decision_after_resolve_for_test(ConflictDecision::Overwrite);
+        assert_eq!(resolved, ConflictDecision::Overwrite);
+    }
+    #[test]
+    fn cross_device_error_detection_supports_move_fallback_policy() {
+        let error = io::Error::from_raw_os_error(18);
+        assert!(operation::is_cross_device_error(&error));
     }
 }

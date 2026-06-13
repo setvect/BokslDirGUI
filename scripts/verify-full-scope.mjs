@@ -154,19 +154,26 @@ addCheck('operation store separates atomic command execution mode', operationSto
 addCheck('operation store separates long-running operation execution mode', operationStore.includes("'longRunningOperation'") && operationStore.includes('LONG_RUNNING_DIALOGS'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
 addCheck('operation store validates safe mutation names', operationStore.includes('validateDialogInput') && operationStore.includes('errors.invalidName'), 'create_dir/rename_entry dialog names must be validated before Rust command execution');
 addCheck('operation store exposes atomic executor seam', operationStore.includes('AtomicCommandExecutor') && operationStore.includes('onAtomicSuccess'), 'Connected atomic commands must use request/response execution, not progress stubs');
+addCheck('operation store exposes long-running executor seam', operationStore.includes('LongRunningOperationExecutor') && operationStore.includes('applyOperationProgress') && operationStore.includes('applyOperationSummary'), 'copy/move/delete/trash must consume backend operation events instead of preview-only stubs');
 addCheck('operation store guards duplicate atomic submissions', operationStore.includes('atomicPending') && operationStore.includes('if (dialog.atomicPending)'), 'create_dir/rename_entry dialogs must not submit duplicate filesystem requests while pending');
+addCheck('operation store guards duplicate long-running submissions', operationStore.includes('operationPending') && operationStore.includes('if (dialog.operationPending)'), 'long-running operation dialogs must not submit duplicate filesystem requests while pending');
 for (const conflictState of ['lastConflictDecision', 'applyAllConflictDecision', 'allOverwrite', 'allSkip']) {
   addCheck(`operation conflict model includes ${conflictState}`, operationStore.includes(conflictState), 'Conflict apply-all decisions are explicit');
 }
 
 const rustLib = read('src-tauri/src/lib.rs');
-for (const command of ['list_dir', 'get_metadata', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry']) {
-  addCheck(`rust handler includes ${command}`, rustLib.includes(command), 'read-only command bridge');
+const rustOperation = read('src-tauri/src/operation.rs');
+const rustBackend = `${rustLib}\n${rustOperation}`;
+for (const command of ['list_dir', 'get_metadata', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict']) {
+  addCheck(`rust handler includes ${command}`, rustBackend.includes(command), 'read-only command bridge');
 }
-addCheck('rust list_dir normalizes filter once', rustLib.includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
-addCheck('rust safe mutation validates child names', rustLib.includes('validate_child_name') && rustLib.includes('already_exists'), 'create_dir/rename_entry must reject invalid names and overwrites');
-addCheck('rust rename preserves source entry identity for symlinks', rustLib.includes('rename_entry_renames_symlink_entry_not_target') && rustLib.includes('fs::symlink_metadata(&source)'), 'rename_entry must rename the visible entry, not a symlink target');
-addCheck('rust rename uses no-replace abstraction', rustLib.includes('rename_no_replace') && rustLib.includes('RENAME_EXCL') && rustLib.includes('RENAME_NOREPLACE'), 'rename_entry overwrite prevention must not depend only on check-then-rename');
+addCheck('rust list_dir normalizes filter once', rustBackend.includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
+addCheck('rust safe mutation validates child names', rustBackend.includes('validate_child_name') && rustLib.includes('already_exists'), 'create_dir/rename_entry must reject invalid names and overwrites');
+addCheck('rust rename preserves source entry identity for symlinks', rustBackend.includes('rename_entry_renames_symlink_entry_not_target') && rustBackend.includes('fs::symlink_metadata(&source)'), 'rename_entry must rename the visible entry, not a symlink target');
+addCheck('rust rename uses no-replace abstraction', rustBackend.includes('rename_no_replace') && rustBackend.includes('RENAME_EXCL') && rustBackend.includes('RENAME_NOREPLACE'), 'rename_entry overwrite prevention must not depend only on check-then-rename');
+addCheck('rust operation service emits progress and summary events', rustBackend.includes('operation_progress') && rustBackend.includes('operation_summary') && rustBackend.includes('operation_conflict'), 'long-running operation state must be observable by the GUI');
+addCheck('rust operation service implements copy move delete trash policies', rustBackend.includes('start_copy') && rustBackend.includes('start_move') && rustBackend.includes('DeleteMode::Trash') && rustBackend.includes('PERMANENT_DELETE'), 'copy/move/delete/trash must be real backend commands with safety policies');
+addCheck('rust trash does not fall back to permanent delete', rustBackend.includes('errors.trashUnsupported') && rustBackend.includes('trash_directory'), 'trash failure must be recoverable and must not silently remove files permanently');
 
 const tauriConf = JSON.parse(read('src-tauri/tauri.conf.json'));
 addCheck(
@@ -185,6 +192,7 @@ for (const token of ['TauriResult', 'BACKEND_IMPLEMENTED_COMMANDS', 'unsupported
   addCheck(`tauri client exposes ${token}`, tauriClient.includes(token), 'Frontend wrappers must distinguish unsupported vs failed commands');
 }
 addCheck('tauri client marks safe mutation handlers implemented', tauriClient.includes('COMMANDS.createDir') && tauriClient.includes('COMMANDS.renameEntry'), 'create_dir/rename_entry frontend capability must match Rust handler registration');
+addCheck('tauri client marks long-running operation handlers implemented', tauriClient.includes('COMMANDS.startCopy') && tauriClient.includes('COMMANDS.startMove') && tauriClient.includes('COMMANDS.startDelete') && tauriClient.includes('listenOperationEvents'), 'copy/move/delete/trash frontend capability must match Rust handler registration and event stream');
 
 const panelState = read('src/ui/panelState.ts');
 const panelDataSource = read('src/ui/panelDataSource.ts');
@@ -206,7 +214,7 @@ for (const token of ['createActionContext', 'filterEnabledActions', 'blocksVirtu
 }
 
 const fullScopeTest = read('src/verification/fullScope.test.ts');
-for (const token of ['tauriClient.startDelete', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.preview']) {
+for (const token of ['tauriClient.archiveCreate', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.preview']) {
   addCheck(`full-scope test covers ${token}`, fullScopeTest.includes(token), 'Semantic verification beyond static smoke');
 }
 

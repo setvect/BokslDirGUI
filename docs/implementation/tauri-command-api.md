@@ -61,7 +61,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `rename_entry` | `{ path, newName }` | `FileEntry` | 같은 parent 내 rename |
 | `start_copy` | `{ sources, targetDir, policy }` | `OperationStarted` | 진행률 event |
 | `start_move` | `{ sources, targetDir, policy }` | `OperationStarted` | rename 우선, fallback copy+delete |
-| `start_delete` | `{ targets, mode }` | `OperationStarted` | `trash`/`permanent` |
+| `start_delete` | `{ targets, mode, confirmToken? }` | `OperationStarted` | `trash`/`permanent`; permanent는 `PERMANENT_DELETE` token 필요 |
 | `cancel_operation` | `{ operationId }` | `CancelAck` | cooperative cancel |
 | `resolve_conflict` | `{ operationId, decision }` | `ConflictAck` | overwrite/skip/allOverwrite/allSkip/cancel |
 | `archive_list` | `{ archivePath, password? }` | `ArchiveListing` | 대량 목록 제한 |
@@ -82,7 +82,8 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `dir_changed` | `{ panelId, path, version }` | watch service | panel store |
 | `operation_progress` | `OperationProgress` | operation service | operation store/dialog |
 | `operation_conflict` | `ConflictPrompt` | operation service | conflict dialog |
-| `operation_completed` | `OperationSummary` | operation service | queue/toast/panel refresh |
+| `operation_summary` | `OperationSummary` | operation service | queue/toast/panel refresh |
+| `operation_completed` | `OperationSummary` | operation service | `operation_summary` 호환 alias |
 | `operation_error` | `OperationError` | operation service | error summary/log |
 | `settings_changed` | `Settings` | settings service | UI providers |
 

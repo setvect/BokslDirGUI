@@ -24,7 +24,7 @@ import {
 } from '../actions/registry';
 import type { DirectoryListing, FileEntry, PanelId, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
-import { dialogKindForAction, useOperationStore, type AtomicCommandExecutor } from '../operations/operationStore';
+import { dialogKindForAction, useOperationStore, type AtomicCommandExecutor, type LongRunningOperationExecutor } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
 import { actionNeedsConcreteSources, createActionContext, filterEnabledActions } from './actionContext';
 import { createTauriPanelDataSource, type PanelDataSource } from './panelDataSource';
@@ -60,6 +60,7 @@ type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selecte
 interface CommanderShellProps {
   dataSource?: PanelDataSource;
   mutationClient?: SafeMutationClient;
+  operationClient?: LongRunningOperationClient;
   initialFocusIndex?: Partial<Record<PanelId, number>>;
   initialSelectedPaths?: Partial<Record<PanelId, string[]>>;
 }
@@ -67,6 +68,14 @@ interface CommanderShellProps {
 interface SafeMutationClient {
   createDir(input: { parent: string; name: string }): ReturnType<typeof tauriClient.createDir>;
   renameEntry(input: { path: string; newName: string }): ReturnType<typeof tauriClient.renameEntry>;
+}
+
+interface LongRunningOperationClient {
+  startCopy(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startCopy>;
+  startMove(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startMove>;
+  startDelete(input: { targets: string[]; mode: 'trash' | 'permanent'; confirmToken?: string }): ReturnType<typeof tauriClient.startDelete>;
+  cancelOperation(input: { operationId: string }): ReturnType<typeof tauriClient.cancelOperation>;
+  resolveConflict(input: { operationId: string; decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.resolveConflict>;
 }
 
 interface KeyboardRuntime {
@@ -92,6 +101,7 @@ interface ListPanelOptions {
 export function CommanderShell({
   dataSource = DEFAULT_DATA_SOURCE,
   mutationClient = tauriClient,
+  operationClient = tauriClient,
   initialFocusIndex,
   initialSelectedPaths,
 }: CommanderShellProps) {
@@ -502,12 +512,22 @@ export function CommanderShell({
         targetDir: panelState[oppositePanel].path,
         workingDir: panelListing.path,
         atomicExecutor: atomicExecutorForAction(actionId, mutationClient),
+        longRunningExecutor: longRunningExecutorForAction(actionId, operationClient),
+        cancelExecutor: (operationId) => operationClient.cancelOperation({ operationId }),
+        conflictResolver: (operationId, decision) => operationClient.resolveConflict({ operationId, decision }),
         onAtomicSuccess: (entry) => {
           void listPanel(panelOverride, panelListing.path, {
             preserveSelection: false,
             focusPath: entry.path,
           });
           setOverlayMessage(`${labelForAction(action)} 완료: ${entry.name}`);
+        },
+        onOperationSummary: (summary) => {
+          if (summary.state === 'completed' || summary.state === 'completedWithErrors') {
+            refreshPanel(panelOverride);
+            refreshPanel(oppositePanel);
+          }
+          setOverlayMessage(`${labelForAction(action)} 완료 상태: ${summary.state}`);
         },
       });
       return;
@@ -1194,6 +1214,40 @@ const atomicExecutorForAction = (
   if (actionId === 'file.rename') {
     return (dialog) =>
       mutationClient.renameEntry({ path: dialog.sources[0]?.path ?? '', newName: dialog.inputValue.trim() });
+  }
+  return undefined;
+};
+
+const longRunningExecutorForAction = (
+  actionId: ActionId,
+  operationClient: LongRunningOperationClient,
+): LongRunningOperationExecutor | undefined => {
+  if (actionId === 'file.copy') {
+    return (dialog) => operationClient.startCopy({
+      sources: dialog.sources.map((source) => source.path),
+      targetDir: dialog.targetDir ?? '',
+      policy: dialog.defaultDecision,
+    });
+  }
+  if (actionId === 'file.move') {
+    return (dialog) => operationClient.startMove({
+      sources: dialog.sources.map((source) => source.path),
+      targetDir: dialog.targetDir ?? '',
+      policy: dialog.defaultDecision,
+    });
+  }
+  if (actionId === 'file.trash') {
+    return (dialog) => operationClient.startDelete({
+      targets: dialog.sources.map((source) => source.path),
+      mode: 'trash',
+    });
+  }
+  if (actionId === 'file.deletePermanent') {
+    return (dialog) => operationClient.startDelete({
+      targets: dialog.sources.map((source) => source.path),
+      mode: 'permanent',
+      confirmToken: dialog.inputValue.trim() === 'PERMANENT_DELETE' ? 'PERMANENT_DELETE' : undefined,
+    });
   }
   return undefined;
 };

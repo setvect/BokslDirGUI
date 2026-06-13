@@ -35,23 +35,30 @@ describe('Tauri command names', () => {
       'list_locations',
       'create_dir',
       'rename_entry',
+      'start_copy',
+      'start_move',
+      'start_delete',
+      'cancel_operation',
+      'resolve_conflict',
     ]);
     expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.startCopy)).toBe(false);
+    expect(isBackendImplementedCommand(COMMANDS.startCopy)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(false);
   });
 
   it('returns explicit unsupported results for wrappers whose Rust handlers are not registered yet', async () => {
-    const result = await tauriClient.startCopy({
+    const result = await tauriClient.archiveCreate({
       sources: ['/demo/source.txt'],
-      targetDir: '/demo/target',
-      policy: 'skip',
+      targetArchive: '/demo/target.zip',
+      format: 'zip',
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toEqual(unsupportedCommandError(COMMANDS.startCopy));
+      expect(result.error).toEqual(unsupportedCommandError(COMMANDS.archiveCreate));
     }
   });
 

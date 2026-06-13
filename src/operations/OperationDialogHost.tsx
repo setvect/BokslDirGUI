@@ -1,6 +1,8 @@
 import * as Dialog from '@radix-ui/react-dialog';
+import { useEffect } from 'react';
 import { useOperationStore } from './operationStore';
 import { useCommanderKeyboardBoundaryProps } from '../ui/keyboardOwnership';
+import { tauriClient } from '../tauri/client';
 
 export function OperationDialogHost() {
   const dialog = useOperationStore((state) => state.dialog);
@@ -13,7 +15,40 @@ export function OperationDialogHost() {
   const resolveConflict = useOperationStore((state) => state.resolveConflict);
   const cancelOperation = useOperationStore((state) => state.cancelOperation);
   const closeDialog = useOperationStore((state) => state.closeDialog);
+  const applyOperationProgress = useOperationStore((state) => state.applyOperationProgress);
+  const applyOperationConflict = useOperationStore((state) => state.applyOperationConflict);
+  const applyOperationSummary = useOperationStore((state) => state.applyOperationSummary);
+  const applyOperationError = useOperationStore((state) => state.applyOperationError);
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('operation-dialog', Boolean(dialog));
+
+  useEffect(() => {
+    let disposed = false;
+    let cleanup: (() => void) | null = null;
+    void tauriClient.listenOperationEvents({
+      progress: applyOperationProgress,
+      conflict: applyOperationConflict,
+      summary: applyOperationSummary,
+      error: applyOperationError,
+    }).then((unlisten) => {
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      cleanup = unlisten;
+    }).catch((error) => {
+      applyOperationError({
+        code: 'event_listen_failed',
+        messageKey: 'errors.operationEventListenFailed',
+        path: null,
+        details: { message: String(error) },
+        recoverable: true,
+      });
+    });
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
+  }, [applyOperationConflict, applyOperationError, applyOperationProgress, applyOperationSummary]);
 
   return (
     <Dialog.Root open={Boolean(dialog)} onOpenChange={(open) => { if (!open) closeDialog(); }}>
@@ -126,10 +161,10 @@ export function OperationDialogHost() {
                 <button
                   type="button"
                   className="dialog-button primary"
-                  disabled={Boolean(dialog.validationErrorKey) || dialog.atomicPending}
+                  disabled={Boolean(dialog.validationErrorKey) || dialog.atomicPending || dialog.operationPending}
                   onClick={() => void confirmDialog()}
                 >
-                  {dialog.atomicPending ? '실행 중…' : dialog.primaryLabel}
+                  {dialog.atomicPending || dialog.operationPending ? '실행 중…' : dialog.primaryLabel}
                 </button>
               </div>
             </>

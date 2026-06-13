@@ -221,4 +221,222 @@ describe('operation store', () => {
     expect(useOperationStore.getState().lastConflictDecision).toBe('allOverwrite');
     expect(useOperationStore.getState().applyAllConflictDecision).toBe('allOverwrite');
   });
+
+  it('runs connected long-running copy through operation executor instead of preview stub', async () => {
+    const action = ACTION_BY_ID.get('file.copy');
+    if (!action) {
+      throw new Error('file.copy action is required');
+    }
+    const longRunningExecutor = vi.fn(async () => ({
+      ok: true as const,
+      data: { operationId: 'op-copy-1', kind: 'copy' as const, state: 'queued' as const },
+    }));
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'left',
+      sources: [sampleEntry],
+      targetDir: '/tmp/target',
+      workingDir: '/tmp',
+      longRunningExecutor,
+    });
+
+    expect(useOperationStore.getState().dialog?.backendExecutionStubbed).toBe(false);
+    await useOperationStore.getState().confirmDialog();
+
+    expect(longRunningExecutor).toHaveBeenCalledOnce();
+    expect(useOperationStore.getState().progress).toMatchObject({
+      operationId: 'op-copy-1',
+      kind: 'copy',
+      state: 'queued',
+    });
+  });
+
+  it('applies backend operation event stream transitions to progress, conflict, and summary', () => {
+    openAction('file.copy');
+
+    useOperationStore.getState().applyOperationProgress({
+      operationId: 'op-copy-2',
+      kind: 'copy',
+      state: 'running',
+      totalFiles: 2,
+      completedFiles: 1,
+      totalBytes: 10,
+      completedBytes: 5,
+      currentPath: '/tmp/source.txt',
+      bytesPerSecond: 5,
+      etaSeconds: 1,
+      recentErrorCount: 0,
+    });
+    expect(useOperationStore.getState().progress?.state).toBe('running');
+
+    useOperationStore.getState().applyOperationConflict({
+      operationId: 'op-copy-2',
+      source: sampleEntry,
+      destination: { ...sampleEntry, path: '/tmp/target/source.txt' },
+      defaultDecision: 'skip',
+      availableDecisions: ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'],
+    });
+    expect(useOperationStore.getState().progress?.state).toBe('waitingForConflict');
+    expect(useOperationStore.getState().conflictPrompt?.operationId).toBe('op-copy-2');
+
+    useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-copy-2',
+      kind: 'copy',
+      state: 'completed',
+      completedFiles: 2,
+      failedFiles: 0,
+      errors: [],
+    });
+
+    expect(useOperationStore.getState().summary?.state).toBe('completed');
+    expect(useOperationStore.getState().conflictPrompt).toBeNull();
+    expect(useOperationStore.getState().progress?.state).toBe('completed');
+  });
+
+
+  it('requires typed permanent delete confirmation before connected delete execution', async () => {
+    const action = ACTION_BY_ID.get('file.deletePermanent');
+    if (!action) {
+      throw new Error('file.deletePermanent action is required');
+    }
+    const longRunningExecutor = vi.fn(async () => ({
+      ok: true as const,
+      data: { operationId: 'op-delete-typed', kind: 'delete' as const, state: 'queued' as const },
+    }));
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'left',
+      sources: [sampleEntry],
+      targetDir: '/tmp/target',
+      workingDir: '/tmp',
+      longRunningExecutor,
+    });
+
+    await useOperationStore.getState().confirmDialog();
+    expect(longRunningExecutor).not.toHaveBeenCalled();
+    expect(useOperationStore.getState().lastError?.messageKey).toBe('errors.confirmationRequired');
+
+    useOperationStore.getState().updateDialogInput('PERMANENT_DELETE');
+    await useOperationStore.getState().confirmDialog();
+
+    expect(longRunningExecutor).toHaveBeenCalledOnce();
+  });
+
+  it('does not downgrade a fast terminal summary when OperationStarted arrives later', () => {
+    openAction('file.copy');
+
+    useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-fast-copy',
+      kind: 'copy',
+      state: 'completed',
+      completedFiles: 1,
+      failedFiles: 0,
+      errors: [],
+    });
+    useOperationStore.getState().applyOperationStarted({
+      operationId: 'op-fast-copy',
+      kind: 'copy',
+      state: 'queued',
+    });
+
+    expect(useOperationStore.getState().progress?.state).toBe('completed');
+    expect(useOperationStore.getState().summary?.state).toBe('completed');
+  });
+
+  it('ignores stale summaries for a different active operation id', () => {
+    useOperationStore.getState().applyOperationProgress({
+      operationId: 'op-active',
+      kind: 'copy',
+      state: 'running',
+      totalFiles: 1,
+      completedFiles: 0,
+      totalBytes: null,
+      completedBytes: 0,
+      currentPath: sampleEntry.path,
+      bytesPerSecond: null,
+      etaSeconds: null,
+      recentErrorCount: 0,
+    });
+
+    useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-stale',
+      kind: 'copy',
+      state: 'completed',
+      completedFiles: 1,
+      failedFiles: 0,
+      errors: [],
+    });
+
+    expect(useOperationStore.getState().progress?.operationId).toBe('op-active');
+    expect(useOperationStore.getState().summary).toBeNull();
+  });
+
+
+  it('resolves a prompt-first conflict using the prompt operation id', () => {
+    const action = ACTION_BY_ID.get('file.copy');
+    if (!action) {
+      throw new Error('file.copy action is required');
+    }
+    const conflictResolver = vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-prompt-first', decision: 'skip' as const } }));
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'left',
+      sources: [sampleEntry],
+      targetDir: '/tmp/target',
+      workingDir: '/tmp',
+      conflictResolver,
+    });
+    useOperationStore.getState().applyOperationConflict({
+      operationId: 'op-prompt-first',
+      source: sampleEntry,
+      destination: { ...sampleEntry, path: '/tmp/target/source.txt' },
+      defaultDecision: 'skip',
+      availableDecisions: ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'],
+    });
+
+    useOperationStore.getState().resolveConflict('overwrite');
+
+    expect(conflictResolver).toHaveBeenCalledWith('op-prompt-first', 'overwrite');
+    expect(useOperationStore.getState().progress).toMatchObject({
+      operationId: 'op-prompt-first',
+      state: 'running',
+    });
+  });
+
+
+  it('ignores delayed running progress and conflict after terminal summary for same operation', () => {
+    useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-terminal',
+      kind: 'copy',
+      state: 'completed',
+      completedFiles: 1,
+      failedFiles: 0,
+      errors: [],
+    });
+
+    useOperationStore.getState().applyOperationProgress({
+      operationId: 'op-terminal',
+      kind: 'copy',
+      state: 'running',
+      totalFiles: 1,
+      completedFiles: 0,
+      totalBytes: null,
+      completedBytes: 0,
+      currentPath: sampleEntry.path,
+      bytesPerSecond: null,
+      etaSeconds: null,
+      recentErrorCount: 0,
+    });
+    useOperationStore.getState().applyOperationConflict({
+      operationId: 'op-terminal',
+      source: sampleEntry,
+      destination: { ...sampleEntry, path: '/tmp/target/source.txt' },
+      defaultDecision: 'skip',
+      availableDecisions: ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'],
+    });
+
+    expect(useOperationStore.getState().progress?.state).toBe('completed');
+    expect(useOperationStore.getState().conflictPrompt).toBeNull();
+  });
+
 });
