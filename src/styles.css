@@ -106,6 +106,18 @@ button {
   background: #181818;
 }
 
+.panel-zone.layout-70-30 {
+  grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+}
+
+.panel-zone.layout-30-70 {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
+}
+
+.panel-zone.is-single-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .file-panel {
   display: grid;
   grid-template-rows: 25px 30px minmax(0, 1fr) 24px;
@@ -121,9 +133,13 @@ button {
   outline-color: rgba(5, 137, 216, 0.35);
 }
 
+.file-panel.is-hidden-by-layout {
+  display: none;
+}
+
 .panel-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   height: 25px;
@@ -143,6 +159,12 @@ button {
   color: #6c6c6c;
   font-size: 12px;
   letter-spacing: 0.08em;
+}
+
+.panel-tabs {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
 }
 
 .panel-marker.active {
@@ -564,7 +586,8 @@ button {
 
 .operation-grid code,
 .operation-source-list code,
-.operation-shell-preview code {
+.operation-shell-preview code,
+.operation-result pre {
   overflow: hidden;
   color: var(--cyan);
   text-overflow: ellipsis;
@@ -583,6 +606,32 @@ button {
   margin: 0;
   color: #f1f1f1;
   font-size: 14px;
+}
+
+.operation-result pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid #303030;
+  background: #101010;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.shortcut-help-list {
+  display: grid;
+  gap: 4px;
+  max-height: 54vh;
+  overflow: auto;
+}
+
+.shortcut-help-row {
+  display: grid;
+  grid-template-columns: 90px 1fr minmax(120px, auto);
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid #262626;
+  padding: 4px 0;
 }
 
 .operation-source-list {

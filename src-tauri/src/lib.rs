@@ -5,9 +5,10 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -106,7 +107,7 @@ struct WatchAck {
     version: u64,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct BookmarkLocation {
     id: String,
@@ -121,6 +122,111 @@ struct LocationList {
     roots: Vec<String>,
     recent: Vec<String>,
     bookmarks: Vec<BookmarkLocation>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ArchiveListing {
+    archive_path: String,
+    entries: Vec<FileEntry>,
+    encrypted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ActionResult {
+    ok: bool,
+    message_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ShellCommandPolicy {
+    enabled: bool,
+    reason_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ShellCommandPreview {
+    confirm_token: String,
+    expires_at: String,
+    fingerprint: String,
+    requires_confirmation: bool,
+    policy: ShellCommandPolicy,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ShellCommandResult {
+    exit_code: Option<i32>,
+    stdout: String,
+    stderr: String,
+    timed_out: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ExternalSettings {
+    editor_id: Option<String>,
+    shell_command: ShellCommandEnabled,
+}
+
+impl Default for ExternalSettings {
+    fn default() -> Self {
+        Self {
+            editor_id: None,
+            shell_command: ShellCommandEnabled { enabled: false },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ShellCommandEnabled {
+    enabled: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct LayoutSettings {
+    single_panel: bool,
+    ratio: String,
+}
+
+impl Default for LayoutSettings {
+    fn default() -> Self {
+        Self {
+            single_panel: false,
+            ratio: "50:50".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct Settings {
+    schema_version: u32,
+    theme: String,
+    language: String,
+    size_format: String,
+    external: ExternalSettings,
+    bookmarks: Vec<BookmarkLocation>,
+    layout: LayoutSettings,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            theme: "dark".to_string(),
+            language: "ko".to_string(),
+            size_format: "binary".to_string(),
+            external: ExternalSettings::default(),
+            bookmarks: Vec::new(),
+            layout: LayoutSettings::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -360,6 +466,495 @@ fn resolve_conflict(
     operation::resolve_conflict(operation_id, decision)
 }
 
+#[tauri::command]
+fn archive_list(archive_path: String, password: Option<String>) -> CommandResult<ArchiveListing> {
+    archive::archive_list(&archive_path, password)
+}
+
+#[tauri::command]
+fn archive_create(
+    app: tauri::AppHandle,
+    sources: Vec<String>,
+    target_archive: String,
+    format: String,
+    password: Option<String>,
+) -> CommandResult<OperationStarted> {
+    operation::start_archive_create(Some(&app), sources, target_archive, format, password)
+}
+
+#[tauri::command]
+fn archive_extract(
+    app: tauri::AppHandle,
+    archive_path: String,
+    target_dir: String,
+    password: Option<String>,
+    policy: ConflictDecision,
+) -> CommandResult<OperationStarted> {
+    operation::start_archive_extract(Some(&app), archive_path, target_dir, password, policy)
+}
+
+#[tauri::command]
+fn open_default(path: String) -> CommandResult<ActionResult> {
+    external::open_default(&path)
+}
+
+#[tauri::command]
+fn reveal_in_manager(path: String) -> CommandResult<ActionResult> {
+    external::reveal_in_manager(&path)
+}
+
+#[tauri::command]
+fn open_external_editor(path: String, editor_id: Option<String>) -> CommandResult<ActionResult> {
+    external::open_external_editor(&path, editor_id.as_deref())
+}
+
+#[tauri::command]
+fn prepare_shell_command(
+    working_dir: String,
+    command: String,
+    args: Option<Vec<String>>,
+) -> CommandResult<ShellCommandPreview> {
+    shell_command::prepare_shell_command(&working_dir, &command, args.unwrap_or_default())
+}
+
+#[tauri::command]
+fn run_shell_command(
+    working_dir: String,
+    command: String,
+    args: Option<Vec<String>>,
+    confirm_token: String,
+) -> CommandResult<ShellCommandResult> {
+    shell_command::run_shell_command(&working_dir, &command, args.unwrap_or_default(), &confirm_token)
+}
+
+#[tauri::command]
+fn load_settings() -> CommandResult<Settings> {
+    settings_service::load_settings()
+}
+
+#[tauri::command]
+fn save_settings(patch: serde_json::Value) -> CommandResult<Settings> {
+    settings_service::save_settings(patch)
+}
+
+mod settings_service {
+    use super::*;
+
+    pub(super) fn load_settings() -> CommandResult<Settings> {
+        let path = settings_path()?;
+        if !path.exists() {
+            return Ok(Settings::default());
+        }
+        let text = fs::read_to_string(&path).map_err(|error| map_io_error(error, Some(&path)))?;
+        serde_json::from_str::<Settings>(&text).map_err(|error| {
+            AppError::new("invalid_settings", "errors.settingsInvalid", Some(&path), true)
+                .with_detail("message", error.to_string())
+        })
+    }
+
+    pub(super) fn save_settings(patch: serde_json::Value) -> CommandResult<Settings> {
+        let path = settings_path()?;
+        let current = load_settings().unwrap_or_default();
+        let mut value = serde_json::to_value(current).map_err(|error| {
+            AppError::new("invalid_settings", "errors.settingsInvalid", Some(&path), true)
+                .with_detail("message", error.to_string())
+        })?;
+        merge_json(&mut value, patch);
+        let next: Settings = serde_json::from_value(value).map_err(|error| {
+            AppError::new("invalid_settings", "errors.settingsInvalid", Some(&path), true)
+                .with_detail("message", error.to_string())
+        })?;
+        validate_settings(&next, &path)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| map_io_error(error, Some(parent)))?;
+        }
+        let tmp = path.with_extension("json.tmp");
+        let body = serde_json::to_string_pretty(&next).map_err(|error| {
+            AppError::new("invalid_settings", "errors.settingsInvalid", Some(&path), true)
+                .with_detail("message", error.to_string())
+        })?;
+        fs::write(&tmp, body).map_err(|error| map_io_error(error, Some(&tmp)))?;
+        fs::rename(&tmp, &path).map_err(|error| map_io_error(error, Some(&path)))?;
+        Ok(next)
+    }
+
+    pub(super) fn settings_path() -> CommandResult<PathBuf> {
+        if let Some(path) = env::var_os("BOKSLDIRGUI_SETTINGS_PATH") {
+            return Ok(PathBuf::from(path));
+        }
+        let home = home_dir()?;
+        #[cfg(target_os = "macos")]
+        let path = home
+            .join("Library")
+            .join("Application Support")
+            .join("BokslDirGUI")
+            .join("settings.json");
+        #[cfg(target_os = "windows")]
+        let path = env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or(home)
+            .join("BokslDirGUI")
+            .join("settings.json");
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+        let path = env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config"))
+            .join("BokslDirGUI")
+            .join("settings.json");
+        Ok(path)
+    }
+
+    fn validate_settings(settings: &Settings, path: &Path) -> CommandResult<()> {
+        if !["dark", "light", "highContrast"].contains(&settings.theme.as_str()) {
+            return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+                .with_detail("field", "theme"));
+        }
+        if !["ko", "en"].contains(&settings.language.as_str()) {
+            return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+                .with_detail("field", "language"));
+        }
+        if !["binary", "decimal"].contains(&settings.size_format.as_str()) {
+            return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+                .with_detail("field", "sizeFormat"));
+        }
+        if !["50:50", "70:30", "30:70"].contains(&settings.layout.ratio.as_str()) {
+            return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+                .with_detail("field", "layout.ratio"));
+        }
+        Ok(())
+    }
+
+    fn merge_json(target: &mut serde_json::Value, patch: serde_json::Value) {
+        match (target, patch) {
+            (serde_json::Value::Object(target), serde_json::Value::Object(patch)) => {
+                for (key, value) in patch {
+                    merge_json(target.entry(key).or_insert(serde_json::Value::Null), value);
+                }
+            }
+            (target, patch) => *target = patch,
+        }
+    }
+
+    fn home_dir() -> CommandResult<PathBuf> {
+        env::var_os("HOME")
+            .map(PathBuf::from)
+            .or_else(|| env::current_dir().ok())
+            .ok_or_else(|| AppError::new("io_error", "errors.homeUnavailable", None, true))
+    }
+}
+
+mod shell_command {
+    use super::*;
+
+    static SHELL_TOKENS: OnceLock<Mutex<BTreeMap<String, ShellToken>>> = OnceLock::new();
+    static SHELL_TOKEN_COUNTER: AtomicU64 = AtomicU64::new(0);
+    const SHELL_TOKEN_TTL: Duration = Duration::from_secs(60);
+    const SHELL_OUTPUT_LIMIT: usize = 16 * 1024;
+
+    #[derive(Debug, Clone)]
+    struct ShellToken {
+        fingerprint: String,
+        expires_at: Instant,
+        expires_at_text: String,
+        used: bool,
+    }
+
+    pub(super) fn prepare_shell_command(
+        working_dir: &str,
+        command: &str,
+        args: Vec<String>,
+    ) -> CommandResult<ShellCommandPreview> {
+        let settings = settings_service::load_settings()?;
+        let working_dir = navigation::canonical_existing_path(working_dir)?;
+        if !working_dir.is_dir() {
+            return Err(AppError::new("not_directory", "errors.notDirectory", Some(&working_dir), true));
+        }
+        let fingerprint = fingerprint(&working_dir, command, &args)?;
+        let enabled = settings.external.shell_command.enabled;
+        if !enabled {
+            return Ok(ShellCommandPreview {
+                confirm_token: "disabled".to_string(),
+                expires_at: epoch_text(),
+                fingerprint,
+                requires_confirmation: true,
+                policy: ShellCommandPolicy {
+                    enabled: false,
+                    reason_key: Some("settings.external.shellCommand.disabledByDefault".to_string()),
+                },
+            });
+        }
+        let token = next_token();
+        let expires_at = Instant::now() + SHELL_TOKEN_TTL;
+        let expires_at_text = unix_text(SystemTime::now() + SHELL_TOKEN_TTL);
+        token_registry()
+            .lock()
+            .expect("shell token registry lock should not be poisoned")
+            .insert(token.clone(), ShellToken {
+                fingerprint: fingerprint.clone(),
+                expires_at,
+                expires_at_text: expires_at_text.clone(),
+                used: false,
+            });
+        Ok(ShellCommandPreview {
+            confirm_token: token,
+            expires_at: expires_at_text,
+            fingerprint,
+            requires_confirmation: true,
+            policy: ShellCommandPolicy {
+                enabled: true,
+                reason_key: None,
+            },
+        })
+    }
+
+    pub(super) fn run_shell_command(
+        working_dir: &str,
+        command: &str,
+        args: Vec<String>,
+        confirm_token: &str,
+    ) -> CommandResult<ShellCommandResult> {
+        let settings = settings_service::load_settings()?;
+        if !settings.external.shell_command.enabled {
+            return Err(AppError::new("disabled", "errors.shellCommandDisabled", None, true));
+        }
+        let working_dir = navigation::canonical_existing_path(working_dir)?;
+        if !working_dir.is_dir() {
+            return Err(AppError::new("not_directory", "errors.notDirectory", Some(&working_dir), true));
+        }
+        let fingerprint = fingerprint(&working_dir, command, &args)?;
+        consume_token(confirm_token, &fingerprint)?;
+        let output = Command::new(command)
+            .args(&args)
+            .current_dir(&working_dir)
+            .output()
+            .map_err(|error| map_io_error(error, Some(&working_dir)))?;
+        Ok(ShellCommandResult {
+            exit_code: output.status.code(),
+            stdout: limit_output(&String::from_utf8_lossy(&output.stdout)),
+            stderr: limit_output(&String::from_utf8_lossy(&output.stderr)),
+            timed_out: false,
+        })
+    }
+
+    fn consume_token(token: &str, fingerprint: &str) -> CommandResult<()> {
+        let mut registry = token_registry()
+            .lock()
+            .expect("shell token registry lock should not be poisoned");
+        let Some(stored) = registry.get_mut(token) else {
+            return Err(AppError::new("invalid_token", "errors.confirmationRequired", None, true));
+        };
+        if stored.used || stored.expires_at < Instant::now() || stored.fingerprint != fingerprint {
+            return Err(AppError::new("invalid_token", "errors.confirmationRequired", None, true)
+                .with_detail("expiresAt", stored.expires_at_text.clone()));
+        }
+        stored.used = true;
+        Ok(())
+    }
+
+    fn fingerprint(working_dir: &Path, command: &str, args: &[String]) -> CommandResult<String> {
+        let command = command.trim();
+        if command.is_empty() || command.contains('\0') {
+            return Err(AppError::new("invalid_command", "errors.invalidShellCommand", Some(working_dir), true));
+        }
+        if args.iter().any(|arg| arg.contains('\0')) {
+            return Err(AppError::new("invalid_command", "errors.invalidShellCommand", Some(working_dir), true));
+        }
+        Ok(format!("{}::{}::{:?}", display_path(working_dir), command, args))
+    }
+
+    fn token_registry() -> &'static Mutex<BTreeMap<String, ShellToken>> {
+        SHELL_TOKENS.get_or_init(|| Mutex::new(BTreeMap::new()))
+    }
+
+    fn next_token() -> String {
+        let counter = SHELL_TOKEN_COUNTER.fetch_add(1, AtomicOrdering::Relaxed);
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        format!("shell-{nonce}-{counter}")
+    }
+
+    fn limit_output(value: &str) -> String {
+        value.chars().take(SHELL_OUTPUT_LIMIT).collect()
+    }
+
+    fn epoch_text() -> String {
+        unix_text(UNIX_EPOCH)
+    }
+}
+
+mod external {
+    use super::*;
+
+    pub(super) fn open_default(path: &str) -> CommandResult<ActionResult> {
+        let path = navigation::canonical_existing_path(path)?;
+        run_open_command(&path, false, None)
+    }
+
+    pub(super) fn reveal_in_manager(path: &str) -> CommandResult<ActionResult> {
+        let path = navigation::canonical_existing_path(path)?;
+        run_open_command(&path, true, None)
+    }
+
+    pub(super) fn open_external_editor(path: &str, editor_id: Option<&str>) -> CommandResult<ActionResult> {
+        let path = navigation::canonical_existing_path(path)?;
+        let settings = settings_service::load_settings()?;
+        let editor = editor_id
+            .map(str::to_string)
+            .or(settings.external.editor_id)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| AppError::new("disabled", "errors.externalEditorNotConfigured", Some(&path), true))?;
+        run_open_command(&path, false, Some(editor))
+    }
+
+    fn run_open_command(path: &Path, reveal: bool, editor: Option<String>) -> CommandResult<ActionResult> {
+        if env::var_os("BOKSLDIRGUI_EXTERNAL_DRY_RUN").is_some() {
+            return Ok(ActionResult { ok: true, message_key: Some("external.dryRun".to_string()) });
+        }
+
+        let mut command = if let Some(editor) = editor {
+            let mut command = Command::new(editor);
+            command.arg(path);
+            command
+        } else {
+            platform_open_command(path, reveal)?
+        };
+        command
+            .spawn()
+            .map_err(|error| map_io_error(error, Some(path)))?;
+        Ok(ActionResult { ok: true, message_key: None })
+    }
+
+    #[cfg(target_os = "macos")]
+    fn platform_open_command(path: &Path, reveal: bool) -> CommandResult<Command> {
+        let mut command = Command::new("open");
+        if reveal {
+            command.arg("-R");
+        }
+        command.arg(path);
+        Ok(command)
+    }
+
+    #[cfg(target_os = "windows")]
+    fn platform_open_command(path: &Path, reveal: bool) -> CommandResult<Command> {
+        let mut command = Command::new("explorer");
+        if reveal {
+            command.arg("/select,");
+        }
+        command.arg(path);
+        Ok(command)
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    fn platform_open_command(path: &Path, _reveal: bool) -> CommandResult<Command> {
+        let mut command = Command::new("xdg-open");
+        command.arg(path);
+        Ok(command)
+    }
+}
+
+mod archive {
+    use super::*;
+
+    pub(super) fn archive_list(archive_path: &str, password: Option<String>) -> CommandResult<ArchiveListing> {
+        if password.as_deref().is_some_and(|value| !value.is_empty()) {
+            return Err(AppError::new("unsupported", "errors.archivePasswordListUnsupported", None, true));
+        }
+        let archive = navigation::canonical_existing_path(archive_path)?;
+        let names = list_archive_entry_names(&archive)?;
+        let entries = names
+            .iter()
+            .map(|name| archive_entry_for_name(&archive, name))
+            .collect();
+        Ok(ArchiveListing {
+            archive_path: display_path(&archive),
+            entries,
+            encrypted: false,
+        })
+    }
+
+    pub(super) fn list_archive_entry_names(archive: &Path) -> CommandResult<Vec<String>> {
+        match archive.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref() {
+            Some("zip") => list_zip_entries(archive),
+            Some("7z") => list_7z_entries(archive),
+            _ => Err(AppError::new("unsupported", "errors.archiveFormatUnsupported", Some(archive), true)),
+        }
+    }
+
+    fn list_zip_entries(archive: &Path) -> CommandResult<Vec<String>> {
+        let output = Command::new("unzip")
+            .arg("-Z1")
+            .arg(archive)
+            .output()
+            .map_err(|error| map_io_error(error, Some(archive)))?;
+        parse_list_output(output, archive)
+    }
+
+    fn list_7z_entries(archive: &Path) -> CommandResult<Vec<String>> {
+        let binary = find_binary("7zz").or_else(|| find_binary("7z")).ok_or_else(|| {
+            AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(archive), true)
+                .with_detail("provider", "7z")
+        })?;
+        let output = Command::new(binary)
+            .arg("l")
+            .arg("-ba")
+            .arg(archive)
+            .output()
+            .map_err(|error| map_io_error(error, Some(archive)))?;
+        if !output.status.success() {
+            return Err(AppError::new("external_command_failed", "errors.externalCommandFailed", Some(archive), true)
+                .with_detail("stderr", String::from_utf8_lossy(&output.stderr).chars().take(512).collect::<String>()));
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        Ok(text
+            .lines()
+            .filter_map(|line| line.split_whitespace().last())
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .collect())
+    }
+
+    fn parse_list_output(output: std::process::Output, archive: &Path) -> CommandResult<Vec<String>> {
+        if !output.status.success() {
+            return Err(AppError::new("external_command_failed", "errors.externalCommandFailed", Some(archive), true)
+                .with_detail("stderr", String::from_utf8_lossy(&output.stderr).chars().take(512).collect::<String>()));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect())
+    }
+
+    fn archive_entry_for_name(archive: &Path, name: &str) -> FileEntry {
+        let is_dir = name.ends_with('/');
+        FileEntry {
+            path: format!("{}!{}", display_path(archive), name),
+            name: name.trim_end_matches('/').rsplit('/').next().unwrap_or(name).to_string(),
+            kind: if is_dir { EntryKind::Directory } else { EntryKind::File },
+            size_bytes: None,
+            modified_at: None,
+            created_at: None,
+            permissions: None,
+            is_hidden: name.rsplit('/').next().is_some_and(|value| value.starts_with('.')),
+            is_virtual: false,
+        }
+    }
+
+    fn find_binary(name: &str) -> Option<String> {
+        let path_var = env::var_os("PATH")?;
+        for dir in env::split_paths(&path_var) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(display_path(&candidate));
+            }
+        }
+        None
+    }
+}
+
 mod navigation {
     use super::*;
 
@@ -470,11 +1065,15 @@ mod navigation {
             .map(|path| vec![display_path(&path)])
             .unwrap_or_default();
 
+        let bookmarks = settings_service::load_settings()
+            .map(|settings| settings.bookmarks)
+            .unwrap_or_default();
+
         Ok(LocationList {
             home: display_path(&home),
             roots,
             recent,
-            bookmarks: Vec::new(),
+            bookmarks,
         })
     }
 
@@ -881,6 +1480,11 @@ fn system_time_to_rfc3339(time: SystemTime) -> Option<String> {
     Some(datetime.to_rfc3339())
 }
 
+fn unix_text(time: SystemTime) -> String {
+    let datetime: chrono::DateTime<chrono::Utc> = time.into();
+    datetime.to_rfc3339()
+}
+
 fn listing_version(path: &Path) -> u64 {
     fs::metadata(path)
         .and_then(|metadata| metadata.modified())
@@ -935,7 +1539,17 @@ pub fn run() {
             start_move,
             start_delete,
             cancel_operation,
-            resolve_conflict
+            resolve_conflict,
+            archive_list,
+            archive_create,
+            archive_extract,
+            open_default,
+            reveal_in_manager,
+            open_external_editor,
+            prepare_shell_command,
+            run_shell_command,
+            load_settings,
+            save_settings
         ])
         .run(tauri::generate_context!())
         .expect("failed to run BokslDirGUI Tauri application");
@@ -1519,5 +2133,183 @@ mod tests {
     fn cross_device_error_detection_supports_move_fallback_policy() {
         let error = io::Error::from_raw_os_error(18);
         assert!(operation::is_cross_device_error(&error));
+    }
+
+    #[test]
+    fn load_and_save_settings_persist_bookmarks_and_layout() {
+        let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+        let fixture = TempFixture::new();
+        let settings_path = fixture.root.join("settings/settings.json");
+        env::set_var("BOKSLDIRGUI_SETTINGS_PATH", &settings_path);
+
+        let initial = load_settings().expect("missing settings should use defaults");
+        assert_eq!(initial.schema_version, 1);
+        assert_eq!(initial.layout.ratio, "50:50");
+
+        let saved = save_settings(serde_json::json!({
+            "bookmarks": [{ "id": "root", "label": "Root", "path": fixture.root.to_string_lossy() }],
+            "layout": { "singlePanel": true, "ratio": "70:30" },
+            "theme": "highContrast",
+            "language": "en"
+        }))
+        .expect("settings patch should be saved");
+        assert_eq!(saved.bookmarks[0].label, "Root");
+        assert!(saved.layout.single_panel);
+        assert_eq!(saved.layout.ratio, "70:30");
+        assert!(settings_path.is_file());
+
+        let locations = list_locations().expect("locations should load bookmark settings");
+        assert!(locations.bookmarks.iter().any(|bookmark| bookmark.id == "root"));
+
+        env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
+    }
+
+    #[test]
+    fn save_settings_rejects_invalid_layout_ratio() {
+        let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+        let fixture = TempFixture::new();
+        env::set_var("BOKSLDIRGUI_SETTINGS_PATH", fixture.root.join("settings.json"));
+
+        let error = save_settings(serde_json::json!({
+            "layout": { "singlePanel": false, "ratio": "90:10" }
+        }))
+        .expect_err("invalid layout ratio should fail");
+
+        env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
+        assert_eq!(error.code, "invalid_settings");
+        assert_eq!(error.details.and_then(|details| details.get("field").cloned()), Some("layout.ratio".to_string()));
+    }
+
+    #[test]
+    fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() {
+        let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+        let fixture = TempFixture::new();
+        env::set_var("BOKSLDIRGUI_SETTINGS_PATH", fixture.root.join("settings.json"));
+
+        let disabled = prepare_shell_command(
+            fixture.root.to_string_lossy().into_owned(),
+            "echo".to_string(),
+            Some(vec!["hello".to_string()]),
+        )
+        .expect("disabled shell preview should be returned");
+        assert!(!disabled.policy.enabled);
+        assert_eq!(disabled.confirm_token, "disabled");
+
+        save_settings(serde_json::json!({
+            "external": { "shellCommand": { "enabled": true } }
+        }))
+        .expect("shell command setting should be enabled for test");
+        let preview = prepare_shell_command(
+            fixture.root.to_string_lossy().into_owned(),
+            "echo".to_string(),
+            Some(vec!["hello".to_string()]),
+        )
+        .expect("enabled shell preview should issue token");
+        assert!(preview.policy.enabled);
+        let result = run_shell_command(
+            fixture.root.to_string_lossy().into_owned(),
+            "echo".to_string(),
+            Some(vec!["hello".to_string()]),
+            preview.confirm_token.clone(),
+        )
+        .expect("tokenized shell command should run");
+        assert_eq!(result.exit_code, Some(0));
+        assert_eq!(result.stdout.trim(), "hello");
+
+        let reused = run_shell_command(
+            fixture.root.to_string_lossy().into_owned(),
+            "echo".to_string(),
+            Some(vec!["hello".to_string()]),
+            preview.confirm_token,
+        )
+        .expect_err("shell confirm token must be one-shot");
+        env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
+        assert_eq!(reused.code, "invalid_token");
+    }
+
+    #[test]
+    fn external_open_commands_support_dry_run_and_editor_policy() {
+        let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+        let fixture = TempFixture::new();
+        let source = fixture.root.join("alpha.txt");
+        env::set_var("BOKSLDIRGUI_SETTINGS_PATH", fixture.root.join("settings.json"));
+        env::set_var("BOKSLDIRGUI_EXTERNAL_DRY_RUN", "1");
+
+        let opened = open_default(source.to_string_lossy().into_owned())
+            .expect("dry-run default open should succeed");
+        assert_eq!(opened.message_key, Some("external.dryRun".to_string()));
+        let revealed = reveal_in_manager(source.to_string_lossy().into_owned())
+            .expect("dry-run reveal should succeed");
+        assert!(revealed.ok);
+
+        let missing_editor = open_external_editor(source.to_string_lossy().into_owned(), None)
+            .expect_err("external editor requires configured editor");
+        assert_eq!(missing_editor.message_key, "errors.externalEditorNotConfigured");
+        let editor = open_external_editor(source.to_string_lossy().into_owned(), Some("fake-editor".to_string()))
+            .expect("explicit editor id should pass dry-run");
+        assert!(editor.ok);
+
+        env::remove_var("BOKSLDIRGUI_EXTERNAL_DRY_RUN");
+        env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
+    }
+
+    #[test]
+    fn archive_zip_create_list_extract_round_trip_uses_relative_entry_names() {
+        if !command_available("zip") || !command_available("unzip") {
+            return;
+        }
+        let fixture = TempFixture::new();
+        let archive_path = fixture.root.join("round-trip.zip");
+        let extract_dir = fixture.root.join("extract");
+        fs::create_dir_all(&extract_dir).expect("extract directory should be created");
+
+        let created = operation::start_archive_create(
+            None,
+            vec![fixture.root.join("alpha.txt").to_string_lossy().into_owned()],
+            archive_path.to_string_lossy().into_owned(),
+            "zip".to_string(),
+            None,
+        )
+        .expect("archive create should start");
+        assert_eq!(created.kind, OperationKind::ArchiveCreate);
+        assert!(archive_path.is_file());
+
+        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None)
+            .expect("zip listing should succeed");
+        assert!(listing.entries.iter().any(|entry| entry.name == "alpha.txt"));
+        assert!(!listing.entries.iter().any(|entry| entry.name.contains("boksldir-gui-navigation")));
+
+        let extracted = operation::start_archive_extract(
+            None,
+            archive_path.to_string_lossy().into_owned(),
+            extract_dir.to_string_lossy().into_owned(),
+            None,
+            ConflictDecision::Overwrite,
+        )
+        .expect("archive extract should start");
+        assert_eq!(extracted.kind, OperationKind::ArchiveExtract);
+        assert_eq!(fs::read(extract_dir.join("alpha.txt")).expect("extracted file should exist"), b"hello");
+    }
+
+    #[test]
+    fn archive_operations_reject_passwords_and_unsafe_entries() {
+        let fixture = TempFixture::new();
+        let password_summary = operation::archive_create_summary_for_test(
+            vec![fixture.root.join("alpha.txt").to_string_lossy().into_owned()],
+            fixture.root.join("secret.zip").to_string_lossy().into_owned(),
+            "zip".to_string(),
+            Some("secret".to_string()),
+        );
+        assert_eq!(password_summary.kind, OperationKind::ArchiveCreate);
+        assert_eq!(password_summary.state, OperationState::Failed);
+        assert_eq!(password_summary.errors[0].message_key, "errors.archivePasswordCreateUnsupported");
+
+        assert!(operation::archive_entry_is_unsafe_for_test("../escape.txt"));
+        assert!(operation::archive_entry_is_unsafe_for_test("/absolute.txt"));
+        assert!(!operation::archive_entry_is_unsafe_for_test("safe/entry.txt"));
+    }
+
+    fn command_available(command: &str) -> bool {
+        Command::new(command).arg("--help").output().is_ok()
     }
 }

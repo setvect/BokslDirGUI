@@ -93,6 +93,16 @@ export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.startDelete,
   COMMANDS.cancelOperation,
   COMMANDS.resolveConflict,
+  COMMANDS.archiveList,
+  COMMANDS.archiveCreate,
+  COMMANDS.archiveExtract,
+  COMMANDS.openDefault,
+  COMMANDS.revealInManager,
+  COMMANDS.openExternalEditor,
+  COMMANDS.prepareShellCommand,
+  COMMANDS.runShellCommand,
+  COMMANDS.loadSettings,
+  COMMANDS.saveSettings,
 ] as const satisfies readonly TauriCommandName[];
 
 const implementedCommandSet = new Set<TauriCommandName>(BACKEND_IMPLEMENTED_COMMANDS);

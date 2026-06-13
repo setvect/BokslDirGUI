@@ -4,8 +4,6 @@ import {
   COMMANDS,
   isBackendImplementedCommand,
   normalizeInvokeError,
-  tauriClient,
-  unsupportedCommandError,
 } from './client';
 
 describe('Tauri command names', () => {
@@ -40,26 +38,29 @@ describe('Tauri command names', () => {
       'start_delete',
       'cancel_operation',
       'resolve_conflict',
+      'archive_list',
+      'archive_create',
+      'archive_extract',
+      'open_default',
+      'reveal_in_manager',
+      'open_external_editor',
+      'prepare_shell_command',
+      'run_shell_command',
+      'load_settings',
+      'save_settings',
     ]);
     expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.startCopy)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(false);
+    expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.openDefault)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.saveSettings)).toBe(true);
   });
 
-  it('returns explicit unsupported results for wrappers whose Rust handlers are not registered yet', async () => {
-    const result = await tauriClient.archiveCreate({
-      sources: ['/demo/source.txt'],
-      targetArchive: '/demo/target.zip',
-      format: 'zip',
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toEqual(unsupportedCommandError(COMMANDS.archiveCreate));
-    }
+  it('has no remaining frontend wrappers outside the registered backend surface', () => {
+    expect(BACKEND_IMPLEMENTED_COMMANDS).toEqual(Object.values(COMMANDS));
   });
 
   it('normalizes structured and unknown invoke errors to AppError', () => {

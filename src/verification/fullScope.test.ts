@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ACTIONS, ACTION_BY_ID, isActionAvailable, menuRootsFromRegistry } from '../actions/registry';
-import { BACKEND_IMPLEMENTED_COMMANDS, COMMANDS, isBackendImplementedCommand, tauriClient } from '../tauri/client';
+import { BACKEND_IMPLEMENTED_COMMANDS, COMMANDS, isBackendImplementedCommand } from '../tauri/client';
 import { canTransitionOperation } from '../operations/operationStore';
+import { useOperationStore } from '../operations/operationStore';
 import { contextMenuActions } from '../ui/CommanderShell';
 import { createActionContext } from '../ui/actionContext';
 import { SAMPLE_LISTINGS } from '../ui/commanderFixture';
+import { I18N_RESOURCES } from '../i18n-resources';
 
 describe('full-scope verification harness', () => {
   it('keeps command-backed actions aligned with known Tauri command names', () => {
@@ -16,33 +18,17 @@ describe('full-scope verification harness', () => {
     }
   });
 
-  it('makes unimplemented frontend command wrappers explicit unsupported results', async () => {
-    expect(BACKEND_IMPLEMENTED_COMMANDS).toEqual([
-      COMMANDS.listDir,
-      COMMANDS.getMetadata,
-      COMMANDS.watchPath,
-      COMMANDS.gotoPath,
-      COMMANDS.listLocations,
-      COMMANDS.createDir,
-      COMMANDS.renameEntry,
-      COMMANDS.startCopy,
-      COMMANDS.startMove,
-      COMMANDS.startDelete,
-      COMMANDS.cancelOperation,
-      COMMANDS.resolveConflict,
-    ]);
+  it('keeps implemented frontend wrappers aligned with registered backend handlers', () => {
+    expect(BACKEND_IMPLEMENTED_COMMANDS).toEqual(Object.values(COMMANDS));
     expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(false);
-
-    const result = await tauriClient.archiveCreate({ sources: ['/demo/file.txt'], targetArchive: '/demo/file.zip', format: 'zip' });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('unsupported');
-      expect(result.error.details).toMatchObject({ command: COMMANDS.archiveCreate });
-    }
+    expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.prepareShellCommand)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.runShellCommand)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.openDefault)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.saveSettings)).toBe(true);
   });
 
   it('keeps parity-critical GUI and file-manager actions registered', () => {
@@ -52,6 +38,8 @@ describe('full-scope verification harness', () => {
       'history.list',
       'bookmark.add',
       'bookmark.list',
+      'bookmark.rename',
+      'bookmark.delete',
       'layout.toggleSingleDual',
       'layout.ratio50',
       'layout.ratio70Left',
@@ -73,6 +61,22 @@ describe('full-scope verification harness', () => {
     expect(canTransitionOperation('running', 'cancelling')).toBe(true);
     expect(canTransitionOperation('waitingForConflict', 'running')).toBe(true);
     expect(canTransitionOperation('failed', 'running')).toBe(false);
+  });
+
+  it('keeps operation history and message resources available for audit and i18n surfaces', () => {
+    useOperationStore.setState({ operationHistory: [] });
+    useOperationStore.getState().applyOperationSummary({
+      operationId: 'scope-history',
+      kind: 'archiveCreate',
+      state: 'completed',
+      completedFiles: 1,
+      failedFiles: 0,
+      errors: [],
+    });
+
+    expect(useOperationStore.getState().operationHistory[0]?.operationId).toBe('scope-history');
+    expect(I18N_RESOURCES.ko['errors.archiveFormatUnsupported']).toBeTruthy();
+    expect(I18N_RESOURCES.en['errors.shellCommandDisabled']).toBeTruthy();
   });
 
   it('uses action-registry enablement for context menu actions and blocks virtual targets', () => {

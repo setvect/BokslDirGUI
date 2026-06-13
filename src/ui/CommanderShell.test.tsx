@@ -390,6 +390,119 @@ describe('CommanderShell', () => {
     expect(focusedRowText(container)).toContain('renamed-entry');
   });
 
+  it('opens properties and archive previews through mocked Tauri atomic clients', async () => {
+    const user = userEvent.setup();
+    const archiveEntry = SAMPLE_LISTINGS.left.entries.find((entry) => entry.name === 'release-bundle.zip');
+    if (!archiveEntry) {
+      throw new Error('archive fixture is required');
+    }
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      getMetadata: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          ...SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right],
+          absolutePath: SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right].path,
+          extension: null,
+          mimeType: null,
+          readonly: false,
+        },
+      })),
+      archiveList: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          archivePath: archiveEntry.path,
+          encrypted: false,
+          entries: [testEntry(archiveEntry.path, 'inside.txt')],
+        },
+      })),
+    };
+    const { container } = renderCommander(createFixturePanelDataSource(), mutationClient);
+
+    await user.keyboard('i');
+    expect(await screen.findByText('Properties')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+    await waitFor(() => expect(mutationClient.getMetadata).toHaveBeenCalledOnce());
+    expect(screen.getByText(/absolutePath/)).toBeTruthy();
+    useOperationStore.getState().closeDialog();
+
+    await user.keyboard('{Tab}');
+    const archiveRow = rowByText(container, 'release-bundle.zip');
+    if (!archiveRow) {
+      throw new Error('archive row is required');
+    }
+    fireEvent.contextMenu(archiveRow);
+    await user.click(await screen.findByText('Preview'));
+    await user.click(await screen.findByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath: archiveEntry.path }));
+    expect(screen.getByText(/inside.txt/)).toBeTruthy();
+  });
+
+  it('persists bookmark/layout settings and opens registry-derived shortcut help', async () => {
+    const user = userEvent.setup();
+    const saveSettings = vi.fn(async ({ patch }: { patch: object }) => ({
+      ok: true as const,
+      data: {
+        schemaVersion: 1,
+        theme: 'dark' as const,
+        language: 'ko' as const,
+        sizeFormat: 'binary' as const,
+        external: { editorId: null, shellCommand: { enabled: false } },
+        bookmarks: [],
+        layout: { singlePanel: false, ratio: '50:50' as const },
+        ...patch,
+      },
+    }));
+    renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+
+    await user.keyboard('tba');
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: expect.objectContaining({
+        bookmarks: expect.arrayContaining([expect.objectContaining({ path: SAMPLE_LISTINGS.right.path })]),
+      }),
+    }));
+
+    await user.click(screen.getByRole('button', { name: 'View' }));
+    await user.click(await screen.findByText('Single-Dual Panel'));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: expect.objectContaining({ layout: expect.objectContaining({ singlePanel: true }) }),
+    }));
+
+    await user.click(screen.getByRole('button', { name: 'Help' }));
+    await user.click(await screen.findByText('Shortcuts'));
+    expect(await screen.findByText('Keyboard Shortcuts')).toBeTruthy();
+    expect(screen.getByText('file.copy')).toBeTruthy();
+  });
+
+  it('starts panel-to-panel drag copy through the operation client', async () => {
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-dnd-copy', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-dnd-move', kind: 'move' as const, state: 'queued' as const } })),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
+    const leftPanel = container.querySelector<HTMLElement>('.file-panel[aria-label^="left panel"]');
+    if (!sourceRow || !leftPanel) {
+      throw new Error('drag source row and left panel are required');
+    }
+
+    fireEvent.dragStart(sourceRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
+    fireEvent.drop(leftPanel, { dataTransfer: { files: [] } });
+    await waitFor(() => expect(screen.getByText('Copy to opposite panel')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: [expect.stringContaining('generic-array-7534a23a150ae5e7')],
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+  });
+
   it('dispatches registry sequence shortcuts without web text focus', async () => {
     const user = userEvent.setup();
     renderCommander();
@@ -405,7 +518,9 @@ describe('CommanderShell', () => {
 
     await user.keyboard('tba');
 
-    expect(screen.getByText('Add · save_settings')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByText('Bookmarks · UI state')).toBeNull();
+    });
     expect(screen.queryByText('Bookmarks · UI state')).toBeNull();
   });
 

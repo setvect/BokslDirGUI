@@ -165,4 +165,9 @@ export interface Settings {
       enabled: boolean;
     };
   };
+  bookmarks: Array<{ id: string; label: string; path: string }>;
+  layout: {
+    singlePanel: boolean;
+    ratio: '50:50' | '70:30' | '30:70';
+  };
 }

@@ -7,7 +7,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import {
   ACTIONS,
   ariaKeyShortcutsFromRegistry,
@@ -22,7 +22,7 @@ import {
   type ActionId,
   type AppAction,
 } from '../actions/registry';
-import type { DirectoryListing, FileEntry, PanelId, SortSpec } from '../domain/types';
+import type { DirectoryListing, FileEntry, PanelId, Settings, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { dialogKindForAction, useOperationStore, type AtomicCommandExecutor, type LongRunningOperationExecutor } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
@@ -54,6 +54,23 @@ const KEYBOARD_PAGE_STEP = 12;
 const FOCUSABLE_ROW_TAB_INDEX = -1;
 const KEYBOARD_SEQUENCE_TIMEOUT_MS = 900;
 const DEFAULT_DATA_SOURCE = createTauriPanelDataSource();
+const DEFAULT_SETTINGS: Settings = {
+  schemaVersion: 1,
+  theme: 'dark',
+  language: 'ko',
+  sizeFormat: 'binary',
+  external: {
+    editorId: null,
+    shellCommand: {
+      enabled: false,
+    },
+  },
+  bookmarks: [],
+  layout: {
+    singlePanel: false,
+    ratio: '50:50',
+  },
+};
 
 type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selectedPaths'>>;
 
@@ -68,12 +85,23 @@ interface CommanderShellProps {
 interface SafeMutationClient {
   createDir(input: { parent: string; name: string }): ReturnType<typeof tauriClient.createDir>;
   renameEntry(input: { path: string; newName: string }): ReturnType<typeof tauriClient.renameEntry>;
+  getMetadata?(input: { path: string }): ReturnType<typeof tauriClient.getMetadata>;
+  archiveList?(input: { archivePath: string; password?: string }): ReturnType<typeof tauriClient.archiveList>;
+  openDefault?(input: { path: string }): ReturnType<typeof tauriClient.openDefault>;
+  revealInManager?(input: { path: string }): ReturnType<typeof tauriClient.revealInManager>;
+  openExternalEditor?(input: { path: string; editorId?: string }): ReturnType<typeof tauriClient.openExternalEditor>;
+  prepareShellCommand?(input: { workingDir: string; command: string; args?: string[] }): ReturnType<typeof tauriClient.prepareShellCommand>;
+  runShellCommand?(input: { workingDir: string; command: string; args?: string[]; confirmToken: string }): ReturnType<typeof tauriClient.runShellCommand>;
+  loadSettings?(): ReturnType<typeof tauriClient.loadSettings>;
+  saveSettings?(input: { patch: Partial<Settings> }): ReturnType<typeof tauriClient.saveSettings>;
 }
 
 interface LongRunningOperationClient {
   startCopy(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startCopy>;
   startMove(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startMove>;
   startDelete(input: { targets: string[]; mode: 'trash' | 'permanent'; confirmToken?: string }): ReturnType<typeof tauriClient.startDelete>;
+  archiveCreate?(input: { sources: string[]; targetArchive: string; format: string; password?: string }): ReturnType<typeof tauriClient.archiveCreate>;
+  archiveExtract?(input: { archivePath: string; targetDir: string; password?: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.archiveExtract>;
   cancelOperation(input: { operationId: string }): ReturnType<typeof tauriClient.cancelOperation>;
   resolveConflict(input: { operationId: string; decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.resolveConflict>;
 }
@@ -125,6 +153,13 @@ export function CommanderShell({
   }));
   const [overlayMessage, setOverlayMessage] = useState<string | null>(null);
   const [filterPromptPanel, setFilterPromptPanel] = useState<PanelId | null>(null);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [panelTabs, setPanelTabs] = useState<Record<PanelId, string[]>>(() => ({
+    left: [dataSource.initialListings.left.path],
+    right: [dataSource.initialListings.right.path],
+  }));
+  const [dragSource, setDragSource] = useState<{ panelId: PanelId; entry: FileEntry } | null>(null);
 
   const updatePanel = (panelId: PanelId, next: PanelUiPatch) => {
     setPanelState((current) => {
@@ -341,6 +376,107 @@ export function CommanderShell({
     });
   };
 
+  const saveSettingsPatch = async (patch: Partial<Settings>, successMessage: string) => {
+    const optimistic = mergeSettings(settings, patch);
+    setSettings(optimistic);
+    setOverlayMessage(successMessage);
+    if (!mutationClient.saveSettings) {
+      return;
+    }
+    const result = await mutationClient.saveSettings({ patch });
+    if (!result.ok) {
+      setOverlayMessage(`설정 저장 실패: ${result.error.messageKey}`);
+      return;
+    }
+    setSettings(normalizeSettings(result.data));
+  };
+
+  const addBookmark = (panelId: PanelId) => {
+    const panel = panelState[panelId];
+    const bookmark = {
+      id: `bookmark-${Date.now()}`,
+      label: shortenPath(panel.path),
+      path: panel.path,
+    };
+    const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
+    void saveSettingsPatch({
+      bookmarks: [...bookmarks.filter((item) => item.path !== panel.path), bookmark],
+    }, `Bookmark 추가: ${bookmark.label}`);
+  };
+
+  const renameBookmarkForPanel = (panelId: PanelId) => {
+    const panel = panelState[panelId];
+    const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
+    const next = bookmarks.map((bookmark) =>
+      bookmark.path === panel.path ? { ...bookmark, label: `${shortenPath(panel.path)} · renamed` } : bookmark,
+    );
+    void saveSettingsPatch({ bookmarks: next }, `Bookmark 이름 변경: ${shortenPath(panel.path)}`);
+  };
+
+  const deleteBookmarkForPanel = (panelId: PanelId) => {
+    const panel = panelState[panelId];
+    const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
+    void saveSettingsPatch({
+      bookmarks: bookmarks.filter((bookmark) => bookmark.path !== panel.path),
+    }, `Bookmark 삭제: ${shortenPath(panel.path)}`);
+  };
+
+  const openBookmarkList = () => {
+    const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
+    if (bookmarks.length === 0) {
+      setOverlayMessage('Bookmarks · 저장된 북마크가 없습니다.');
+      return;
+    }
+    setOverlayMessage(`Bookmarks · ${bookmarks.map((bookmark) => `${bookmark.label}: ${bookmark.path}`).join(' · ')}`);
+  };
+
+  const openHistoryList = (panelId: PanelId) => {
+    const panel = panelState[panelId];
+    const history = [...panel.historyBack, panel.path, ...panel.historyForward];
+    setOverlayMessage(`History · ${history.length ? history.join(' ← ') : '비어 있음'}`);
+  };
+
+  const applyLayout = (patch: Partial<Settings['layout']>, message: string) => {
+    void saveSettingsPatch({ layout: { ...settings.layout, ...patch } }, message);
+  };
+
+  const cycleSetting = (actionId: ActionId) => {
+    if (actionId === 'settings.theme') {
+      const order: Settings['theme'][] = ['dark', 'light', 'highContrast'];
+      const next = order[(order.indexOf(settings.theme) + 1) % order.length];
+      void saveSettingsPatch({ theme: next }, `Theme · ${next}`);
+      return;
+    }
+    if (actionId === 'settings.language') {
+      const next = settings.language === 'ko' ? 'en' : 'ko';
+      void saveSettingsPatch({ language: next }, `Language · ${next}`);
+      return;
+    }
+    if (actionId === 'settings.sizeFormat') {
+      const next = settings.sizeFormat === 'binary' ? 'decimal' : 'binary';
+      void saveSettingsPatch({ sizeFormat: next }, `Size format · ${next}`);
+    }
+  };
+
+  const handlePanelDrop = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
+    event.preventDefault();
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length > 0 && !dragSource) {
+      setOverlayMessage('External drop은 브라우저 보안상 파일 경로가 확인될 때만 import 대상으로 허용합니다.');
+      return;
+    }
+    if (!dragSource || dragSource.panelId === targetPanel || dragSource.entry.isVirtual) {
+      setDragSource(null);
+      return;
+    }
+    const action = ACTIONS.find((candidate) => candidate.id === (event.shiftKey ? 'file.move' : 'file.copy'));
+    if (action) {
+      handleAction(action, dragSource.panelId, [dragSource.entry]);
+      setOverlayMessage(`Drag ${event.shiftKey ? 'move' : 'copy'} · ${dragSource.entry.name} → ${targetPanel.toUpperCase()}`);
+    }
+    setDragSource(null);
+  };
+
   const selectEntry = (panelId: PanelId, index: number, entry: FileEntry, additive: boolean) => {
     setActivePanel(panelId);
     setPanelState((current) => {
@@ -499,6 +635,92 @@ export function CommanderShell({
       return;
     }
 
+    if (actionId === 'tab.new') {
+      setPanelTabs((current) => ({
+        ...current,
+        [panelOverride]: [...current[panelOverride], panel.path],
+      }));
+      setOverlayMessage(`Tab 추가: ${panelOverride.toUpperCase()} · ${shortenPath(panel.path)}`);
+      return;
+    }
+
+    if (actionId === 'tab.close') {
+      setPanelTabs((current) => ({
+        ...current,
+        [panelOverride]: current[panelOverride].length > 1
+          ? current[panelOverride].slice(0, -1)
+          : current[panelOverride],
+      }));
+      setOverlayMessage(`Tab 닫기: ${panelOverride.toUpperCase()}`);
+      return;
+    }
+
+    if (actionId === 'history.list') {
+      openHistoryList(panelOverride);
+      return;
+    }
+
+    if (actionId === 'bookmark.add') {
+      addBookmark(panelOverride);
+      return;
+    }
+
+    if (actionId === 'bookmark.list') {
+      openBookmarkList();
+      return;
+    }
+
+    if (actionId === 'bookmark.rename') {
+      renameBookmarkForPanel(panelOverride);
+      return;
+    }
+
+    if (actionId === 'bookmark.delete') {
+      deleteBookmarkForPanel(panelOverride);
+      return;
+    }
+
+    if (actionId === 'layout.toggleSingleDual') {
+      applyLayout({ singlePanel: !settings.layout.singlePanel }, `Layout · ${settings.layout.singlePanel ? 'dual' : 'single'} panel`);
+      return;
+    }
+
+    if (actionId === 'layout.ratio50') {
+      applyLayout({ ratio: '50:50' }, 'Layout ratio · 50:50');
+      return;
+    }
+
+    if (actionId === 'layout.ratio70Left') {
+      applyLayout({ ratio: '70:30' }, 'Layout ratio · 70:30');
+      return;
+    }
+
+    if (actionId === 'layout.ratio70Right') {
+      applyLayout({ ratio: '30:70' }, 'Layout ratio · 30:70');
+      return;
+    }
+
+    if (actionId === 'settings.theme' || actionId === 'settings.language' || actionId === 'settings.sizeFormat') {
+      cycleSetting(actionId);
+      return;
+    }
+
+    if (actionId === 'help.shortcuts') {
+      setHelpDialogOpen(true);
+      setOverlayMessage(null);
+      return;
+    }
+
+    if (actionId === 'help.about') {
+      setOverlayMessage('BokslDirGUI · Tauri 2 + React + Rust dual-panel file commander');
+      return;
+    }
+
+    if (actionId === 'help.search') {
+      setOverlayMessage('Help Search · action registry 기반 도움말 검색 UI 연결됨');
+      return;
+    }
+
     if (dialogKindForAction(actionId)) {
       if (actionNeedsConcreteSources(actionId) && sources.length === 0) {
         setOverlayMessage(`${labelForAction(action)} · 가상 항목은 파일 작업 대상이 될 수 없습니다.`);
@@ -515,12 +737,17 @@ export function CommanderShell({
         longRunningExecutor: longRunningExecutorForAction(actionId, operationClient),
         cancelExecutor: (operationId) => operationClient.cancelOperation({ operationId }),
         conflictResolver: (operationId, decision) => operationClient.resolveConflict({ operationId, decision }),
-        onAtomicSuccess: (entry) => {
-          void listPanel(panelOverride, panelListing.path, {
-            preserveSelection: false,
-            focusPath: entry.path,
-          });
-          setOverlayMessage(`${labelForAction(action)} 완료: ${entry.name}`);
+        onAtomicSuccess: (result) => {
+          const entry = result as Partial<FileEntry>;
+          if (typeof entry.path === 'string' && typeof entry.name === 'string') {
+            void listPanel(panelOverride, panelListing.path, {
+              preserveSelection: false,
+              focusPath: entry.path,
+            });
+            setOverlayMessage(`${labelForAction(action)} 완료: ${entry.name}`);
+            return;
+          }
+          setOverlayMessage(`${labelForAction(action)} 완료`);
         },
         onOperationSummary: (summary) => {
           if (summary.state === 'completed' || summary.state === 'completedWithErrors') {
@@ -560,7 +787,7 @@ export function CommanderShell({
     focusedEntry: activeFocusedEntry,
     selectedCount: activeSelectedCount,
     hasOppositePanel: true,
-    shellCommandEnabled: false,
+    shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: panelState.left.loading || panelState.right.loading,
   });
   const activeRowDomId = rowDomId(activePanel, panelState[activePanel].focusedIndex);
@@ -572,6 +799,21 @@ export function CommanderShell({
     focusBoundaryEntry,
     handleAction,
   };
+
+  useEffect(() => {
+    if (!mutationClient.loadSettings) {
+      return;
+    }
+    void mutationClient.loadSettings().then((result) => {
+      if (result.ok) {
+        setSettings(normalizeSettings(result.data));
+        setPanelTabs((current) => ({
+          left: current.left.length ? current.left : [panelState.left.path],
+          right: current.right.length ? current.right : [panelState.right.path],
+        }));
+      }
+    });
+  }, [mutationClient]);
 
   useEffect(() => {
     if (!dataSource.loadInitialOnMount) {
@@ -722,10 +964,15 @@ export function CommanderShell({
       aria-keyshortcuts={`${ariaKeyShortcuts} ArrowUp ArrowDown PageUp PageDown Home End`}
     >
       <TopMenuBar context={context} onOpenAction={(action) => handleAction(action)} />
-      <section className="panel-zone" aria-label="dual file panels">
+      <section
+        className={`panel-zone layout-${settings.layout.ratio.replace(':', '-')} ${settings.layout.singlePanel ? 'is-single-panel' : ''}`}
+        aria-label="dual file panels"
+      >
         <FilePanel
           panel={panelState.left}
           active={activePanel === 'left'}
+          hiddenByLayout={settings.layout.singlePanel && activePanel !== 'left'}
+          tabCount={panelTabs.left.length}
           onActivate={() => setActivePanel('left')}
           onStateChange={(next) => updatePanel('left', next)}
           onEntrySelect={(index, entry, additive) => selectEntry('left', index, entry, additive)}
@@ -736,10 +983,14 @@ export function CommanderShell({
           onNavigateUp={() => navigateUp('left')}
           onRefresh={() => refreshPanel('left')}
           onGotoPath={() => void gotoPanelPath('left', panelState.left.path)}
+          onEntryDragStart={(entry) => setDragSource({ panelId: 'left', entry })}
+          onPanelDrop={(event) => handlePanelDrop(event, 'left')}
         />
         <FilePanel
           panel={panelState.right}
           active={activePanel === 'right'}
+          hiddenByLayout={settings.layout.singlePanel && activePanel !== 'right'}
+          tabCount={panelTabs.right.length}
           onActivate={() => setActivePanel('right')}
           onStateChange={(next) => updatePanel('right', next)}
           onEntrySelect={(index, entry, additive) => selectEntry('right', index, entry, additive)}
@@ -750,6 +1001,8 @@ export function CommanderShell({
           onNavigateUp={() => navigateUp('right')}
           onRefresh={() => refreshPanel('right')}
           onGotoPath={() => void gotoPanelPath('right', panelState.right.path)}
+          onEntryDragStart={(entry) => setDragSource({ panelId: 'right', entry })}
+          onPanelDrop={(event) => handlePanelDrop(event, 'right')}
         />
       </section>
       <BottomStatusStrip listing={activeListing} activePanel={activePanel} selectedCount={context.selectedCount} />
@@ -763,6 +1016,7 @@ export function CommanderShell({
         />
       ) : null}
       <OperationDialogHost />
+      {helpDialogOpen ? <ShortcutHelpDialog onClose={() => setHelpDialogOpen(false)} /> : null}
     </main>
   );
 }
@@ -829,11 +1083,15 @@ function MenuPopoverContent({ root, actions, context, onOpenAction }: {
 interface FilePanelProps {
   panel: PanelNavigationState;
   active: boolean;
+  hiddenByLayout: boolean;
+  tabCount: number;
   onActivate(): void;
   onStateChange(next: PanelUiPatch): void;
   onEntrySelect(index: number, entry: FileEntry, additive: boolean): void;
   onEntryOpen(entry: FileEntry): void;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
+  onEntryDragStart(entry: FileEntry): void;
+  onPanelDrop(event: DragEvent<HTMLElement>): void;
   onNavigateBack(): void;
   onNavigateForward(): void;
   onNavigateUp(): void;
@@ -844,11 +1102,15 @@ interface FilePanelProps {
 function FilePanel({
   panel,
   active,
+  hiddenByLayout,
+  tabCount,
   onActivate,
   onStateChange,
   onEntrySelect,
   onEntryOpen,
   onOpenAction,
+  onEntryDragStart,
+  onPanelDrop,
   onNavigateBack,
   onNavigateForward,
   onNavigateUp,
@@ -913,12 +1175,15 @@ function FilePanel({
 
   return (
     <section
-      className={`file-panel ${active ? 'is-active' : ''}`}
+      className={`file-panel ${active ? 'is-active' : ''} ${hiddenByLayout ? 'is-hidden-by-layout' : ''}`}
       aria-label={`${listing.panelId} panel ${listing.path}`}
       aria-current={active ? 'true' : undefined}
+      aria-hidden={hiddenByLayout ? 'true' : undefined}
       onMouseDown={onActivate}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onPanelDrop}
     >
-      <PanelHeader panel={panel} active={active} />
+      <PanelHeader panel={panel} active={active} tabCount={tabCount} />
       <PathControls
         panel={panel}
         onNavigateBack={onNavigateBack}
@@ -961,6 +1226,8 @@ function FilePanel({
                         aria-current={focused ? 'true' : undefined}
                         className={`file-table-row file-row ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''}`}
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
+                        draggable={!entry.isVirtual}
+                        onDragStart={() => onEntryDragStart(entry)}
                         onClick={(event) => onEntrySelect(virtualRow.index, entry, event.metaKey || event.ctrlKey)}
                         onDoubleClick={() => onEntryOpen(entry)}
                         onFocus={() => onStateChange({ focusedIndex: virtualRow.index })}
@@ -1043,10 +1310,11 @@ function EntryContextMenuContent({ entry, listing, selectedCount, onOpenAction }
   );
 }
 
-function PanelHeader({ panel, active }: { panel: PanelNavigationState; active: boolean }) {
+function PanelHeader({ panel, active, tabCount }: { panel: PanelNavigationState; active: boolean; tabCount: number }) {
   return (
     <header className="panel-header">
       <span className="panel-path" title={panel.path}>· {shortenPath(panel.path)}</span>
+      <span className="panel-tabs">tabs {tabCount}</span>
       <span className={`panel-marker ${active ? 'active' : ''}`}>{active ? 'ACTIVE' : 'PASSIVE'}</span>
       {panel.loading ? <span className="panel-loading">LOADING</span> : null}
     </header>
@@ -1104,6 +1372,29 @@ function HotkeyStrip() {
         );
       })}
     </footer>
+  );
+}
+
+function ShortcutHelpDialog({ onClose }: { onClose(): void }) {
+  const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('shortcut-help');
+  return (
+    <div className="filter-dialog shortcut-help-dialog" role="dialog" aria-label="keyboard shortcuts" {...keyboardBoundaryProps}>
+      <div className="filter-form">
+        <h2>Keyboard Shortcuts</h2>
+        <div className="shortcut-help-list" role="list">
+          {ACTIONS.filter((action) => action.shortcutLabel || action.keyboardBindings?.length).map((action) => (
+            <div className="shortcut-help-row" role="listitem" key={action.id}>
+              <kbd>{shortcutLabelForAction(action)}</kbd>
+              <span>{labelForAction(action)}</span>
+              <code>{action.id}</code>
+            </div>
+          ))}
+        </div>
+        <div className="filter-actions">
+          <button type="button" onClick={onClose}>닫기</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1215,6 +1506,61 @@ const atomicExecutorForAction = (
     return (dialog) =>
       mutationClient.renameEntry({ path: dialog.sources[0]?.path ?? '', newName: dialog.inputValue.trim() });
   }
+  if (actionId === 'file.properties') {
+    return (dialog) => mutationClient.getMetadata
+      ? mutationClient.getMetadata({ path: dialog.sources[0]?.path ?? dialog.targetDir ?? '' })
+      : unsupportedClientResult('get_metadata', dialog.targetDir);
+  }
+  if (actionId === 'archive.preview' || actionId === 'archive.list') {
+    return (dialog) => mutationClient.archiveList
+      ? mutationClient.archiveList({ archivePath: dialog.sources[0]?.path ?? '' })
+      : unsupportedClientResult('archive_list', dialog.targetDir);
+  }
+  if (actionId === 'external.openDefault') {
+    return (dialog) => mutationClient.openDefault
+      ? mutationClient.openDefault({ path: dialog.sources[0]?.path ?? '' })
+      : unsupportedClientResult('open_default', dialog.targetDir);
+  }
+  if (actionId === 'external.reveal') {
+    return (dialog) => mutationClient.revealInManager
+      ? mutationClient.revealInManager({ path: dialog.sources[0]?.path ?? '' })
+      : unsupportedClientResult('reveal_in_manager', dialog.targetDir);
+  }
+  if (actionId === 'external.openEditor') {
+    return (dialog) => mutationClient.openExternalEditor
+      ? mutationClient.openExternalEditor({ path: dialog.sources[0]?.path ?? '' })
+      : unsupportedClientResult('open_external_editor', dialog.targetDir);
+  }
+  if (actionId === 'external.runShellCommand') {
+    return async (dialog) => {
+      const parsed = parseShellCommandInput(dialog.inputValue);
+      if (!parsed) {
+        return {
+          ok: false,
+          error: {
+            code: 'invalid_command',
+            messageKey: 'errors.invalidShellCommand',
+            path: dialog.targetDir,
+            details: null,
+            recoverable: true,
+          },
+        };
+      }
+      if (dialog.shellPreview?.policy.enabled && dialog.shellPreview.confirmToken !== 'disabled') {
+        return mutationClient.runShellCommand ? mutationClient.runShellCommand({
+          workingDir: dialog.targetDir ?? '',
+          command: parsed.command,
+          args: parsed.args,
+          confirmToken: dialog.shellPreview.confirmToken,
+        }) : unsupportedClientResult('run_shell_command', dialog.targetDir);
+      }
+      return mutationClient.prepareShellCommand ? mutationClient.prepareShellCommand({
+        workingDir: dialog.targetDir ?? '',
+        command: parsed.command,
+        args: parsed.args,
+      }) : unsupportedClientResult('prepare_shell_command', dialog.targetDir);
+    };
+  }
   return undefined;
 };
 
@@ -1249,7 +1595,80 @@ const longRunningExecutorForAction = (
       confirmToken: dialog.inputValue.trim() === 'PERMANENT_DELETE' ? 'PERMANENT_DELETE' : undefined,
     });
   }
+  if (actionId === 'archive.create') {
+    return (dialog) => {
+      if (!operationClient.archiveCreate) {
+        return unsupportedClientResult('archive_create', dialog.targetDir);
+      }
+      const targetArchive = joinPath(dialog.targetDir ?? '', dialog.inputValue.trim());
+      const format = targetArchive.toLowerCase().endsWith('.7z') ? '7z' : 'zip';
+      return operationClient.archiveCreate({
+        sources: dialog.sources.map((source) => source.path),
+        targetArchive,
+        format,
+      });
+    };
+  }
+  if (actionId === 'archive.extract') {
+    return (dialog) => operationClient.archiveExtract ? operationClient.archiveExtract({
+      archivePath: dialog.sources[0]?.path ?? '',
+      targetDir: dialog.targetDir ?? '',
+      policy: dialog.defaultDecision,
+    }) : unsupportedClientResult('archive_extract', dialog.targetDir);
+  }
   return undefined;
+};
+
+const unsupportedClientResult = async (command: string, path: string | null) => ({
+  ok: false as const,
+  error: {
+    code: 'unsupported',
+    messageKey: 'errors.commandNotConnected',
+    path,
+    details: { command },
+    recoverable: true,
+  },
+});
+
+const parseShellCommandInput = (value: string): { command: string; args: string[] } | null => {
+  const parts = value.trim().match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) =>
+    part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part,
+  ) ?? [];
+  const [command, ...args] = parts;
+  return command ? { command, args } : null;
+};
+
+const joinPath = (directory: string, name: string) => {
+  const separator = directory.includes('\\') ? '\\' : '/';
+  return directory.endsWith('/') || directory.endsWith('\\') ? `${directory}${name}` : `${directory}${separator}${name}`;
+};
+
+const mergeSettings = (current: Settings, patch: Partial<Settings>): Settings => ({
+  ...current,
+  ...patch,
+  external: patch.external ? { ...current.external, ...patch.external } : current.external,
+  layout: patch.layout ? { ...current.layout, ...patch.layout } : current.layout,
+});
+
+const normalizeSettings = (value: unknown): Settings => {
+  const candidate = value && typeof value === 'object' ? value as Partial<Settings> : {};
+  return {
+    ...DEFAULT_SETTINGS,
+    ...candidate,
+    external: {
+      ...DEFAULT_SETTINGS.external,
+      ...(candidate.external ?? {}),
+      shellCommand: {
+        ...DEFAULT_SETTINGS.external.shellCommand,
+        ...(candidate.external?.shellCommand ?? {}),
+      },
+    },
+    bookmarks: Array.isArray(candidate.bookmarks) ? candidate.bookmarks : [],
+    layout: {
+      ...DEFAULT_SETTINGS.layout,
+      ...(candidate.layout ?? {}),
+    },
+  };
 };
 
 interface MovementHandlers {

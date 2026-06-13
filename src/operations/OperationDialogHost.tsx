@@ -10,6 +10,7 @@ export function OperationDialogHost() {
   const conflictPrompt = useOperationStore((state) => state.conflictPrompt);
   const summary = useOperationStore((state) => state.summary);
   const lastError = useOperationStore((state) => state.lastError);
+  const atomicResult = useOperationStore((state) => state.dialog?.atomicResult);
   const confirmDialog = useOperationStore((state) => state.confirmDialog);
   const updateDialogInput = useOperationStore((state) => state.updateDialogInput);
   const resolveConflict = useOperationStore((state) => state.resolveConflict);
@@ -118,6 +119,12 @@ export function OperationDialogHost() {
                   <code>{dialog.shellPreview.fingerprint}</code>
                 </div>
               ) : null}
+              {atomicResult ? (
+                <div className="operation-section operation-result">
+                  <h3>Result</h3>
+                  <pre>{formatAtomicResult(atomicResult)}</pre>
+                </div>
+              ) : null}
               {progress ? (
                 <div className="operation-section">
                   <h3>Progress</h3>
@@ -180,4 +187,11 @@ const progressPercent = (completed: number, total: number | null) => {
     return 0;
   }
   return Math.min(100, Math.round((completed / total) * 100));
+};
+
+const formatAtomicResult = (value: unknown) => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  return JSON.stringify(value, null, 2);
 };

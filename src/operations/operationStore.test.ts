@@ -36,6 +36,7 @@ describe('operation store', () => {
       progress: null,
       conflictPrompt: null,
       summary: null,
+      operationHistory: [],
       lastError: null,
       lastConflictDecision: null,
       applyAllConflictDecision: null,
@@ -180,14 +181,14 @@ describe('operation store', () => {
     expect(useOperationStore.getState().dialog).toBeNull();
   });
 
-  it('keeps shell command disabled until preview token policy is enabled', () => {
+  it('keeps shell command disabled and validates command text before preview', () => {
     openAction('external.runShellCommand');
     const dialog = useOperationStore.getState().dialog;
     expect(dialog?.shellPreview?.policy.enabled).toBe(false);
 
     useOperationStore.getState().confirmDialog();
     expect(useOperationStore.getState().summary).toBeNull();
-    expect(useOperationStore.getState().lastError?.messageKey).toBe('errors.shellCommandDisabled');
+    expect(useOperationStore.getState().lastError?.messageKey).toBe('errors.invalidShellCommand');
   });
 
   it('documents allowed operation state transitions', () => {
@@ -289,8 +290,40 @@ describe('operation store', () => {
     });
 
     expect(useOperationStore.getState().summary?.state).toBe('completed');
+    expect(useOperationStore.getState().operationHistory[0]).toMatchObject({
+      operationId: 'op-copy-2',
+      state: 'completed',
+    });
     expect(useOperationStore.getState().conflictPrompt).toBeNull();
     expect(useOperationStore.getState().progress?.state).toBe('completed');
+  });
+
+  it('keeps a bounded local operation history without duplicate operation ids', () => {
+    for (let index = 0; index < 55; index += 1) {
+      useOperationStore.setState({ progress: null });
+      useOperationStore.getState().applyOperationSummary({
+        operationId: `op-history-${index}`,
+        kind: 'copy',
+        state: 'completed',
+        completedFiles: 1,
+        failedFiles: 0,
+        errors: [],
+      });
+    }
+    useOperationStore.setState({ progress: null });
+    useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-history-54',
+      kind: 'copy',
+      state: 'completedWithErrors',
+      completedFiles: 1,
+      failedFiles: 1,
+      errors: [],
+    });
+
+    const history = useOperationStore.getState().operationHistory;
+    expect(history).toHaveLength(50);
+    expect(history[0]).toMatchObject({ operationId: 'op-history-54', state: 'completedWithErrors' });
+    expect(history.filter((item) => item.operationId === 'op-history-54')).toHaveLength(1);
   });
 
 

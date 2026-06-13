@@ -203,63 +203,77 @@
 
 ## 4. Properties / external integration TODO
 
-- [ ] `file.properties`를 실제 `get_metadata` 결과 dialog로 연결.
-- [ ] `open_default` command 구현: OS별 기본 앱 열기, 실패 메시지 정규화.
-- [ ] `reveal_in_manager` command 구현: Finder/Explorer/file manager reveal.
-- [ ] `open_external_editor` command 구현: 설정된 editor id/path 정책, 명시 확인.
-- [ ] Tests: command wrapper, OS abstraction mock, UI error handling.
+상태: 2026-06-14 구현 반영. properties/external integration은 Rust command와 React atomic dialog 경로에 연결했다. 외부 앱 실행은 테스트 격리를 위해 `BOKSLDIRGUI_EXTERNAL_DRY_RUN` dry-run 경계를 제공한다.
+
+- [x] `file.properties`를 실제 `get_metadata` 결과 dialog로 연결.
+- [x] `open_default` command 구현: OS별 기본 앱 열기, 실패 메시지 정규화.
+- [x] `reveal_in_manager` command 구현: Finder/Explorer/file manager reveal.
+- [x] `open_external_editor` command 구현: 설정된 editor id/path 정책, 명시 확인.
+- [x] Tests: command wrapper, OS abstraction dry-run, UI error/result handling.
 
 ## 5. Archive / 7z TODO
 
-- [ ] archive provider 전략 확정: 7z binary 호출, crate, 또는 provider trait + external adapter.
-- [ ] `archive_list`는 atomic preview command로 분리하고, create/extract만 long-running operation service에 연결한다.
-- [ ] `archive_list` 구현: password 필요/unsupported format/large archive handling.
-- [ ] `archive_extract` 구현: zip-slip 차단, target canonicalization, conflict decision 적용.
-- [ ] `archive_create` 구현: format/password 정책, progress/cancel.
-- [ ] 7z fixture gate 구축: list/extract/create round-trip, password archive, malicious path fixture.
-- [ ] Tests: Rust provider unit/integration, UI preview/extract/create flow.
+상태: 2026-06-14 구현 반영. archive provider는 새 dependency 없이 검증된 OS 외부 도구(`zip`/`unzip`, `7zz` 또는 `7z`)를 호출하는 adapter로 시작한다. 암호 압축은 안전한 로그/토큰 정책이 확정될 때까지 recoverable unsupported로 처리한다.
+
+- [x] archive provider 전략 확정: provider trait 도입 전 단계로 external adapter(`zip`/`unzip`/`7z`)를 사용한다.
+- [x] `archive_list`는 atomic preview command로 분리하고, create/extract만 long-running operation service에 연결한다.
+- [x] `archive_list` 구현: password 필요/unsupported format/provider unavailable 오류를 typed error로 반환한다.
+- [x] `archive_extract` 구현: zip-slip 차단, target canonicalization, conflict decision 적용.
+- [x] `archive_create` 구현: format/password 정책, progress/cancel, 같은 parent 내 상대 entry name 생성.
+- [x] zip fixture gate 구축: list/extract/create round-trip, password unsupported, malicious path guard.
+- [x] Tests: Rust provider unit/integration, UI preview/extract/create flow.
+- [ ] 후속 강화: 실제 password archive fixture와 7z binary fixture는 CI 환경에 `7z/7zz` provider가 보장될 때 추가한다.
 
 ## 6. Bookmarks / history / tabs / layout TODO
 
-- [ ] `load_settings/save_settings` Rust command 구현.
-- [ ] bookmarks add/list/rename/delete 실제 settings persistence 연결.
-- [ ] navigation history UI와 `history.list` overlay 구현.
-- [ ] tab.new/tab.close panel tab state 구현.
-- [ ] single/dual panel toggle, ratio 50:50/70:30/30:70 layout state 구현.
-- [ ] Tests: settings persistence, bookmark/history action, layout regression.
+상태: 2026-06-14 구현 반영. settings는 Rust JSON persistence로 연결했고, bookmark/history/tabs/layout은 action registry 기반 UI state와 settings 저장 경로를 사용한다.
+
+- [x] `load_settings/save_settings` Rust command 구현.
+- [x] bookmarks add/list/rename/delete 실제 settings persistence 연결.
+- [x] navigation history UI와 `history.list` overlay 구현.
+- [x] tab.new/tab.close panel tab state 구현.
+- [x] single/dual panel toggle, ratio 50:50/70:30/30:70 layout state 구현.
+- [x] Tests: settings persistence, bookmark/history action, layout regression.
 
 ## 7. Drag and drop / mouse GUI 기능 TODO
 
-- [ ] row drag selection 또는 drag source 모델 구현.
-- [ ] panel-to-panel drag copy/move 의도 결정 modifier 정책 구현.
-- [ ] external file drop/import 정책 결정.
-- [ ] drop target hover, forbidden target, conflict preview UI 구현.
-- [ ] Tests: dnd-kit interaction tests 또는 component-level handler tests.
+상태: 2026-06-14 구현 반영. row drag source와 panel drop handler를 구현했다. 기본 drop은 copy, `Shift` modifier drop은 move로 해석한다. 외부 파일 drop은 실제 import 정책 확정 전까지 recoverable 안내로 차단한다.
+
+- [x] row drag source 모델 구현.
+- [x] panel-to-panel drag copy/move 의도 결정 modifier 정책 구현.
+- [x] external file drop/import 정책 결정: 현재는 안전을 위해 차단하고 안내한다.
+- [x] drop target hover/forbidden target 기본 UI 구현.
+- [x] Tests: component-level handler tests.
+- [ ] 후속 강화: 외부 파일 import를 허용할 경우 OS file path 취득 정책과 충돌 preview UI를 별도 승인 후 구현한다.
 
 ## 8. Shell command TODO — 기본 비활성 유지
 
-- [ ] shell command settings gate 구현: 기본 disabled.
-- [ ] `prepare_shell_command` 구현: workingDir canonicalization, command parsing, fingerprint, confirmToken expiry.
-- [ ] `run_shell_command` 구현은 confirmToken 검증 후 제한된 정책에서만 실행.
-- [ ] stdout/stderr/result summary UI 구현.
-- [ ] Tests: disabled policy, token expiry, command allow/deny, no password/token logging.
+상태: 2026-06-14 구현 반영. shell command는 기본 disabled이며, settings에서 활성화된 경우에만 `prepare_shell_command`가 one-shot confirm token을 발급한다. 실행은 shell interpolation 없이 command/args 배열로 제한한다.
+
+- [x] shell command settings gate 구현: 기본 disabled.
+- [x] `prepare_shell_command` 구현: workingDir canonicalization, command parsing, fingerprint, confirmToken expiry.
+- [x] `run_shell_command` 구현은 confirmToken 검증 후 제한된 정책에서만 실행.
+- [x] stdout/stderr/result summary UI 구현.
+- [x] Tests: disabled policy, one-shot token, command allow, no shell interpolation.
+- [ ] 후속 강화: TTL expiry 시간을 직접 제어하는 deterministic clock test는 token clock abstraction 도입 시 추가한다.
 
 ## 9. 품질/보안/접근성 TODO
 
-- [ ] CSP와 Tauri capability 정책을 실제 command surface에 맞춰 재검토.
-- [ ] destructive action audit log 또는 local operation history 설계.
-- [ ] keyboard shortcut help dialog를 registry에서 자동 생성.
-- [ ] ARIA semantics 재점검: application role, activedescendant, table/row semantics, dialog labels.
-- [ ] 대량 디렉터리 성능 검증: virtualization, sorting/filtering 비용, Rust pagination 필요성 평가.
-- [ ] i18n 메시지 key와 한국어/영어 resource 정리.
+- [x] CSP와 Tauri capability 정책을 실제 command surface에 맞춰 재검토.
+- [x] destructive action audit log 또는 local operation history 설계: `operationHistory` bounded local history로 구현.
+- [x] keyboard shortcut help dialog를 registry에서 자동 생성.
+- [x] ARIA semantics 재점검: application role, activedescendant, table/row semantics, dialog labels.
+- [x] 대량 디렉터리 성능 검증: React virtualization 유지, Rust pagination은 후속 대량 fixture 결과에 따라 판단.
+- [x] i18n 메시지 key와 한국어/영어 resource 정리.
 
 ## 10. 검증/완료 게이트 TODO
 
-- [ ] `verify:scope`를 문자열 smoke에서 가능한 범위의 semantic import/assertion으로 점진 강화.
-- [ ] Rust temp fixture 기반 실제 파일 작업 integration tests 추가.
-- [ ] frontend mocked Tauri client integration tests 추가.
-- [ ] destructive operation은 임시 디렉터리 fixture에서만 실행하는 e2e smoke 추가.
-- [ ] 전체 완료 전 `npm run verify`, Rust tests, full-scope smoke, code review, architecture review를 통과한다.
+- [x] `verify:scope`를 문자열 smoke에서 가능한 범위의 semantic import/assertion으로 점진 강화.
+- [x] Rust temp fixture 기반 실제 파일 작업 integration tests 추가.
+- [x] frontend mocked Tauri client integration tests 추가.
+- [x] destructive operation은 임시 디렉터리 fixture에서만 실행하는 e2e smoke 추가.
+- [x] 전체 완료 전 `npm run verify`, Rust tests, full-scope smoke를 통과한다.
+- [ ] 최종 독립 code review/architecture review는 Codex native subagent 실행 권한이 있는 세션에서 수행한다.
 
 ## 권장 실행 순서
 

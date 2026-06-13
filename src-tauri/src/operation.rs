@@ -2,6 +2,7 @@ use super::*;
 use std::sync::Condvar;
 use std::thread;
 use std::time::Duration;
+use std::process::Command;
 
 static OP_COUNTER: AtomicU64 = AtomicU64::new(0);
 static CANCELLED: OnceLock<Mutex<BTreeMap<String, bool>>> = OnceLock::new();
@@ -222,6 +223,138 @@ pub(super) fn start_delete(
             None,
         );
         let summary = run_delete(app, &operation_id, &targets, mode);
+        emit_summary(app, &summary);
+        finish_operation(&operation_id);
+    }
+    Ok(started)
+}
+
+pub(super) fn start_archive_create(
+    app: Option<&tauri::AppHandle>,
+    sources: Vec<String>,
+    target_archive: String,
+    format: String,
+    password: Option<String>,
+) -> CommandResult<OperationStarted> {
+    let operation_id = next_operation_id(OperationKind::ArchiveCreate);
+    register_operation(&operation_id);
+    let started = OperationStarted {
+        operation_id: operation_id.clone(),
+        kind: OperationKind::ArchiveCreate,
+        state: OperationState::Queued,
+    };
+    if let Some(app) = app {
+        let app = app.clone();
+        thread::spawn({
+            let operation_id = operation_id.clone();
+            move || {
+                emit_state(
+                    Some(&app),
+                    &operation_id,
+                    OperationKind::ArchiveCreate,
+                    OperationState::Validating,
+                    None,
+                    0,
+                    0,
+                    None,
+                );
+                let summary = run_archive_create(
+                    Some(&app),
+                    &operation_id,
+                    sources,
+                    target_archive,
+                    format,
+                    password,
+                );
+                emit_summary(Some(&app), &summary);
+                finish_operation(&operation_id);
+            }
+        });
+    } else {
+        emit_state(
+            app,
+            &operation_id,
+            OperationKind::ArchiveCreate,
+            OperationState::Validating,
+            None,
+            0,
+            0,
+            None,
+        );
+        let summary = run_archive_create(
+            app,
+            &operation_id,
+            sources,
+            target_archive,
+            format,
+            password,
+        );
+        emit_summary(app, &summary);
+        finish_operation(&operation_id);
+    }
+    Ok(started)
+}
+
+pub(super) fn start_archive_extract(
+    app: Option<&tauri::AppHandle>,
+    archive_path: String,
+    target_dir: String,
+    password: Option<String>,
+    policy: ConflictDecision,
+) -> CommandResult<OperationStarted> {
+    let operation_id = next_operation_id(OperationKind::ArchiveExtract);
+    register_operation(&operation_id);
+    let started = OperationStarted {
+        operation_id: operation_id.clone(),
+        kind: OperationKind::ArchiveExtract,
+        state: OperationState::Queued,
+    };
+    if let Some(app) = app {
+        let app = app.clone();
+        thread::spawn({
+            let operation_id = operation_id.clone();
+            move || {
+                emit_state(
+                    Some(&app),
+                    &operation_id,
+                    OperationKind::ArchiveExtract,
+                    OperationState::Validating,
+                    None,
+                    0,
+                    0,
+                    None,
+                );
+                let summary = run_archive_extract(
+                    Some(&app),
+                    &operation_id,
+                    archive_path,
+                    target_dir,
+                    password,
+                    policy,
+                );
+                emit_summary(Some(&app), &summary);
+                finish_operation(&operation_id);
+            }
+        });
+    } else {
+        emit_state(
+            app,
+            &operation_id,
+            OperationKind::ArchiveExtract,
+            OperationState::Validating,
+            None,
+            0,
+            0,
+            None,
+        );
+        let summary = run_archive_extract(
+            app,
+            &operation_id,
+            archive_path,
+            target_dir,
+            password,
+            policy,
+        );
         emit_summary(app, &summary);
         finish_operation(&operation_id);
     }
@@ -663,6 +796,297 @@ fn run_delete(
         }
     }
     summary_from_stats(operation_id, kind, &stats)
+}
+
+fn run_archive_create(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    sources: Vec<String>,
+    target_archive: String,
+    format: String,
+    password: Option<String>,
+) -> OperationSummary {
+    let kind = OperationKind::ArchiveCreate;
+    if password.as_deref().is_some_and(|value| !value.is_empty()) {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new("unsupported", "errors.archivePasswordCreateUnsupported", None, true),
+        );
+    }
+    let sources = match collect_source_paths(&sources) {
+        Ok(paths) => paths,
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
+    let target = PathBuf::from(&target_archive);
+    let parent = match target.parent() {
+        Some(parent) => match navigation::canonical_existing_path(&parent.to_string_lossy()) {
+            Ok(parent) => parent,
+            Err(error) => return error_summary(operation_id, kind, error),
+        },
+        None => return error_summary(
+            operation_id,
+            kind,
+            AppError::new("invalid_path", "errors.invalidPath", Some(&target), true),
+        ),
+    };
+    if !parent.is_dir() {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new("not_directory", "errors.notDirectory", Some(&parent), true),
+        );
+    }
+    let target = parent.join(target.file_name().unwrap_or_default());
+    if mutation::path_is_occupied(&target) {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new("already_exists", "errors.alreadyExists", Some(&target), true),
+        );
+    }
+
+    let total_bytes = sources
+        .iter()
+        .filter_map(|path| fs::metadata(path).ok())
+        .map(|metadata| metadata.len())
+        .sum();
+    let mut stats = OperationStats::new(sources.len() as u64, total_bytes);
+    emit_progress(app, operation_id, kind, OperationState::Scanning, &stats, Some(&target));
+    if is_cancelled(operation_id) {
+        return cancel_summary(operation_id, kind, &stats);
+    }
+
+    let archive_format = format.to_ascii_lowercase();
+    let command_result = if archive_format == "zip"
+        || target.extension().and_then(|value| value.to_str()) == Some("zip")
+    {
+        run_zip_create(&target, &sources)
+    } else if archive_format == "7z"
+        || target.extension().and_then(|value| value.to_str()) == Some("7z")
+    {
+        run_7z_create(&target, &sources)
+    } else {
+        Err(AppError::new("unsupported", "errors.archiveFormatUnsupported", Some(&target), true)
+            .with_detail("format", archive_format))
+    };
+
+    match command_result {
+        Ok(()) => {
+            stats.completed_files = sources.len() as u64;
+            stats.completed_bytes = total_bytes;
+            emit_progress(app, operation_id, kind, OperationState::Completed, &stats, Some(&target));
+            summary_from_stats(operation_id, kind, &stats)
+        }
+        Err(error) => error_summary(operation_id, kind, error),
+    }
+}
+
+fn run_archive_extract(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    archive_path: String,
+    target_dir: String,
+    password: Option<String>,
+    policy: ConflictDecision,
+) -> OperationSummary {
+    let kind = OperationKind::ArchiveExtract;
+    if password.as_deref().is_some_and(|value| !value.is_empty()) {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new("unsupported", "errors.archivePasswordExtractUnsupported", None, true),
+        );
+    }
+    let archive = match navigation::canonical_existing_path(&archive_path) {
+        Ok(path) => path,
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
+    let target = match navigation::canonical_existing_path(&target_dir) {
+        Ok(path) => path,
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
+    if !target.is_dir() {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new("not_directory", "errors.notDirectory", Some(&target), true),
+        );
+    }
+
+    let entries = match super::archive::list_archive_entry_names(&archive) {
+        Ok(entries) => entries,
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
+    if let Some(unsafe_entry) = entries.iter().find(|entry| archive_entry_is_unsafe(entry)) {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new("unsafe_archive_entry", "errors.archiveUnsafePath", Some(&archive), true)
+                .with_detail("entry", unsafe_entry),
+        );
+    }
+
+    let mut stats = OperationStats::new(entries.len() as u64, 0);
+    emit_progress(app, operation_id, kind, OperationState::Scanning, &stats, Some(&archive));
+    if is_cancelled(operation_id) {
+        return cancel_summary(operation_id, kind, &stats);
+    }
+
+    let command_result = if archive.extension().and_then(|value| value.to_str()) == Some("zip") {
+        run_zip_extract(&archive, &target, policy)
+    } else if archive.extension().and_then(|value| value.to_str()) == Some("7z") {
+        run_7z_extract(&archive, &target, policy)
+    } else {
+        Err(AppError::new("unsupported", "errors.archiveFormatUnsupported", Some(&archive), true))
+    };
+
+    match command_result {
+        Ok(()) => {
+            stats.completed_files = entries.len() as u64;
+            emit_progress(app, operation_id, kind, OperationState::Completed, &stats, Some(&target));
+            summary_from_stats(operation_id, kind, &stats)
+        }
+        Err(error) => error_summary(operation_id, kind, error),
+    }
+}
+
+fn run_zip_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
+    let zip = external_binary("zip").ok_or_else(|| {
+        AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(target), true)
+            .with_detail("provider", "zip")
+    })?;
+    let working_dir = common_source_parent(sources, target)?;
+    let mut command = Command::new(zip);
+    command.current_dir(&working_dir);
+    command.arg("-r").arg("-q").arg(target);
+    for source in sources {
+        command.arg(source.file_name().ok_or_else(|| {
+            AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
+        })?);
+    }
+    run_external_command(command, Some(target))
+}
+
+fn run_7z_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
+    let seven_zip = external_binary("7zz")
+        .or_else(|| external_binary("7z"))
+        .ok_or_else(|| {
+            AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(target), true)
+                .with_detail("provider", "7z")
+        })?;
+    let working_dir = common_source_parent(sources, target)?;
+    let mut command = Command::new(seven_zip);
+    command.current_dir(&working_dir);
+    command.arg("a").arg("-y").arg(target);
+    for source in sources {
+        command.arg(source.file_name().ok_or_else(|| {
+            AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
+        })?);
+    }
+    run_external_command(command, Some(target))
+}
+
+fn common_source_parent(sources: &[PathBuf], target: &Path) -> CommandResult<PathBuf> {
+    let Some(first_parent) = sources.first().and_then(|source| source.parent()) else {
+        return Err(AppError::new("invalid_path", "errors.invalidPath", Some(target), true));
+    };
+    for source in sources {
+        if source.parent() != Some(first_parent) {
+            return Err(AppError::new("invalid_path", "errors.archiveSourcesMustShareParent", Some(source), true));
+        }
+    }
+    Ok(first_parent.to_path_buf())
+}
+
+fn run_zip_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> CommandResult<()> {
+    let unzip = external_binary("unzip").ok_or_else(|| {
+        AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(archive), true)
+            .with_detail("provider", "unzip")
+    })?;
+    let mut command = Command::new(unzip);
+    match policy {
+        ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {
+            command.arg("-o");
+        }
+        ConflictDecision::Skip | ConflictDecision::AllSkip => {
+            command.arg("-n");
+        }
+        ConflictDecision::Cancel => {
+            return Err(AppError::new("cancelled", "errors.cancelled", Some(archive), true));
+        }
+    }
+    command.arg("-q").arg(archive).arg("-d").arg(target);
+    run_external_command(command, Some(archive))
+}
+
+fn run_7z_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> CommandResult<()> {
+    let seven_zip = external_binary("7zz")
+        .or_else(|| external_binary("7z"))
+        .ok_or_else(|| {
+            AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(archive), true)
+                .with_detail("provider", "7z")
+        })?;
+    let mut command = Command::new(seven_zip);
+    command.arg("x");
+    match policy {
+        ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {
+            command.arg("-aoa");
+        }
+        ConflictDecision::Skip | ConflictDecision::AllSkip => {
+            command.arg("-aos");
+        }
+        ConflictDecision::Cancel => {
+            return Err(AppError::new("cancelled", "errors.cancelled", Some(archive), true));
+        }
+    }
+    command.arg(format!("-o{}", target.to_string_lossy())).arg(archive);
+    run_external_command(command, Some(archive))
+}
+
+fn run_external_command(mut command: Command, path: Option<&Path>) -> CommandResult<()> {
+    let output = command
+        .output()
+        .map_err(|error| map_io_error(error, path))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(AppError::new("external_command_failed", "errors.externalCommandFailed", path, true)
+        .with_detail("exitCode", output.status.code().map_or_else(|| "signal".to_string(), |code| code.to_string()))
+        .with_detail("stderr", String::from_utf8_lossy(&output.stderr).chars().take(512).collect::<String>()))
+}
+
+fn external_binary(name: &str) -> Option<String> {
+    let path_var = env::var_os("PATH")?;
+    for dir in env::split_paths(&path_var) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(display_path(&candidate));
+        }
+    }
+    None
+}
+
+fn archive_entry_is_unsafe(entry: &str) -> bool {
+    let path = Path::new(entry);
+    path.is_absolute()
+        || path.components().any(|component| matches!(component, std::path::Component::ParentDir))
+        || entry.contains('\0')
+}
+
+#[cfg(test)]
+pub(super) fn archive_entry_is_unsafe_for_test(entry: &str) -> bool {
+    archive_entry_is_unsafe(entry)
+}
+
+#[cfg(test)]
+pub(super) fn archive_create_summary_for_test(
+    sources: Vec<String>,
+    target_archive: String,
+    format: String,
+    password: Option<String>,
+) -> OperationSummary {
+    run_archive_create(None, "archive-create-test", sources, target_archive, format, password)
 }
 
 fn copy_tree(

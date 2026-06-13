@@ -49,6 +49,7 @@ export interface OperationDialogDraft {
   backendExecutionStubbed: boolean;
   backendExecutionStubReasonKey: string | null;
   shellPreview: ShellCommandPreview | null;
+  atomicResult: unknown | null;
   inputLabel: string | null;
   inputValue: string;
   validationErrorKey: string | null;
@@ -64,9 +65,9 @@ export interface OperationDialogDraft {
 
 export type AtomicCommandExecutor = (
   dialog: OperationDialogDraft,
-) => Promise<{ ok: true; data: FileEntry } | { ok: false; error: AppError }>;
+) => Promise<{ ok: true; data: unknown } | { ok: false; error: AppError }>;
 
-export type AtomicCommandSuccessHandler = (entry: FileEntry, dialog: OperationDialogDraft) => void;
+export type AtomicCommandSuccessHandler = (entry: unknown, dialog: OperationDialogDraft) => void;
 
 export type LongRunningOperationExecutor = (
   dialog: OperationDialogDraft,
@@ -95,6 +96,7 @@ export interface OperationStoreState {
   progress: OperationProgress | null;
   conflictPrompt: ConflictPrompt | null;
   summary: OperationSummary | null;
+  operationHistory: OperationSummary[];
   lastError: AppError | null;
   lastConflictDecision: ConflictDecision | null;
   applyAllConflictDecision: Extract<ConflictDecision, 'allOverwrite' | 'allSkip'> | null;
@@ -110,6 +112,7 @@ export interface OperationStoreState {
   cancelOperation(): void;
   closeDialog(): void;
   clearSummary(): void;
+  clearOperationHistory(): void;
 }
 
 export const useOperationStore = create<OperationStoreState>((set, get) => ({
@@ -117,6 +120,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
   progress: null,
   conflictPrompt: null,
   summary: null,
+  operationHistory: [],
   lastError: null,
   lastConflictDecision: null,
   applyAllConflictDecision: null,
@@ -195,6 +199,37 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       }
 
       dialog.onAtomicSuccess?.(result.data, dialog);
+      const shellPreviewResult = isShellCommandPreviewResult(result.data) ? result.data : null;
+      if (dialog.dialogKind === 'shellCommand' && shellPreviewResult) {
+        set((current) => ({
+          dialog: current.dialog
+            ? {
+                ...current.dialog,
+                atomicPending: false,
+                shellPreview: shellPreviewResult,
+                atomicResult: shellPreviewResult,
+                primaryLabel: shellPreviewResult.policy.enabled ? '확인 후 실행' : 'Preview disabled',
+              }
+            : null,
+          progress: null,
+          conflictPrompt: null,
+          summary: null,
+          lastError: null,
+        }));
+        return;
+      }
+      if (dialog.dialogKind === 'properties' || dialog.dialogKind === 'archivePreview' || dialog.dialogKind === 'shellCommand') {
+        set((current) => ({
+          dialog: current.dialog
+            ? { ...current.dialog, atomicPending: false, atomicResult: result.data }
+            : null,
+          progress: null,
+          conflictPrompt: null,
+          summary: null,
+          lastError: null,
+        }));
+        return;
+      }
       set({
         dialog: null,
         progress: null,
@@ -322,6 +357,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
     dialog?.onOperationSummary?.(summary, dialog);
     set((current) => ({
       summary,
+      operationHistory: appendOperationHistory(current.operationHistory, summary),
       conflictPrompt: current.conflictPrompt?.operationId === summary.operationId ? null : current.conflictPrompt,
       progress: current.progress && current.progress.operationId === summary.operationId
         ? { ...current.progress, state: summary.state, completedFiles: summary.completedFiles, recentErrorCount: summary.failedFiles }
@@ -378,17 +414,25 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
             etaSeconds: null,
             recentErrorCount: 0,
           },
-        summary: {
-          operationId,
-          kind,
-          state: 'cancelled',
-          completedFiles,
-          failedFiles: 0,
-          errors: [],
-        },
-        conflictPrompt: null,
-        lastConflictDecision: decision,
-        applyAllConflictDecision: null,
+      summary: {
+        operationId,
+        kind,
+        state: 'cancelled',
+        completedFiles,
+        failedFiles: 0,
+        errors: [],
+      },
+      operationHistory: appendOperationHistory(get().operationHistory, {
+        operationId,
+        kind,
+        state: 'cancelled',
+        completedFiles,
+        failedFiles: 0,
+        errors: [],
+      }),
+      conflictPrompt: null,
+      lastConflictDecision: decision,
+      applyAllConflictDecision: null,
       });
       return;
     }
@@ -431,10 +475,19 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         failedFiles: 0,
         errors: [],
       },
+      operationHistory: appendOperationHistory(get().operationHistory, {
+        operationId: progress.operationId,
+        kind: progress.kind,
+        state: 'cancelled',
+        completedFiles: progress.completedFiles,
+        failedFiles: 0,
+        errors: [],
+      }),
     });
   },
   closeDialog: () => set({ dialog: null, progress: null, conflictPrompt: null, lastError: null }),
   clearSummary: () => set({ summary: null, lastError: null }),
+  clearOperationHistory: () => set({ operationHistory: [] }),
 }));
 
 export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
@@ -483,6 +536,7 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
       ? 'operations.backendExecution.stubbedUntilCommandWiring'
       : null,
     shellPreview: isShell ? disabledShellPreview(request.workingDir) : null,
+    atomicResult: null,
     inputLabel: inputLabelForDialog(dialogKind),
     inputValue,
     validationErrorKey: validateDialogInput(dialogKind, inputValue),
@@ -498,10 +552,10 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
 };
 
 const targetForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
-  if (dialogKind === 'copy' || dialogKind === 'move' || dialogKind === 'archiveExtract') {
+  if (dialogKind === 'copy' || dialogKind === 'move' || dialogKind === 'archiveCreate' || dialogKind === 'archiveExtract') {
     return request.targetDir;
   }
-  if (dialogKind === 'createDir') {
+  if (dialogKind === 'createDir' || dialogKind === 'shellCommand') {
     return request.workingDir;
   }
   return request.sources[0]?.path ?? request.workingDir;
@@ -574,7 +628,8 @@ type AtomicCommandDialogKind =
   | 'archivePreview'
   | 'externalOpenDefault'
   | 'externalReveal'
-  | 'externalEditor';
+  | 'externalEditor'
+  | 'shellCommand';
 
 const LONG_RUNNING_DIALOGS: readonly LongRunningDialogKind[] = [
   'copy',
@@ -593,6 +648,7 @@ const ATOMIC_COMMAND_DIALOGS: readonly AtomicCommandDialogKind[] = [
   'externalOpenDefault',
   'externalReveal',
   'externalEditor',
+  'shellCommand',
 ];
 
 const isLongRunningDialog = (dialogKind: DialogKind): dialogKind is LongRunningDialogKind =>
@@ -612,7 +668,7 @@ export const dialogExecutionModeForDialog = (dialogKind: DialogKind): DialogExec
 };
 
 const CONNECTABLE_SAFE_MUTATIONS: readonly DialogKind[] = ['createDir', 'rename'];
-const CONNECTABLE_LONG_RUNNING_OPERATIONS: readonly DialogKind[] = ['copy', 'move', 'trash', 'deletePermanent'];
+const CONNECTABLE_LONG_RUNNING_OPERATIONS: readonly DialogKind[] = ['copy', 'move', 'trash', 'deletePermanent', 'archiveCreate', 'archiveExtract'];
 
 const isBackendExecutionStubbed = (dialogKind: DialogKind, request: OpenDialogRequest) => {
   if (CONNECTABLE_LONG_RUNNING_OPERATIONS.includes(dialogKind)) {
@@ -624,7 +680,7 @@ const isBackendExecutionStubbed = (dialogKind: DialogKind, request: OpenDialogRe
   if (CONNECTABLE_SAFE_MUTATIONS.includes(dialogKind)) {
     return !request.atomicExecutor;
   }
-  return dialogExecutionModeForDialog(dialogKind) === 'atomicCommand';
+  return dialogExecutionModeForDialog(dialogKind) === 'atomicCommand' && !request.atomicExecutor;
 };
 
 const inputLabelForDialog = (dialogKind: DialogKind) => {
@@ -637,12 +693,21 @@ const inputLabelForDialog = (dialogKind: DialogKind) => {
   if (dialogKind === 'deletePermanent') {
     return '영구 삭제 확인 문구(PERMANENT_DELETE)';
   }
+  if (dialogKind === 'archiveCreate') {
+    return '압축 파일 이름(.zip 또는 .7z)';
+  }
+  if (dialogKind === 'shellCommand') {
+    return '실행할 명령(command arg1 arg2)';
+  }
   return null;
 };
 
 const initialInputValueForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
   if (dialogKind === 'rename') {
     return request.sources[0]?.name ?? '';
+  }
+  if (dialogKind === 'archiveCreate') {
+    return `archive-${Date.now()}.zip`;
   }
   return '';
 };
@@ -651,6 +716,18 @@ const validateDialogInput = (dialogKind: DialogKind, value: string) => {
   const trimmed = value.trim();
   if (dialogKind === 'deletePermanent') {
     return trimmed === 'PERMANENT_DELETE' ? null : 'errors.confirmationRequired';
+  }
+  if (dialogKind === 'archiveCreate') {
+    if (!trimmed || trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('\0')) {
+      return 'errors.invalidName';
+    }
+    if (!trimmed.endsWith('.zip') && !trimmed.endsWith('.7z')) {
+      return 'errors.archiveFormatUnsupported';
+    }
+    return null;
+  }
+  if (dialogKind === 'shellCommand') {
+    return trimmed ? null : 'errors.invalidShellCommand';
   }
   if (dialogKind !== 'createDir' && dialogKind !== 'rename') {
     return null;
@@ -666,6 +743,13 @@ const validateDialogInput = (dialogKind: DialogKind, value: string) => {
 
 const isTerminalState = (state: OperationState) =>
   state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';
+
+const MAX_OPERATION_HISTORY = 50;
+
+const appendOperationHistory = (history: OperationSummary[], summary: OperationSummary) => [
+  summary,
+  ...history.filter((item) => item.operationId !== summary.operationId),
+].slice(0, MAX_OPERATION_HISTORY);
 
 const operationKindForDialog = (dialogKind: LongRunningDialogKind): OperationKind => {
   const mapping: Record<LongRunningDialogKind, OperationKind> = {
@@ -689,6 +773,16 @@ const disabledShellPreview = (workingDir: string): ShellCommandPreview => ({
     reasonKey: 'settings.external.shellCommand.disabledByDefault',
   },
 });
+
+const isShellCommandPreviewResult = (value: unknown): value is ShellCommandPreview => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<ShellCommandPreview>;
+  return typeof candidate.confirmToken === 'string'
+    && typeof candidate.fingerprint === 'string'
+    && Boolean(candidate.policy);
+};
 
 const appError = (code: string, messageKey: string, path: string | null, recoverable: boolean): AppError => ({
   code,
