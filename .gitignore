@@ -1,0 +1,39 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local temporary workspace
+temp/
+
+# OMX local runtime/state
+.omx/
+
+# Logs
+*.log
+logs/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node / frontend build artifacts (for future GUI stack)
+node_modules/
+dist/
+build/
+coverage/
+.npm/
+.yarn/
+.pnpm-store/
+
+# Rust / Tauri build artifacts (if selected later)
+target/
+src-tauri/target/
+
+# Electron packaging artifacts (if selected later)
+out/
+release/
