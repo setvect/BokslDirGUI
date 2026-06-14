@@ -343,6 +343,15 @@ button {
   font-size: 16px;
 }
 
+.status-message {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #d9ecff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-language {
   margin-left: auto;
   color: #65ef8f;
@@ -379,7 +388,6 @@ button {
 
 .menu-popover,
 .context-menu,
-.transient-overlay,
 .filter-dialog {
   z-index: 20;
   min-width: 260px;
@@ -434,41 +442,6 @@ button {
   gap: 24px;
 }
 
-.overlay-host {
-  position: absolute;
-  inset: 31px 0 56px;
-  pointer-events: none;
-}
-
-.transient-overlay {
-  position: absolute;
-  top: 58px;
-  left: 50%;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px 18px;
-  width: min(560px, 64vw);
-  padding: 14px 16px;
-  transform: translateX(-50%);
-  pointer-events: auto;
-}
-
-.transient-overlay strong {
-  color: var(--green);
-}
-
-.transient-overlay span {
-  grid-column: 1 / -1;
-  color: #d7d7d7;
-}
-
-.transient-overlay button {
-  grid-row: 1;
-  grid-column: 2;
-  border: 1px solid #3d3d3d;
-  background: #2b2b2b;
-  color: #f2f2f2;
-}
 
 .filter-dialog {
   position: absolute;

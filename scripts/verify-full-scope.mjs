@@ -77,10 +77,10 @@ for (const decision of ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'
 }
 
 const commanderShell = read('src/ui/CommanderShell.tsx');
-for (const selector of ['file-panel', 'hotkey-strip', 'panel-zone', 'overlay-host']) {
+for (const selector of ['file-panel', 'hotkey-strip', 'panel-zone', 'bottom-status']) {
   addCheck(`commander shell emits ${selector}`, commanderShell.includes(selector), 'TUI-faithful shell');
 }
-for (const forbidden of ['persistent-sidebar', 'persistent-inspector', 'large-toolbar']) {
+for (const forbidden of ['persistent-sidebar', 'persistent-inspector', 'large-toolbar', 'Action preview', 'transient-overlay', 'overlay-host']) {
   addCheck(`commander shell avoids ${forbidden}`, !commanderShell.includes(forbidden), 'No dashboard chrome');
 }
 for (const forbidden of ['MENU_ROOTS', 'ACTION_LABELS']) {

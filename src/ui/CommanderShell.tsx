@@ -151,7 +151,7 @@ export function CommanderShell({
       selectedPaths: initialSelectedPaths?.right,
     },
   }));
-  const [overlayMessage, setOverlayMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [filterPromptPanel, setFilterPromptPanel] = useState<PanelId | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
@@ -191,9 +191,7 @@ export function CommanderShell({
   };
 
   const switchActivePanel = () => {
-    const nextPanel = oppositePanelOf(activePanel);
-    setActivePanel(nextPanel);
-    setOverlayMessage(`활성 패널 전환: ${nextPanel.toUpperCase()}`);
+    setActivePanel(oppositePanelOf(activePanel));
   };
 
   const beginPanelRequest = (panelId: PanelId) => {
@@ -231,7 +229,7 @@ export function CommanderShell({
         ...current,
         [panelId]: markPanelError(current[panelId], result.error),
       }));
-      setOverlayMessage(`목록 읽기 실패: ${result.error.messageKey}${result.error.path ? ` · ${result.error.path}` : ''}`);
+      setStatusMessage(`목록 읽기 실패: ${result.error.messageKey}${result.error.path ? ` · ${result.error.path}` : ''}`);
       shellRef.current?.focus({ preventScroll: true });
       return;
     }
@@ -250,7 +248,7 @@ export function CommanderShell({
         showHidden,
       },
     }));
-    setOverlayMessage(null);
+    setStatusMessage(null);
     shellRef.current?.focus({ preventScroll: true });
   };
 
@@ -264,7 +262,7 @@ export function CommanderShell({
     }
     if (!result.ok) {
       setPanelState((current) => ({ ...current, [panelId]: markPanelError(current[panelId], result.error) }));
-      setOverlayMessage(`직접 이동 실패: ${result.error.messageKey}`);
+      setStatusMessage(`직접 이동 실패: ${result.error.messageKey}`);
       return;
     }
     setPanelState((current) => ({
@@ -274,7 +272,7 @@ export function CommanderShell({
         showHidden: false,
       },
     }));
-    setOverlayMessage(`Path · goto_path · ${result.data.path}`);
+    setStatusMessage(`Path · goto_path · ${result.data.path}`);
   };
 
   const refreshPanel = (panelId: PanelId) => {
@@ -299,7 +297,7 @@ export function CommanderShell({
     const panel = panelState[panelId];
     const targetPath = panel.historyBack.at(-1);
     if (!targetPath) {
-      setOverlayMessage('뒤로 이동할 history가 없습니다.');
+      setStatusMessage('뒤로 이동할 history가 없습니다.');
       return;
     }
     void listPanel(panelId, targetPath, {
@@ -312,7 +310,7 @@ export function CommanderShell({
     const panel = panelState[panelId];
     const targetPath = panel.historyForward[0];
     if (!targetPath) {
-      setOverlayMessage('앞으로 이동할 history가 없습니다.');
+      setStatusMessage('앞으로 이동할 history가 없습니다.');
       return;
     }
     void listPanel(panelId, targetPath, {
@@ -334,7 +332,7 @@ export function CommanderShell({
     const panel = panelState[panelId];
     const focusedEntry = focusedEntryOf(panel);
     if (!focusedEntry || focusedEntry.isVirtual) {
-      setOverlayMessage('가상 항목은 선택 대상으로 표시하지 않습니다.');
+      setStatusMessage('가상 항목은 선택 대상으로 표시하지 않습니다.');
       return;
     }
 
@@ -379,13 +377,13 @@ export function CommanderShell({
   const saveSettingsPatch = async (patch: Partial<Settings>, successMessage: string) => {
     const optimistic = mergeSettings(settings, patch);
     setSettings(optimistic);
-    setOverlayMessage(successMessage);
+    setStatusMessage(successMessage);
     if (!mutationClient.saveSettings) {
       return;
     }
     const result = await mutationClient.saveSettings({ patch });
     if (!result.ok) {
-      setOverlayMessage(`설정 저장 실패: ${result.error.messageKey}`);
+      setStatusMessage(`설정 저장 실패: ${result.error.messageKey}`);
       return;
     }
     setSettings(normalizeSettings(result.data));
@@ -424,16 +422,16 @@ export function CommanderShell({
   const openBookmarkList = () => {
     const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
     if (bookmarks.length === 0) {
-      setOverlayMessage('Bookmarks · 저장된 북마크가 없습니다.');
+      setStatusMessage('Bookmarks · 저장된 북마크가 없습니다.');
       return;
     }
-    setOverlayMessage(`Bookmarks · ${bookmarks.map((bookmark) => `${bookmark.label}: ${bookmark.path}`).join(' · ')}`);
+    setStatusMessage(`Bookmarks · ${bookmarks.map((bookmark) => `${bookmark.label}: ${bookmark.path}`).join(' · ')}`);
   };
 
   const openHistoryList = (panelId: PanelId) => {
     const panel = panelState[panelId];
     const history = [...panel.historyBack, panel.path, ...panel.historyForward];
-    setOverlayMessage(`History · ${history.length ? history.join(' ← ') : '비어 있음'}`);
+    setStatusMessage(`History · ${history.length ? history.join(' ← ') : '비어 있음'}`);
   };
 
   const applyLayout = (patch: Partial<Settings['layout']>, message: string) => {
@@ -462,7 +460,7 @@ export function CommanderShell({
     event.preventDefault();
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length > 0 && !dragSource) {
-      setOverlayMessage('External drop은 브라우저 보안상 파일 경로가 확인될 때만 import 대상으로 허용합니다.');
+      setStatusMessage('External drop은 브라우저 보안상 파일 경로가 확인될 때만 import 대상으로 허용합니다.');
       return;
     }
     if (!dragSource || dragSource.panelId === targetPanel || dragSource.entry.isVirtual) {
@@ -472,7 +470,7 @@ export function CommanderShell({
     const action = ACTIONS.find((candidate) => candidate.id === (event.shiftKey ? 'file.move' : 'file.copy'));
     if (action) {
       handleAction(action, dragSource.panelId, [dragSource.entry]);
-      setOverlayMessage(`Drag ${event.shiftKey ? 'move' : 'copy'} · ${dragSource.entry.name} → ${targetPanel.toUpperCase()}`);
+      setStatusMessage(`Drag ${event.shiftKey ? 'move' : 'copy'} · ${dragSource.entry.name} → ${targetPanel.toUpperCase()}`);
     }
     setDragSource(null);
   };
@@ -519,7 +517,7 @@ export function CommanderShell({
       return;
     }
 
-    setOverlayMessage(`기본 앱 열기 예정: ${entry.name} · open_default 확인 대기`);
+    setStatusMessage(`기본 앱 열기 예정: ${entry.name} · open_default 확인 대기`);
   };
 
   const handleAction = (action: AppAction, panelOverride = activePanel, sourceOverride?: FileEntry[]) => {
@@ -566,12 +564,12 @@ export function CommanderShell({
     }
 
     if (actionId === 'nav.gotoPath') {
-      setOverlayMessage('Path · goto_path · 주소 입력 UI 연결 대기');
+      setStatusMessage('Path · goto_path · 주소 입력 UI 연결 대기');
       return;
     }
 
     if (actionId === 'nav.locations') {
-      setOverlayMessage('Locations · list_locations · 위치 팔레트 연결 대기');
+      setStatusMessage('Locations · list_locations · 위치 팔레트 연결 대기');
       return;
     }
 
@@ -582,19 +580,19 @@ export function CommanderShell({
 
     if (actionId === 'selection.all') {
       selectAllEntries(panelOverride);
-      setOverlayMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
       return;
     }
 
     if (actionId === 'selection.clear') {
       clearSelection(panelOverride);
-      setOverlayMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
       return;
     }
 
     if (actionId === 'selection.invert') {
       invertSelection(panelOverride);
-      setOverlayMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
       return;
     }
 
@@ -613,7 +611,7 @@ export function CommanderShell({
 
     if (actionId === 'filter.start') {
       setFilterPromptPanel(panelOverride);
-      setOverlayMessage(null);
+      setStatusMessage(null);
       return;
     }
 
@@ -640,7 +638,7 @@ export function CommanderShell({
         ...current,
         [panelOverride]: [...current[panelOverride], panel.path],
       }));
-      setOverlayMessage(`Tab 추가: ${panelOverride.toUpperCase()} · ${shortenPath(panel.path)}`);
+      setStatusMessage(`Tab 추가: ${panelOverride.toUpperCase()} · ${shortenPath(panel.path)}`);
       return;
     }
 
@@ -651,7 +649,7 @@ export function CommanderShell({
           ? current[panelOverride].slice(0, -1)
           : current[panelOverride],
       }));
-      setOverlayMessage(`Tab 닫기: ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`Tab 닫기: ${panelOverride.toUpperCase()}`);
       return;
     }
 
@@ -707,23 +705,23 @@ export function CommanderShell({
 
     if (actionId === 'help.shortcuts') {
       setHelpDialogOpen(true);
-      setOverlayMessage(null);
+      setStatusMessage(null);
       return;
     }
 
     if (actionId === 'help.about') {
-      setOverlayMessage('BokslDirGUI · Tauri 2 + React + Rust dual-panel file commander');
+      setStatusMessage('BokslDirGUI · Tauri 2 + React + Rust dual-panel file commander');
       return;
     }
 
     if (actionId === 'help.search') {
-      setOverlayMessage('Help Search · action registry 기반 도움말 검색 UI 연결됨');
+      setStatusMessage('Help Search · action registry 기반 도움말 검색 UI 연결됨');
       return;
     }
 
     if (dialogKindForAction(actionId)) {
       if (actionNeedsConcreteSources(actionId) && sources.length === 0) {
-        setOverlayMessage(`${labelForAction(action)} · 가상 항목은 파일 작업 대상이 될 수 없습니다.`);
+        setStatusMessage(`${labelForAction(action)} · 가상 항목은 파일 작업 대상이 될 수 없습니다.`);
         return;
       }
 
@@ -744,23 +742,23 @@ export function CommanderShell({
               preserveSelection: false,
               focusPath: entry.path,
             });
-            setOverlayMessage(`${labelForAction(action)} 완료: ${entry.name}`);
+            setStatusMessage(`${labelForAction(action)} 완료: ${entry.name}`);
             return;
           }
-          setOverlayMessage(`${labelForAction(action)} 완료`);
+          setStatusMessage(`${labelForAction(action)} 완료`);
         },
         onOperationSummary: (summary) => {
           if (summary.state === 'completed' || summary.state === 'completedWithErrors') {
             refreshPanel(panelOverride);
             refreshPanel(oppositePanel);
           }
-          setOverlayMessage(`${labelForAction(action)} 완료 상태: ${summary.state}`);
+          setStatusMessage(`${labelForAction(action)} 완료 상태: ${summary.state}`);
         },
       });
       return;
     }
 
-    setOverlayMessage(`${labelForAction(action)} · ${action.runPath}`);
+    setStatusMessage(`${labelForAction(action)} · ${action.runPath}`);
   };
 
   const applyFilter = (panelId: PanelId, filterValue: string) => {
@@ -883,7 +881,7 @@ export function CommanderShell({
       }
 
       if (!isActionAvailable(shortcutAction, runtime.context)) {
-        setOverlayMessage(`${labelForAction(shortcutAction)} · 현재 컨텍스트에서는 사용할 수 없습니다.`);
+        setStatusMessage(`${labelForAction(shortcutAction)} · 현재 컨텍스트에서는 사용할 수 없습니다.`);
         shellRef.current?.focus({ preventScroll: true });
         return;
       }
@@ -1005,9 +1003,13 @@ export function CommanderShell({
           onPanelDrop={(event) => handlePanelDrop(event, 'right')}
         />
       </section>
-      <BottomStatusStrip listing={activeListing} activePanel={activePanel} selectedCount={context.selectedCount} />
+      <BottomStatusStrip
+        listing={activeListing}
+        activePanel={activePanel}
+        selectedCount={context.selectedCount}
+        message={statusMessage}
+      />
       <HotkeyStrip />
-      <OverlayHost message={overlayMessage} onDismiss={() => setOverlayMessage(null)} />
       {filterPromptPanel ? (
         <FilterPrompt
           panel={panelState[filterPromptPanel]}
@@ -1348,13 +1350,24 @@ function PathControls({
   );
 }
 
-function BottomStatusStrip({ listing, activePanel, selectedCount }: { listing: DirectoryListing; activePanel: PanelId; selectedCount: number }) {
+function BottomStatusStrip({
+  listing,
+  activePanel,
+  selectedCount,
+  message,
+}: {
+  listing: DirectoryListing;
+  activePanel: PanelId;
+  selectedCount: number;
+  message: string | null;
+}) {
   const summary = summarizeEntries(listing.entries);
   return (
     <footer className="bottom-status" aria-label="active panel status">
       <span>{summary.files} files, {summary.dirs} dirs</span>
       <span>{selectedCount} selected</span>
       <span>{activePanel.toUpperCase()}</span>
+      {message ? <span className="status-message" aria-live="polite">{message}</span> : null}
       <span className="status-language">[KO]</span>
     </footer>
   );
@@ -1442,20 +1455,6 @@ function FilterPrompt({ panel, onApply, onCancel }: {
           <button type="button" onClick={onCancel}>Cancel</button>
         </div>
       </form>
-    </div>
-  );
-}
-
-function OverlayHost({ message, onDismiss }: { message: string | null; onDismiss(): void }) {
-  return (
-    <div className="overlay-host" aria-live="polite">
-      {message ? (
-        <div className="transient-overlay" role="dialog" aria-label="transient action preview">
-          <strong>Action preview</strong>
-          <span>{message}</span>
-          <button type="button" onClick={onDismiss}>닫기</button>
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -70,6 +70,8 @@ describe('CommanderShell', () => {
 
     expect(activePanelLabel(container)).toContain('left panel');
     expect(document.activeElement).toBe(shell);
+    expect(screen.queryByText('Action preview')).toBeNull();
+    expect(container.querySelector('.transient-overlay')).toBeNull();
   });
 
   it('keeps the document keydown listener stable across rerenders', async () => {

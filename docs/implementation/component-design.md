@@ -22,8 +22,9 @@ App
          │  │  └─ FileTable
          │  └─ FilePanel(right)
          ├─ BottomStatusStrip
+         │  └─ TransientStatusText
          ├─ HotkeyStrip
-         └─ OverlayHost
+         └─ DialogLayer
             ├─ CommandPalette
             ├─ ContextMenuLayer
             ├─ OperationDialog
@@ -56,6 +57,7 @@ App
 | `ExternalOpenDialog` | 기본 앱/파일 관리자/외부 에디터 실행 확인 및 실패 메시지 | action/settings state | 사용자 확인 없는 외부 실행 |
 | `ConflictResolutionDialog` | `ConflictDecision` 선택과 apply-all 정책 표시 | operation store | enum 밖 결정값 생성 |
 | `CommandPalette` | action registry 검색/실행, Help 검색과 동일 ID 사용 | action registry | registry 밖 임의 command 실행 |
+| `BottomStatusStrip` | 파일/선택/활성 패널 상태와 짧은 transient status를 한 줄로 표시 | panel/action state | 조작을 막는 팝업 표시 |
 | `HotkeyStrip` | 현재 action hint 표시 | action registry | 실제 action source 중복 |
 | `ShellCommandDialog` | 현재 경로 기준 shell command preview/confirm/result 표시, backend `prepare_shell_command` → `run_shell_command` 호출 흐름 소유 | action/operation/settings state | 확인 없이 명령 실행 |
 | `HelpDialog` | action registry 기반 도움말/검색/About | action registry | 하드코딩 단축키 목록 |
