@@ -7,26 +7,28 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react';
 import {
   ACTIONS,
+  ACTION_BY_ID,
   ariaKeyShortcutsFromRegistry,
   actionsForMenu,
   hotkeyStripActionsFromRegistry,
   isActionAvailable,
   labelForAction,
   matchKeyboardShortcut,
+  menuRootLabelFromRegistry,
   menuRootsFromRegistry,
   shortcutLabelForAction,
   type ActionContext,
   type ActionId,
   type AppAction,
 } from '../actions/registry';
-import type { DirectoryListing, FileEntry, PanelId, Settings, SortSpec } from '../domain/types';
+import type { DirectoryListing, FileEntry, LocationList, PanelId, Settings, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { dialogKindForAction, useOperationStore, type AtomicCommandExecutor, type LongRunningOperationExecutor } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
-import { actionNeedsConcreteSources, createActionContext, filterEnabledActions } from './actionContext';
+import { actionNeedsConcreteSources, createActionContext, filterEnabledActions, resolveActionTargets } from './actionContext';
 import { createTauriPanelDataSource, type PanelDataSource } from './panelDataSource';
 import {
   clampFocusedIndex,
@@ -40,15 +42,21 @@ import {
   parentNavigationEntryOf,
   parentPathOf,
   replacePanelListing,
-  selectedConcreteEntriesOf,
   type PanelNavigationState,
   type PanelStateById,
 } from './panelState';
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
+import { commanderKeyboardIsSuspended, useCommanderKeyboardBoundaryProps } from './keyboardOwnership';
 import {
-  commanderKeyboardIsSuspended,
-  useCommanderKeyboardBoundaryProps,
-} from './keyboardOwnership';
+  AboutDialog,
+  FilterPrompt,
+  HelpSearchDialog,
+  NavigationListDialog,
+  PathPrompt,
+  ShortcutHelpDialog,
+  type NavigationListItem,
+  type NavigationListState,
+} from './CommanderOverlays';
 
 const KEYBOARD_PAGE_STEP = 12;
 const FOCUSABLE_ROW_TAB_INDEX = -1;
@@ -70,9 +78,19 @@ const DEFAULT_SETTINGS: Settings = {
     singlePanel: false,
     ratio: '50:50',
   },
+  view: {
+    zoomStep: 0,
+    density: 'compact',
+  },
 };
 
+const MIN_ZOOM_STEP = -3;
+const MAX_ZOOM_STEP = 5;
+const BASE_FONT_SIZE_PX = 16;
+const BASE_ROW_HEIGHT_PX = 27;
+
 type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selectedPaths'>>;
+type SelectionMode = 'replace' | 'additive' | 'range';
 
 interface CommanderShellProps {
   dataSource?: PanelDataSource;
@@ -109,10 +127,13 @@ interface LongRunningOperationClient {
 interface KeyboardRuntime {
   context: ActionContext;
   operationDialogOpen: boolean;
-  moveFocusedEntry(delta: number): void;
-  focusBoundaryEntry(boundary: 'first' | 'last'): void;
+  moveFocusedEntry(delta: number, extendSelection?: boolean): void;
+  focusBoundaryEntry(boundary: 'first' | 'last', extendSelection?: boolean): void;
   handleAction(action: AppAction): void;
+  handleZoom(command: ZoomCommand): void;
 }
+
+type ZoomCommand = 'in' | 'out' | 'reset';
 
 interface ListPanelOptions {
   pushHistory?: boolean;
@@ -140,6 +161,8 @@ export function CommanderShell({
   const shortcutSequenceTimeoutRef = useRef<number | null>(null);
   const keyboardRuntimeRef = useRef<KeyboardRuntime | null>(null);
   const navigationRequestRef = useRef<Record<PanelId, number>>({ left: 0, right: 0 });
+  const locationsRequestRef = useRef(0);
+  const selectionAnchorRef = useRef<Record<PanelId, number | null>>({ left: null, right: null });
   const [activePanel, setActivePanel] = useState<PanelId>('right');
   const [panelState, setPanelState] = useState<PanelStateById>(() => createPanelStates(dataSource.initialListings, {
     left: {
@@ -153,13 +176,31 @@ export function CommanderShell({
   }));
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [filterPromptPanel, setFilterPromptPanel] = useState<PanelId | null>(null);
+  const [pathPromptPanel, setPathPromptPanel] = useState<PanelId | null>(null);
+  const [navigationList, setNavigationList] = useState<NavigationListState | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpSearchOpen, setHelpSearchOpen] = useState(false);
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [keyboardLanguage, setKeyboardLanguage] = useState<'KO' | 'EN'>('KO');
   const [panelTabs, setPanelTabs] = useState<Record<PanelId, string[]>>(() => ({
     left: [dataSource.initialListings.left.path],
     right: [dataSource.initialListings.right.path],
   }));
   const [dragSource, setDragSource] = useState<{ panelId: PanelId; entry: FileEntry } | null>(null);
+  const viewMetrics = viewMetricsForSettings(settings.view);
+  const shellStyle = {
+    '--commander-scale': String(viewMetrics.scale),
+    '--commander-font-size': `${viewMetrics.fontSizePx}px`,
+    '--row-height': `${viewMetrics.rowHeightPx}px`,
+    '--top-menu-height': `${viewMetrics.topMenuHeightPx}px`,
+    '--panel-header-height': `${viewMetrics.panelHeaderHeightPx}px`,
+    '--path-control-height': `${viewMetrics.pathControlHeightPx}px`,
+    '--status-height': `${viewMetrics.statusHeightPx}px`,
+    '--hotkey-strip-height': `${viewMetrics.hotkeyStripHeightPx}px`,
+    '--cell-padding-x': `${viewMetrics.cellPaddingXPx}px`,
+    '--control-gap': `${viewMetrics.controlGapPx}px`,
+  } as CSSProperties;
 
   const updatePanel = (panelId: PanelId, next: PanelUiPatch) => {
     setPanelState((current) => {
@@ -174,20 +215,42 @@ export function CommanderShell({
     });
   };
 
-  const focusEntry = (panelId: PanelId, index: number) => {
-    const entryCount = panelState[panelId].listing.entries.length;
-    const focusedIndex = clampFocusedIndex(index, entryCount);
+  const focusEntry = (panelId: PanelId, index: number, extendSelection = false) => {
     setActivePanel(panelId);
-    updatePanel(panelId, { focusedIndex });
+    setPanelState((current) => {
+      const panel = current[panelId];
+      const focusedIndex = clampFocusedIndex(index, panel.listing.entries.length);
+      if (!extendSelection) {
+        selectionAnchorRef.current[panelId] = focusedIndex;
+        return {
+          ...current,
+          [panelId]: {
+            ...panel,
+            focusedIndex,
+          },
+        };
+      }
+
+      const anchor = selectionAnchorRef.current[panelId] ?? panel.focusedIndex;
+      selectionAnchorRef.current[panelId] = anchor;
+      return {
+        ...current,
+        [panelId]: {
+          ...panel,
+          focusedIndex,
+          selectedPaths: selectedPathsInRange(panel.listing.entries, anchor, focusedIndex),
+        },
+      };
+    });
   };
 
-  const moveFocusedEntry = (delta: number) => {
-    focusEntry(activePanel, panelState[activePanel].focusedIndex + delta);
+  const moveFocusedEntry = (delta: number, extendSelection = false) => {
+    focusEntry(activePanel, panelState[activePanel].focusedIndex + delta, extendSelection);
   };
 
-  const focusBoundaryEntry = (boundary: 'first' | 'last') => {
+  const focusBoundaryEntry = (boundary: 'first' | 'last', extendSelection = false) => {
     const entryCount = panelState[activePanel].listing.entries.length;
-    focusEntry(activePanel, boundary === 'first' ? 0 : entryCount - 1);
+    focusEntry(activePanel, boundary === 'first' ? 0 : entryCount - 1, extendSelection);
   };
 
   const switchActivePanel = () => {
@@ -273,6 +336,7 @@ export function CommanderShell({
       },
     }));
     setStatusMessage(`Path · goto_path · ${result.data.path}`);
+    shellRef.current?.focus({ preventScroll: true });
   };
 
   const refreshPanel = (panelId: PanelId) => {
@@ -331,7 +395,12 @@ export function CommanderShell({
   const toggleFocusedSelection = (panelId: PanelId) => {
     const panel = panelState[panelId];
     const focusedEntry = focusedEntryOf(panel);
-    if (!focusedEntry || focusedEntry.isVirtual) {
+    if (!focusedEntry) {
+      return;
+    }
+
+    if (focusedEntry.isVirtual) {
+      focusEntry(panelId, panel.focusedIndex + 1);
       setStatusMessage('가상 항목은 선택 대상으로 표시하지 않습니다.');
       return;
     }
@@ -341,12 +410,15 @@ export function CommanderShell({
       const selectedPaths = current[panelId].selectedPaths.includes(focusedEntry.path)
         ? current[panelId].selectedPaths.filter((path) => path !== focusedEntry.path)
         : [...current[panelId].selectedPaths, focusedEntry.path];
+      const focusedIndex = clampFocusedIndex(current[panelId].focusedIndex + 1, current[panelId].listing.entries.length);
+      selectionAnchorRef.current[panelId] = focusedIndex;
 
       return {
         ...current,
         [panelId]: {
           ...current[panelId],
           selectedPaths,
+          focusedIndex,
         },
       };
     });
@@ -389,6 +461,20 @@ export function CommanderShell({
     setSettings(normalizeSettings(result.data));
   };
 
+  const applyZoom = (command: ZoomCommand) => {
+    const currentStep = settings.view.zoomStep;
+    const nextStep = command === 'reset'
+      ? 0
+      : clampNumber(currentStep + (command === 'in' ? 1 : -1), MIN_ZOOM_STEP, MAX_ZOOM_STEP);
+    if (nextStep === currentStep) {
+      setStatusMessage(`Zoom · ${Math.round(viewMetricsForSettings(settings.view).scale * 100)}%`);
+      return;
+    }
+    void saveSettingsPatch({
+      view: { ...settings.view, zoomStep: nextStep },
+    }, `Zoom · ${Math.round(viewMetricsForSettings({ ...settings.view, zoomStep: nextStep }).scale * 100)}%`);
+  };
+
   const addBookmark = (panelId: PanelId) => {
     const panel = panelState[panelId];
     const bookmark = {
@@ -419,19 +505,77 @@ export function CommanderShell({
     }, `Bookmark 삭제: ${shortenPath(panel.path)}`);
   };
 
-  const openBookmarkList = () => {
+  const openBookmarkList = (panelId: PanelId) => {
     const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
-    if (bookmarks.length === 0) {
-      setStatusMessage('Bookmarks · 저장된 북마크가 없습니다.');
-      return;
-    }
-    setStatusMessage(`Bookmarks · ${bookmarks.map((bookmark) => `${bookmark.label}: ${bookmark.path}`).join(' · ')}`);
+    setNavigationList({
+      kind: 'bookmarks',
+      panelId,
+      title: 'Bookmarks',
+      items: bookmarks.map((bookmark) => ({
+        id: bookmark.id,
+        label: bookmark.label,
+        path: bookmark.path,
+        group: 'bookmark',
+      })),
+    });
+    setStatusMessage(null);
   };
 
   const openHistoryList = (panelId: PanelId) => {
     const panel = panelState[panelId];
     const history = [...panel.historyBack, panel.path, ...panel.historyForward];
-    setStatusMessage(`History · ${history.length ? history.join(' ← ') : '비어 있음'}`);
+    setNavigationList({
+      kind: 'history',
+      panelId,
+      title: `${panelId.toUpperCase()} History`,
+      items: history.map((path, index) => ({
+        id: `history-${index}-${path}`,
+        label: index === panel.historyBack.length ? `현재 · ${shortenPath(path)}` : shortenPath(path),
+        path,
+        group: index < panel.historyBack.length ? 'back' : index === panel.historyBack.length ? 'current' : 'forward',
+      })),
+    });
+    setStatusMessage(null);
+  };
+
+  const openTabList = (panelId: PanelId) => {
+    setNavigationList({
+      kind: 'tabs',
+      panelId,
+      title: `${panelId.toUpperCase()} Tabs`,
+      items: panelTabs[panelId].map((path, index) => ({
+        id: `tab-${index}-${path}`,
+        label: `${index + 1}. ${shortenPath(path)}`,
+        path,
+        group: path === panelState[panelId].path ? 'active tab' : 'tab',
+      })),
+    });
+    setStatusMessage(null);
+  };
+
+  const openLocationsList = async (panelId: PanelId) => {
+    const requestId = ++locationsRequestRef.current;
+    setStatusMessage('Locations · list_locations');
+    const result = await dataSource.listLocations();
+    if (requestId !== locationsRequestRef.current) {
+      return;
+    }
+    if (!result.ok) {
+      setStatusMessage(`Locations 실패: ${result.error.messageKey}`);
+      return;
+    }
+    setNavigationList({
+      kind: 'locations',
+      panelId,
+      title: 'Locations',
+      items: navigationItemsFromLocations(result.data, settings),
+    });
+    setStatusMessage(null);
+  };
+
+  const chooseNavigationItem = (state: NavigationListState, item: NavigationListItem) => {
+    setNavigationList(null);
+    void gotoPanelPath(state.panelId, item.path);
   };
 
   const applyLayout = (patch: Partial<Settings['layout']>, message: string) => {
@@ -475,11 +619,12 @@ export function CommanderShell({
     setDragSource(null);
   };
 
-  const selectEntry = (panelId: PanelId, index: number, entry: FileEntry, additive: boolean) => {
+  const selectEntry = (panelId: PanelId, index: number, entry: FileEntry, mode: SelectionMode) => {
     setActivePanel(panelId);
     setPanelState((current) => {
       const panel = current[panelId];
       if (entry.isVirtual) {
+        selectionAnchorRef.current[panelId] = index;
         return {
           ...current,
           [panelId]: {
@@ -490,11 +635,15 @@ export function CommanderShell({
       }
 
       const selected = panel.selectedPaths;
-      const selectedPaths = additive
+      const anchor = selectionAnchorRef.current[panelId] ?? panel.focusedIndex;
+      const selectedPaths = mode === 'range'
+        ? selectedPathsInRange(panel.listing.entries, anchor, index)
+        : mode === 'additive'
         ? selected.includes(entry.path)
           ? selected.filter((path) => path !== entry.path)
           : [...selected, entry.path]
         : [entry.path];
+      selectionAnchorRef.current[panelId] = mode === 'range' ? anchor : index;
 
       return {
         ...current,
@@ -530,12 +679,10 @@ export function CommanderShell({
     const panel = panelState[panelOverride];
     const panelListing = panel.listing;
     const oppositePanel = oppositePanelOf(panelOverride);
-    const focusedEntry = focusedEntryOf(panel);
-    const selectedEntries = selectedConcreteEntriesOf(panel);
-    const focusedConcreteSource = focusedEntry && !focusedEntry.isVirtual ? [focusedEntry] : [];
-    const sources = (sourceOverride ?? (selectedEntries.length > 0 ? selectedEntries : focusedConcreteSource)).filter(
-      (entry) => !entry.isVirtual,
-    );
+    const actionTargets = resolveActionTargets(panel);
+    const focusedEntry = actionTargets.focusedEntry;
+    const sources = sourceOverride?.filter((entry) => !entry.isVirtual)
+      ?? actionTargets.effectiveSources;
 
     const actionTargetEntry = sourceOverride?.[0] ?? focusedEntry;
     if (actionId === 'nav.enter' && actionTargetEntry) {
@@ -564,12 +711,23 @@ export function CommanderShell({
     }
 
     if (actionId === 'nav.gotoPath') {
-      setStatusMessage('Path · goto_path · 주소 입력 UI 연결 대기');
+      setPathPromptPanel(panelOverride);
+      setStatusMessage(null);
       return;
     }
 
     if (actionId === 'nav.locations') {
-      setStatusMessage('Locations · list_locations · 위치 팔레트 연결 대기');
+      void openLocationsList(panelOverride);
+      return;
+    }
+
+    if (actionId === 'nav.top') {
+      focusEntry(panelOverride, 0);
+      return;
+    }
+
+    if (actionId === 'nav.bottom') {
+      focusEntry(panelOverride, panel.listing.entries.length - 1);
       return;
     }
 
@@ -653,6 +811,11 @@ export function CommanderShell({
       return;
     }
 
+    if (actionId === 'tab.list') {
+      openTabList(panelOverride);
+      return;
+    }
+
     if (actionId === 'history.list') {
       openHistoryList(panelOverride);
       return;
@@ -664,7 +827,7 @@ export function CommanderShell({
     }
 
     if (actionId === 'bookmark.list') {
-      openBookmarkList();
+      openBookmarkList(panelOverride);
       return;
     }
 
@@ -710,12 +873,14 @@ export function CommanderShell({
     }
 
     if (actionId === 'help.about') {
-      setStatusMessage('BokslDirGUI · Tauri 2 + React + Rust dual-panel file commander');
+      setAboutDialogOpen(true);
+      setStatusMessage(null);
       return;
     }
 
     if (actionId === 'help.search') {
-      setStatusMessage('Help Search · action registry 기반 도움말 검색 UI 연결됨');
+      setHelpSearchOpen(true);
+      setStatusMessage(null);
       return;
     }
 
@@ -777,13 +942,34 @@ export function CommanderShell({
     shellRef.current?.focus({ preventScroll: true });
   };
 
+  const applyGotoPath = (panelId: PanelId, pathValue: string) => {
+    const path = pathValue.trim();
+    setPathPromptPanel(null);
+    if (!path) {
+      shellRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    void gotoPanelPath(panelId, path);
+  };
+
+  const closeOverlay = () => {
+    locationsRequestRef.current += 1;
+    setPathPromptPanel(null);
+    setNavigationList(null);
+    setHelpSearchOpen(false);
+    setAboutDialogOpen(false);
+    shellRef.current?.focus({ preventScroll: true });
+  };
+
   const activeListing = panelState[activePanel].listing;
-  const activeFocusedEntry = focusedEntryOf(panelState[activePanel]);
-  const activeSelectedCount = selectedConcreteEntriesOf(panelState[activePanel]).length;
+  const activePanelState = panelState[activePanel];
+  const activeTargets = resolveActionTargets(activePanelState);
   const context = createActionContext({
     activePanel,
-    focusedEntry: activeFocusedEntry,
-    selectedCount: activeSelectedCount,
+    focusedEntry: activeTargets.focusedEntry,
+    selectedCount: activeTargets.selectedCount,
+    hasConcreteFocus: activeTargets.hasConcreteFocus,
+    effectiveTargetCount: activeTargets.effectiveTargetCount,
     hasOppositePanel: true,
     shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: panelState.left.loading || panelState.right.loading,
@@ -796,6 +982,7 @@ export function CommanderShell({
     moveFocusedEntry,
     focusBoundaryEntry,
     handleAction,
+    handleZoom: applyZoom,
   };
 
   useEffect(() => {
@@ -910,8 +1097,19 @@ export function CommanderShell({
         return;
       }
 
+      const detectedLanguage = detectKeyboardLanguage(event.key);
+      if (detectedLanguage) {
+        setKeyboardLanguage(detectedLanguage);
+      }
+
       if (runtime.operationDialogOpen || commanderKeyboardIsSuspended(event.target)) {
         clearShortcutSequence();
+        return;
+      }
+
+      if (handleZoomKey(event, runtime.handleZoom)) {
+        clearShortcutSequence();
+        shellRef.current?.focus({ preventScroll: true });
         return;
       }
 
@@ -943,10 +1141,21 @@ export function CommanderShell({
       clearShortcutSequence();
       runShortcutAction(shortcutMatch.action);
     };
+    const handleCompositionStart = () => setKeyboardLanguage('KO');
+    const handleCompositionEnd = (event: CompositionEvent) => {
+      const detectedLanguage = detectKeyboardLanguage(event.data);
+      if (detectedLanguage) {
+        setKeyboardLanguage(detectedLanguage);
+      }
+    };
 
     document.addEventListener('keydown', handleDocumentKeyDown, { capture: true });
+    document.addEventListener('compositionstart', handleCompositionStart, { capture: true });
+    document.addEventListener('compositionend', handleCompositionEnd, { capture: true });
     return () => {
       document.removeEventListener('keydown', handleDocumentKeyDown, { capture: true });
+      document.removeEventListener('compositionstart', handleCompositionStart, { capture: true });
+      document.removeEventListener('compositionend', handleCompositionEnd, { capture: true });
       clearShortcutSequence();
     };
   }, []);
@@ -957,6 +1166,7 @@ export function CommanderShell({
       className="commander-shell"
       role="application"
       tabIndex={0}
+      style={shellStyle}
       aria-label="BokslDirGUI file commander shell"
       aria-activedescendant={activeRowDomId}
       aria-keyshortcuts={`${ariaKeyShortcuts} ArrowUp ArrowDown PageUp PageDown Home End`}
@@ -971,16 +1181,19 @@ export function CommanderShell({
           active={activePanel === 'left'}
           hiddenByLayout={settings.layout.singlePanel && activePanel !== 'left'}
           tabCount={panelTabs.left.length}
+          rowHeightPx={viewMetrics.rowHeightPx}
           onActivate={() => setActivePanel('left')}
           onStateChange={(next) => updatePanel('left', next)}
-          onEntrySelect={(index, entry, additive) => selectEntry('left', index, entry, additive)}
+          onEntrySelect={(index, entry, mode) => selectEntry('left', index, entry, mode)}
           onEntryOpen={(entry) => openEntry('left', entry)}
           onOpenAction={(action, sources) => handleAction(action, 'left', sources)}
           onNavigateBack={() => navigateBack('left')}
           onNavigateForward={() => navigateForward('left')}
           onNavigateUp={() => navigateUp('left')}
           onRefresh={() => refreshPanel('left')}
-          onGotoPath={() => void gotoPanelPath('left', panelState.left.path)}
+          onGotoPath={() => setPathPromptPanel('left')}
+          onClearFilter={() => handleAction(ACTION_BY_ID.get('filter.clear')!, 'left')}
+          onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
           onEntryDragStart={(entry) => setDragSource({ panelId: 'left', entry })}
           onPanelDrop={(event) => handlePanelDrop(event, 'left')}
         />
@@ -989,16 +1202,19 @@ export function CommanderShell({
           active={activePanel === 'right'}
           hiddenByLayout={settings.layout.singlePanel && activePanel !== 'right'}
           tabCount={panelTabs.right.length}
+          rowHeightPx={viewMetrics.rowHeightPx}
           onActivate={() => setActivePanel('right')}
           onStateChange={(next) => updatePanel('right', next)}
-          onEntrySelect={(index, entry, additive) => selectEntry('right', index, entry, additive)}
+          onEntrySelect={(index, entry, mode) => selectEntry('right', index, entry, mode)}
           onEntryOpen={(entry) => openEntry('right', entry)}
           onOpenAction={(action, sources) => handleAction(action, 'right', sources)}
           onNavigateBack={() => navigateBack('right')}
           onNavigateForward={() => navigateForward('right')}
           onNavigateUp={() => navigateUp('right')}
           onRefresh={() => refreshPanel('right')}
-          onGotoPath={() => void gotoPanelPath('right', panelState.right.path)}
+          onGotoPath={() => setPathPromptPanel('right')}
+          onClearFilter={() => handleAction(ACTION_BY_ID.get('filter.clear')!, 'right')}
+          onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
           onEntryDragStart={(entry) => setDragSource({ panelId: 'right', entry })}
           onPanelDrop={(event) => handlePanelDrop(event, 'right')}
         />
@@ -1007,7 +1223,10 @@ export function CommanderShell({
         listing={activeListing}
         activePanel={activePanel}
         selectedCount={context.selectedCount}
+        selectedBytes={sumEntryBytes(activeTargets.selectedEntries)}
         message={statusMessage}
+        keyboardLanguage={keyboardLanguage}
+        filter={activePanelState.filter}
       />
       <HotkeyStrip />
       {filterPromptPanel ? (
@@ -1017,8 +1236,24 @@ export function CommanderShell({
           onCancel={cancelFilter}
         />
       ) : null}
+      {pathPromptPanel ? (
+        <PathPrompt
+          panel={panelState[pathPromptPanel]}
+          onApply={(pathValue) => applyGotoPath(pathPromptPanel, pathValue)}
+          onCancel={closeOverlay}
+        />
+      ) : null}
+      {navigationList ? (
+        <NavigationListDialog
+          state={navigationList}
+          onChoose={(item) => chooseNavigationItem(navigationList, item)}
+          onClose={closeOverlay}
+        />
+      ) : null}
       <OperationDialogHost />
       {helpDialogOpen ? <ShortcutHelpDialog onClose={() => setHelpDialogOpen(false)} /> : null}
+      {helpSearchOpen ? <HelpSearchDialog onClose={closeOverlay} /> : null}
+      {aboutDialogOpen ? <AboutDialog onClose={closeOverlay} /> : null}
     </main>
   );
 }
@@ -1029,6 +1264,7 @@ interface TopMenuBarProps {
 }
 
 function TopMenuBar({ context, onOpenAction }: TopMenuBarProps) {
+  const now = useLocalClock();
   return (
     <header className="top-menu" aria-label="application menu">
       <div className="brand" aria-label="application name">[복슬Dir]</div>
@@ -1037,7 +1273,7 @@ function TopMenuBar({ context, onOpenAction }: TopMenuBarProps) {
           const actions = actionsForMenu(root);
           return (
             <Popover.Root key={root}>
-              <Popover.Trigger className="menu-trigger">{root}</Popover.Trigger>
+              <Popover.Trigger className="menu-trigger">{menuRootLabelFromRegistry(root)}</Popover.Trigger>
               <Popover.Portal>
                 <MenuPopoverContent
                   root={root}
@@ -1050,7 +1286,7 @@ function TopMenuBar({ context, onOpenAction }: TopMenuBarProps) {
           );
         })}
       </nav>
-      <time className="clock" dateTime="2026-06-13T19:31:00+09:00">2026-06-13 19:31</time>
+      <time className="clock" dateTime={now.toISOString()}>{formatLocalClock(now)}</time>
     </header>
   );
 }
@@ -1181,9 +1417,10 @@ interface FilePanelProps {
   active: boolean;
   hiddenByLayout: boolean;
   tabCount: number;
+  rowHeightPx: number;
   onActivate(): void;
   onStateChange(next: PanelUiPatch): void;
-  onEntrySelect(index: number, entry: FileEntry, additive: boolean): void;
+  onEntrySelect(index: number, entry: FileEntry, mode: SelectionMode): void;
   onEntryOpen(entry: FileEntry): void;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
   onEntryDragStart(entry: FileEntry): void;
@@ -1193,6 +1430,8 @@ interface FilePanelProps {
   onNavigateUp(): void;
   onRefresh(): void;
   onGotoPath(): void;
+  onClearFilter(): void;
+  onRestoreFocus(): void;
 }
 
 function FilePanel({
@@ -1200,6 +1439,7 @@ function FilePanel({
   active,
   hiddenByLayout,
   tabCount,
+  rowHeightPx,
   onActivate,
   onStateChange,
   onEntrySelect,
@@ -1212,6 +1452,8 @@ function FilePanel({
   onNavigateUp,
   onRefresh,
   onGotoPath,
+  onClearFilter,
+  onRestoreFocus,
 }: FilePanelProps) {
   const { listing } = panel;
   const panelRef = useRef<HTMLElement>(null);
@@ -1225,7 +1467,7 @@ function FilePanel({
         cell: ({ row }) => (
           <span className="entry-name">
             <span className="entry-icon" aria-hidden="true">{entryIcon(row.original.kind)}</span>
-            {row.original.name}
+            <HighlightedEntryName name={row.original.name} filter={listing.filter} />
           </span>
         ),
       },
@@ -1270,7 +1512,7 @@ function FilePanel({
     }
 
     return columns;
-  }, [columnLayout, panel.sort.direction, panel.sort.field]);
+  }, [columnLayout, listing.filter, panel.sort.direction, panel.sort.field]);
 
   const table = useReactTable({
     data: listing.entries,
@@ -1282,7 +1524,7 @@ function FilePanel({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 27,
+    estimateSize: () => rowHeightPx,
     initialRect: { width: 640, height: 520 },
     overscan: 8,
   });
@@ -1291,9 +1533,13 @@ function FilePanel({
     ? virtualRows
     : rows.slice(0, Math.min(rows.length, 24)).map((_, index) => ({
         index,
-        start: index * 27,
+        start: index * rowHeightPx,
       }));
   const summary = summarizeEntries(listing.entries);
+
+  useEffect(() => {
+    virtualizer.measure();
+  }, [rowHeightPx, virtualizer]);
 
   useEffect(() => {
     if (rows.length > 0) {
@@ -1312,7 +1558,7 @@ function FilePanel({
       onDragOver={(event) => event.preventDefault()}
       onDrop={onPanelDrop}
     >
-      <PanelHeader panel={panel} active={active} tabCount={tabCount} />
+      <PanelHeader panel={panel} active={active} tabCount={tabCount} onClearFilter={onClearFilter} />
       <PathControls
         panel={panel}
         onNavigateBack={onNavigateBack}
@@ -1320,6 +1566,7 @@ function FilePanel({
         onNavigateUp={onNavigateUp}
         onRefresh={onRefresh}
         onGotoPath={onGotoPath}
+        onRestoreFocus={onRestoreFocus}
       />
       <div className="file-table" role="table" aria-rowcount={listing.entries.length}>
         <div className="file-table-head" role="rowgroup">
@@ -1357,7 +1604,11 @@ function FilePanel({
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
                         draggable={!entry.isVirtual}
                         onDragStart={() => onEntryDragStart(entry)}
-                        onClick={(event) => onEntrySelect(virtualRow.index, entry, event.metaKey || event.ctrlKey)}
+                        onClick={(event) => onEntrySelect(
+                          virtualRow.index,
+                          entry,
+                          event.shiftKey ? 'range' : event.metaKey || event.ctrlKey ? 'additive' : 'replace',
+                        )}
                         onDoubleClick={() => onEntryOpen(entry)}
                         onFocus={() => onStateChange({ focusedIndex: virtualRow.index })}
                       >
@@ -1386,6 +1637,7 @@ function FilePanel({
       <footer className="panel-status">
         <span>{summary.files} files, {summary.dirs} dirs</span>
         <span>{panel.selectedPaths.length} selected</span>
+        {panel.filter ? <span className="panel-filter-status">Filter: {panel.filter}</span> : null}
         <span>{active ? 'ACTIVE' : 'TARGET'}</span>
       </footer>
     </section>
@@ -1439,10 +1691,25 @@ function EntryContextMenuContent({ entry, listing, selectedCount, onOpenAction }
   );
 }
 
-function PanelHeader({ panel, active, tabCount }: { panel: PanelNavigationState; active: boolean; tabCount: number }) {
+function PanelHeader({
+  panel,
+  active,
+  tabCount,
+  onClearFilter,
+}: {
+  panel: PanelNavigationState;
+  active: boolean;
+  tabCount: number;
+  onClearFilter(): void;
+}) {
   return (
     <header className="panel-header">
       <span className="panel-path" title={panel.path}>· {shortenPath(panel.path)}</span>
+      {panel.filter ? (
+        <button type="button" className="filter-chip" aria-label={`Clear filter ${panel.filter}`} onClick={onClearFilter}>
+          FILTER {panel.filter} ×
+        </button>
+      ) : null}
       <span className="panel-tabs">tabs {tabCount}</span>
       <span className={`panel-marker ${active ? 'active' : ''}`}>{active ? 'ACTIVE' : 'PASSIVE'}</span>
       {panel.loading ? <span className="panel-loading">LOADING</span> : null}
@@ -1457,6 +1724,7 @@ function PathControls({
   onNavigateUp,
   onRefresh,
   onGotoPath,
+  onRestoreFocus,
 }: {
   panel: PanelNavigationState;
   onNavigateBack(): void;
@@ -1464,13 +1732,19 @@ function PathControls({
   onNavigateUp(): void;
   onRefresh(): void;
   onGotoPath(): void;
+  onRestoreFocus(): void;
 }) {
+  const runNavigation = (callback: () => void) => {
+    callback();
+    window.requestAnimationFrame(() => onRestoreFocus());
+  };
+
   return (
     <div className="path-controls" aria-label={`${panel.listing.panelId} navigation controls`}>
-      <button type="button" aria-label="Back" disabled={!panelCanGoBack(panel)} onClick={onNavigateBack}>◀</button>
-      <button type="button" aria-label="Forward" disabled={!panelCanGoForward(panel)} onClick={onNavigateForward}>▶</button>
-      <button type="button" aria-label="Up" onClick={onNavigateUp}>↑</button>
-      <button type="button" aria-label="Refresh" onClick={onRefresh}>⟳</button>
+      <button type="button" aria-label="Back" disabled={!panelCanGoBack(panel)} onClick={() => runNavigation(onNavigateBack)}>◀</button>
+      <button type="button" aria-label="Forward" disabled={!panelCanGoForward(panel)} onClick={() => runNavigation(onNavigateForward)}>▶</button>
+      <button type="button" aria-label="Up" onClick={() => runNavigation(onNavigateUp)}>↑</button>
+      <button type="button" aria-label="Refresh" onClick={() => runNavigation(onRefresh)}>⟳</button>
       <span className="path-input" title={panel.path}>{panel.path}</span>
       <button type="button" aria-label="Go to path" onClick={onGotoPath}>⌘</button>
     </div>
@@ -1481,22 +1755,42 @@ function BottomStatusStrip({
   listing,
   activePanel,
   selectedCount,
+  selectedBytes,
   message,
+  keyboardLanguage,
+  filter,
 }: {
   listing: DirectoryListing;
   activePanel: PanelId;
   selectedCount: number;
+  selectedBytes: number;
   message: string | null;
+  keyboardLanguage: 'KO' | 'EN';
+  filter: string | null;
 }) {
   const summary = summarizeEntries(listing.entries);
   return (
     <footer className="bottom-status" aria-label="active panel status">
       <span>{summary.files} files, {summary.dirs} dirs</span>
-      <span>{selectedCount} selected</span>
+      <span>{selectedCount} selected{selectedBytes ? ` · ${formatBytes(selectedBytes)}` : ''}</span>
+      {filter ? <span className="status-filter">Filter: {filter}</span> : null}
       <span>{activePanel.toUpperCase()}</span>
       {message ? <span className="status-message" aria-live="polite">{message}</span> : null}
-      <span className="status-language">[KO]</span>
+      <span className="status-language">[{keyboardLanguage}]</span>
     </footer>
+  );
+}
+
+function HighlightedEntryName({ name, filter }: { name: string; filter: string | null }) {
+  const segments = filterMatchSegments(name, filter);
+  return (
+    <>
+      {segments.map((segment, index) => segment.matched ? (
+        <mark className="filter-match" key={`${segment.text}-${index}`}>{segment.text}</mark>
+      ) : (
+        <span key={`${segment.text}-${index}`}>{segment.text}</span>
+      ))}
+    </>
   );
 }
 
@@ -1515,76 +1809,6 @@ function HotkeyStrip() {
   );
 }
 
-function ShortcutHelpDialog({ onClose }: { onClose(): void }) {
-  const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('shortcut-help');
-  return (
-    <div className="filter-dialog shortcut-help-dialog" role="dialog" aria-label="keyboard shortcuts" {...keyboardBoundaryProps}>
-      <div className="filter-form">
-        <h2>Keyboard Shortcuts</h2>
-        <div className="shortcut-help-list" role="list">
-          {ACTIONS.filter((action) => action.shortcutLabel || action.keyboardBindings?.length).map((action) => (
-            <div className="shortcut-help-row" role="listitem" key={action.id}>
-              <kbd>{shortcutLabelForAction(action)}</kbd>
-              <span>{labelForAction(action)}</span>
-              <code>{action.id}</code>
-            </div>
-          ))}
-        </div>
-        <div className="filter-actions">
-          <button type="button" onClick={onClose}>닫기</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-
-function FilterPrompt({ panel, onApply, onCancel }: {
-  panel: PanelNavigationState;
-  onApply(filterValue: string): void;
-  onCancel(): void;
-}) {
-  const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('filter-prompt');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState(panel.filter ?? '');
-
-  useEffect(() => {
-    inputRef.current?.focus({ preventScroll: true });
-  }, []);
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onApply(value);
-  };
-
-  return (
-    <div className="filter-dialog" role="dialog" aria-label="filter entries" {...keyboardBoundaryProps}>
-      <form className="filter-form" onSubmit={handleSubmit}>
-        <label>
-          <span>Filter · {panel.path}</span>
-          <input
-            ref={inputRef}
-            aria-label="Filter pattern"
-            value={value}
-            onChange={(event) => setValue(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                onCancel();
-              }
-            }}
-          />
-        </label>
-        <div className="filter-actions">
-          <button type="submit">Apply filter</button>
-          {panel.filter ? <button type="button" onClick={() => onApply('')}>Clear filter</button> : null}
-          <button type="button" onClick={onCancel}>Cancel</button>
-        </div>
-      </form>
-    </div>
-  );
-}
 
 export const contextMenuActions = (entry: FileEntry, context: ActionContext) => {
   const actions = entry.isVirtual
@@ -1619,6 +1843,146 @@ const shortenPath = (path: string) => {
 const oppositePanelOf = (panelId: PanelId): PanelId => (panelId === 'left' ? 'right' : 'left');
 
 const rowDomId = (panelId: PanelId, index: number) => `commander-row-${panelId}-${index}`;
+
+const selectedPathsInRange = (entries: readonly FileEntry[], anchorIndex: number, focusIndex: number) => {
+  const start = Math.max(0, Math.min(anchorIndex, focusIndex));
+  const end = Math.min(entries.length - 1, Math.max(anchorIndex, focusIndex));
+  return entries
+    .slice(start, end + 1)
+    .filter((entry) => !entry.isVirtual)
+    .map((entry) => entry.path);
+};
+
+const filterMatchSegments = (name: string, filter: string | null): Array<{ text: string; matched: boolean }> => {
+  const pattern = filter?.trim();
+  if (!pattern) {
+    return [{ text: name, matched: false }];
+  }
+  const matchStart = name.toLowerCase().indexOf(pattern.toLowerCase());
+  if (matchStart < 0) {
+    return [{ text: name, matched: false }];
+  }
+  const matchEnd = matchStart + pattern.length;
+  return [
+    { text: name.slice(0, matchStart), matched: false },
+    { text: name.slice(matchStart, matchEnd), matched: true },
+    { text: name.slice(matchEnd), matched: false },
+  ].filter((segment) => segment.text.length > 0);
+};
+
+const uniqueNavigationItems = (items: readonly NavigationListItem[]) => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.path)) {
+      return false;
+    }
+    seen.add(item.path);
+    return true;
+  });
+};
+
+const navigationItemsFromLocations = (locations: LocationList, settings: Settings): NavigationListItem[] =>
+  // The palette dedupes by path because navigation target identity matters more
+  // than source provenance here; labels from earlier, higher-signal groups win.
+  uniqueNavigationItems([
+    { id: 'home', label: 'Home', path: locations.home, group: 'location' },
+    ...locations.roots.map((path, index) => ({
+      id: `root-${index}-${path}`,
+      label: `Root · ${shortenPath(path)}`,
+      path,
+      group: 'root',
+    })),
+    ...locations.recent.map((path, index) => ({
+      id: `recent-${index}-${path}`,
+      label: `Recent · ${shortenPath(path)}`,
+      path,
+      group: 'recent',
+    })),
+    ...locations.bookmarks.map((bookmark) => ({
+      id: `location-bookmark-${bookmark.id}`,
+      label: bookmark.label,
+      path: bookmark.path,
+      group: 'location bookmark',
+    })),
+    ...settings.bookmarks.map((bookmark) => ({
+      id: `settings-bookmark-${bookmark.id}`,
+      label: bookmark.label,
+      path: bookmark.path,
+      group: 'bookmark',
+    })),
+  ]);
+
+const sumEntryBytes = (entries: readonly FileEntry[]) =>
+  entries.reduce((total, entry) => total + (entry.kind === 'directory' ? 0 : entry.sizeBytes ?? 0), 0);
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+};
+
+const useLocalClock = () => {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+};
+
+const formatLocalClock = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+};
+
+const detectKeyboardLanguage = (value: string): 'KO' | 'EN' | null => {
+  if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(value)) {
+    return 'KO';
+  }
+  if (/[A-Za-z]/.test(value)) {
+    return 'EN';
+  }
+  return null;
+};
+
+const handleZoomKey = (
+  event: KeyboardEvent,
+  handleZoom: (command: ZoomCommand) => void,
+) => {
+  if (!(event.metaKey || event.ctrlKey)) {
+    return false;
+  }
+  if (event.key === '=' || event.key === '+') {
+    event.preventDefault();
+    event.stopPropagation();
+    handleZoom('in');
+    return true;
+  }
+  if (event.key === '-') {
+    event.preventDefault();
+    event.stopPropagation();
+    handleZoom('out');
+    return true;
+  }
+  if (event.key === '0') {
+    event.preventDefault();
+    event.stopPropagation();
+    handleZoom('reset');
+    return true;
+  }
+  return false;
+};
 
 const atomicExecutorForAction = (
   actionId: ActionId,
@@ -1774,6 +2138,7 @@ const mergeSettings = (current: Settings, patch: Partial<Settings>): Settings =>
   ...patch,
   external: patch.external ? { ...current.external, ...patch.external } : current.external,
   layout: patch.layout ? { ...current.layout, ...patch.layout } : current.layout,
+  view: patch.view ? { ...current.view, ...patch.view } : current.view,
 });
 
 const normalizeSettings = (value: unknown): Settings => {
@@ -1794,24 +2159,64 @@ const normalizeSettings = (value: unknown): Settings => {
       ...DEFAULT_SETTINGS.layout,
       ...(candidate.layout ?? {}),
     },
+    view: {
+      ...DEFAULT_SETTINGS.view,
+      ...(candidate.view ?? {}),
+      zoomStep: clampNumber(
+        typeof candidate.view?.zoomStep === 'number' ? candidate.view.zoomStep : DEFAULT_SETTINGS.view.zoomStep,
+        MIN_ZOOM_STEP,
+        MAX_ZOOM_STEP,
+      ),
+      density: candidate.view?.density === 'comfortable' ? 'comfortable' : 'compact',
+    },
   };
 };
 
+const viewMetricsForSettings = (view: Settings['view']) => {
+  const densityMultiplier = view.density === 'comfortable' ? 1.08 : 1;
+  const scale = Number((Math.pow(1.08, clampNumber(view.zoomStep, MIN_ZOOM_STEP, MAX_ZOOM_STEP)) * densityMultiplier).toFixed(3));
+  return {
+    scale,
+    fontSizePx: Math.round(BASE_FONT_SIZE_PX * scale),
+    rowHeightPx: Math.round(BASE_ROW_HEIGHT_PX * scale),
+    topMenuHeightPx: Math.round(31 * scale),
+    panelHeaderHeightPx: Math.round(25 * scale),
+    pathControlHeightPx: Math.round(30 * scale),
+    statusHeightPx: Math.round(27 * scale),
+    hotkeyStripHeightPx: Math.round(29 * scale),
+    cellPaddingXPx: Math.round(10 * scale),
+    controlGapPx: Math.max(3, Math.round(4 * scale)),
+  };
+};
+
+const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
 interface MovementHandlers {
-  moveFocusedEntry(delta: number): void;
-  focusBoundaryEntry(boundary: 'first' | 'last'): void;
+  moveFocusedEntry(delta: number, extendSelection?: boolean): void;
+  focusBoundaryEntry(boundary: 'first' | 'last', extendSelection?: boolean): void;
 }
 
 const handleMovementKey = (event: KeyboardEvent, handlers: MovementHandlers) => {
+  const extendSelection = event.shiftKey;
   const keyHandlers: Partial<Record<string, () => void>> = {
-    ArrowUp: () => handlers.moveFocusedEntry(-1),
-    ArrowDown: () => handlers.moveFocusedEntry(1),
-    PageUp: () => handlers.moveFocusedEntry(-KEYBOARD_PAGE_STEP),
-    PageDown: () => handlers.moveFocusedEntry(KEYBOARD_PAGE_STEP),
-    Home: () => handlers.focusBoundaryEntry('first'),
-    End: () => handlers.focusBoundaryEntry('last'),
+    ArrowUp: () => handlers.moveFocusedEntry(-1, extendSelection),
+    ArrowDown: () => handlers.moveFocusedEntry(1, extendSelection),
+    PageUp: () => handlers.moveFocusedEntry(-KEYBOARD_PAGE_STEP, extendSelection),
+    PageDown: () => handlers.moveFocusedEntry(KEYBOARD_PAGE_STEP, extendSelection),
+    Home: () => handlers.focusBoundaryEntry('first', extendSelection),
+    End: () => handlers.focusBoundaryEntry('last', extendSelection),
   };
-  const handler = keyHandlers[event.key];
+  const physicalKey = physicalLetterKey(event) ?? event.key.toLowerCase();
+  const vimLikeKey = event.ctrlKey || event.metaKey || event.altKey ? null : physicalKey;
+  const handler = keyHandlers[event.key]
+    ?? (vimLikeKey === 'j' ? () => handlers.moveFocusedEntry(1, false) : undefined)
+    ?? (vimLikeKey === 'k' ? () => handlers.moveFocusedEntry(-1, false) : undefined)
+    ?? ((event.ctrlKey || event.metaKey) && physicalKey === 'u'
+      ? () => handlers.moveFocusedEntry(-KEYBOARD_PAGE_STEP, extendSelection)
+      : undefined)
+    ?? ((event.ctrlKey || event.metaKey) && physicalKey === 'd'
+      ? () => handlers.moveFocusedEntry(KEYBOARD_PAGE_STEP, extendSelection)
+      : undefined);
   if (!handler) {
     return false;
   }
@@ -1821,3 +2226,6 @@ const handleMovementKey = (event: KeyboardEvent, handlers: MovementHandlers) => 
   handler();
   return true;
 };
+
+const physicalLetterKey = (event: KeyboardEvent) =>
+  /^Key[A-Z]$/.test(event.code) ? event.code.slice(3).toLowerCase() : null;

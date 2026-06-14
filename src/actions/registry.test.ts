@@ -7,6 +7,7 @@ import {
   isActionAvailable,
   keyboardBindingCollisions,
   labelForAction,
+  menuRootLabelFromRegistry,
   matchKeyboardShortcut,
   menuRootsFromRegistry,
   shortcutLabelForAction,
@@ -32,6 +33,9 @@ const requiredActionIds: ActionId[] = [
   'layout.ratio70Right',
   'nav.back',
   'nav.forward',
+  'nav.top',
+  'nav.bottom',
+  'tab.list',
   'history.list',
   'bookmark.add',
   'bookmark.list',
@@ -73,6 +77,16 @@ describe('action registry', () => {
 
   it('derives menu roots and display labels from the registry', () => {
     expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Tools', 'Settings', 'Help']);
+    expect(menuRootsFromRegistry().map(menuRootLabelFromRegistry)).toEqual([
+      'File(F)',
+      'Edit(E)',
+      'View(V)',
+      'Go(G)',
+      'Archive(A)',
+      'Tools(T)',
+      'Settings(S)',
+      'Help(H)',
+    ]);
     const copy = ACTION_BY_ID.get('file.copy');
     if (!copy) {
       throw new Error('file.copy action is required');
@@ -90,6 +104,8 @@ describe('action registry', () => {
       activePanel: 'left',
       focusedEntryKind: 'file',
       selectedCount: 1,
+      hasConcreteFocus: true,
+      effectiveTargetCount: 1,
       hasOppositePanel: true,
       shellCommandEnabled: false,
       operationBusy: false,
@@ -105,8 +121,11 @@ describe('action registry', () => {
     expect(actionForKeyboardShortcut(key('h'))?.id).toBe('nav.up');
     expect(actionForKeyboardShortcut(key('y'))?.id).toBe('file.copy');
     expect(actionForKeyboardShortcut(key('F5'))?.id).toBe('file.copy');
+    expect(actionForKeyboardShortcut(key('ㅛ', { code: 'KeyY' }))?.id).toBe('file.copy');
     expect(actionForKeyboardShortcut(key('D', { shiftKey: true }))?.id).toBe('file.deletePermanent');
+    expect(actionForKeyboardShortcut(key('ㅇ', { code: 'KeyD', shiftKey: true }))?.id).toBe('file.deletePermanent');
     expect(actionForKeyboardShortcut(key('Delete', { shiftKey: true }))?.id).toBe('file.deletePermanent');
+    expect(actionForKeyboardShortcut(key('ㅎ', { code: 'KeyG', shiftKey: true }))?.id).toBe('nav.bottom');
     expect(actionForKeyboardShortcut(key('a', { ctrlKey: true }))?.id).toBe('selection.all');
     expect(ACTION_BY_ID.get('archive.preview')?.shortcutLabel).toBe('Enter on archive');
     expect(ACTION_BY_ID.get('archive.preview')?.keyboardBindings).toBeUndefined();
@@ -116,6 +135,7 @@ describe('action registry', () => {
     const pendingGo = matchKeyboardShortcut(key('g'));
     expect(pendingGo.status).toBe('pending');
     expect(actionForKeyboardShortcut(key('p'), pendingGo.sequence)?.id).toBe('nav.gotoPath');
+    expect(actionForKeyboardShortcut(key('g'), pendingGo.sequence)?.id).toBe('nav.top');
 
     const pendingSort = matchKeyboardShortcut(key('s'));
     expect(pendingSort.status).toBe('pending');
@@ -147,15 +167,17 @@ describe('action registry', () => {
 
   it('keeps hotkey strip shortcut formatting behind a registry helper', () => {
     expect(shortcutLabelForAction(ACTION_BY_ID.get('file.copy')!)).toBe('y');
+    expect(shortcutLabelForAction(ACTION_BY_ID.get('filter.start')!)).toBe('/');
     expect(shortcutLabelForAction(ACTION_BY_ID.get('archive.preview')!)).toBe('Enter on archive');
   });
 });
 
 const key = (
   value: string,
-  modifiers: Partial<Pick<KeyboardEvent, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>> = {},
+  modifiers: Partial<Pick<KeyboardEvent, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'code'>> = {},
 ) => ({
   key: value,
+  code: modifiers.code ?? '',
   altKey: modifiers.altKey ?? false,
   ctrlKey: modifiers.ctrlKey ?? false,
   metaKey: modifiers.metaKey ?? false,

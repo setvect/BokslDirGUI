@@ -1,4 +1,4 @@
-import type { AppError, DirectoryListing, FileEntry, PanelId, SortSpec } from '../domain/types';
+import type { AppError, DirectoryListing, FileEntry, LocationList, PanelId, SortSpec } from '../domain/types';
 import { type ListDirInput, tauriClient, type TauriResult } from '../tauri/client';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { createDirectoryListing, DEFAULT_SORT, PANEL_IDS, parentPathOf } from './panelState';
@@ -11,6 +11,7 @@ export interface PanelDataSource {
   loadInitialListings(): Promise<PanelInitialLoadResult>;
   listDir(input: ListDirInput): Promise<TauriResult<DirectoryListing>>;
   gotoPath(input: { panelId: PanelId; path: string }): Promise<TauriResult<DirectoryListing>>;
+  listLocations(): Promise<TauriResult<LocationList>>;
 }
 
 type TauriNavigationClient = Pick<typeof tauriClient, 'listDir' | 'gotoPath' | 'listLocations'>;
@@ -49,6 +50,7 @@ export const createTauriPanelDataSource = (
   },
   listDir: (input) => client.listDir(input),
   gotoPath: (input) => client.gotoPath(input),
+  listLocations: () => client.listLocations(),
 });
 
 export const createPreviewPanelDataSource = (
@@ -80,6 +82,12 @@ export const createFixturePanelDataSource = (
     loadInitialListings: async () => okInitialListings(initialListings),
     listDir: async (input) => ok(listingFor(input.panelId, input.path, input.sort, input.filter)),
     gotoPath: async (input) => ok(listingFor(input.panelId, input.path, DEFAULT_SORT, null)),
+    listLocations: async () => ok({
+      home: initialListings.right.path,
+      roots: [initialListings.left.path, initialListings.right.path],
+      recent: [initialListings.right.path, initialListings.left.path],
+      bookmarks: [],
+    }),
   };
 };
 

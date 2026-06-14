@@ -172,4 +172,8 @@ export interface Settings {
     singlePanel: boolean;
     ratio: '50:50' | '70:30' | '30:70';
   };
+  view: {
+    zoomStep: number;
+    density: 'compact' | 'comfortable';
+  };
 }

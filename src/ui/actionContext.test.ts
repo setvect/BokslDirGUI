@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACTION_BY_ID, isActionAvailable, menuRootsFromRegistry } from '../actions/registry';
-import { createActionContext, filterEnabledActions } from './actionContext';
+import { createActionContext, filterEnabledActions, resolveActionTargets } from './actionContext';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { contextMenuActions } from './CommanderShell';
 
@@ -17,8 +17,42 @@ describe('action context helpers', () => {
     });
 
     expect(virtualParent.isVirtual).toBe(true);
-    expect(context.selectedCount).toBe(0);
+    expect(context.hasConcreteFocus).toBe(false);
     expect(contextMenuActions(virtualParent, context).map((action) => action.id)).toEqual(['nav.enter']);
+    expect(isActionAvailable(ACTION_BY_ID.get('file.rename')!, context)).toBe(false);
+    expect(isActionAvailable(ACTION_BY_ID.get('file.properties')!, context)).toBe(false);
+    expect(isActionAvailable(ACTION_BY_ID.get('external.reveal')!, context)).toBe(false);
+  });
+
+  it('treats a focused concrete row as the effective file-operation target without explicit selection', () => {
+    const focusedIndex = SAMPLE_LISTINGS.right.entries.findIndex((candidate) => !candidate.isVirtual);
+    const entry = SAMPLE_LISTINGS.right.entries[focusedIndex];
+    const copyAction = ACTION_BY_ID.get('file.copy');
+    const archiveCreateAction = ACTION_BY_ID.get('archive.create');
+    if (!entry || !copyAction || !archiveCreateAction) {
+      throw new Error('fixture entry and registry actions are required');
+    }
+    const targets = resolveActionTargets({
+      focusedIndex,
+      selectedPaths: [],
+      listing: SAMPLE_LISTINGS.right,
+    });
+
+    const context = createActionContext({
+      activePanel: 'right',
+      focusedEntry: targets.focusedEntry,
+      selectedCount: targets.selectedCount,
+      hasConcreteFocus: targets.hasConcreteFocus,
+      effectiveTargetCount: targets.effectiveTargetCount,
+      hasOppositePanel: true,
+      shellCommandEnabled: false,
+      operationBusy: false,
+    });
+
+    expect(targets.effectiveSources).toEqual([entry]);
+    expect(context.effectiveTargetCount).toBe(1);
+    expect(isActionAvailable(copyAction, context)).toBe(true);
+    expect(isActionAvailable(archiveCreateAction, context)).toBe(true);
   });
 
   it('uses the same enablement predicate for menu and context actions', () => {

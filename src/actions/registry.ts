@@ -9,6 +9,8 @@ export interface ActionContext {
   activePanel: PanelId;
   focusedEntryKind: ContextScope | null;
   selectedCount: number;
+  hasConcreteFocus: boolean;
+  effectiveTargetCount: number;
   hasOppositePanel: boolean;
   shellCommandEnabled: boolean;
   operationBusy: boolean;
@@ -33,7 +35,8 @@ export interface AppAction {
 
 const always = () => true;
 const hasFocus = (context: ActionContext) => context.focusedEntryKind !== null;
-const hasSelection = (context: ActionContext) => context.selectedCount > 0;
+const hasConcreteFocus = (context: ActionContext) => context.hasConcreteFocus;
+const hasEffectiveTarget = (context: ActionContext) => context.effectiveTargetCount > 0;
 const canMutate = (context: ActionContext) => !context.operationBusy;
 
 type ActionDefinition = Omit<AppAction, 'labelKey' | 'descriptionKey' | 'displayLabel' | 'hotkeyLabel' | 'isEnabled'> & {
@@ -60,23 +63,26 @@ export const ACTIONS = [
   action({ id: 'nav.refresh', category: 'navigation', shortcutLabel: 'Ctrl+R', keyboardBindings: ['Ctrl+R'], menuPath: ['View', 'Refresh'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.gotoPath', category: 'navigation', shortcutLabel: 'gp', keyboardBindings: ['g p'], menuPath: ['Go', 'Path'], dangerLevel: 'safe', command: COMMANDS.gotoPath, runPath: 'goto_path' }),
   action({ id: 'nav.locations', category: 'navigation', shortcutLabel: 'gm', keyboardBindings: ['g m'], menuPath: ['Go', 'Locations'], dangerLevel: 'safe', command: COMMANDS.listLocations, runPath: 'list_locations' }),
+  action({ id: 'nav.top', category: 'navigation', displayLabel: 'Go Top', shortcutLabel: 'gg', keyboardBindings: ['g g'], menuPath: ['Go', 'Top'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'nav.bottom', category: 'navigation', displayLabel: 'Go Bottom', shortcutLabel: 'G', keyboardBindings: ['Shift+G'], menuPath: ['Go', 'Bottom'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'tab.new', category: 'panel', shortcutLabel: 'tn', keyboardBindings: ['t n'], menuPath: ['View', 'New Tab'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'tab.close', category: 'panel', shortcutLabel: 'tx', keyboardBindings: ['t x'], menuPath: ['View', 'Close Tab'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'tab.list', category: 'panel', shortcutLabel: 'tt', keyboardBindings: ['t t'], menuPath: ['View', 'Tab List'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.toggle', category: 'selection', hotkeyLabel: 'Sel', shortcutLabel: 'Space', keyboardBindings: ['Space'], menuPath: ['Edit', 'Select'], dangerLevel: 'none', runPath: 'UI state', isEnabled: hasFocus }),
   action({ id: 'selection.all', category: 'selection', hotkeyLabel: 'SelAll', shortcutLabel: 'Ctrl+A', keyboardBindings: ['Ctrl+A'], menuPath: ['Edit', 'Select All'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'file.copy', category: 'file', displayLabel: 'Copy', shortcutLabel: 'y/F5', keyboardBindings: ['y', 'F5'], menuPath: ['File', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.startCopy, runPath: 'start_copy', isEnabled: (c) => hasSelection(c) && c.hasOppositePanel && canMutate(c) }),
-  action({ id: 'file.move', category: 'file', displayLabel: 'Move', shortcutLabel: 'x/F6', keyboardBindings: ['x', 'F6'], menuPath: ['File', 'Move'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move', isEnabled: (c) => hasSelection(c) && c.hasOppositePanel && canMutate(c) }),
-  action({ id: 'file.trash', category: 'file', hotkeyLabel: 'Del', shortcutLabel: 'd', keyboardBindings: ['d'], menuPath: ['File', 'Move to Trash'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startDelete, runPath: 'start_delete trash', isEnabled: (c) => hasSelection(c) && canMutate(c) }),
-  action({ id: 'file.deletePermanent', category: 'file', displayLabel: 'Permanent Delete', hotkeyLabel: 'PermDel', shortcutLabel: 'D/Shift+Delete', keyboardBindings: ['Shift+D', 'Shift+Delete'], menuPath: ['File', 'Delete Permanently'], contextScopes: ['selection'], dangerLevel: 'irreversible', command: COMMANDS.startDelete, runPath: 'start_delete permanent', isEnabled: (c) => hasSelection(c) && canMutate(c) }),
+  action({ id: 'file.copy', category: 'file', displayLabel: 'Copy', shortcutLabel: 'y/F5', keyboardBindings: ['y', 'F5'], menuPath: ['File', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.startCopy, runPath: 'start_copy', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutate(c) }),
+  action({ id: 'file.move', category: 'file', displayLabel: 'Move', shortcutLabel: 'x/F6', keyboardBindings: ['x', 'F6'], menuPath: ['File', 'Move'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutate(c) }),
+  action({ id: 'file.trash', category: 'file', hotkeyLabel: 'Del', shortcutLabel: 'd', keyboardBindings: ['d'], menuPath: ['File', 'Move to Trash'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startDelete, runPath: 'start_delete trash', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
+  action({ id: 'file.deletePermanent', category: 'file', displayLabel: 'Permanent Delete', hotkeyLabel: 'PermDel', shortcutLabel: 'D/Shift+Delete', keyboardBindings: ['Shift+D', 'Shift+Delete'], menuPath: ['File', 'Delete Permanently'], contextScopes: ['selection'], dangerLevel: 'irreversible', command: COMMANDS.startDelete, runPath: 'start_delete permanent', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'file.mkdir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutate }),
-  action({ id: 'file.rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => c.focusedEntryKind !== null && c.selectedCount <= 1 && canMutate(c) }),
-  action({ id: 'file.properties', category: 'file', displayLabel: 'Properties', hotkeyLabel: 'Info', shortcutLabel: 'i', keyboardBindings: ['i'], menuPath: ['File', 'Properties'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.getMetadata, runPath: 'get_metadata', isEnabled: hasFocus }),
+  action({ id: 'file.rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutate(c) }),
+  action({ id: 'file.properties', category: 'file', displayLabel: 'Properties', hotkeyLabel: 'Info', shortcutLabel: 'i', keyboardBindings: ['i'], menuPath: ['File', 'Properties'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.getMetadata, runPath: 'get_metadata', isEnabled: hasConcreteFocus }),
   action({ id: 'archive.preview', category: 'archive', displayLabel: 'Preview', shortcutLabel: 'Enter on archive', menuPath: ['Archive', 'Preview'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list', isEnabled: hasFocus }),
   action({ id: 'archive.list', category: 'archive', shortcutLabel: 'Enter on archive', menuPath: ['Archive', 'Open Archive'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list', isEnabled: hasFocus }),
   action({ id: 'archive.extract', category: 'archive', displayLabel: 'Extract', shortcutLabel: 'zx', keyboardBindings: ['z x'], menuPath: ['Archive', 'Extract'], contextScopes: ['archive'], dangerLevel: 'destructive', command: COMMANDS.archiveExtract, runPath: 'archive_extract', isEnabled: (c) => hasFocus(c) && canMutate(c) }),
-  action({ id: 'archive.create', category: 'archive', displayLabel: 'Create Archive', hotkeyLabel: 'Archive', shortcutLabel: 'zc', keyboardBindings: ['z c'], menuPath: ['Archive', 'Create'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.archiveCreate, runPath: 'archive_create', isEnabled: (c) => hasSelection(c) && canMutate(c) }),
+  action({ id: 'archive.create', category: 'archive', displayLabel: 'Create Archive', hotkeyLabel: 'Archive', shortcutLabel: 'zc', keyboardBindings: ['z c'], menuPath: ['Archive', 'Create'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.archiveCreate, runPath: 'archive_create', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'external.openDefault', category: 'file', displayLabel: 'Open Default', shortcutLabel: 'o', keyboardBindings: ['o'], menuPath: ['File', 'Open Default'], contextScopes: ['file'], dangerLevel: 'safe', command: COMMANDS.openDefault, runPath: 'open_default', isEnabled: hasFocus }),
-  action({ id: 'external.reveal', category: 'file', displayLabel: 'Reveal', menuPath: ['File', 'Reveal'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.revealInManager, runPath: 'reveal_in_manager', isEnabled: hasFocus }),
+  action({ id: 'external.reveal', category: 'file', displayLabel: 'Reveal', menuPath: ['File', 'Reveal'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.revealInManager, runPath: 'reveal_in_manager', isEnabled: hasConcreteFocus }),
   action({ id: 'external.openEditor', category: 'file', displayLabel: 'Open Editor', shortcutLabel: 'e', keyboardBindings: ['e'], menuPath: ['File', 'Open in External Editor'], contextScopes: ['file'], dangerLevel: 'safe', command: COMMANDS.openExternalEditor, runPath: 'open_external_editor', isEnabled: hasFocus }),
   action({ id: 'view.sortName', category: 'view', shortcutLabel: 'sn', keyboardBindings: ['s n'], menuPath: ['View', 'Sort', 'Name'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortSize', category: 'view', shortcutLabel: 'ss', keyboardBindings: ['s s'], menuPath: ['View', 'Sort', 'Size'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
@@ -88,7 +94,7 @@ export const ACTIONS = [
   action({ id: 'view.toggleHidden', category: 'view', shortcutLabel: '.', keyboardBindings: ['.'], menuPath: ['View', 'Hidden Files'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'selection.invert', category: 'selection', hotkeyLabel: 'InvSel', shortcutLabel: 'v', keyboardBindings: ['v'], menuPath: ['Edit', 'Invert Selection'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.clear', category: 'selection', hotkeyLabel: 'Desel', shortcutLabel: 'u', keyboardBindings: ['u'], menuPath: ['Edit', 'Clear Selection'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'layout.toggleSingleDual', category: 'view', menuPath: ['View', 'Single-Dual Panel'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'layout.toggleSingleDual', category: 'view', shortcutLabel: 'Ctrl+W', keyboardBindings: ['Ctrl+W'], menuPath: ['View', 'Single-Dual Panel'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'layout.ratio50', category: 'view', menuPath: ['View', 'Panel Ratio', '50:50'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'layout.ratio70Left', category: 'view', menuPath: ['View', 'Panel Ratio', '70:30'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'layout.ratio70Right', category: 'view', menuPath: ['View', 'Panel Ratio', '30:70'], dangerLevel: 'none', runPath: 'UI state' }),
@@ -136,13 +142,25 @@ const HOTKEY_STRIP_ACTION_IDS: readonly ActionId[] = [
 
 export const hotkeyStripActionsFromRegistry = () => HOTKEY_STRIP_ACTION_IDS.map(getAction);
 
-const MENU_ROOT_ORDER = ['File', 'Edit', 'View', 'Go', 'Archive', 'Tools', 'Settings', 'Help'];
+const MENU_ROOT_DEFINITIONS = [
+  { root: 'File', accelerator: 'F' },
+  { root: 'Edit', accelerator: 'E' },
+  { root: 'View', accelerator: 'V' },
+  { root: 'Go', accelerator: 'G' },
+  { root: 'Archive', accelerator: 'A' },
+  { root: 'Tools', accelerator: 'T' },
+  { root: 'Settings', accelerator: 'S' },
+  { root: 'Help', accelerator: 'H' },
+] as const;
+const MENU_ROOT_ORDER = MENU_ROOT_DEFINITIONS.map(({ root }) => root);
+const MENU_ROOT_ORDER_SET = new Set<string>(MENU_ROOT_ORDER);
+const MENU_ROOT_ACCELERATORS: ReadonlyMap<string, string> = new Map(MENU_ROOT_DEFINITIONS.map(({ root, accelerator }) => [root, accelerator]));
 
 export const menuRootsFromRegistry = () => {
   const roots = new Set(ACTIONS.map((item) => item.menuPath?.[0]).filter((root): root is string => Boolean(root)));
   return [
     ...MENU_ROOT_ORDER.filter((root) => roots.has(root)),
-    ...[...roots].filter((root) => !MENU_ROOT_ORDER.includes(root)),
+    ...[...roots].filter((root) => !MENU_ROOT_ORDER_SET.has(root)),
   ];
 };
 
@@ -152,7 +170,7 @@ export const actionMatchesContextScope = (action: AppAction, context: ActionCont
   }
   return action.contextScopes.some((scope) => {
     if (scope === 'selection') {
-      return context.selectedCount > 0;
+      return context.effectiveTargetCount > 0;
     }
     if (scope === 'blank') {
       return true;
@@ -169,12 +187,19 @@ export const labelForAction = (action: AppAction) => action.displayLabel;
 export const actionsForMenu = (menuRoot: string) =>
   ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot);
 
+export const menuRootLabelFromRegistry = (root: string) => {
+  const accelerator = MENU_ROOT_ACCELERATORS.get(root);
+  return accelerator ? `${root}(${accelerator})` : root;
+};
+
 export const shortcutLabelForAction = (action: AppAction) =>
-  action.shortcutLabel?.split('/')[0] ?? action.keyboardBindings?.[0]?.replace(/\s+/g, '') ?? '·';
+  action.shortcutLabel
+    ? (action.shortcutLabel === '/' ? '/' : action.shortcutLabel.split('/')[0])
+    : action.keyboardBindings?.[0]?.replace(/\s+/g, '') ?? '·';
 
 export type KeyboardShortcutEvent = Pick<
   KeyboardEvent,
-  'key' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'
+  'key' | 'code' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'
 >;
 
 export type KeyboardShortcutMatch =
@@ -250,13 +275,22 @@ const bindingToTokens = (binding: string) =>
   binding.split(/\s+/).map(normalizeBindingToken).filter(Boolean);
 
 const eventToBindingToken = (event: KeyboardShortcutEvent) => {
-  const key = normalizeEventKey(event.key);
+  const physicalKey = keyForPhysicalShortcut(event);
+  const key = normalizeEventKey(physicalKey);
   const modifiers = [
     event.altKey ? 'Alt' : null,
     event.ctrlKey || event.metaKey ? 'Ctrl' : null,
-    event.shiftKey && shouldKeepShiftModifier(event.key) ? 'Shift' : null,
+    event.shiftKey && shouldKeepShiftModifier(physicalKey) ? 'Shift' : null,
   ].filter(Boolean);
   return [...modifiers, key].join('+');
+};
+
+const keyForPhysicalShortcut = (event: KeyboardShortcutEvent) => {
+  const code = typeof event.code === 'string' ? event.code : '';
+  if (event.key.length === 1 && /^Key[A-Z]$/.test(code)) {
+    return code.slice(3);
+  }
+  return event.key;
 };
 
 const shouldKeepShiftModifier = (key: string) => key.length > 1 || /^[A-Z]$/.test(key);

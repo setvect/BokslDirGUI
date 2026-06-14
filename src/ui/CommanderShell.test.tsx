@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
@@ -148,15 +148,31 @@ describe('CommanderShell', () => {
     expect(fireEvent.keyDown(document, { key: ' ' })).toBe(false);
   });
 
-  it('toggles focused-row selection with Space', async () => {
+  it('toggles focused-row selection with Space and moves down like the TUI', async () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
 
-    expect(focusedRow(container)?.className).toContain('is-selected');
+    const originalFocusedRow = focusedRow(container);
+    expect(originalFocusedRow?.textContent).toContain('generic-array-6de08afde610f112');
+    expect(originalFocusedRow?.className).toContain('is-selected');
 
     await user.keyboard('{Space}');
 
-    expect(focusedRow(container)?.className).not.toContain('is-selected');
+    expect(originalFocusedRow?.className).not.toContain('is-selected');
+    expect(focusedRowText(container)).toContain('generic-array-7534a23a150ae5e7');
+  });
+
+  it('moves down from virtual parent rows without selecting them when Space is pressed', async () => {
+    const user = userEvent.setup();
+    const { container } = renderCommander();
+
+    await user.keyboard('gg');
+    expect(focusedRowText(container)).toContain('..');
+
+    await user.keyboard('{Space}');
+
+    expect(focusedRowText(container)).not.toContain('..');
+    expect(rowByText(container, '..')?.className).not.toContain('is-selected');
   });
 
   it('opens the focused entry with Enter using the commander action path', async () => {
@@ -232,6 +248,9 @@ describe('CommanderShell', () => {
     await user.click(screen.getByRole('button', { name: 'Apply filter' }));
 
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({ filter: 'generic' })));
+    expect(screen.getAllByText('Filter: generic').length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelector('.filter-chip')?.textContent).toContain('FILTER generic');
+    expect(document.querySelector('.filter-match')?.textContent?.toLowerCase()).toBe('generic');
 
     fireEvent.keyDown(document, { key: 'r', ctrlKey: true });
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({ filter: 'generic' })));
@@ -239,6 +258,36 @@ describe('CommanderShell', () => {
     await user.keyboard('/');
     await user.click(await screen.findByRole('button', { name: 'Clear filter' }));
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({ filter: null })));
+    expect(screen.queryByText('Filter: generic')).toBeNull();
+  });
+
+  it('keeps filter indicators in sync from panel state while listDir is pending', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const pending: Array<{
+      input: ListDirInput;
+      resolve(result: Awaited<ReturnType<PanelDataSource['listDir']>>): void;
+    }> = [];
+    vi.spyOn(dataSource, 'listDir').mockImplementation((input) => new Promise((resolve) => {
+      pending.push({ input, resolve });
+    }));
+    renderCommander(dataSource);
+
+    await user.keyboard('/');
+    await user.type(await screen.findByLabelText('Filter pattern'), 'generic');
+    await user.click(screen.getByRole('button', { name: 'Apply filter' }));
+
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(screen.getAllByText('Filter: generic').length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelector('.filter-chip')?.textContent).toContain('FILTER generic');
+
+    act(() => pending[0].resolve({
+      ok: true,
+      data: createDirectoryListing('right', SAMPLE_LISTINGS.right.path, [
+        testEntry(SAMPLE_LISTINGS.right.path, 'generic-match.txt'),
+      ], pending[0].input.sort, pending[0].input.filter, 14),
+    }));
+    await waitFor(() => expect(rowByText(document.body, 'generic-match.txt')).not.toBeNull());
   });
 
   it('passes sort, hidden, and refresh state through listDir', async () => {
@@ -309,6 +358,26 @@ describe('CommanderShell', () => {
 
     expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
     expect(screen.getByText('file.copy')).toBeTruthy();
+  });
+
+  it('uses the focused row as the file-operation source when nothing is explicitly selected', async () => {
+    const user = userEvent.setup();
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={{ left: [], right: [] }}
+      />,
+    );
+
+    await user.keyboard('y');
+
+    expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
+    const dialog = screen.getByText('Copy to opposite panel').closest('.operation-dialog');
+    if (!dialog) {
+      throw new Error('operation dialog is required');
+    }
+    expect(within(dialog as HTMLElement).getByText('generic-array-6de08afde610f112')).toBeTruthy();
   });
 
 
@@ -474,6 +543,7 @@ describe('CommanderShell', () => {
         external: { editorId: null, shellCommand: { enabled: false } },
         bookmarks: [],
         layout: { singlePanel: false, ratio: '50:50' as const },
+        view: { zoomStep: 0, density: 'compact' as const },
         ...patch,
       },
     }));
@@ -486,13 +556,13 @@ describe('CommanderShell', () => {
       }),
     }));
 
-    await user.click(screen.getByRole('button', { name: 'View' }));
+    await user.click(screen.getByRole('button', { name: 'View(V)' }));
     await user.click(await screen.findByText('Single-Dual Panel'));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
       patch: expect.objectContaining({ layout: expect.objectContaining({ singlePanel: true }) }),
     }));
 
-    await user.click(screen.getByRole('button', { name: 'Help' }));
+    await user.click(screen.getByRole('button', { name: 'Help(H)' }));
     await user.click(await screen.findByText('Shortcuts'));
     expect(await screen.findByText('Keyboard Shortcuts')).toBeTruthy();
     expect(screen.getByText('file.copy')).toBeTruthy();
@@ -531,7 +601,105 @@ describe('CommanderShell', () => {
 
     await user.keyboard('gp');
 
-    expect(screen.getByText(/Path · goto_path/)).toBeTruthy();
+    expect(await screen.findByLabelText('Path')).toBeTruthy();
+  });
+
+  it('supports TUI vim-style movement and range selection shortcuts', async () => {
+    const user = userEvent.setup();
+    const { container } = renderCommander();
+
+    expect(focusedRowText(container)).toContain('generic-array-6de08afde610f112');
+
+    await user.keyboard('j');
+    expect(focusedRowText(container)).toContain('generic-array-7534a23a150ae5e7');
+
+    await user.keyboard('k');
+    expect(focusedRowText(container)).toContain('generic-array-6de08afde610f112');
+
+    fireEvent.keyDown(document, { key: 'ㅓ', code: 'KeyJ' });
+    expect(focusedRowText(container)).toContain('generic-array-7534a23a150ae5e7');
+
+    fireEvent.keyDown(document, { key: 'ㅏ', code: 'KeyK' });
+    expect(focusedRowText(container)).toContain('generic-array-6de08afde610f112');
+
+    fireEvent.keyDown(document, { key: 'ㅕ', code: 'KeyU', ctrlKey: true });
+    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
+
+    fireEvent.keyDown(document, { key: 'ㅇ', code: 'KeyD', ctrlKey: true });
+    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-12');
+
+    fireEvent.keyDown(document, { key: 'ArrowDown', shiftKey: true });
+    expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length).toBeGreaterThanOrEqual(2);
+
+    await user.keyboard('gg');
+    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
+
+    fireEvent.keyDown(document, { key: 'G', shiftKey: true });
+    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-32');
+  });
+
+  it('opens path, location, tab, history, bookmark, help search, and about overlays', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+
+    await user.keyboard('gm');
+    expect(await screen.findByRole('dialog', { name: 'Locations' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+
+    await user.keyboard('tn');
+    await user.keyboard('tt');
+    const tabDialog = await screen.findByRole('dialog', { name: 'RIGHT Tabs' });
+    expect(within(tabDialog).getAllByText(SAMPLE_LISTINGS.right.path)).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+
+    await user.keyboard('th');
+    expect(await screen.findByRole('dialog', { name: 'RIGHT History' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+
+    await user.keyboard('tba');
+    await user.keyboard('tb');
+    expect(await screen.findByRole('dialog', { name: 'Bookmarks' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+
+    await user.click(screen.getByRole('button', { name: 'Help(H)' }));
+    await user.click(await screen.findByText('Search'));
+    expect(await screen.findByLabelText('Help search query')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+
+    await user.click(screen.getByRole('button', { name: 'Help(H)' }));
+    await user.click(await screen.findByText('About'));
+    expect(await screen.findByRole('dialog', { name: 'BokslDirGUI' })).toBeTruthy();
+  });
+
+  it('ignores stale async location palette results', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const pending: Array<(result: Awaited<ReturnType<PanelDataSource['listLocations']>>) => void> = [];
+    vi.spyOn(dataSource, 'listLocations').mockImplementation(() => new Promise((resolve) => {
+      pending.push(resolve);
+    }));
+    renderCommander(dataSource);
+
+    await user.keyboard('gm');
+    await waitFor(() => expect(pending).toHaveLength(1));
+
+    await user.keyboard('gm');
+    await waitFor(() => expect(pending).toHaveLength(2));
+
+    act(() => pending[0]({
+      ok: true,
+      data: { home: '/stale', roots: ['/stale-root'], recent: ['/stale-recent'], bookmarks: [] },
+    }));
+    expect(screen.queryByRole('dialog', { name: 'Locations' })).toBeNull();
+
+    act(() => pending[1]({
+      ok: true,
+      data: { home: '/fresh', roots: ['/fresh-root'], recent: ['/fresh-recent'], bookmarks: [] },
+    }));
+
+    const locationsDialog = await screen.findByRole('dialog', { name: 'Locations' });
+    expect(within(locationsDialog).getByText('/fresh')).toBeTruthy();
+    expect(within(locationsDialog).queryByText('/stale')).toBeNull();
   });
 
   it('dispatches longer overlapping sequence shortcuts before the shorter timeout action', async () => {
@@ -613,7 +781,7 @@ describe('CommanderShell', () => {
     useOperationStore.getState().closeDialog();
     await waitFor(() => expect(commanderKeyboardOwners()).not.toContain('operation-dialog'));
 
-    await user.click(screen.getByRole('button', { name: 'File' }));
+    await user.click(screen.getByRole('button', { name: 'File(F)' }));
     await waitFor(() => expect(commanderKeyboardOwners()).toContain('menu-popover'));
   });
 
@@ -638,7 +806,7 @@ describe('CommanderShell', () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
 
-    await user.click(screen.getByRole('button', { name: 'File' }));
+    await user.click(screen.getByRole('button', { name: 'File(F)' }));
     expect(document.querySelector('.menu-popover')).not.toBeNull();
 
     await user.keyboard('{Tab}');
@@ -658,6 +826,53 @@ describe('CommanderShell', () => {
     await user.keyboard('{Space}');
 
     expect(focusedRow(container)?.className).toContain('is-selected');
+  });
+
+  it('returns keyboard ownership to the commander after non-modal path button clicks', async () => {
+    const user = userEvent.setup();
+    const { container } = renderCommander();
+    const refreshButton = screen.getByLabelText('right navigation controls').querySelectorAll('button')[3];
+
+    if (!refreshButton) {
+      throw new Error('refresh button is required');
+    }
+    await user.click(refreshButton);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' })));
+
+    await user.keyboard('{Space}');
+    expect(focusedRowText(container)).toContain('generic-array-7534a23a150ae5e7');
+  });
+
+  it('scales font, density variables, and persists zoom settings with Cmd/Ctrl +/-/0', async () => {
+    const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
+      ok: true as const,
+      data: {
+        schemaVersion: 1,
+        theme: 'dark' as const,
+        language: 'ko' as const,
+        sizeFormat: 'binary' as const,
+        external: { editorId: null, shellCommand: { enabled: false } },
+        bookmarks: [],
+        layout: { singlePanel: false, ratio: '50:50' as const },
+        view: { zoomStep: patch.view?.zoomStep ?? 0, density: 'compact' as const },
+      },
+    }));
+    renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+    const beforeRowHeight = shell.style.getPropertyValue('--row-height');
+
+    fireEvent.keyDown(document, { key: '=', metaKey: true });
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: expect.objectContaining({ view: expect.objectContaining({ zoomStep: 1 }) }),
+    }));
+
+    expect(shell.style.getPropertyValue('--row-height')).not.toBe(beforeRowHeight);
+    expect(shell.style.getPropertyValue('--commander-font-size')).not.toBe('16px');
+
+    fireEvent.keyDown(document, { key: '0', metaKey: true });
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: expect.objectContaining({ view: expect.objectContaining({ zoomStep: 0 }) }),
+    }));
   });
 
   it('opens the right-clicked row from the context menu instead of the previous focused row', async () => {
@@ -710,6 +925,10 @@ describe('CommanderShell', () => {
       })),
       listDir: vi.fn(async (input: ListDirInput) => ({ ok: true as const, data: createDirectoryListing(input.panelId, input.path, [testEntry(input.path, 'child.txt')], input.sort, input.filter) })),
       gotoPath: vi.fn(async (input: { panelId: PanelId; path: string }) => ({ ok: true as const, data: createDirectoryListing(input.panelId, input.path) })),
+      listLocations: vi.fn(async () => ({
+        ok: true as const,
+        data: { home: '/home/mock', roots: ['/'], recent: ['/home/mock'], bookmarks: [] },
+      })),
     };
 
     render(<CommanderShell dataSource={dataSource} />);
@@ -782,6 +1001,10 @@ const mockedPanelDataSource = ({
   gotoPath: vi.fn(async (input) => ({
     ok: true as const,
     data: createDirectoryListing(input.panelId, input.path, [testEntry(input.path, 'goto-child.txt')], DEFAULT_SORT, null, 3),
+  })),
+  listLocations: vi.fn(async () => ({
+    ok: true as const,
+    data: { home: loadResult.right.path, roots: [loadResult.left.path], recent: [loadResult.right.path], bookmarks: [] },
   })),
 });
 

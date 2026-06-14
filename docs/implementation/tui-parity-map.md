@@ -36,6 +36,16 @@
 | 도움말/단축키 | action registry 기반 help | `HelpDialog` | none | action registry와 help 내용 일치 |
 | 설정/테마/i18n | settings dialog, runtime apply | `SettingsDialog` | `load_settings`, `save_settings` | 테마/언어 저장/복원 |
 
+## 3.1 UX/TUI parity repair 체크리스트
+
+| 항목 | TUI 기준 | GUI 구현 기준 | 검증 |
+| --- | --- | --- | --- |
+| Space 선택 | focused concrete row 선택 토글 후 다음 row로 이동, `..`는 선택하지 않고 아래로 이동 | `selection.toggle`이 active panel focused row에 적용되고 focus를 clamp 이동한다 | `CommanderShell.test.tsx` Space 이동/virtual parent 회귀 |
+| 작업 대상 fallback | 명시 선택이 없으면 커서 위치 항목이 복사/이동/삭제/압축 대상 | `ActionContext.effectiveTargetCount`와 `effectiveSourceEntries`가 registry enablement와 dialog source를 일치시킨다 | `actionContext.test.ts`, copy dialog source 회귀 |
+| Commander focus 복귀 | non-modal navigation control 사용 후 다음 키 입력은 commander가 받음 | path/refresh/back/up 클릭 후 shell focus 복구, dialog/menu/input은 keyboard owner 유지 | path button click → Space 회귀 |
+| Zoom/density | 화면 배율 변경은 글자뿐 아니라 행 높이/상태줄/단축키줄/여백까지 같이 변함 | `Settings.view.zoomStep`, CSS scale variables, virtualizer row estimate가 같은 row height를 사용한다 | Cmd/Ctrl `+/-/0` CSS variable 및 settings 저장 회귀 |
+| Filter 가시성 | filter pattern이 panel/status에 보이고 목록 맥락에서 인지됨 | header filter chip, panel/bottom status `Filter: ...`, filename substring highlight 표시 | filter apply/clear DOM 회귀 |
+
 ## 4. GUI 확장 매핑
 
 | GUI 확장 | 기준 포함 여부 | 이유 | 제약 |

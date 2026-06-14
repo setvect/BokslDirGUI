@@ -207,6 +207,28 @@ impl Default for LayoutSettings {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+struct ViewSettings {
+    #[serde(default)]
+    zoom_step: i32,
+    #[serde(default = "default_view_density")]
+    density: String,
+}
+
+fn default_view_density() -> String {
+    "compact".to_string()
+}
+
+impl Default for ViewSettings {
+    fn default() -> Self {
+        Self {
+            zoom_step: 0,
+            density: "compact".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 struct Settings {
     schema_version: u32,
     theme: String,
@@ -215,6 +237,8 @@ struct Settings {
     external: ExternalSettings,
     bookmarks: Vec<BookmarkLocation>,
     layout: LayoutSettings,
+    #[serde(default)]
+    view: ViewSettings,
 }
 
 impl Default for Settings {
@@ -227,6 +251,7 @@ impl Default for Settings {
             external: ExternalSettings::default(),
             bookmarks: Vec::new(),
             layout: LayoutSettings::default(),
+            view: ViewSettings::default(),
         }
     }
 }
@@ -622,6 +647,14 @@ mod settings_service {
         if !["50:50", "70:30", "30:70"].contains(&settings.layout.ratio.as_str()) {
             return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
                 .with_detail("field", "layout.ratio"));
+        }
+        if !(-3..=5).contains(&settings.view.zoom_step) {
+            return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+                .with_detail("field", "view.zoomStep"));
+        }
+        if !["compact", "comfortable"].contains(&settings.view.density.as_str()) {
+            return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+                .with_detail("field", "view.density"));
         }
         Ok(())
     }
@@ -2175,10 +2208,12 @@ mod tests {
         let initial = load_settings().expect("missing settings should use defaults");
         assert_eq!(initial.schema_version, 1);
         assert_eq!(initial.layout.ratio, "50:50");
+        assert_eq!(initial.view.zoom_step, 0);
 
         let saved = save_settings(serde_json::json!({
             "bookmarks": [{ "id": "root", "label": "Root", "path": fixture.root.to_string_lossy() }],
             "layout": { "singlePanel": true, "ratio": "70:30" },
+            "view": { "zoomStep": 2, "density": "compact" },
             "theme": "highContrast",
             "language": "en"
         }))
@@ -2186,6 +2221,7 @@ mod tests {
         assert_eq!(saved.bookmarks[0].label, "Root");
         assert!(saved.layout.single_panel);
         assert_eq!(saved.layout.ratio, "70:30");
+        assert_eq!(saved.view.zoom_step, 2);
         assert!(settings_path.is_file());
 
         let locations = list_locations().expect("locations should load bookmark settings");

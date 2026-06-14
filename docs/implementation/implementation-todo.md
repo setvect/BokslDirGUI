@@ -68,19 +68,25 @@
 
 - [x] `Tab`으로 활성 패널 전환.
 - [x] `ArrowUp/ArrowDown`, `PageUp/PageDown`, `Home/End`로 focused row 이동.
-- [x] `Space`로 선택 토글.
+- [x] TUI/Vim 계열 이동키(`j/k`, `gg`, `G`, `Ctrl+U`, `Ctrl+D`)로 focused row 이동.
+- [x] `Space`로 선택 토글 후 TUI처럼 다음 row 이동, `..` row는 선택하지 않고 아래로 이동.
+- [x] `Shift+ArrowUp/ArrowDown`, `Shift+PageUp/PageDown`, `Shift+Home/End`, Shift-click으로 범위 선택.
 - [x] `Enter`로 focused entry open preview.
 - [x] action registry 기반 단축키 dispatch 구현.
+- [x] 한글 IME 입력 상태에서도 물리 키 기준 단축키 dispatch.
 - [x] display-only `shortcutLabel`과 executable `keyboardBindings` 분리.
 - [x] prefix sequence shortcut 처리(`t b` vs `t b a`)와 timeout disambiguation 구현.
 - [x] 입력 필드, 다이얼로그, 메뉴, 컨텍스트 메뉴, native control의 keyboard ownership 보호.
 - [x] ref-counted keyboard owner boundary helper 구현.
+- [x] `Cmd/Ctrl +`, `Cmd/Ctrl -`, `Cmd/Ctrl 0`로 글자/행 높이/여백/status/hotkey strip을 함께 조정하고 `Settings.view.zoomStep`으로 저장.
 
 ### 0.4 Action / operation shell
 
 - [x] parity-critical action ID 등록.
 - [x] 메뉴 root와 hotkey strip을 registry에서 파생.
 - [x] context menu action enablement와 virtual parent row 보호.
+- [x] 선택 항목이 없을 때 focused concrete row를 복사/이동/삭제/압축 effective target으로 사용하는 TUI fallback 구현.
+- [x] filter 적용 상태를 panel header/status/bottom status에 표시하고 파일명 매칭 구간 highlight 구현.
 - [x] 복사/이동/삭제/이름변경/폴더생성/압축/external/shell command 다이얼로그 shell 구성.
 - [x] operation state union, transition table, conflict decision model skeleton 구성.
 - [x] 실제 backend 미연결 작업은 `backendExecutionStubbed`로 표시.
@@ -144,6 +150,7 @@
 - [x] `Alt+Left`, `Alt+Right`, `Backspace/h`, refresh를 실제 panel navigation에 연결.
 - [x] sort/filter/showHidden 상태를 panel state로 관리하고 `list_dir` 인자로 전달.
 - [x] watcher 또는 manual refresh 후 focused row/selection 보존 정책 구현.
+- [x] `goto_path` 직접 입력 overlay와 `list_locations` 위치 palette를 실제 이동 흐름에 연결.
 
 ## 2. Safe mutation TODO — create/rename부터 연결
 
@@ -232,6 +239,7 @@
 - [x] bookmarks add/list/rename/delete 실제 settings persistence 연결.
 - [x] navigation history UI와 `history.list` overlay 구현.
 - [x] tab.new/tab.close panel tab state 구현.
+- [x] `tt` tab list overlay를 구현하고 선택 시 해당 tab path로 이동한다.
 - [x] single/dual panel toggle, ratio 50:50/70:30/30:70 layout state 구현.
 - [x] Tests: settings persistence, bookmark/history action, layout regression.
 

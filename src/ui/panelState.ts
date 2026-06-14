@@ -133,9 +133,6 @@ export const markPanelError = (current: PanelNavigationState, error: AppError): 
 export const focusedEntryOf = (panel: PanelNavigationState) =>
   panel.listing.entries[panel.focusedIndex] ?? null;
 
-export const selectedConcreteEntriesOf = (panel: PanelNavigationState) =>
-  panel.listing.entries.filter((entry) => panel.selectedPaths.includes(entry.path) && !entry.isVirtual);
-
 export const parentNavigationEntryOf = (panel: PanelNavigationState) =>
   panel.listing.entries.find((entry) => entry.isVirtual && entry.kind === 'directory') ?? null;
 

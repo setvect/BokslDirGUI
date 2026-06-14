@@ -7,12 +7,31 @@ export const commanderShortcutsDisabledProps = {
 } as const;
 const commanderShortcutsEnabledProps = {};
 
-export type CommanderKeyboardOwner = 'operation-dialog' | 'menu-popover' | 'context-menu' | 'filter-prompt' | 'shortcut-help';
+export type CommanderKeyboardOwner =
+  | 'operation-dialog'
+  | 'menu-popover'
+  | 'context-menu'
+  | 'filter-prompt'
+  | 'path-prompt'
+  | 'shortcut-help'
+  | 'help-search'
+  | 'about-dialog'
+  | `navigation-list-${string}`;
 
+// BokslDirGUI currently renders one commander shell per Tauri window.
+// This singleton intentionally models that product invariant: any modal
+// owner in the shell suspends commander-wide shortcuts for the whole window.
+// If the app grows multiple independent commander shells in one renderer,
+// replace this module-level registry with a per-shell React context.
 const activeCommanderKeyboardOwnerCounts = new Map<CommanderKeyboardOwner, number>();
 
 export const commanderKeyboardOwners = () => [...activeCommanderKeyboardOwnerCounts.keys()];
 
+// Commander keyboard ownership is intentionally coarse and modal-only:
+// any active owner fully suspends global commander shortcuts so dialogs,
+// menus, context menus, and prompts can keep native keyboard behavior.
+// Do not use this boundary for partially interactive surfaces that should
+// still allow row movement or file-operation hotkeys to pass through.
 export const commanderKeyboardHasOwner = () => activeCommanderKeyboardOwnerCounts.size > 0;
 
 export const useCommanderKeyboardOwner = (owner: CommanderKeyboardOwner, active = true) => {

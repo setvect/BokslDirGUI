@@ -80,6 +80,7 @@ for (const decision of ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'
 }
 
 const commanderShell = read('src/ui/CommanderShell.tsx');
+const commanderOverlays = read('src/ui/CommanderOverlays.tsx');
 for (const selector of ['file-panel', 'hotkey-strip', 'panel-zone', 'bottom-status', 'columnLayoutForPanelWidth', 'entry-row-kind-']) {
   addCheck(`commander shell emits ${selector}`, commanderShell.includes(selector), 'TUI-faithful shell');
 }
@@ -130,7 +131,7 @@ addCheck(
 );
 addCheck(
   'commander shell exposes real filter input path',
-  commanderShell.includes('FilterPrompt') && commanderShell.includes('Filter pattern') && commanderShell.includes("Object.hasOwn(options, 'filter')"),
+  commanderShell.includes('FilterPrompt') && commanderOverlays.includes('Filter pattern') && commanderShell.includes("Object.hasOwn(options, 'filter')"),
   'filter.start/filter.clear must send explicit non-null/null filter values to list_dir',
 );
 addCheck(
