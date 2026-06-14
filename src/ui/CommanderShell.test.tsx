@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { ACTION_BY_ID } from '../actions/registry';
 import { useOperationStore } from '../operations/operationStore';
-import { CommanderShell } from './CommanderShell';
+import { CommanderShell, columnLayoutForPanelWidth } from './CommanderShell';
 import type { AppError, DirectoryListing, PanelId } from '../domain/types';
 import type { ListDirInput } from '../tauri/client';
 import type { PanelDataSource } from './panelDataSource';
@@ -56,6 +56,26 @@ describe('CommanderShell', () => {
     expect(container.querySelector('.persistent-sidebar')).toBeNull();
     expect(container.querySelector('.persistent-inspector')).toBeNull();
     expect(container.querySelector('.large-toolbar')).toBeNull();
+  });
+
+
+  it('uses the TUI width-based metadata column policy', () => {
+    expect(columnLayoutForPanelWidth(44 * 8)).toMatchObject({ showSize: false, dateFormat: 'short' });
+    expect(columnLayoutForPanelWidth(45 * 8)).toMatchObject({ showSize: true, showPermissions: false, dateFormat: 'short' });
+    expect(columnLayoutForPanelWidth(70 * 8)).toMatchObject({ showPermissions: true, showCreated: false, dateFormat: 'long' });
+    expect(columnLayoutForPanelWidth(100 * 8)).toMatchObject({ showPermissions: true, showCreated: true, showOwner: false });
+    expect(columnLayoutForPanelWidth(120 * 8)).toMatchObject({ showCreated: true, showOwner: true });
+  });
+
+  it('applies file-type color classes to whole rows instead of only file names', () => {
+    const { container } = renderCommander();
+    const rows = [...container.querySelectorAll<HTMLElement>('.file-row')];
+    const fileRow = rows.find((row) => row.textContent?.includes('Architecture.md'));
+    const directoryRow = rows.find((row) => row.textContent?.includes('images'));
+
+    expect(fileRow?.className).toContain('entry-row-kind-file');
+    expect(directoryRow?.className).toContain('entry-row-kind-directory');
+    expect(container.querySelector('.entry-kind-file')).toBeNull();
   });
 
   it('uses Tab as active-panel switching instead of DOM focus traversal', async () => {
@@ -778,6 +798,8 @@ const testEntry = (parent: string, name: string) => ({
   modifiedAt: null,
   createdAt: null,
   permissions: '-rw-r--r--',
+  owner: 'boksl',
+  group: 'staff',
   isHidden: false,
   isVirtual: false,
 });

@@ -73,6 +73,8 @@ struct FileEntry {
     modified_at: Option<String>,
     created_at: Option<String>,
     permissions: Option<String>,
+    owner: Option<String>,
+    group: Option<String>,
     is_hidden: bool,
     is_virtual: bool,
 }
@@ -938,6 +940,8 @@ mod archive {
             modified_at: None,
             created_at: None,
             permissions: None,
+            owner: None,
+            group: None,
             is_hidden: name.rsplit('/').next().is_some_and(|value| value.starts_with('.')),
             is_virtual: false,
         }
@@ -1304,6 +1308,8 @@ fn parent_virtual_entry(parent: &Path) -> FileEntry {
         modified_at: None,
         created_at: None,
         permissions: None,
+        owner: None,
+        group: None,
         is_hidden: false,
         is_virtual: true,
     }
@@ -1330,6 +1336,8 @@ fn file_entry_from_path(path: &Path, is_virtual: bool) -> CommandResult<FileEntr
         modified_at: metadata.modified().ok().and_then(system_time_to_rfc3339),
         created_at: metadata.created().ok().and_then(system_time_to_rfc3339),
         permissions: Some(format_permissions(&metadata)),
+        owner: owner_text(&metadata),
+        group: group_text(&metadata),
         is_hidden: is_hidden_name(&name),
         is_virtual,
     })
@@ -1365,6 +1373,28 @@ fn is_archive_path(path: &Path) -> bool {
     ]
     .iter()
     .any(|suffix| lowered.ends_with(suffix))
+}
+
+#[cfg(unix)]
+fn owner_text(metadata: &fs::Metadata) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    Some(metadata.uid().to_string())
+}
+
+#[cfg(not(unix))]
+fn owner_text(_metadata: &fs::Metadata) -> Option<String> {
+    None
+}
+
+#[cfg(unix)]
+fn group_text(metadata: &fs::Metadata) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    Some(metadata.gid().to_string())
+}
+
+#[cfg(not(unix))]
+fn group_text(_metadata: &fs::Metadata) -> Option<String> {
+    None
 }
 
 #[cfg(unix)]

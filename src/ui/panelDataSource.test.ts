@@ -71,6 +71,8 @@ const entry = (parent: string, name: string) => ({
   modifiedAt: null,
   createdAt: null,
   permissions: '-rw-r--r--',
+  owner: 'boksl',
+  group: 'staff',
   isHidden: false,
   isVirtual: false,
 });

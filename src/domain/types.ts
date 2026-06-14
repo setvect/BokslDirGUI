@@ -31,6 +31,8 @@ export interface FileEntry {
   modifiedAt: string | null;
   createdAt: string | null;
   permissions: string | null;
+  owner: string | null;
+  group: string | null;
   isHidden: boolean;
   isVirtual: boolean;
 }

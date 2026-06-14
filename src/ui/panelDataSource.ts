@@ -117,6 +117,8 @@ const virtualParent = (path: string): FileEntry => ({
   modifiedAt: null,
   createdAt: null,
   permissions: null,
+  owner: null,
+  group: null,
   isHidden: false,
   isVirtual: true,
 });
@@ -129,6 +131,8 @@ const syntheticEntry = (parent: string, name: string): FileEntry => ({
   modifiedAt: null,
   createdAt: null,
   permissions: '-rw-r--r--',
+  owner: 'boksl',
+  group: 'staff',
   isHidden: name.startsWith('.'),
   isVirtual: false,
 });

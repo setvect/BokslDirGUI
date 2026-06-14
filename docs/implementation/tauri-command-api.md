@@ -25,6 +25,8 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `modifiedAt` | string/null | ISO timestamp |
 | `createdAt` | string/null | 플랫폼별 가능 시 |
 | `permissions` | string/null | 표시용 권한 |
+| `owner` | string/null | 플랫폼에서 확인 가능한 소유자 표시값 |
+| `group` | string/null | 플랫폼에서 확인 가능한 그룹 표시값 |
 | `isHidden` | boolean | 숨김 여부 |
 | `isVirtual` | boolean | `..` 같은 가상 항목 |
 

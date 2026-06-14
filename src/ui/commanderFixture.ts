@@ -7,6 +7,8 @@ const entry = (
   sizeBytes: number | null,
   modifiedAt: string,
   permissions = kind === 'directory' ? 'drwxr-xr-x' : '-rw-r--r--',
+  owner = 'boksl',
+  group = 'staff',
 ): FileEntry => ({
   path: `${parent}/${name}`.replace(/\/+/g, '/'),
   name,
@@ -15,6 +17,8 @@ const entry = (
   modifiedAt,
   createdAt: null,
   permissions,
+  owner,
+  group,
   isHidden: name.startsWith('.'),
   isVirtual: false,
 });
@@ -32,6 +36,8 @@ const virtualParent = (path: string, modifiedAt: string): FileEntry => ({
   modifiedAt,
   createdAt: null,
   permissions: null,
+  owner: null,
+  group: null,
   isHidden: false,
   isVirtual: true,
 });

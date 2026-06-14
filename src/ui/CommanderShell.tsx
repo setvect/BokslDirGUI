@@ -7,7 +7,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type RefObject } from 'react';
 import {
   ACTIONS,
   ariaKeyShortcutsFromRegistry,
@@ -44,7 +44,7 @@ import {
   type PanelNavigationState,
   type PanelStateById,
 } from './panelState';
-import { entryIcon, formatModified, formatSize, summarizeEntries } from './format';
+import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
 import {
   commanderKeyboardIsSuspended,
   useCommanderKeyboardBoundaryProps,
@@ -1082,6 +1082,100 @@ function MenuPopoverContent({ root, actions, context, onOpenAction }: {
   );
 }
 
+export interface PanelColumnLayout {
+  showSize: boolean;
+  showPermissions: boolean;
+  showCreated: boolean;
+  showOwner: boolean;
+  dateFormat: 'short' | 'long';
+  cssClass: string;
+}
+
+const PANEL_COLUMN_CHAR_WIDTH_PX = 8;
+
+export const columnLayoutForPanelWidth = (widthPx: number): PanelColumnLayout => {
+  const width = Math.floor(widthPx / PANEL_COLUMN_CHAR_WIDTH_PX);
+  if (width >= 120) {
+    return {
+      showSize: true,
+      showPermissions: true,
+      showCreated: true,
+      showOwner: true,
+      dateFormat: 'long',
+      cssClass: 'columns-owner',
+    };
+  }
+  if (width >= 100) {
+    return {
+      showSize: true,
+      showPermissions: true,
+      showCreated: true,
+      showOwner: false,
+      dateFormat: 'long',
+      cssClass: 'columns-created',
+    };
+  }
+  if (width >= 70) {
+    return {
+      showSize: true,
+      showPermissions: true,
+      showCreated: false,
+      showOwner: false,
+      dateFormat: 'long',
+      cssClass: 'columns-permissions',
+    };
+  }
+  if (width >= 45) {
+    return {
+      showSize: true,
+      showPermissions: false,
+      showCreated: false,
+      showOwner: false,
+      dateFormat: 'short',
+      cssClass: 'columns-basic',
+    };
+  }
+  return {
+    showSize: false,
+    showPermissions: false,
+    showCreated: false,
+    showOwner: false,
+    dateFormat: 'short',
+    cssClass: 'columns-name-date',
+  };
+};
+
+const useElementWidth = <T extends HTMLElement>(ref: RefObject<T | null>, fallbackWidth: number) => {
+  const [width, setWidth] = useState(fallbackWidth);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const updateWidth = () => {
+      const measuredWidth = element.getBoundingClientRect().width;
+      if (measuredWidth > 0) {
+        setWidth(Math.round(measuredWidth));
+      }
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateWidth);
+      observer.observe(element);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [ref]);
+
+  return width;
+};
+
 interface FilePanelProps {
   panel: PanelNavigationState;
   active: boolean;
@@ -1120,31 +1214,63 @@ function FilePanel({
   onGotoPath,
 }: FilePanelProps) {
   const { listing } = panel;
-  const tableColumns = useMemo<ColumnDef<FileEntry>[]>(
-    () => [
+  const panelRef = useRef<HTMLElement>(null);
+  const panelWidth = useElementWidth(panelRef, 760);
+  const columnLayout = useMemo(() => columnLayoutForPanelWidth(panelWidth), [panelWidth]);
+  const tableColumns = useMemo<ColumnDef<FileEntry>[]>(() => {
+    const columns: ColumnDef<FileEntry>[] = [
       {
         id: 'name',
         header: `Name ${panel.sort.field === 'name' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => (
-          <span className={`entry-name entry-kind-${row.original.kind}`}>
+          <span className="entry-name">
             <span className="entry-icon" aria-hidden="true">{entryIcon(row.original.kind)}</span>
             {row.original.name}
           </span>
         ),
       },
-      {
+    ];
+
+    if (columnLayout.showSize) {
+      columns.push({
         id: 'size',
         header: `Size ${panel.sort.field === 'size' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => formatSize(row.original),
-      },
-      {
-        id: 'modified',
-        header: `Modified ${panel.sort.field === 'modifiedAt' ? sortMarker(panel.sort.direction) : ''}`,
-        cell: ({ row }) => formatModified(row.original.modifiedAt),
-      },
-    ],
-    [panel.sort.direction, panel.sort.field],
-  );
+      });
+    }
+
+    columns.push({
+      id: 'modified',
+      header: `Modified ${panel.sort.field === 'modifiedAt' ? sortMarker(panel.sort.direction) : ''}`,
+      cell: ({ row }) => formatDate(row.original.modifiedAt, columnLayout.dateFormat),
+    });
+
+    if (columnLayout.showCreated) {
+      columns.push({
+        id: 'created',
+        header: 'Created',
+        cell: ({ row }) => formatDate(row.original.createdAt, columnLayout.dateFormat),
+      });
+    }
+
+    if (columnLayout.showPermissions) {
+      columns.push({
+        id: 'permissions',
+        header: 'Permissions',
+        cell: ({ row }) => row.original.permissions ?? '-',
+      });
+    }
+
+    if (columnLayout.showOwner) {
+      columns.push({
+        id: 'owner',
+        header: 'Owner',
+        cell: ({ row }) => formatOwnerGroup(row.original),
+      });
+    }
+
+    return columns;
+  }, [columnLayout, panel.sort.direction, panel.sort.field]);
 
   const table = useReactTable({
     data: listing.entries,
@@ -1177,6 +1303,7 @@ function FilePanel({
 
   return (
     <section
+      ref={panelRef}
       className={`file-panel ${active ? 'is-active' : ''} ${hiddenByLayout ? 'is-hidden-by-layout' : ''}`}
       aria-label={`${listing.panelId} panel ${listing.path}`}
       aria-current={active ? 'true' : undefined}
@@ -1197,7 +1324,7 @@ function FilePanel({
       <div className="file-table" role="table" aria-rowcount={listing.entries.length}>
         <div className="file-table-head" role="rowgroup">
           {table.getHeaderGroups().map((headerGroup) => (
-            <div className="file-table-row file-table-heading" role="row" key={headerGroup.id}>
+            <div className={`file-table-row file-table-heading ${columnLayout.cssClass}`} role="row" key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <span key={header.id} role="columnheader" className={`file-cell file-cell-${header.id}`}>
                   {flexRender(header.column.columnDef.header, header.getContext())}
@@ -1226,7 +1353,7 @@ function FilePanel({
                         aria-rowindex={virtualRow.index + 1}
                         aria-selected={selected}
                         aria-current={focused ? 'true' : undefined}
-                        className={`file-table-row file-row ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''}`}
+                        className={`file-table-row file-row ${columnLayout.cssClass} entry-row-kind-${entry.kind} ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''}`}
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
                         draggable={!entry.isVirtual}
                         onDragStart={() => onEntryDragStart(entry)}

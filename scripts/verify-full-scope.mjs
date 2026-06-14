@@ -69,6 +69,9 @@ for (const actionId of requiredActionIds) {
 }
 
 const domainTypes = read('src/domain/types.ts');
+for (const field of ['owner: string | null', 'group: string | null', 'permissions: string | null']) {
+  addCheck(`file entry metadata includes ${field}`, domainTypes.includes(field), 'FileEntry metadata DTO must support TUI parity columns');
+}
 for (const state of ['idle', 'validating', 'scanning', 'queued', 'waitingForConflict', 'running', 'cancelling', 'completed', 'completedWithErrors', 'failed', 'cancelled']) {
   addCheck(`operation state includes ${state}`, domainTypes.includes(`'${state}'`), 'OperationState union');
 }
@@ -77,7 +80,7 @@ for (const decision of ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'
 }
 
 const commanderShell = read('src/ui/CommanderShell.tsx');
-for (const selector of ['file-panel', 'hotkey-strip', 'panel-zone', 'bottom-status']) {
+for (const selector of ['file-panel', 'hotkey-strip', 'panel-zone', 'bottom-status', 'columnLayoutForPanelWidth', 'entry-row-kind-']) {
   addCheck(`commander shell emits ${selector}`, commanderShell.includes(selector), 'TUI-faithful shell');
 }
 for (const forbidden of ['persistent-sidebar', 'persistent-inspector', 'large-toolbar', 'Action preview', 'transient-overlay', 'overlay-host']) {
@@ -88,6 +91,9 @@ for (const forbidden of ['MENU_ROOTS', 'ACTION_LABELS']) {
 }
 for (const selector of ['menuRootsFromRegistry', 'hotkeyStripActionsFromRegistry', 'isActionAvailable']) {
   addCheck(`commander shell uses registry selector ${selector}`, commanderShell.includes(selector), 'No parallel hardcoded action surface in shell');
+}
+for (const token of ['showCreated', 'showOwner', 'showPermissions', 'formatOwnerGroup']) {
+  addCheck(`commander shell supports responsive metadata token ${token}`, commanderShell.includes(token), 'File metadata columns must follow TUI width-responsive behavior');
 }
 for (const token of ["document.addEventListener('keydown'", 'handleMovementKey', 'commanderKeyboardIsSuspended', 'aria-keyshortcuts', 'FOCUSABLE_ROW_TAB_INDEX = -1']) {
   addCheck(`commander shell includes keyboard control ${token}`, commanderShell.includes(token), 'Keyboard-first commander control must override web-page defaults');

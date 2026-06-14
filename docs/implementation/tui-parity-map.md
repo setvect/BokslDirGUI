@@ -18,7 +18,7 @@
 | TUI/기존 기능 영역 | GUI 대응 | 주요 컴포넌트 | Command/API | 테스트 기준 |
 | --- | --- | --- | --- | --- |
 | 좌/우 듀얼 패널 | 두 개의 FilePanel, 활성 패널 강조 | `CommanderShell`, `FilePanel` | `list_dir`, `watch_path` | 양쪽 패널이 독립 경로/정렬/선택/스크롤 유지 |
-| 파일 목록/메타데이터 | 조밀한 table row, 타입 아이콘, 권한/크기/날짜 컬럼 | `FileTable`, `FileRow` | `list_dir`, `get_metadata` | 10,000개 항목 virtualized rendering |
+| 파일 목록/메타데이터 | 조밀한 table row, 타입 아이콘, 폭 반응형 권한/크기/수정일/생성일/소유자 컬럼 | `FileTable`, `FileRow` | `list_dir`, `get_metadata` | 10,000개 항목 virtualized rendering, 패널 폭별 컬럼 표시 정책 |
 | 디렉토리 진입/상위 이동 | Enter/double click/up action/compact breadcrumb | `PanelHeader`, `PathControls` | `list_dir` | 진입 후 오류/권한 부족이 패널 오류로 표시 |
 | 패널 전환 | Tab/click focus | `CommanderShell` | none | 키보드/마우스가 같은 active panel state 사용 |
 | 패널별 탭 | 탭 생성/닫기/전환, 마지막 탭 보호 | `TabStrip`, `FilePanel` | `list_dir` | 패널별 탭 상태 독립 유지 |
