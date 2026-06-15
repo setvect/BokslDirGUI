@@ -1,8 +1,8 @@
 use super::*;
+use std::process::Command;
 use std::sync::Condvar;
 use std::thread;
 use std::time::Duration;
-use std::process::Command;
 
 static OP_COUNTER: AtomicU64 = AtomicU64::new(0);
 static CANCELLED: OnceLock<Mutex<BTreeMap<String, bool>>> = OnceLock::new();
@@ -811,7 +811,12 @@ fn run_archive_create(
         return error_summary(
             operation_id,
             kind,
-            AppError::new("unsupported", "errors.archivePasswordCreateUnsupported", None, true),
+            AppError::new(
+                "unsupported",
+                "errors.archivePasswordCreateUnsupported",
+                None,
+                true,
+            ),
         );
     }
     let sources = match collect_source_paths(&sources) {
@@ -824,11 +829,13 @@ fn run_archive_create(
             Ok(parent) => parent,
             Err(error) => return error_summary(operation_id, kind, error),
         },
-        None => return error_summary(
-            operation_id,
-            kind,
-            AppError::new("invalid_path", "errors.invalidPath", Some(&target), true),
-        ),
+        None => {
+            return error_summary(
+                operation_id,
+                kind,
+                AppError::new("invalid_path", "errors.invalidPath", Some(&target), true),
+            )
+        }
     };
     if !parent.is_dir() {
         return error_summary(
@@ -842,7 +849,12 @@ fn run_archive_create(
         return error_summary(
             operation_id,
             kind,
-            AppError::new("already_exists", "errors.alreadyExists", Some(&target), true),
+            AppError::new(
+                "already_exists",
+                "errors.alreadyExists",
+                Some(&target),
+                true,
+            ),
         );
     }
 
@@ -852,7 +864,14 @@ fn run_archive_create(
         .map(|metadata| metadata.len())
         .sum();
     let mut stats = OperationStats::new(sources.len() as u64, total_bytes);
-    emit_progress(app, operation_id, kind, OperationState::Scanning, &stats, Some(&target));
+    emit_progress(
+        app,
+        operation_id,
+        kind,
+        OperationState::Scanning,
+        &stats,
+        Some(&target),
+    );
     if is_cancelled(operation_id) {
         return cancel_summary(operation_id, kind, &stats);
     }
@@ -867,15 +886,27 @@ fn run_archive_create(
     {
         run_7z_create(&target, &sources)
     } else {
-        Err(AppError::new("unsupported", "errors.archiveFormatUnsupported", Some(&target), true)
-            .with_detail("format", archive_format))
+        Err(AppError::new(
+            "unsupported",
+            "errors.archiveFormatUnsupported",
+            Some(&target),
+            true,
+        )
+        .with_detail("format", archive_format))
     };
 
     match command_result {
         Ok(()) => {
             stats.completed_files = sources.len() as u64;
             stats.completed_bytes = total_bytes;
-            emit_progress(app, operation_id, kind, OperationState::Completed, &stats, Some(&target));
+            emit_progress(
+                app,
+                operation_id,
+                kind,
+                OperationState::Completed,
+                &stats,
+                Some(&target),
+            );
             summary_from_stats(operation_id, kind, &stats)
         }
         Err(error) => error_summary(operation_id, kind, error),
@@ -895,7 +926,12 @@ fn run_archive_extract(
         return error_summary(
             operation_id,
             kind,
-            AppError::new("unsupported", "errors.archivePasswordExtractUnsupported", None, true),
+            AppError::new(
+                "unsupported",
+                "errors.archivePasswordExtractUnsupported",
+                None,
+                true,
+            ),
         );
     }
     let archive = match navigation::canonical_existing_path(&archive_path) {
@@ -922,13 +958,25 @@ fn run_archive_extract(
         return error_summary(
             operation_id,
             kind,
-            AppError::new("unsafe_archive_entry", "errors.archiveUnsafePath", Some(&archive), true)
-                .with_detail("entry", unsafe_entry),
+            AppError::new(
+                "unsafe_archive_entry",
+                "errors.archiveUnsafePath",
+                Some(&archive),
+                true,
+            )
+            .with_detail("entry", unsafe_entry),
         );
     }
 
     let mut stats = OperationStats::new(entries.len() as u64, 0);
-    emit_progress(app, operation_id, kind, OperationState::Scanning, &stats, Some(&archive));
+    emit_progress(
+        app,
+        operation_id,
+        kind,
+        OperationState::Scanning,
+        &stats,
+        Some(&archive),
+    );
     if is_cancelled(operation_id) {
         return cancel_summary(operation_id, kind, &stats);
     }
@@ -938,13 +986,25 @@ fn run_archive_extract(
     } else if archive.extension().and_then(|value| value.to_str()) == Some("7z") {
         run_7z_extract(&archive, &target, policy)
     } else {
-        Err(AppError::new("unsupported", "errors.archiveFormatUnsupported", Some(&archive), true))
+        Err(AppError::new(
+            "unsupported",
+            "errors.archiveFormatUnsupported",
+            Some(&archive),
+            true,
+        ))
     };
 
     match command_result {
         Ok(()) => {
             stats.completed_files = entries.len() as u64;
-            emit_progress(app, operation_id, kind, OperationState::Completed, &stats, Some(&target));
+            emit_progress(
+                app,
+                operation_id,
+                kind,
+                OperationState::Completed,
+                &stats,
+                Some(&target),
+            );
             summary_from_stats(operation_id, kind, &stats)
         }
         Err(error) => error_summary(operation_id, kind, error),
@@ -953,8 +1013,13 @@ fn run_archive_extract(
 
 fn run_zip_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
     let zip = external_binary("zip").ok_or_else(|| {
-        AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(target), true)
-            .with_detail("provider", "zip")
+        AppError::new(
+            "unsupported",
+            "errors.archiveProviderUnavailable",
+            Some(target),
+            true,
+        )
+        .with_detail("provider", "zip")
     })?;
     let working_dir = common_source_parent(sources, target)?;
     let mut command = Command::new(zip);
@@ -972,8 +1037,13 @@ fn run_7z_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
     let seven_zip = external_binary("7zz")
         .or_else(|| external_binary("7z"))
         .ok_or_else(|| {
-            AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(target), true)
-                .with_detail("provider", "7z")
+            AppError::new(
+                "unsupported",
+                "errors.archiveProviderUnavailable",
+                Some(target),
+                true,
+            )
+            .with_detail("provider", "7z")
         })?;
     let working_dir = common_source_parent(sources, target)?;
     let mut command = Command::new(seven_zip);
@@ -989,11 +1059,21 @@ fn run_7z_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
 
 fn common_source_parent(sources: &[PathBuf], target: &Path) -> CommandResult<PathBuf> {
     let Some(first_parent) = sources.first().and_then(|source| source.parent()) else {
-        return Err(AppError::new("invalid_path", "errors.invalidPath", Some(target), true));
+        return Err(AppError::new(
+            "invalid_path",
+            "errors.invalidPath",
+            Some(target),
+            true,
+        ));
     };
     for source in sources {
         if source.parent() != Some(first_parent) {
-            return Err(AppError::new("invalid_path", "errors.archiveSourcesMustShareParent", Some(source), true));
+            return Err(AppError::new(
+                "invalid_path",
+                "errors.archiveSourcesMustShareParent",
+                Some(source),
+                true,
+            ));
         }
     }
     Ok(first_parent.to_path_buf())
@@ -1001,8 +1081,13 @@ fn common_source_parent(sources: &[PathBuf], target: &Path) -> CommandResult<Pat
 
 fn run_zip_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> CommandResult<()> {
     let unzip = external_binary("unzip").ok_or_else(|| {
-        AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(archive), true)
-            .with_detail("provider", "unzip")
+        AppError::new(
+            "unsupported",
+            "errors.archiveProviderUnavailable",
+            Some(archive),
+            true,
+        )
+        .with_detail("provider", "unzip")
     })?;
     let mut command = Command::new(unzip);
     match policy {
@@ -1013,7 +1098,12 @@ fn run_zip_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> C
             command.arg("-n");
         }
         ConflictDecision::Cancel => {
-            return Err(AppError::new("cancelled", "errors.cancelled", Some(archive), true));
+            return Err(AppError::new(
+                "cancelled",
+                "errors.cancelled",
+                Some(archive),
+                true,
+            ));
         }
     }
     command.arg("-q").arg(archive).arg("-d").arg(target);
@@ -1024,8 +1114,13 @@ fn run_7z_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> Co
     let seven_zip = external_binary("7zz")
         .or_else(|| external_binary("7z"))
         .ok_or_else(|| {
-            AppError::new("unsupported", "errors.archiveProviderUnavailable", Some(archive), true)
-                .with_detail("provider", "7z")
+            AppError::new(
+                "unsupported",
+                "errors.archiveProviderUnavailable",
+                Some(archive),
+                true,
+            )
+            .with_detail("provider", "7z")
         })?;
     let mut command = Command::new(seven_zip);
     command.arg("x");
@@ -1037,10 +1132,17 @@ fn run_7z_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> Co
             command.arg("-aos");
         }
         ConflictDecision::Cancel => {
-            return Err(AppError::new("cancelled", "errors.cancelled", Some(archive), true));
+            return Err(AppError::new(
+                "cancelled",
+                "errors.cancelled",
+                Some(archive),
+                true,
+            ));
         }
     }
-    command.arg(format!("-o{}", target.to_string_lossy())).arg(archive);
+    command
+        .arg(format!("-o{}", target.to_string_lossy()))
+        .arg(archive);
     run_external_command(command, Some(archive))
 }
 
@@ -1051,9 +1153,26 @@ fn run_external_command(mut command: Command, path: Option<&Path>) -> CommandRes
     if output.status.success() {
         return Ok(());
     }
-    Err(AppError::new("external_command_failed", "errors.externalCommandFailed", path, true)
-        .with_detail("exitCode", output.status.code().map_or_else(|| "signal".to_string(), |code| code.to_string()))
-        .with_detail("stderr", String::from_utf8_lossy(&output.stderr).chars().take(512).collect::<String>()))
+    Err(AppError::new(
+        "external_command_failed",
+        "errors.externalCommandFailed",
+        path,
+        true,
+    )
+    .with_detail(
+        "exitCode",
+        output
+            .status
+            .code()
+            .map_or_else(|| "signal".to_string(), |code| code.to_string()),
+    )
+    .with_detail(
+        "stderr",
+        String::from_utf8_lossy(&output.stderr)
+            .chars()
+            .take(512)
+            .collect::<String>(),
+    ))
 }
 
 fn external_binary(name: &str) -> Option<String> {
@@ -1070,7 +1189,9 @@ fn external_binary(name: &str) -> Option<String> {
 fn archive_entry_is_unsafe(entry: &str) -> bool {
     let path = Path::new(entry);
     path.is_absolute()
-        || path.components().any(|component| matches!(component, std::path::Component::ParentDir))
+        || path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
         || entry.contains('\0')
 }
 
@@ -1086,7 +1207,14 @@ pub(super) fn archive_create_summary_for_test(
     format: String,
     password: Option<String>,
 ) -> OperationSummary {
-    run_archive_create(None, "archive-create-test", sources, target_archive, format, password)
+    run_archive_create(
+        None,
+        "archive-create-test",
+        sources,
+        target_archive,
+        format,
+        password,
+    )
 }
 
 fn copy_tree(

@@ -595,6 +595,38 @@ describe('CommanderShell', () => {
     }));
   });
 
+  it('imports external dropped files only when the OS path is exposed', async () => {
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-external-import', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+    const leftPanel = container.querySelector<HTMLElement>('.file-panel[aria-label^="left panel"]');
+    if (!leftPanel) {
+      throw new Error('left panel is required');
+    }
+
+    const blockedFile = new File(['blocked'], 'blocked.txt', { type: 'text/plain' });
+    fireEvent.drop(leftPanel, { dataTransfer: { files: [blockedFile] } });
+    expect(await screen.findByText('External drop은 OS 파일 경로가 확인될 때만 import 대상으로 허용합니다.')).toBeTruthy();
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+
+    const externalFile = new File(['hello'], 'incoming.txt', { type: 'text/plain', lastModified: 1_700_000_000_000 });
+    Object.defineProperty(externalFile, 'path', { value: '/tmp/incoming.txt' });
+    fireEvent.drop(leftPanel, { dataTransfer: { files: [externalFile] } });
+    await waitFor(() => expect(screen.getByText('Copy to opposite panel')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: ['/tmp/incoming.txt'],
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+  });
+
   it('dispatches registry sequence shortcuts without web text focus', async () => {
     const user = userEvent.setup();
     renderCommander();

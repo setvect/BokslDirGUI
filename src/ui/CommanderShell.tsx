@@ -91,6 +91,7 @@ const BASE_ROW_HEIGHT_PX = 27;
 
 type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selectedPaths'>>;
 type SelectionMode = 'replace' | 'additive' | 'range';
+type ExternalDropFile = File & { path?: unknown };
 
 interface CommanderShellProps {
   dataSource?: PanelDataSource;
@@ -604,7 +605,20 @@ export function CommanderShell({
     event.preventDefault();
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length > 0 && !dragSource) {
-      setStatusMessage('External drop은 브라우저 보안상 파일 경로가 확인될 때만 import 대상으로 허용합니다.');
+      const externalEntries = files
+        .map(fileEntryFromExternalDropFile)
+        .filter((entry): entry is FileEntry => Boolean(entry));
+      if (externalEntries.length !== files.length) {
+        setDragSource(null);
+        setStatusMessage('External drop은 OS 파일 경로가 확인될 때만 import 대상으로 허용합니다.');
+        return;
+      }
+      const action = ACTIONS.find((candidate) => candidate.id === 'file.copy');
+      if (action) {
+        handleAction(action, targetPanel, externalEntries, panelState[targetPanel].path);
+        setStatusMessage(`External import · ${externalEntries.length}개 → ${targetPanel.toUpperCase()}`);
+      }
+      setDragSource(null);
       return;
     }
     if (!dragSource || dragSource.panelId === targetPanel || dragSource.entry.isVirtual) {
@@ -669,7 +683,12 @@ export function CommanderShell({
     setStatusMessage(`기본 앱 열기 예정: ${entry.name} · open_default 확인 대기`);
   };
 
-  const handleAction = (action: AppAction, panelOverride = activePanel, sourceOverride?: FileEntry[]) => {
+  const handleAction = (
+    action: AppAction,
+    panelOverride = activePanel,
+    sourceOverride?: FileEntry[],
+    targetDirOverride?: string,
+  ) => {
     const actionId = action.id as ActionId;
     if (actionId === 'panel.switchActive') {
       switchActivePanel();
@@ -894,7 +913,7 @@ export function CommanderShell({
         action,
         panelId: panelOverride,
         sources,
-        targetDir: panelState[oppositePanel].path,
+        targetDir: targetDirOverride ?? panelState[oppositePanel].path,
         workingDir: panelListing.path,
         atomicExecutor: atomicExecutorForAction(actionId, mutationClient),
         longRunningExecutor: longRunningExecutorForAction(actionId, operationClient),
@@ -2127,6 +2146,44 @@ const parseShellCommandInput = (value: string): { command: string; args: string[
   const [command, ...args] = parts;
   return command ? { command, args } : null;
 };
+
+const fileEntryFromExternalDropFile = (file: File): FileEntry | null => {
+  const path = externalDropPath(file);
+  if (!path) {
+    return null;
+  }
+  const name = file.name || basenameFromPath(path);
+  return {
+    path,
+    name,
+    kind: 'file',
+    sizeBytes: Number.isFinite(file.size) ? file.size : null,
+    modifiedAt: file.lastModified > 0 ? new Date(file.lastModified).toISOString() : null,
+    createdAt: null,
+    permissions: null,
+    owner: null,
+    group: null,
+    isHidden: name.startsWith('.'),
+    isVirtual: false,
+  };
+};
+
+const externalDropPath = (file: File): string | null => {
+  const candidate = (file as ExternalDropFile).path;
+  if (typeof candidate !== 'string') {
+    return null;
+  }
+  const trimmed = candidate.trim();
+  return pathLooksAbsolute(trimmed) ? trimmed : null;
+};
+
+const pathLooksAbsolute = (path: string) =>
+  path.startsWith('/')
+  || path.startsWith('\\\\')
+  || /^[A-Za-z]:[\\/]/.test(path);
+
+const basenameFromPath = (path: string) =>
+  path.replace(/\\/g, '/').split('/').filter(Boolean).at(-1) ?? path;
 
 const joinPath = (directory: string, name: string) => {
   const separator = directory.includes('\\') ? '\\' : '/';

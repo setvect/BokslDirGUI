@@ -229,7 +229,8 @@
 - [x] `archive_create` 구현: format/password 정책, progress/cancel, 같은 parent 내 상대 entry name 생성.
 - [x] zip fixture gate 구축: list/extract/create round-trip, password unsupported, malicious path guard.
 - [x] Tests: Rust provider unit/integration, UI preview/extract/create flow.
-- [ ] 후속 강화: 실제 password archive fixture와 7z binary fixture는 CI 환경에 `7z/7zz` provider가 보장될 때 추가한다.
+- [x] 조건부 7z binary fixture gate 추가: `7zz/7z` provider가 있는 환경에서는 실제 `.7z` 생성 후 listing을 검증하고, provider가 없으면 안전하게 skip한다.
+- [x] password archive 정책 검증: 현재 암호 압축/목록은 지원하지 않으며 recoverable unsupported 오류와 unsafe entry guard를 테스트로 고정한다.
 
 ## 6. Bookmarks / history / tabs / layout TODO
 
@@ -245,14 +246,14 @@
 
 ## 7. Drag and drop / mouse GUI 기능 TODO
 
-상태: 2026-06-14 구현 반영. row drag source와 panel drop handler를 구현했다. 기본 drop은 copy, `Shift` modifier drop은 move로 해석한다. 외부 파일 drop은 실제 import 정책 확정 전까지 recoverable 안내로 차단한다.
+상태: 2026-06-14 구현 반영. row drag source와 panel drop handler를 구현했다. 기본 drop은 copy, `Shift` modifier drop은 move로 해석한다. 외부 파일 drop은 Tauri/WebView가 OS absolute path를 노출한 경우에만 import copy dialog로 연결하고, 경로가 확인되지 않으면 recoverable 안내로 차단한다.
 
 - [x] row drag source 모델 구현.
 - [x] panel-to-panel drag copy/move 의도 결정 modifier 정책 구현.
-- [x] external file drop/import 정책 결정: 현재는 안전을 위해 차단하고 안내한다.
+- [x] external file drop/import 정책 결정: OS absolute path가 확인된 파일만 target panel로 copy import하고, 확인 불가 파일은 차단한다.
 - [x] drop target hover/forbidden target 기본 UI 구현.
 - [x] Tests: component-level handler tests.
-- [ ] 후속 강화: 외부 파일 import를 허용할 경우 OS file path 취득 정책과 충돌 preview UI를 별도 승인 후 구현한다.
+- [x] 후속 강화: 외부 파일 import는 기존 copy operation dialog/충돌 정책을 재사용해 안전 확인 후 실행한다.
 
 ## 8. Shell command TODO — 기본 비활성 유지
 
@@ -263,7 +264,7 @@
 - [x] `run_shell_command` 구현은 confirmToken 검증 후 제한된 정책에서만 실행.
 - [x] stdout/stderr/result summary UI 구현.
 - [x] Tests: disabled policy, one-shot token, command allow, no shell interpolation.
-- [ ] 후속 강화: TTL expiry 시간을 직접 제어하는 deterministic clock test는 token clock abstraction 도입 시 추가한다.
+- [x] token clock abstraction과 deterministic TTL expiry test 추가.
 
 ## 9. 품질/보안/접근성 TODO
 
