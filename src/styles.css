@@ -50,6 +50,16 @@ button {
   font: inherit;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .commander-shell {
   position: relative;
   display: grid;
@@ -86,14 +96,19 @@ button {
   align-items: center;
   gap: 4px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .menu-trigger {
+  min-width: 0;
+  overflow: hidden;
   border: 0;
   padding: 4px 10px;
   background: transparent;
   color: inherit;
   cursor: default;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menu-trigger:hover,
@@ -103,8 +118,11 @@ button {
 }
 
 .clock {
+  justify-self: end;
+  flex: 0 0 auto;
   color: #aaa;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .panel-zone {
@@ -257,29 +275,33 @@ button {
 
 .file-table-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 112px 148px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   min-width: 0;
 }
 
+.file-table-row.columns-name-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .file-table-row.columns-name-date {
-  grid-template-columns: minmax(140px, 1fr) 116px;
+  grid-template-columns: minmax(0, 1fr) max-content;
 }
 
 .file-table-row.columns-basic {
-  grid-template-columns: minmax(160px, 1fr) 104px 116px;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
 }
 
 .file-table-row.columns-permissions {
-  grid-template-columns: minmax(180px, 1fr) 112px 148px 116px;
+  grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
 }
 
 .file-table-row.columns-created {
-  grid-template-columns: minmax(190px, 1fr) 112px 148px 148px 116px;
+  grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content;
 }
 
 .file-table-row.columns-owner {
-  grid-template-columns: minmax(210px, 1fr) 112px 148px 148px 116px 112px;
+  grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content max-content;
 }
 
 .file-table-heading {
@@ -296,6 +318,16 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.file-cell-size,
+.file-cell-modified,
+.file-cell-created,
+.file-cell-permissions,
+.file-cell-owner {
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .file-cell-size,
@@ -350,8 +382,31 @@ button {
 .entry-name {
   display: inline-flex;
   align-items: center;
+  width: 100%;
   max-width: 100%;
   gap: 8px;
+  min-width: 0;
+}
+
+.middle-ellipsis {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.middle-ellipsis-start {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.middle-ellipsis-mark,
+.middle-ellipsis-end {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .entry-row-kind-directory {
@@ -576,22 +631,6 @@ button {
 
   .menu-trigger {
     padding-inline: 6px;
-  }
-
-  .file-table-row.columns-basic {
-    grid-template-columns: minmax(160px, 1fr) 88px 116px;
-  }
-
-  .file-table-row.columns-permissions {
-    grid-template-columns: minmax(160px, 1fr) 88px 116px 96px;
-  }
-
-  .file-table-row.columns-created {
-    grid-template-columns: minmax(170px, 1fr) 88px 116px 116px 96px;
-  }
-
-  .file-table-row.columns-owner {
-    grid-template-columns: minmax(180px, 1fr) 88px 116px 116px 96px 96px;
   }
 
   .hotkey {

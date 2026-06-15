@@ -18,7 +18,7 @@
 | TUI/기존 기능 영역 | GUI 대응 | 주요 컴포넌트 | Command/API | 테스트 기준 |
 | --- | --- | --- | --- | --- |
 | 좌/우 듀얼 패널 | 두 개의 FilePanel, 활성 패널 강조 | `CommanderShell`, `FilePanel` | `list_dir`, `watch_path` | 양쪽 패널이 독립 경로/정렬/선택/스크롤 유지 |
-| 파일 목록/메타데이터 | 조밀한 table row, 타입 아이콘, 폭 반응형 권한/크기/수정일/생성일/소유자 컬럼 | `FileTable`, `FileRow` | `list_dir`, `get_metadata` | 10,000개 항목 virtualized rendering, 패널 폭별 컬럼 표시 정책 |
+| 파일 목록/메타데이터 | 조밀한 table row, 타입 아이콘, 폭/확대율/실제 항목 길이 반응형 권한/크기/수정일/생성일/소유자 컬럼 | `FileTable`, `FileRow` | `list_dir`, `get_metadata` | 10,000개 항목 virtualized rendering, 표시 metadata no-truncation, 낮은 우선순위 컬럼 숨김 |
 | 디렉토리 진입/상위 이동 | Enter/double click/up action/compact breadcrumb | `PanelHeader`, `PathControls` | `list_dir` | 진입 후 오류/권한 부족이 패널 오류로 표시 |
 | 패널 전환 | Tab/click focus | `CommanderShell` | none | 키보드/마우스가 같은 active panel state 사용 |
 | 패널별 탭 | 탭 생성/닫기/전환, 마지막 탭 보호 | `TabStrip`, `FilePanel` | `list_dir` | 패널별 탭 상태 독립 유지 |
@@ -43,7 +43,9 @@
 | Space 선택 | focused concrete row 선택 토글 후 다음 row로 이동, `..`는 선택하지 않고 아래로 이동 | `selection.toggle`이 active panel focused row에 적용되고 focus를 clamp 이동한다 | `CommanderShell.test.tsx` Space 이동/virtual parent 회귀 |
 | 작업 대상 fallback | 명시 선택이 없으면 커서 위치 항목이 복사/이동/삭제/압축 대상 | `ActionContext.effectiveTargetCount`와 `effectiveSourceEntries`가 registry enablement와 dialog source를 일치시킨다 | `actionContext.test.ts`, copy dialog source 회귀 |
 | Commander focus 복귀 | non-modal navigation control 사용 후 다음 키 입력은 commander가 받음 | path/refresh/back/up 클릭 후 shell focus 복구, dialog/menu/input은 keyboard owner 유지 | path button click → Space 회귀 |
-| Zoom/density | 화면 배율 변경은 글자뿐 아니라 행 높이/상태줄/단축키줄/여백까지 같이 변함 | `Settings.view.zoomStep`, CSS scale variables, virtualizer row estimate가 같은 row height를 사용한다 | Cmd/Ctrl `+/-/0` CSS variable 및 settings 저장 회귀 |
+| Zoom/density | 화면 배율 변경은 글자뿐 아니라 행 높이/상태줄/단축키줄/여백까지 같이 변하며 100→110→125→150 같은 preset을 사용 | `Settings.view.zoomStep`, preset scale, CSS scale variables, virtualizer row estimate가 같은 row height를 사용한다 | Cmd/Ctrl `+/-/0` preset/variable 및 settings 저장 회귀 |
+| 확대 시 컬럼 가독성 | 표시되는 size/date/permission/owner는 잘리지 않고, 공간 부족 시 낮은 우선순위 컬럼부터 숨김 | scale/data-aware `columnLayoutForPanelWidth`, metadata `max-content`, Unicode-safe name middle ellipsis | 150% 확대 컬럼 policy, metadata cell no ellipsis, filename suffix 보존 회귀 |
+| GUI hover 정보 | TUI 기본 목록을 해치지 않고 GUI hover/focus로 상세 파일 정보를 보조 표시 | row `title`/ARIA tooltip text | 전체 이름/경로/종류/크기/수정일/권한/소유자 tooltip 회귀 |
 | Filter 가시성 | filter pattern이 panel/status에 보이고 목록 맥락에서 인지됨 | header filter chip, panel/bottom status `Filter: ...`, filename substring highlight 표시 | filter apply/clear DOM 회귀 |
 
 ## 4. GUI 확장 매핑

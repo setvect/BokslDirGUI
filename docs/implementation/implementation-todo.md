@@ -79,6 +79,8 @@
 - [x] 입력 필드, 다이얼로그, 메뉴, 컨텍스트 메뉴, native control의 keyboard ownership 보호.
 - [x] ref-counted keyboard owner boundary helper 구현.
 - [x] `Cmd/Ctrl +`, `Cmd/Ctrl -`, `Cmd/Ctrl 0`로 글자/행 높이/여백/status/hotkey strip을 함께 조정하고 `Settings.view.zoomStep`으로 저장.
+- [x] 확대 배율은 `75/80/90/100/110/125/150/175/200%` preset으로 표시하고, 확대 시 metadata는 실제 항목 길이를 반영해 잘라 표시하지 않고 낮은 우선순위 컬럼부터 숨긴다.
+- [x] 긴 파일명은 Unicode-safe middle ellipsis로 suffix/확장자를 보존하고, row hover/focus 정보로 전체 파일 정보를 제공한다.
 
 ### 0.4 Action / operation shell
 

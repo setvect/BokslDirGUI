@@ -88,6 +88,17 @@ const MIN_ZOOM_STEP = -3;
 const MAX_ZOOM_STEP = 5;
 const BASE_FONT_SIZE_PX = 16;
 const BASE_ROW_HEIGHT_PX = 27;
+const ZOOM_PRESETS_BY_STEP: Record<number, number> = {
+  [-3]: 0.75,
+  [-2]: 0.8,
+  [-1]: 0.9,
+  0: 1,
+  1: 1.1,
+  2: 1.25,
+  3: 1.5,
+  4: 1.75,
+  5: 2,
+};
 
 type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selectedPaths'>>;
 type SelectionMode = 'replace' | 'additive' | 'range';
@@ -468,12 +479,12 @@ export function CommanderShell({
       ? 0
       : clampNumber(currentStep + (command === 'in' ? 1 : -1), MIN_ZOOM_STEP, MAX_ZOOM_STEP);
     if (nextStep === currentStep) {
-      setStatusMessage(`Zoom · ${Math.round(viewMetricsForSettings(settings.view).scale * 100)}%`);
+      setStatusMessage(`Zoom · ${zoomPercentForStep(settings.view.zoomStep)}%`);
       return;
     }
     void saveSettingsPatch({
       view: { ...settings.view, zoomStep: nextStep },
-    }, `Zoom · ${Math.round(viewMetricsForSettings({ ...settings.view, zoomStep: nextStep }).scale * 100)}%`);
+    }, `Zoom · ${zoomPercentForStep(nextStep)}%`);
   };
 
   const addBookmark = (panelId: PanelId) => {
@@ -1201,6 +1212,7 @@ export function CommanderShell({
           hiddenByLayout={settings.layout.singlePanel && activePanel !== 'left'}
           tabCount={panelTabs.left.length}
           rowHeightPx={viewMetrics.rowHeightPx}
+          scale={viewMetrics.scale}
           onActivate={() => setActivePanel('left')}
           onStateChange={(next) => updatePanel('left', next)}
           onEntrySelect={(index, entry, mode) => selectEntry('left', index, entry, mode)}
@@ -1222,6 +1234,7 @@ export function CommanderShell({
           hiddenByLayout={settings.layout.singlePanel && activePanel !== 'right'}
           tabCount={panelTabs.right.length}
           rowHeightPx={viewMetrics.rowHeightPx}
+          scale={viewMetrics.scale}
           onActivate={() => setActivePanel('right')}
           onStateChange={(next) => updatePanel('right', next)}
           onEntrySelect={(index, entry, mode) => selectEntry('right', index, entry, mode)}
@@ -1338,6 +1351,7 @@ function MenuPopoverContent({ root, actions, context, onOpenAction }: {
 }
 
 export interface PanelColumnLayout {
+  showModified: boolean;
   showSize: boolean;
   showPermissions: boolean;
   showCreated: boolean;
@@ -1346,12 +1360,61 @@ export interface PanelColumnLayout {
   cssClass: string;
 }
 
-const PANEL_COLUMN_CHAR_WIDTH_PX = 8;
+const BASE_COLUMN_CHAR_WIDTH_PX = 8;
+const COLUMN_MIN_CHARS = {
+  name: 18,
+  modifiedShort: 12,
+  modifiedLong: 17,
+  size: 10,
+  permissions: 11,
+  created: 17,
+  owner: 14,
+};
 
-export const columnLayoutForPanelWidth = (widthPx: number): PanelColumnLayout => {
-  const width = Math.floor(widthPx / PANEL_COLUMN_CHAR_WIDTH_PX);
-  if (width >= 120) {
+interface PanelMetadataColumnWidths {
+  modifiedShort: number;
+  modifiedLong: number;
+  size: number;
+  permissions: number;
+  created: number;
+  owner: number;
+}
+
+const metadataColumnWidthsForEntries = (entries: readonly FileEntry[]): PanelMetadataColumnWidths => {
+  const maxWidth = (values: string[], base: number) =>
+    Math.max(base, ...values.map((value) => textDisplayWidth(value)));
+
+  return {
+    modifiedShort: maxWidth(
+      entries.map((entry) => formatDate(entry.modifiedAt, 'short') || '-'),
+      COLUMN_MIN_CHARS.modifiedShort,
+    ),
+    modifiedLong: maxWidth(
+      entries.map((entry) => formatDate(entry.modifiedAt, 'long') || '-'),
+      COLUMN_MIN_CHARS.modifiedLong,
+    ),
+    size: maxWidth(entries.map((entry) => formatSize(entry) || '-'), COLUMN_MIN_CHARS.size),
+    permissions: maxWidth(entries.map((entry) => entry.permissions ?? '-'), COLUMN_MIN_CHARS.permissions),
+    created: maxWidth(
+      entries.map((entry) => formatDate(entry.createdAt, 'long') || '-'),
+      COLUMN_MIN_CHARS.created,
+    ),
+    owner: maxWidth(entries.map((entry) => formatOwnerGroup(entry)), COLUMN_MIN_CHARS.owner),
+  };
+};
+
+export const columnLayoutForPanelWidth = (
+  widthPx: number,
+  scale = 1,
+  entriesOrWidths: readonly FileEntry[] | PanelMetadataColumnWidths = [],
+): PanelColumnLayout => {
+  const width = Math.floor(widthPx / (BASE_COLUMN_CHAR_WIDTH_PX * scale));
+  const columnWidths = (Array.isArray(entriesOrWidths)
+    ? metadataColumnWidthsForEntries(entriesOrWidths)
+    : entriesOrWidths) as PanelMetadataColumnWidths;
+  if (width >= COLUMN_MIN_CHARS.name + columnWidths.size + columnWidths.modifiedLong + columnWidths.permissions + columnWidths.created + columnWidths.owner) {
     return {
+      showModified: true,
       showSize: true,
       showPermissions: true,
       showCreated: true,
@@ -1360,8 +1423,9 @@ export const columnLayoutForPanelWidth = (widthPx: number): PanelColumnLayout =>
       cssClass: 'columns-owner',
     };
   }
-  if (width >= 100) {
+  if (width >= COLUMN_MIN_CHARS.name + columnWidths.size + columnWidths.modifiedLong + columnWidths.permissions + columnWidths.created) {
     return {
+      showModified: true,
       showSize: true,
       showPermissions: true,
       showCreated: true,
@@ -1370,8 +1434,9 @@ export const columnLayoutForPanelWidth = (widthPx: number): PanelColumnLayout =>
       cssClass: 'columns-created',
     };
   }
-  if (width >= 70) {
+  if (width >= COLUMN_MIN_CHARS.name + columnWidths.size + columnWidths.modifiedLong + columnWidths.permissions) {
     return {
+      showModified: true,
       showSize: true,
       showPermissions: true,
       showCreated: false,
@@ -1380,8 +1445,9 @@ export const columnLayoutForPanelWidth = (widthPx: number): PanelColumnLayout =>
       cssClass: 'columns-permissions',
     };
   }
-  if (width >= 45) {
+  if (width >= COLUMN_MIN_CHARS.name + columnWidths.size + columnWidths.modifiedShort) {
     return {
+      showModified: true,
       showSize: true,
       showPermissions: false,
       showCreated: false,
@@ -1390,13 +1456,25 @@ export const columnLayoutForPanelWidth = (widthPx: number): PanelColumnLayout =>
       cssClass: 'columns-basic',
     };
   }
+  if (width >= COLUMN_MIN_CHARS.name + columnWidths.modifiedShort) {
+    return {
+      showModified: true,
+      showSize: false,
+      showPermissions: false,
+      showCreated: false,
+      showOwner: false,
+      dateFormat: 'short',
+      cssClass: 'columns-name-date',
+    };
+  }
   return {
+    showModified: false,
     showSize: false,
     showPermissions: false,
     showCreated: false,
     showOwner: false,
     dateFormat: 'short',
-    cssClass: 'columns-name-date',
+    cssClass: 'columns-name-only',
   };
 };
 
@@ -1437,6 +1515,7 @@ interface FilePanelProps {
   hiddenByLayout: boolean;
   tabCount: number;
   rowHeightPx: number;
+  scale: number;
   onActivate(): void;
   onStateChange(next: PanelUiPatch): void;
   onEntrySelect(index: number, entry: FileEntry, mode: SelectionMode): void;
@@ -1459,6 +1538,7 @@ function FilePanel({
   hiddenByLayout,
   tabCount,
   rowHeightPx,
+  scale,
   onActivate,
   onStateChange,
   onEntrySelect,
@@ -1477,18 +1557,25 @@ function FilePanel({
   const { listing } = panel;
   const panelRef = useRef<HTMLElement>(null);
   const panelWidth = useElementWidth(panelRef, 760);
-  const columnLayout = useMemo(() => columnLayoutForPanelWidth(panelWidth), [panelWidth]);
+  const metadataColumnWidths = useMemo(
+    () => metadataColumnWidthsForEntries(listing.entries),
+    [listing.entries],
+  );
+  const columnLayout = useMemo(
+    () => columnLayoutForPanelWidth(panelWidth, scale, metadataColumnWidths),
+    [panelWidth, scale, metadataColumnWidths],
+  );
   const tableColumns = useMemo<ColumnDef<FileEntry>[]>(() => {
     const columns: ColumnDef<FileEntry>[] = [
       {
         id: 'name',
         header: `Name ${panel.sort.field === 'name' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => (
-          <span className="entry-name">
-            <span className="entry-icon" aria-hidden="true">{entryIcon(row.original.kind)}</span>
-            <HighlightedEntryName name={row.original.name} filter={listing.filter} />
-          </span>
-        ),
+            <span className="entry-name">
+              <span className="entry-icon" aria-hidden="true">{entryIcon(row.original.kind)}</span>
+              <MiddleEllipsisEntryName name={row.original.name} filter={listing.filter} />
+            </span>
+          ),
       },
     ];
 
@@ -1500,11 +1587,13 @@ function FilePanel({
       });
     }
 
-    columns.push({
-      id: 'modified',
-      header: `Modified ${panel.sort.field === 'modifiedAt' ? sortMarker(panel.sort.direction) : ''}`,
-      cell: ({ row }) => formatDate(row.original.modifiedAt, columnLayout.dateFormat),
-    });
+    if (columnLayout.showModified) {
+      columns.push({
+        id: 'modified',
+        header: `Modified ${panel.sort.field === 'modifiedAt' ? sortMarker(panel.sort.direction) : ''}`,
+        cell: ({ row }) => formatDate(row.original.modifiedAt, columnLayout.dateFormat),
+      });
+    }
 
     if (columnLayout.showCreated) {
       columns.push({
@@ -1609,6 +1698,8 @@ function FilePanel({
                 const entry = row.original;
                 const focused = virtualRow.index === panel.focusedIndex;
                 const selected = panel.selectedPaths.includes(entry.path);
+                const tooltip = fileEntryTooltip(entry);
+                const accessibleName = fileEntryAccessibleLabel(entry);
                 return (
                   <ContextMenu.Root key={row.id}>
                     <ContextMenu.Trigger asChild>
@@ -1621,6 +1712,9 @@ function FilePanel({
                         aria-current={focused ? 'true' : undefined}
                         className={`file-table-row file-row ${columnLayout.cssClass} entry-row-kind-${entry.kind} ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''}`}
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
+                        title={tooltip}
+                        aria-label={accessibleName}
+                        aria-description={tooltip}
                         draggable={!entry.isVirtual}
                         onDragStart={() => onEntryDragStart(entry)}
                         onClick={(event) => onEntrySelect(
@@ -1813,6 +1907,31 @@ function HighlightedEntryName({ name, filter }: { name: string; filter: string |
   );
 }
 
+function MiddleEllipsisEntryName({ name, filter }: { name: string; filter: string | null }) {
+  const { start, end } = splitMiddleEllipsisParts(name);
+  if (!end) {
+    return (
+      <span className="middle-ellipsis" aria-label={name}>
+        <span className="middle-ellipsis-start">
+          <HighlightedEntryName name={start} filter={filter} />
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="middle-ellipsis" aria-label={name}>
+      <span className="middle-ellipsis-start">
+        <HighlightedEntryName name={start} filter={filter} />
+      </span>
+      <span className="middle-ellipsis-mark" aria-hidden="true">…</span>
+      <span className="middle-ellipsis-end">
+        <HighlightedEntryName name={end} filter={filter} />
+      </span>
+      <span className="sr-only">{name}</span>
+    </span>
+  );
+}
+
 function HotkeyStrip() {
   return (
     <footer className="hotkey-strip" aria-label="hotkey hints">
@@ -1849,6 +1968,79 @@ const sortFieldForAction = (actionId: SortActionId): SortSpec['field'] => {
 };
 
 const sortMarker = (direction: SortSpec['direction']) => (direction === 'asc' ? '▲' : '▼');
+
+export const splitMiddleEllipsisParts = (name: string): { start: string; end: string | null } => {
+  const clusters = graphemeClusters(name);
+  if (clusters.length <= 24) {
+    return { start: name, end: null };
+  }
+  const extension = name.match(/(\.tar\.gz|\.tar\.bz2|\.tar\.xz|\.[^.]{1,8})$/i)?.[1] ?? '';
+  const preserveEndLength = clampNumber(Math.max(12, graphemeClusters(extension).length + 8), 12, 18);
+  if (clusters.length <= preserveEndLength + 8) {
+    return { start: name, end: null };
+  }
+  return {
+    start: clusters.slice(0, -preserveEndLength).join(''),
+    end: clusters.slice(-preserveEndLength).join(''),
+  };
+};
+
+type GraphemeSegmenter = {
+  segment(value: string): Iterable<{ segment: string }>;
+};
+
+type GraphemeSegmenterConstructor = new (
+  locales?: string | string[],
+  options?: { granularity: 'grapheme' },
+) => GraphemeSegmenter;
+
+const graphemeClusters = (value: string) => {
+  const Segmenter = (Intl as typeof Intl & { Segmenter?: GraphemeSegmenterConstructor }).Segmenter;
+  if (Segmenter) {
+    return [...new Segmenter(undefined, { granularity: 'grapheme' }).segment(value)].map((part) => part.segment);
+  }
+  return fallbackGraphemeClusters(value);
+};
+
+const fallbackGraphemeClusters = (value: string) => {
+  const codePoints = Array.from(value);
+  const clusters: string[] = [];
+
+  for (const codePoint of codePoints) {
+    const previous = clusters.at(-1);
+    if (
+      !previous
+      || !(isCombiningMark(codePoint)
+        || isVariationSelector(codePoint)
+        || isEmojiModifier(codePoint)
+        || codePoint === ZERO_WIDTH_JOINER
+        || previous.endsWith(ZERO_WIDTH_JOINER))
+    ) {
+      clusters.push(codePoint);
+      continue;
+    }
+    clusters[clusters.length - 1] = `${previous}${codePoint}`;
+  }
+
+  return clusters;
+};
+
+const textDisplayWidth = (value: string) =>
+  graphemeClusters(value).reduce((width, cluster) => width + graphemeDisplayWidth(cluster), 0);
+
+const graphemeDisplayWidth = (cluster: string) => {
+  if (!cluster || [...cluster].every((codePoint) => isCombiningMark(codePoint) || isVariationSelector(codePoint))) {
+    return 0;
+  }
+  return /[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Emoji_Presentation}\p{Extended_Pictographic}]/u.test(cluster)
+    ? 2
+    : 1;
+};
+
+const ZERO_WIDTH_JOINER = '\u200d';
+const isCombiningMark = (value: string) => /^\p{Mark}$/u.test(value);
+const isVariationSelector = (value: string) => /^[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]$/u.test(value);
+const isEmojiModifier = (value: string) => /^\p{Emoji_Modifier}$/u.test(value);
 
 const shortenPath = (path: string) => {
   const normalized = path.replace(/\\/g, '/');
@@ -2185,6 +2377,29 @@ const pathLooksAbsolute = (path: string) =>
 const basenameFromPath = (path: string) =>
   path.replace(/\\/g, '/').split('/').filter(Boolean).at(-1) ?? path;
 
+const fileEntryAccessibleLabel = (entry: FileEntry) => {
+  if (entry.isVirtual) {
+    return `${entry.name}, 상위 디렉터리`;
+  }
+  return `${entry.name}, ${entry.kind}, ${formatSize(entry) || '크기 없음'}`;
+};
+
+const fileEntryTooltip = (entry: FileEntry) => {
+  if (entry.isVirtual) {
+    return `${entry.name}\n상위 디렉터리로 이동\n경로: ${entry.path}`;
+  }
+  return [
+    `이름: ${entry.name}`,
+    `경로: ${entry.path}`,
+    `종류: ${entry.kind}`,
+    `크기: ${formatSize(entry) || '-'}`,
+    `수정: ${formatDate(entry.modifiedAt, 'long') || '-'}`,
+    `생성: ${formatDate(entry.createdAt, 'long') || '-'}`,
+    `권한: ${entry.permissions ?? '-'}`,
+    `소유자: ${formatOwnerGroup(entry)}`,
+  ].join('\n');
+};
+
 const joinPath = (directory: string, name: string) => {
   const separator = directory.includes('\\') ? '\\' : '/';
   return directory.endsWith('/') || directory.endsWith('\\') ? `${directory}${name}` : `${directory}${separator}${name}`;
@@ -2229,9 +2444,14 @@ const normalizeSettings = (value: unknown): Settings => {
   };
 };
 
+export const zoomScaleForStep = (step: number) =>
+  ZOOM_PRESETS_BY_STEP[clampNumber(step, MIN_ZOOM_STEP, MAX_ZOOM_STEP)] ?? 1;
+
+export const zoomPercentForStep = (step: number) => Math.round(zoomScaleForStep(step) * 100);
+
 const viewMetricsForSettings = (view: Settings['view']) => {
   const densityMultiplier = view.density === 'comfortable' ? 1.08 : 1;
-  const scale = Number((Math.pow(1.08, clampNumber(view.zoomStep, MIN_ZOOM_STEP, MAX_ZOOM_STEP)) * densityMultiplier).toFixed(3));
+  const scale = Number((zoomScaleForStep(view.zoomStep) * densityMultiplier).toFixed(3));
   return {
     scale,
     fontSizePx: Math.round(BASE_FONT_SIZE_PX * scale),
