@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { ACTION_BY_ID } from '../actions/registry';
 import { useOperationStore } from '../operations/operationStore';
-import { CommanderShell, columnLayoutForPanelWidth, splitMiddleEllipsisParts, zoomPercentForStep, zoomScaleForStep } from './CommanderShell';
+import { CommanderShell, columnLayoutForPanelWidth, hotkeyStripActionsForWidth, splitMiddleEllipsisParts, zoomPercentForStep, zoomScaleForStep } from './CommanderShell';
 import type { AppError, DirectoryListing, PanelId } from '../domain/types';
 import type { ListDirInput } from '../tauri/client';
 import type { PanelDataSource } from './panelDataSource';
@@ -49,14 +49,33 @@ describe('CommanderShell', () => {
     expect(screen.getAllByRole('table')).toHaveLength(2);
     expect(screen.getByText('Architecture.md')).toBeTruthy();
     expect(screen.getByText('generic-array-7534a23a150ae5e7')).toBeTruthy();
-    expect(screen.getByLabelText('hotkey hints').textContent).toContain('Copy');
-    expect(screen.getByLabelText('hotkey hints').textContent).toContain('PermDel');
-
     expect(container.querySelector('.file-panel.is-active')).not.toBeNull();
     expect(container.querySelector('.persistent-sidebar')).toBeNull();
     expect(container.querySelector('.persistent-inspector')).toBeNull();
     expect(container.querySelector('.large-toolbar')).toBeNull();
+    expect(screen.getByLabelText('hotkey hints').textContent).toContain('Copy');
+    expect(screen.getByLabelText('hotkey hints').textContent).toContain('Panel');
+    expect(screen.getByLabelText('hotkey hints').textContent).toContain('Filter');
     expect(container.querySelector<HTMLElement>('.file-table')?.style.getPropertyValue('--file-grid-template')).toContain('minmax(0, 1fr)');
+  });
+
+  it('shows more hotkey hints as horizontal space grows', () => {
+    const narrow = hotkeyStripActionsForWidth(520, 1).map((action) => action.id);
+    const wide = hotkeyStripActionsForWidth(1600, 1).map((action) => action.id);
+    const zoomed = hotkeyStripActionsForWidth(1600, 1.5).map((action) => action.id);
+
+    expect(narrow).toEqual([
+      'panel.switchActive',
+      'nav.enter',
+      'selection.toggle',
+      'file.copy',
+      'file.move',
+      'file.mkdir',
+    ]);
+    expect(wide.length).toBeGreaterThan(narrow.length);
+    expect(wide).toContain('filter.start');
+    expect(wide).toContain('nav.refresh');
+    expect(zoomed.length).toBeLessThan(wide.length);
   });
 
 
@@ -999,7 +1018,7 @@ describe('CommanderShell', () => {
       throw new Error('context-menu target row is required');
     }
     fireEvent.contextMenu(contextTarget);
-    await user.click(await screen.findByText('Open'));
+    await user.click(await screen.findByRole('menuitem', { name: /Open/ }));
 
     expect(await screen.findByText('README.md')).toBeTruthy();
     expect(activePanelLabel(document.body)).toContain('getrandom-24ce5e891f8ae242');

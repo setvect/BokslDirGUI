@@ -194,7 +194,6 @@ export function CommanderShell({
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpSearchOpen, setHelpSearchOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
-  const [keyboardLanguage, setKeyboardLanguage] = useState<'KO' | 'EN'>('KO');
   const [panelTabs, setPanelTabs] = useState<Record<PanelId, string[]>>(() => ({
     left: [dataSource.initialListings.left.path],
     right: [dataSource.initialListings.right.path],
@@ -1127,11 +1126,6 @@ export function CommanderShell({
         return;
       }
 
-      const detectedLanguage = detectKeyboardLanguage(event.key);
-      if (detectedLanguage) {
-        setKeyboardLanguage(detectedLanguage);
-      }
-
       if (runtime.operationDialogOpen || commanderKeyboardIsSuspended(event.target)) {
         clearShortcutSequence();
         return;
@@ -1171,21 +1165,10 @@ export function CommanderShell({
       clearShortcutSequence();
       runShortcutAction(shortcutMatch.action);
     };
-    const handleCompositionStart = () => setKeyboardLanguage('KO');
-    const handleCompositionEnd = (event: CompositionEvent) => {
-      const detectedLanguage = detectKeyboardLanguage(event.data);
-      if (detectedLanguage) {
-        setKeyboardLanguage(detectedLanguage);
-      }
-    };
 
     document.addEventListener('keydown', handleDocumentKeyDown, { capture: true });
-    document.addEventListener('compositionstart', handleCompositionStart, { capture: true });
-    document.addEventListener('compositionend', handleCompositionEnd, { capture: true });
     return () => {
       document.removeEventListener('keydown', handleDocumentKeyDown, { capture: true });
-      document.removeEventListener('compositionstart', handleCompositionStart, { capture: true });
-      document.removeEventListener('compositionend', handleCompositionEnd, { capture: true });
       clearShortcutSequence();
     };
   }, []);
@@ -1257,10 +1240,9 @@ export function CommanderShell({
         selectedCount={context.selectedCount}
         selectedBytes={sumEntryBytes(activeTargets.selectedEntries)}
         message={statusMessage}
-        keyboardLanguage={keyboardLanguage}
         filter={activePanelState.filter}
       />
-      <HotkeyStrip />
+      <HotkeyStrip scale={viewMetrics.scale} />
       {filterPromptPanel ? (
         <FilterPrompt
           panel={panelState[filterPromptPanel]}
@@ -1913,7 +1895,6 @@ function BottomStatusStrip({
   selectedCount,
   selectedBytes,
   message,
-  keyboardLanguage,
   filter,
 }: {
   listing: DirectoryListing;
@@ -1921,7 +1902,6 @@ function BottomStatusStrip({
   selectedCount: number;
   selectedBytes: number;
   message: string | null;
-  keyboardLanguage: 'KO' | 'EN';
   filter: string | null;
 }) {
   const summary = summarizeEntries(listing.entries);
@@ -1932,7 +1912,6 @@ function BottomStatusStrip({
       {filter ? <span className="status-filter">Filter: {filter}</span> : null}
       <span>{activePanel.toUpperCase()}</span>
       {message ? <span className="status-message" aria-live="polite">{message}</span> : null}
-      <span className="status-language">[{keyboardLanguage}]</span>
     </footer>
   );
 }
@@ -1975,10 +1954,52 @@ function MiddleEllipsisEntryName({ name, filter }: { name: string; filter: strin
   );
 }
 
-function HotkeyStrip() {
+const HOTKEY_STRIP_HORIZONTAL_PADDING_PX = 24;
+const HOTKEY_STRIP_ITEM_PADDING_PX = 22;
+const HOTKEY_STRIP_CHAR_WIDTH_PX = 9;
+const HOTKEY_STRIP_MIN_VISIBLE = 6;
+
+export const hotkeyStripActionsForWidth = (
+  widthPx: number,
+  scale = 1,
+  actions: readonly AppAction[] = hotkeyStripActionsFromRegistry(),
+) => {
+  const availableWidth = Math.max(0, widthPx - HOTKEY_STRIP_HORIZONTAL_PADDING_PX * scale);
+  const estimateActionWidth = (action: AppAction) => {
+    const shortcut = shortcutLabelForAction(action);
+    const label = action.hotkeyLabel;
+    return Math.ceil((shortcut.length + label.length + 2) * HOTKEY_STRIP_CHAR_WIDTH_PX * scale)
+      + HOTKEY_STRIP_ITEM_PADDING_PX * scale;
+  };
+
+  let usedWidth = 0;
+  const visible: AppAction[] = [];
+  for (const action of actions) {
+    const itemWidth = estimateActionWidth(action);
+    if (visible.length < HOTKEY_STRIP_MIN_VISIBLE || usedWidth + itemWidth <= availableWidth) {
+      visible.push(action);
+      usedWidth += itemWidth;
+    }
+  }
+  return visible;
+};
+
+function HotkeyStrip({ scale }: { scale: number }) {
+  const stripRef = useRef<HTMLElement>(null);
+  const stripWidth = useElementWidth(stripRef, 960);
+  const visibleActions = useMemo(
+    () => hotkeyStripActionsForWidth(stripWidth, scale),
+    [scale, stripWidth],
+  );
+  const hiddenCount = hotkeyStripActionsFromRegistry().length - visibleActions.length;
   return (
-    <footer className="hotkey-strip" aria-label="hotkey hints">
-      {hotkeyStripActionsFromRegistry().map((action) => {
+    <footer
+      ref={stripRef}
+      className="hotkey-strip"
+      aria-label="hotkey hints"
+      title={hiddenCount > 0 ? `${hiddenCount} more shortcuts available in Help` : 'All priority shortcuts visible'}
+    >
+      {visibleActions.map((action) => {
         const shortcut = shortcutLabelForAction(action);
         return (
           <span className="hotkey" key={action.id}>
@@ -1986,6 +2007,7 @@ function HotkeyStrip() {
           </span>
         );
       })}
+      {hiddenCount > 0 ? <span className="hotkey hotkey-more" aria-label={`${hiddenCount} hidden shortcuts`}>+{hiddenCount}</span> : null}
     </footer>
   );
 }
@@ -2198,16 +2220,6 @@ const formatLocalClock = (date: Date) => {
   const hour = String(date.getHours()).padStart(2, '0');
   const minute = String(date.getMinutes()).padStart(2, '0');
   return `${year}-${month}-${day} ${hour}:${minute}`;
-};
-
-const detectKeyboardLanguage = (value: string): 'KO' | 'EN' | null => {
-  if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(value)) {
-    return 'KO';
-  }
-  if (/[A-Za-z]/.test(value)) {
-    return 'EN';
-  }
-  return null;
 };
 
 const handleZoomKey = (

@@ -84,6 +84,7 @@ interface AppAction {
 
 - `ActionContext`는 active panel, focused entry, selected entries, opposite panel path, operation state, settings를 포함한다.
 - action enablement는 메뉴/컨텍스트 메뉴/hotkey strip/help에서 같은 selector를 사용한다.
+- hotkey strip은 action registry의 우선순위 목록을 사용하되 화면 폭과 확대 배율에 따라 표시 개수를 동적으로 조정한다. 좁은 화면에서는 핵심 조작만 남기고, 넓은 화면에서는 추가 action hint를 더 노출한다.
 - destructive/irreversible action은 command 실행 전 dialog 정책을 반드시 거친다.
 - `external.runShellCommand`는 `ShellCommandDialog`의 preview/confirm 단계를 거쳐 backend `prepare_shell_command` → `run_shell_command` 순서로 실행한다. 기본 비활성 또는 명시 확인 정책을 거치며, 작업 디렉토리/명령/종료 코드/표준 오류를 사용자에게 표시한다.
 

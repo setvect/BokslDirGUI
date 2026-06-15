@@ -456,11 +456,6 @@ button {
   color: #fff;
 }
 
-.status-language {
-  margin-left: auto;
-  color: #65ef8f;
-}
-
 .hotkey-strip {
   gap: 0;
   height: var(--hotkey-strip-height);
@@ -482,6 +477,11 @@ button {
   gap: 2px;
   padding: 0 calc(11px * var(--commander-scale));
   border-right: 1px solid #3a3a3a;
+}
+
+.hotkey-more {
+  flex: 0 0 auto;
+  color: #8f8f8f;
 }
 
 .hotkey kbd,

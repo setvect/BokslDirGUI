@@ -85,7 +85,7 @@
 ### 0.4 Action / operation shell
 
 - [x] parity-critical action ID 등록.
-- [x] 메뉴 root와 hotkey strip을 registry에서 파생.
+- [x] 메뉴 root와 hotkey strip을 registry에서 파생. hotkey strip은 화면 폭/확대 배율에 따라 핵심 단축키부터 가능한 만큼 표시한다.
 - [x] context menu action enablement와 virtual parent row 보호.
 - [x] 선택 항목이 없을 때 focused concrete row를 복사/이동/삭제/압축 effective target으로 사용하는 TUI fallback 구현.
 - [x] filter 적용 상태를 panel header/status/bottom status에 표시하고 파일명 매칭 구간 highlight 구현.

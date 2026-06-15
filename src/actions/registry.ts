@@ -55,7 +55,7 @@ const action = <T extends ActionDefinition>(definition: T): T & AppAction => ({
 });
 
 export const ACTIONS = [
-  action({ id: 'panel.switchActive', category: 'panel', shortcutLabel: 'Tab', keyboardBindings: ['Tab'], menuPath: ['View'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'panel.switchActive', category: 'panel', displayLabel: 'Switch Panel', hotkeyLabel: 'Panel', shortcutLabel: 'Tab', keyboardBindings: ['Tab'], menuPath: ['View'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'nav.enter', category: 'navigation', displayLabel: 'Open', shortcutLabel: 'Enter/l', keyboardBindings: ['Enter', 'l'], menuPath: ['File', 'Open'], contextScopes: ['file', 'directory', 'archive'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir/open_default', isEnabled: hasFocus }),
   action({ id: 'nav.up', category: 'navigation', shortcutLabel: 'Backspace/h', keyboardBindings: ['Backspace', 'h'], menuPath: ['Go', 'Up'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.back', category: 'navigation', shortcutLabel: 'Alt+Left', keyboardBindings: ['Alt+ArrowLeft'], menuPath: ['Go', 'Back'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
@@ -125,19 +125,37 @@ export const getAction = (id: ActionId) => {
 };
 
 const HOTKEY_STRIP_ACTION_IDS: readonly ActionId[] = [
+  'panel.switchActive',
+  'nav.enter',
+  'selection.toggle',
   'file.copy',
   'file.move',
-  'file.trash',
   'file.mkdir',
+  'file.trash',
   'file.rename',
-  'file.properties',
-  'help.shortcuts',
   'filter.start',
-  'selection.toggle',
+  'help.shortcuts',
+  'file.properties',
+  'nav.refresh',
+  'nav.up',
   'selection.invert',
   'selection.all',
   'selection.clear',
+  'view.toggleHidden',
+  'view.sortName',
+  'view.sortDate',
+  'archive.create',
+  'archive.extract',
   'file.deletePermanent',
+  'external.openEditor',
+  'external.openDefault',
+  'tab.new',
+  'tab.close',
+  'tab.list',
+  'bookmark.list',
+  'history.list',
+  'layout.toggleSingleDual',
+  'external.runShellCommand',
 ];
 
 export const hotkeyStripActionsFromRegistry = () => HOTKEY_STRIP_ACTION_IDS.map(getAction);
