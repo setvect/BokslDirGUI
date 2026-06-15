@@ -1358,11 +1358,15 @@ export interface PanelColumnLayout {
   showOwner: boolean;
   dateFormat: 'short' | 'long';
   cssClass: string;
+  gridTemplateColumns: string;
 }
 
 const BASE_COLUMN_CHAR_WIDTH_PX = 8;
+const MIN_NAME_CONTENT_CHARS = 30;
+const NAME_MIN_WIDTH_RATIO = 0.48;
+const CELL_HORIZONTAL_PADDING_CHARS = 3;
 const COLUMN_MIN_CHARS = {
-  name: 18,
+  name: MIN_NAME_CONTENT_CHARS,
   modifiedShort: 12,
   modifiedLong: 17,
   size: 10,
@@ -1412,7 +1416,10 @@ export const columnLayoutForPanelWidth = (
   const columnWidths = (Array.isArray(entriesOrWidths)
     ? metadataColumnWidthsForEntries(entriesOrWidths)
     : entriesOrWidths) as PanelMetadataColumnWidths;
-  if (width >= COLUMN_MIN_CHARS.name + columnWidths.size + columnWidths.modifiedLong + columnWidths.permissions + columnWidths.created + columnWidths.owner) {
+  const fits = (...metadataWidths: number[]) =>
+    width >= nameBudgetForWidth(width) + metadataBudget(metadataWidths);
+
+  if (fits(columnWidths.size, columnWidths.modifiedLong, columnWidths.created, columnWidths.permissions, columnWidths.owner)) {
     return {
       showModified: true,
       showSize: true,
@@ -1421,9 +1428,16 @@ export const columnLayoutForPanelWidth = (
       showOwner: true,
       dateFormat: 'long',
       cssClass: 'columns-owner',
+      gridTemplateColumns: gridTemplateColumnsFor([
+        columnWidths.size,
+        columnWidths.modifiedLong,
+        columnWidths.created,
+        columnWidths.permissions,
+        columnWidths.owner,
+      ]),
     };
   }
-  if (width >= COLUMN_MIN_CHARS.name + columnWidths.size + columnWidths.modifiedLong + columnWidths.permissions + columnWidths.created) {
+  if (fits(columnWidths.size, columnWidths.modifiedLong, columnWidths.created, columnWidths.permissions)) {
     return {
       showModified: true,
       showSize: true,
@@ -1432,9 +1446,15 @@ export const columnLayoutForPanelWidth = (
       showOwner: false,
       dateFormat: 'long',
       cssClass: 'columns-created',
+      gridTemplateColumns: gridTemplateColumnsFor([
+        columnWidths.size,
+        columnWidths.modifiedLong,
+        columnWidths.created,
+        columnWidths.permissions,
+      ]),
     };
   }
-  if (width >= COLUMN_MIN_CHARS.name + columnWidths.size + columnWidths.modifiedLong + columnWidths.permissions) {
+  if (fits(columnWidths.size, columnWidths.modifiedLong, columnWidths.permissions)) {
     return {
       showModified: true,
       showSize: true,
@@ -1443,9 +1463,14 @@ export const columnLayoutForPanelWidth = (
       showOwner: false,
       dateFormat: 'long',
       cssClass: 'columns-permissions',
+      gridTemplateColumns: gridTemplateColumnsFor([
+        columnWidths.size,
+        columnWidths.modifiedLong,
+        columnWidths.permissions,
+      ]),
     };
   }
-  if (width >= COLUMN_MIN_CHARS.name + columnWidths.size + columnWidths.modifiedShort) {
+  if (fits(columnWidths.size, columnWidths.modifiedShort)) {
     return {
       showModified: true,
       showSize: true,
@@ -1454,9 +1479,10 @@ export const columnLayoutForPanelWidth = (
       showOwner: false,
       dateFormat: 'short',
       cssClass: 'columns-basic',
+      gridTemplateColumns: gridTemplateColumnsFor([columnWidths.size, columnWidths.modifiedShort]),
     };
   }
-  if (width >= COLUMN_MIN_CHARS.name + columnWidths.modifiedShort) {
+  if (fits(columnWidths.modifiedShort)) {
     return {
       showModified: true,
       showSize: false,
@@ -1465,6 +1491,7 @@ export const columnLayoutForPanelWidth = (
       showOwner: false,
       dateFormat: 'short',
       cssClass: 'columns-name-date',
+      gridTemplateColumns: gridTemplateColumnsFor([columnWidths.modifiedShort]),
     };
   }
   return {
@@ -1475,8 +1502,21 @@ export const columnLayoutForPanelWidth = (
     showOwner: false,
     dateFormat: 'short',
     cssClass: 'columns-name-only',
+    gridTemplateColumns: gridTemplateColumnsFor([]),
   };
 };
+
+const nameBudgetForWidth = (widthChars: number) =>
+  Math.max(COLUMN_MIN_CHARS.name, Math.ceil(widthChars * NAME_MIN_WIDTH_RATIO)) + CELL_HORIZONTAL_PADDING_CHARS;
+
+const metadataBudget = (metadataWidths: number[]) =>
+  metadataWidths.reduce((total, columnWidth) => total + columnWidth + CELL_HORIZONTAL_PADDING_CHARS, 0);
+
+const gridTemplateColumnsFor = (metadataWidths: number[]) =>
+  [
+    'minmax(0, 1fr)',
+    ...metadataWidths.map((columnWidth) => `calc(${columnWidth}ch + var(--cell-padding-x) * 2)`),
+  ].join(' ');
 
 const useElementWidth = <T extends HTMLElement>(ref: RefObject<T | null>, fallbackWidth: number) => {
   const [width, setWidth] = useState(fallbackWidth);
@@ -1565,6 +1605,9 @@ function FilePanel({
     () => columnLayoutForPanelWidth(panelWidth, scale, metadataColumnWidths),
     [panelWidth, scale, metadataColumnWidths],
   );
+  const fileTableStyle = {
+    '--file-grid-template': columnLayout.gridTemplateColumns,
+  } as CSSProperties;
   const tableColumns = useMemo<ColumnDef<FileEntry>[]>(() => {
     const columns: ColumnDef<FileEntry>[] = [
       {
@@ -1676,7 +1719,7 @@ function FilePanel({
         onGotoPath={onGotoPath}
         onRestoreFocus={onRestoreFocus}
       />
-      <div className="file-table" role="table" aria-rowcount={listing.entries.length}>
+      <div className="file-table" role="table" aria-rowcount={listing.entries.length} style={fileTableStyle}>
         <div className="file-table-head" role="rowgroup">
           {table.getHeaderGroups().map((headerGroup) => (
             <div className={`file-table-row file-table-heading ${columnLayout.cssClass}`} role="row" key={headerGroup.id}>

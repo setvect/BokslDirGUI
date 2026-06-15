@@ -56,18 +56,23 @@ describe('CommanderShell', () => {
     expect(container.querySelector('.persistent-sidebar')).toBeNull();
     expect(container.querySelector('.persistent-inspector')).toBeNull();
     expect(container.querySelector('.large-toolbar')).toBeNull();
+    expect(container.querySelector<HTMLElement>('.file-table')?.style.getPropertyValue('--file-grid-template')).toContain('minmax(0, 1fr)');
   });
 
 
   it('uses the TUI width-based metadata column policy', () => {
     expect(columnLayoutForPanelWidth(29 * 8)).toMatchObject({ showModified: false, showSize: false });
-    expect(columnLayoutForPanelWidth(30 * 8)).toMatchObject({ showModified: true, showSize: false, dateFormat: 'short' });
-    expect(columnLayoutForPanelWidth(40 * 8)).toMatchObject({ showSize: true, showPermissions: false, dateFormat: 'short' });
-    expect(columnLayoutForPanelWidth(56 * 8)).toMatchObject({ showPermissions: true, showCreated: false, dateFormat: 'long' });
-    expect(columnLayoutForPanelWidth(73 * 8)).toMatchObject({ showPermissions: true, showCreated: true, showOwner: false });
-    expect(columnLayoutForPanelWidth(87 * 8)).toMatchObject({ showCreated: true, showOwner: true });
-    expect(columnLayoutForPanelWidth(70 * 8, 1)).toMatchObject({ showPermissions: true });
+    expect(columnLayoutForPanelWidth(40 * 8)).toMatchObject({ showModified: false, showSize: false });
+    expect(columnLayoutForPanelWidth(48 * 8)).toMatchObject({ showModified: true, showSize: false, dateFormat: 'short' });
+    expect(columnLayoutForPanelWidth(61 * 8)).toMatchObject({ showSize: true, showPermissions: false, dateFormat: 'short' });
+    expect(columnLayoutForPanelWidth(87 * 8)).toMatchObject({ showSize: true, showPermissions: false, showCreated: false });
+    expect(columnLayoutForPanelWidth(100 * 8)).toMatchObject({ showPermissions: true, showCreated: false, dateFormat: 'long' });
+    expect(columnLayoutForPanelWidth(135 * 8)).toMatchObject({ showPermissions: true, showCreated: true, showOwner: false });
+    expect(columnLayoutForPanelWidth(170 * 8)).toMatchObject({ showCreated: true, showOwner: true });
+    expect(columnLayoutForPanelWidth(70 * 8, 1)).toMatchObject({ showSize: true, showPermissions: false });
     expect(columnLayoutForPanelWidth(70 * 8, 1.5)).toMatchObject({ showPermissions: false });
+    expect(columnLayoutForPanelWidth(100 * 8).gridTemplateColumns).toContain('calc(');
+    expect(columnLayoutForPanelWidth(100 * 8).gridTemplateColumns).toContain('var(--cell-padding-x)');
 
     const longOwnerEntry = {
       ...testEntry(SAMPLE_LISTINGS.right.path, 'long-owner.txt'),
@@ -81,8 +86,8 @@ describe('CommanderShell', () => {
       permissions: 'drwxrwxrwx+ extended-acl',
       modifiedAt: '2026-02-18T11:42:00+09:00',
     };
-    expect(columnLayoutForPanelWidth(87 * 8, 1, [longOwnerEntry])).toMatchObject({ showOwner: false });
-    expect(columnLayoutForPanelWidth(56 * 8, 1, [longPermissionEntry])).toMatchObject({ showPermissions: false });
+    expect(columnLayoutForPanelWidth(170 * 8, 1, [longOwnerEntry])).toMatchObject({ showOwner: false });
+    expect(columnLayoutForPanelWidth(100 * 8, 1, [longPermissionEntry])).toMatchObject({ showPermissions: false });
   });
 
   it('uses predictable preset zoom scales and keeps filename suffixes for middle ellipsis', () => {

@@ -275,33 +275,9 @@ button {
 
 .file-table-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: var(--file-grid-template, minmax(0, 1fr));
   align-items: center;
   min-width: 0;
-}
-
-.file-table-row.columns-name-only {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.file-table-row.columns-name-date {
-  grid-template-columns: minmax(0, 1fr) max-content;
-}
-
-.file-table-row.columns-basic {
-  grid-template-columns: minmax(0, 1fr) max-content max-content;
-}
-
-.file-table-row.columns-permissions {
-  grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
-}
-
-.file-table-row.columns-created {
-  grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content;
-}
-
-.file-table-row.columns-owner {
-  grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content max-content;
 }
 
 .file-table-heading {

@@ -72,7 +72,8 @@
 - path/refresh/back/up 같은 non-modal control 클릭 뒤에는 shell이 keyboard owner를 되찾아 다음 Space/화살표 입력이 commander 동작으로 처리되어야 한다.
 - Cmd/Ctrl `+`, Cmd/Ctrl `-`, Cmd/Ctrl `0`은 글자 크기뿐 아니라 row height, header/status/hotkey strip 높이, padding, virtualizer estimate까지 같이 조정하고 `Settings.view.zoomStep`으로 저장/복원되어야 한다.
 - Zoom 단계는 예측 가능한 preset(`75/80/90/100/110/125/150/175/200%`)으로 표시되어야 한다.
-- 확대/축소 후 표시되는 metadata 컬럼(size/modified/created/permissions/owner)은 중간에 ellipsis로 잘리지 않아야 하며, listing 변경 시 계산한 실제 항목의 metadata 표시 길이를 반영해 공간 부족 시 owner → created → permissions → size → modified 순으로 숨겨야 한다.
+- 확대/축소 후 표시되는 metadata 컬럼(size/modified/created/permissions/owner)은 중간에 ellipsis로 잘리지 않아야 하며, listing 변경 시 계산한 실제 항목의 metadata 표시 길이를 반영해 공간 부족 시 owner → created → permissions → size → modified 순으로 숨겨야 한다. 단, dual-panel에서는 파일명이 우선 정보이므로 metadata가 name 가독 폭을 침범하면 Created/Permissions를 적극적으로 숨긴다.
+- 파일 목록 header와 body row는 같은 panel 단위 grid template을 공유해 `Name/Size/Modified/Created/Permissions` 헤더 위치와 실제 값 위치가 어긋나지 않아야 한다.
 - 긴 파일명은 Unicode grapheme-safe middle ellipsis로 표시해 뒤쪽 확장자/식별자를 보존해야 한다. `Intl.Segmenter`가 없는 환경에서도 fallback 분할은 원본 문자열을 정규화로 바꾸지 않고 combining mark/variation selector/emoji modifier/ZWJ sequence를 같은 cluster로 유지해야 한다. row hover/focus 정보에는 전체 파일명과 경로/크기/날짜/권한/소유자 정보가 포함되어야 한다.
 - filter 적용 상태는 panel header/status와 bottom status에 표시되고, 파일명 substring 매칭 구간이 시각적으로 강조되어야 한다.
 - 다이얼로그는 Esc/Enter/focus trap을 지원한다.
