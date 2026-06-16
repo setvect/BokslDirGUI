@@ -73,6 +73,7 @@ button {
 }
 
 .top-menu {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -112,9 +113,11 @@ button {
 }
 
 .menu-trigger:hover,
-.menu-trigger[data-state='open'] {
+.menu-trigger[data-state='open'],
+.menu-trigger:focus-visible {
   background: #3a3a3d;
   color: #fff;
+  outline: none;
 }
 
 .clock {
@@ -505,6 +508,9 @@ button {
 }
 
 .menu-popover {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: calc((118px + (var(--menu-root-index, 0) * 72px)) * var(--commander-scale));
   padding: 6px;
 }
 
@@ -530,7 +536,30 @@ button {
   text-align: left;
 }
 
+.menu-entry-with-submenu {
+  position: relative;
+}
+
+.menu-submenu {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 5px);
+  z-index: 21;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  background: rgba(31, 31, 31, 0.99);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.menu-submenu-hint {
+  padding: 4px 9px 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .menu-item:hover,
+.menu-item.is-focused,
 .context-item[data-highlighted] {
   background: var(--blue);
   color: #fff;

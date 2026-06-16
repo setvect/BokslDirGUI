@@ -55,6 +55,7 @@ const action = <T extends ActionDefinition>(definition: T): T & AppAction => ({
 });
 
 export const ACTIONS = [
+  action({ id: 'menu.open', category: 'navigation', displayLabel: 'Menu', hotkeyLabel: 'Menu', shortcutLabel: 'F9', keyboardBindings: ['F9'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'panel.switchActive', category: 'panel', displayLabel: 'Switch Panel', hotkeyLabel: 'Panel', shortcutLabel: 'Tab', keyboardBindings: ['Tab'], menuPath: ['View'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'nav.enter', category: 'navigation', displayLabel: 'Open', shortcutLabel: 'Enter/l', keyboardBindings: ['Enter', 'l'], menuPath: ['File', 'Open'], contextScopes: ['file', 'directory', 'archive'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir/open_default', isEnabled: hasFocus }),
   action({ id: 'nav.up', category: 'navigation', shortcutLabel: 'Backspace/h', keyboardBindings: ['Backspace', 'h'], menuPath: ['Go', 'Up'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),

@@ -13,7 +13,196 @@ for (const script of ['typecheck', 'test', 'build', 'check', 'rust:test', 'verif
 }
 
 const registry = read('src/actions/registry.ts');
+const registryActionIds = [...registry.matchAll(/id: '([^']+)'/g)].map((match) => match[1]);
+const registryActionIdSet = new Set(registryActionIds);
+
+const parityMatrix = JSON.parse(read('docs/implementation/tui-parity-matrix.json'));
+const parityMatrixDoc = read('docs/implementation/tui-parity-matrix.md');
+const allowedParityStatuses = new Set(['implemented', 'partial', 'stub', 'planned', 'missing']);
+const expectedTuiActionIds = [
+  'move_up',
+  'move_down',
+  'go_parent',
+  'enter',
+  'go_top',
+  'go_bottom',
+  'page_up',
+  'page_down',
+  'toggle_panel',
+  'toggle_layout',
+  'tab_new',
+  'tab_close',
+  'copy',
+  'move',
+  'open_default',
+  'open_terminal_editor',
+  'run_shell_command',
+  'delete',
+  'perm_delete',
+  'new_dir',
+  'rename',
+  'file_info',
+  'archive_compress',
+  'archive_extract',
+  'archive_extract_auto',
+  'archive_preview',
+  'toggle_sel',
+  'invert_selection',
+  'select_all',
+  'deselect',
+  'help_keys',
+  'refresh',
+  'open_menu',
+  'quit',
+  'theme_dark',
+  'theme_light',
+  'theme_contrast',
+  'language_en',
+  'language_ko',
+  'toggle_icons',
+  'editor_preset_vi',
+  'editor_preset_vim',
+  'editor_preset_nano',
+  'editor_preset_emacs',
+  'sort_name',
+  'sort_size',
+  'sort_date',
+  'sort_ext',
+  'sort_asc',
+  'sort_desc',
+  'filter_start',
+  'filter_clear',
+  'toggle_hidden',
+  'mount_points',
+  'goto_path',
+  'tab_list',
+  'history_back',
+  'history_forward',
+  'history_list',
+  'bookmark_add',
+  'bookmark_list',
+  'size_auto',
+  'size_bytes',
+  'about',
+];
+const expectedTuiActionIdSet = new Set(expectedTuiActionIds);
+const parityRows = Array.isArray(parityMatrix.tuiActions) ? parityMatrix.tuiActions : [];
+const parityRowsById = new Map(parityRows.map((row) => [row.tuiId, row]));
+const guiOnlyExtensionIds = new Set((parityMatrix.guiOnlyExtensions ?? []).map((item) => item.guiActionId));
+const rowHasMenuPath = (row, ...segments) =>
+  row?.tuiMenuPaths?.some((menuPath) => segments.every((segment, index) => menuPath[index] === segment));
+
+addCheck(
+  'TUI parity matrix JSON exists with schema version',
+  parityMatrix.schemaVersion === 1 && parityMatrix.completionRule?.includes('implemented'),
+  'docs/implementation/tui-parity-matrix.json',
+);
+addCheck(
+  'TUI parity matrix markdown documents hard gate',
+  parityMatrixDoc.includes('Phase 0 하드 게이트') && parityMatrixDoc.includes('implemented'),
+  'docs/implementation/tui-parity-matrix.md',
+);
+addCheck(
+  'TUI parity matrix covers every known BokslDir TUI action exactly once',
+  parityRows.length === expectedTuiActionIds.length
+    && new Set(parityRows.map((row) => row.tuiId)).size === expectedTuiActionIds.length
+    && expectedTuiActionIds.every((id) => parityRowsById.has(id)),
+  `${parityRows.length}/${expectedTuiActionIds.length} rows`,
+);
+addCheck(
+  'TUI parity matrix has no unknown TUI action ids',
+  parityRows.every((row) => expectedTuiActionIdSet.has(row.tuiId)),
+  parityRows.filter((row) => !expectedTuiActionIdSet.has(row.tuiId)).map((row) => row.tuiId).join(', ') || 'ok',
+);
+addCheck(
+  'TUI parity matrix statuses are controlled vocabulary',
+  parityRows.every((row) => allowedParityStatuses.has(row.implementationStatus)),
+  'allowed: implemented, partial, stub, planned, missing',
+);
+addCheck(
+  'TUI parity matrix implemented rows carry evidence',
+  parityRows.every((row) => row.implementationStatus !== 'implemented' || row.evidence?.length > 0),
+  'implemented rows must not be assertion-only',
+);
+addCheck(
+  'TUI parity matrix missing rows are not mapped to GUI actions',
+  parityRows.every((row) => row.implementationStatus !== 'missing' || row.guiActionIds.length === 0),
+  'missing means no GUI action is registered yet',
+);
+const menuActionIds = (parityMatrix.menuRoots ?? []).flatMap((root) => root.actionIds ?? []);
+addCheck(
+  'TUI parity matrix menu roots cover only known action ids',
+  menuActionIds.every((id) => expectedTuiActionIdSet.has(id)),
+  menuActionIds.filter((id) => !expectedTuiActionIdSet.has(id)).join(', ') || 'ok',
+);
+addCheck(
+  'TUI parity matrix menu action rows include TUI menu paths',
+  menuActionIds.every((id) => parityRowsById.get(id)?.tuiMenuPaths?.length > 0),
+  menuActionIds.filter((id) => !parityRowsById.get(id)?.tuiMenuPaths?.length).join(', ') || 'ok',
+);
+addCheck(
+  'TUI parity matrix records F9 menu as implemented only with keyboard evidence',
+  parityRowsById.get('open_menu')?.priority === 'P0'
+    && parityRowsById.get('open_menu')?.implementationStatus === 'implemented'
+    && parityRowsById.get('open_menu')?.guiActionIds?.includes('menu.open')
+    && parityRowsById.get('open_menu')?.tuiKeyboardBindings?.includes('F9')
+    && read('src/ui/CommanderShell.tsx').includes('handleTopMenuKeyDown')
+    && registry.includes("id: 'menu.open'"),
+  'F9 menu may be implemented only when registry and shell keyboard state machine evidence exist',
+);
+addCheck(
+  'TUI parity matrix records copy/move menu mismatch and incomplete UX',
+  ['copy', 'move'].every((id) => {
+    const row = parityRowsById.get(id);
+    return row?.priority === 'P0'
+      && row.implementationStatus !== 'implemented'
+      && rowHasMenuPath(row, 'Edit')
+      && row.guiMenuPaths?.some((menuPath) => menuPath[0] === 'File');
+  }),
+  'copy/move currently differ from TUI Edit menu and need G003 UX repair',
+);
+addCheck(
+  'TUI parity matrix records selection reliability as incomplete P0',
+  parityRowsById.get('toggle_sel')?.priority === 'P0'
+    && parityRowsById.get('toggle_sel')?.implementationStatus !== 'implemented'
+    && parityRowsById.get('toggle_sel')?.tuiKeyboardBindings?.includes('Space'),
+  'Space selection must not be falsely marked complete before G004',
+);
+addCheck(
+  'TUI parity matrix records settings direct-submenu parity as incomplete',
+  ['theme_dark', 'theme_light', 'theme_contrast', 'language_en', 'language_ko', 'size_auto', 'size_bytes'].every(
+    (id) => parityRowsById.get(id)?.implementationStatus !== 'implemented',
+  ),
+  'theme/language/size format require direct visible behavior before completion',
+);
+addCheck(
+  'TUI parity matrix records known missing TUI actions',
+  ['archive_extract_auto', 'quit', 'toggle_icons', 'editor_preset_vi', 'editor_preset_vim', 'editor_preset_nano', 'editor_preset_emacs'].every(
+    (id) => parityRowsById.get(id)?.implementationStatus === 'missing',
+  ),
+  'missing TUI parity must stay visible until implemented',
+);
+const matrixMappedGuiIds = new Set(
+  parityRows.flatMap((row) => row.guiActionIds ?? []).filter((id) => !id.startsWith('__ui_motion.')),
+);
+addCheck(
+  'TUI parity matrix maps all non-extension GUI actions',
+  registryActionIds.every((id) => matrixMappedGuiIds.has(id) || guiOnlyExtensionIds.has(id)),
+  registryActionIds.filter((id) => !matrixMappedGuiIds.has(id) && !guiOnlyExtensionIds.has(id)).join(', ') || 'ok',
+);
+addCheck(
+  'TUI parity matrix GUI mappings refer to registered or explicit pseudo actions',
+  [...matrixMappedGuiIds].every((id) => registryActionIdSet.has(id)),
+  [...matrixMappedGuiIds].filter((id) => !registryActionIdSet.has(id)).join(', ') || 'ok',
+);
+addCheck(
+  'TUI parity matrix documents GUI-only extension action ids',
+  [...guiOnlyExtensionIds].every((id) => registryActionIdSet.has(id)),
+  [...guiOnlyExtensionIds].filter((id) => !registryActionIdSet.has(id)).join(', ') || 'ok',
+);
+
 const requiredActionIds = [
+  'menu.open',
   'panel.switchActive',
   'nav.enter',
   'nav.up',

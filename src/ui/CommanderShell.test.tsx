@@ -917,6 +917,48 @@ describe('CommanderShell', () => {
     await waitFor(() => expect(commanderKeyboardOwners()).toContain('menu-popover'));
   });
 
+  it('opens the top menu with F9 and navigates root menus with the keyboard', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+
+    await user.keyboard('{F9}');
+
+    const fileMenu = await screen.findByRole('menu', { name: 'File menu' });
+    expect(within(fileMenu).getAllByRole('menuitem')[0].textContent).toContain('Open');
+    expect(within(fileMenu).getAllByRole('menuitem')[0].className).toContain('is-focused');
+    expect(commanderKeyboardOwners()).toContain('menu-popover');
+
+    await user.keyboard('{ArrowRight}');
+    expect(await screen.findByRole('menu', { name: 'Edit menu' })).toBeTruthy();
+
+    await user.keyboard('{F9}');
+    expect(screen.queryByRole('menu', { name: 'Edit menu' })).toBeNull();
+  });
+
+  it('supports submenu keyboard navigation from the F9 menu', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir');
+    renderCommander(dataSource);
+
+    await user.keyboard('{F9}');
+    await user.keyboard('{ArrowRight}');
+    expect(await screen.findByRole('menu', { name: 'Edit menu' })).toBeTruthy();
+    await user.keyboard('{ArrowRight}');
+    expect(await screen.findByRole('menu', { name: 'View menu' })).toBeTruthy();
+
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowRight}');
+    expect(await screen.findByRole('menu', { name: 'Sort submenu' })).toBeTruthy();
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sort: expect.objectContaining({ field: 'name', direction: 'asc' }),
+    })));
+    expect(screen.queryByRole('menu', { name: 'View menu' })).toBeNull();
+  });
+
   it('keeps same-type keyboard owners registered until all mounts unmount', async () => {
     const { rerender, unmount } = render(
       <>

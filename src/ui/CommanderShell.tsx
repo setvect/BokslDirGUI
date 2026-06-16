@@ -1,5 +1,4 @@
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import * as Popover from '@radix-ui/react-popover';
 import {
   flexRender,
   getCoreRowModel,
@@ -147,6 +146,38 @@ interface KeyboardRuntime {
 
 type ZoomCommand = 'in' | 'out' | 'reset';
 
+interface TopMenuState {
+  rootIndex: number;
+  itemIndex: number;
+  submenuIndex: number | null;
+}
+
+interface MenuActionNode {
+  kind: 'action';
+  id: string;
+  label: string;
+  action: AppAction;
+  enabled: boolean;
+}
+
+interface MenuSubmenuNode {
+  kind: 'submenu';
+  id: string;
+  label: string;
+  children: MenuActionNode[];
+}
+
+type MenuNode = MenuActionNode | MenuSubmenuNode;
+
+interface TopMenuKeyboardRuntime {
+  context: ActionContext;
+  getState(): TopMenuState | null;
+  open(rootIndex?: number): void;
+  close(): void;
+  setState(next: TopMenuState): void;
+  execute(action: AppAction): void;
+}
+
 interface ListPanelOptions {
   pushHistory?: boolean;
   replaceBack?: string[];
@@ -172,6 +203,8 @@ export function CommanderShell({
   const shortcutSequenceRef = useRef<readonly string[]>([]);
   const shortcutSequenceTimeoutRef = useRef<number | null>(null);
   const keyboardRuntimeRef = useRef<KeyboardRuntime | null>(null);
+  const topMenuKeyboardRuntimeRef = useRef<TopMenuKeyboardRuntime | null>(null);
+  const topMenuStateRef = useRef<TopMenuState | null>(null);
   const navigationRequestRef = useRef<Record<PanelId, number>>({ left: 0, right: 0 });
   const locationsRequestRef = useRef(0);
   const selectionAnchorRef = useRef<Record<PanelId, number | null>>({ left: null, right: null });
@@ -194,6 +227,12 @@ export function CommanderShell({
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpSearchOpen, setHelpSearchOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [topMenuState, setTopMenuStateValue] = useState<TopMenuState | null>(null);
+  topMenuStateRef.current = topMenuState;
+  const setTopMenuState = (next: TopMenuState | null) => {
+    topMenuStateRef.current = next;
+    setTopMenuStateValue(next);
+  };
   const [panelTabs, setPanelTabs] = useState<Record<PanelId, string[]>>(() => ({
     left: [dataSource.initialListings.left.path],
     right: [dataSource.initialListings.right.path],
@@ -693,6 +732,21 @@ export function CommanderShell({
     setStatusMessage(`기본 앱 열기 예정: ${entry.name} · open_default 확인 대기`);
   };
 
+  const openTopMenu = (rootIndex = 0) => {
+    const rootCount = menuRootsFromRegistry().length;
+    if (rootCount === 0) {
+      return;
+    }
+    const nextRootIndex = clampNumber(rootIndex, 0, rootCount - 1);
+    setTopMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null });
+    setStatusMessage(`Menu · ${menuRootLabelFromRegistry(menuRootsFromRegistry()[nextRootIndex])}`);
+  };
+
+  const closeTopMenu = () => {
+    setTopMenuState(null);
+    shellRef.current?.focus({ preventScroll: true });
+  };
+
   const handleAction = (
     action: AppAction,
     panelOverride = activePanel,
@@ -700,6 +754,15 @@ export function CommanderShell({
     targetDirOverride?: string,
   ) => {
     const actionId = action.id as ActionId;
+    if (actionId === 'menu.open') {
+      if (topMenuState) {
+        closeTopMenu();
+      } else {
+        openTopMenu(0);
+      }
+      return;
+    }
+
     if (actionId === 'panel.switchActive') {
       switchActivePanel();
       return;
@@ -1013,6 +1076,18 @@ export function CommanderShell({
     handleAction,
     handleZoom: applyZoom,
   };
+  topMenuKeyboardRuntimeRef.current = {
+    context,
+    getState: () => topMenuStateRef.current,
+    open: openTopMenu,
+    close: closeTopMenu,
+    setState: setTopMenuState,
+    execute: (action) => {
+      setTopMenuState(null);
+      handleAction(action);
+      shellRef.current?.focus({ preventScroll: true });
+    },
+  };
 
   useEffect(() => {
     if (!mutationClient.loadSettings) {
@@ -1126,6 +1201,11 @@ export function CommanderShell({
         return;
       }
 
+      if (handleTopMenuKeyDown(event, topMenuKeyboardRuntimeRef.current)) {
+        clearShortcutSequence();
+        return;
+      }
+
       if (runtime.operationDialogOpen || commanderKeyboardIsSuspended(event.target)) {
         clearShortcutSequence();
         return;
@@ -1184,7 +1264,17 @@ export function CommanderShell({
       aria-activedescendant={activeRowDomId}
       aria-keyshortcuts={`${ariaKeyShortcuts} ArrowUp ArrowDown PageUp PageDown Home End`}
     >
-      <TopMenuBar context={context} onOpenAction={(action) => handleAction(action)} />
+      <TopMenuBar
+        context={context}
+        state={topMenuState}
+        onOpenRoot={openTopMenu}
+        onClose={closeTopMenu}
+        onStateChange={setTopMenuState}
+        onOpenAction={(action) => {
+          setTopMenuState(null);
+          handleAction(action);
+        }}
+      />
       <section
         className={`panel-zone layout-${settings.layout.ratio.replace(':', '-')} ${settings.layout.singlePanel ? 'is-single-panel' : ''}`}
         aria-label="dual file panels"
@@ -1274,61 +1364,302 @@ export function CommanderShell({
 
 interface TopMenuBarProps {
   context: Parameters<AppAction['isEnabled']>[0];
+  state: TopMenuState | null;
+  onOpenRoot(rootIndex?: number): void;
+  onClose(): void;
+  onStateChange(next: TopMenuState): void;
   onOpenAction(action: AppAction): void;
 }
 
-function TopMenuBar({ context, onOpenAction }: TopMenuBarProps) {
+const menuNodesForRoot = (root: string, context: ActionContext): MenuNode[] => {
+  const nodes: MenuNode[] = [];
+  const submenuByLabel = new Map<string, MenuSubmenuNode>();
+
+  for (const action of actionsForMenu(root)) {
+    const segments = action.menuPath?.slice(1) ?? [];
+    if (segments.length > 1) {
+      const submenuLabel = segments[0];
+      let submenu = submenuByLabel.get(submenuLabel);
+      if (!submenu) {
+        submenu = {
+          kind: 'submenu',
+          id: `${root}/${submenuLabel}`,
+          label: submenuLabel,
+          children: [],
+        };
+        submenuByLabel.set(submenuLabel, submenu);
+        nodes.push(submenu);
+      }
+      submenu.children.push({
+        kind: 'action',
+        id: action.id,
+        label: segments.at(-1) ?? labelForAction(action),
+        action,
+        enabled: isActionAvailable(action, context),
+      });
+      continue;
+    }
+
+    nodes.push({
+      kind: 'action',
+      id: action.id,
+      label: segments[0] ?? labelForAction(action),
+      action,
+      enabled: isActionAvailable(action, context),
+    });
+  }
+
+  return nodes;
+};
+
+const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRuntime | null) => {
+  if (!runtime) {
+    return false;
+  }
+
+  const roots = menuRootsFromRegistry();
+  const openFromClosed = event.key === 'F9';
+  let state = runtime.getState();
+  if (!state) {
+    if (openFromClosed) {
+      event.preventDefault();
+      event.stopPropagation();
+      runtime.open(0);
+      return true;
+    }
+    return false;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  const applyMenuState = (next: TopMenuState) => {
+    state = next;
+    runtime.setState(next);
+  };
+
+  if (event.key === 'Escape' || event.key === 'F9') {
+    runtime.close();
+    return true;
+  }
+
+  const moveRoot = (delta: number) => {
+    const nextRootIndex = (state!.rootIndex + delta + roots.length) % roots.length;
+    applyMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null });
+  };
+  const nodes = menuNodesForRoot(roots[state.rootIndex], runtime.context);
+  const selectedNode = nodes[state.itemIndex];
+  if (nodes.length === 0) {
+    return true;
+  }
+
+  if (event.key === 'ArrowRight') {
+    if (selectedNode?.kind === 'submenu' && state.submenuIndex === null) {
+      applyMenuState({ ...state, submenuIndex: 0 });
+      return true;
+    }
+    if (selectedNode?.kind !== 'submenu') {
+      const firstSubmenuIndex = nodes.findIndex((node) => node.kind === 'submenu');
+      if (firstSubmenuIndex >= 0) {
+        applyMenuState({ ...state, itemIndex: firstSubmenuIndex, submenuIndex: 0 });
+        return true;
+      }
+    }
+    moveRoot(1);
+    return true;
+  }
+
+  if (event.key === 'ArrowLeft') {
+    if (state.submenuIndex !== null) {
+      applyMenuState({ ...state, submenuIndex: null });
+      return true;
+    }
+    moveRoot(-1);
+    return true;
+  }
+
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    const delta = event.key === 'ArrowDown' ? 1 : -1;
+    if (state.submenuIndex !== null && selectedNode?.kind === 'submenu') {
+      const childCount = selectedNode.children.length;
+      applyMenuState({
+        ...state,
+        submenuIndex: (state.submenuIndex + delta + childCount) % childCount,
+      });
+      return true;
+    }
+    applyMenuState({
+      ...state,
+      itemIndex: (state.itemIndex + delta + nodes.length) % nodes.length,
+      submenuIndex: null,
+    });
+    return true;
+  }
+
+  if (event.key === 'Home') {
+    applyMenuState({ ...state, itemIndex: 0, submenuIndex: null });
+    return true;
+  }
+
+  if (event.key === 'End') {
+    applyMenuState({ ...state, itemIndex: Math.max(0, nodes.length - 1), submenuIndex: null });
+    return true;
+  }
+
+  if (event.key === 'Enter' || event.key === ' ') {
+    if (selectedNode?.kind === 'submenu') {
+      if (state.submenuIndex === null) {
+        applyMenuState({ ...state, submenuIndex: 0 });
+        return true;
+      }
+      const child = selectedNode.children[state.submenuIndex];
+      if (child?.enabled) {
+        runtime.execute(child.action);
+      }
+      return true;
+    }
+    if (selectedNode?.kind === 'action' && selectedNode.enabled) {
+      runtime.execute(selectedNode.action);
+    }
+    return true;
+  }
+
+  return true;
+};
+
+function TopMenuBar({ context, state, onOpenRoot, onClose, onStateChange, onOpenAction }: TopMenuBarProps) {
   const now = useLocalClock();
+  const roots = menuRootsFromRegistry();
+  const activeRoot = state ? roots[state.rootIndex] : null;
+  const activeNodes = activeRoot ? menuNodesForRoot(activeRoot, context) : [];
+
   return (
     <header className="top-menu" aria-label="application menu">
       <div className="brand" aria-label="application name">[복슬Dir]</div>
       <nav className="menu-list" aria-label="primary actions">
-        {menuRootsFromRegistry().map((root) => {
-          const actions = actionsForMenu(root);
+        {roots.map((root, rootIndex) => {
+          const isOpen = state?.rootIndex === rootIndex;
           return (
-            <Popover.Root key={root}>
-              <Popover.Trigger className="menu-trigger">{menuRootLabelFromRegistry(root)}</Popover.Trigger>
-              <Popover.Portal>
-                <MenuPopoverContent
-                  root={root}
-                  actions={actions}
-                  context={context}
-                  onOpenAction={onOpenAction}
-                />
-              </Popover.Portal>
-            </Popover.Root>
+            <button
+              key={root}
+              type="button"
+              className="menu-trigger"
+              aria-haspopup="menu"
+              aria-expanded={isOpen}
+              data-state={isOpen ? 'open' : 'closed'}
+              onClick={() => (isOpen ? onClose() : onOpenRoot(rootIndex))}
+              onMouseEnter={() => {
+                if (state) {
+                  onOpenRoot(rootIndex);
+                }
+              }}
+            >
+              {menuRootLabelFromRegistry(root)}
+            </button>
           );
         })}
       </nav>
       <time className="clock" dateTime={now.toISOString()}>{formatLocalClock(now)}</time>
+      {state && activeRoot ? (
+        <MenuPopoverContent
+          root={activeRoot}
+          rootIndex={state.rootIndex}
+          nodes={activeNodes}
+          state={state}
+          onStateChange={onStateChange}
+          onOpenAction={onOpenAction}
+        />
+      ) : null}
     </header>
   );
 }
 
-function MenuPopoverContent({ root, actions, context, onOpenAction }: {
+function MenuPopoverContent({ root, rootIndex, nodes, state, onStateChange, onOpenAction }: {
   root: string;
-  actions: readonly AppAction[];
-  context: ActionContext;
+  rootIndex: number;
+  nodes: readonly MenuNode[];
+  state: TopMenuState;
+  onStateChange(next: TopMenuState): void;
   onOpenAction(action: AppAction): void;
 }) {
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('menu-popover');
+  const selectedNode = nodes[state.itemIndex];
 
   return (
-    <Popover.Content className="menu-popover" sideOffset={4} align="start" {...keyboardBoundaryProps}>
+    <div
+      className="menu-popover"
+      role="menu"
+      aria-label={`${root} menu`}
+      style={{ '--menu-root-index': rootIndex } as CSSProperties}
+      {...keyboardBoundaryProps}
+    >
       <div className="menu-popover-title">{root}</div>
-      {actions.map((action) => (
-        <button
-          key={action.id}
-          type="button"
-          className="menu-item"
-          disabled={!isActionAvailable(action, context)}
-          onClick={() => onOpenAction(action)}
-        >
-          <span>{labelForAction(action)}</span>
-          <kbd>{shortcutLabelForAction(action)}</kbd>
-        </button>
-      ))}
-    </Popover.Content>
+      {nodes.map((node, itemIndex) => {
+        const focused = state.itemIndex === itemIndex;
+        if (node.kind === 'submenu') {
+          const submenuOpen = focused && state.submenuIndex !== null;
+          return (
+            <div key={node.id} className="menu-entry-with-submenu">
+              <button
+                type="button"
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={submenuOpen}
+                className={`menu-item ${focused ? 'is-focused' : ''}`}
+                onMouseEnter={() => onStateChange({ ...state, itemIndex, submenuIndex: 0 })}
+                onClick={() => onStateChange({ ...state, itemIndex, submenuIndex: submenuOpen ? null : 0 })}
+              >
+                <span>{node.label}</span>
+                <kbd>›</kbd>
+              </button>
+              {submenuOpen ? (
+                <div className="menu-submenu" role="menu" aria-label={`${node.label} submenu`}>
+                  {node.children.map((child, submenuIndex) => (
+                    <button
+                      key={child.id}
+                      type="button"
+                      role="menuitem"
+                      className={`menu-item ${state.submenuIndex === submenuIndex ? 'is-focused' : ''}`}
+                      disabled={!child.enabled}
+                      onMouseEnter={() => onStateChange({ ...state, itemIndex, submenuIndex })}
+                      onClick={() => {
+                        if (child.enabled) {
+                          onOpenAction(child.action);
+                        }
+                      }}
+                    >
+                      <span>{child.label}</span>
+                      <kbd>{shortcutLabelForAction(child.action)}</kbd>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+
+        return (
+          <button
+            key={node.id}
+            type="button"
+            role="menuitem"
+            className={`menu-item ${focused ? 'is-focused' : ''}`}
+            disabled={!node.enabled}
+            onMouseEnter={() => onStateChange({ ...state, itemIndex, submenuIndex: null })}
+            onClick={() => {
+              if (node.enabled) {
+                onOpenAction(node.action);
+              }
+            }}
+          >
+            <span>{node.label}</span>
+            <kbd>{shortcutLabelForAction(node.action)}</kbd>
+          </button>
+        );
+      })}
+      {selectedNode?.kind === 'submenu' && state.submenuIndex === null ? (
+        <div className="menu-submenu-hint" aria-hidden="true">→ submenu</div>
+      ) : null}
+    </div>
   );
 }
 

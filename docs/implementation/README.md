@@ -9,6 +9,7 @@
 | 문서 | 목적 | 구현 전 역할 |
 | --- | --- | --- |
 | `tui-parity-map.md` | 기존 TUI 기능을 GUI 기능/컴포넌트/API로 매핑 | 누락 기능 방지 |
+| `tui-parity-matrix.md` / `tui-parity-matrix.json` | 기존 TUI 액션·단축키·메뉴·서브메뉴와 GUI 구현 상태를 1:1로 대조 | Phase 0 하드 게이트, 허위 완료 방지 |
 | `full-scope-baseline.md` | 첫 완성 기준과 범위 분류 | 구현 범위 기준선 |
 | `tauri-command-api.md` | React↔Rust command/event DTO 계약 | 프론트/백엔드 병렬 구현 기준 |
 | `component-design.md` | React 컴포넌트 구조와 책임 | UI 구현 분해 기준 |
@@ -21,7 +22,7 @@
 
 ## 구현 착수 순서 권장
 
-1. `tui-parity-map.md`로 누락 없는 기능 범위를 잠근다.
+1. `tui-parity-map.md`로 기능 범위를 확인하고, `tui-parity-matrix.json`으로 TUI action/menu/key 누락 여부를 기계 검증한다.
 2. `action-registry.md`와 `tauri-command-api.md`로 UI와 Rust 경계를 고정한다.
 3. `component-design.md`로 화면을 분해한다.
 4. `file-operation-state-machine.md`로 파일 변경 작업 안전성을 잠근다.

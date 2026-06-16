@@ -17,6 +17,7 @@ import {
 import { COMMANDS } from '../tauri/client';
 
 const requiredActionIds: ActionId[] = [
+  'menu.open',
   'view.sortName',
   'view.sortSize',
   'view.sortDate',
@@ -117,6 +118,7 @@ describe('action registry', () => {
 
   it('derives keyboard shortcut dispatch from explicit keyboardBindings metadata', () => {
     expect(actionForKeyboardShortcut(key('Tab'))?.id).toBe('panel.switchActive');
+    expect(actionForKeyboardShortcut(key('F9'))?.id).toBe('menu.open');
     expect(actionForKeyboardShortcut(key('Enter'))?.id).toBe('nav.enter');
     expect(actionForKeyboardShortcut(key('h'))?.id).toBe('nav.up');
     expect(actionForKeyboardShortcut(key('y'))?.id).toBe('file.copy');

@@ -7,6 +7,7 @@ import { contextMenuActions } from '../ui/CommanderShell';
 import { createActionContext } from '../ui/actionContext';
 import { SAMPLE_LISTINGS } from '../ui/commanderFixture';
 import { I18N_RESOURCES } from '../i18n-resources';
+import parityMatrix from '../../docs/implementation/tui-parity-matrix.json';
 
 describe('full-scope verification harness', () => {
   it('keeps command-backed actions aligned with known Tauri command names', () => {
@@ -33,6 +34,7 @@ describe('full-scope verification harness', () => {
 
   it('keeps parity-critical GUI and file-manager actions registered', () => {
     const requiredIds = [
+      'menu.open',
       'nav.back',
       'nav.forward',
       'history.list',
@@ -54,6 +56,28 @@ describe('full-scope verification harness', () => {
       expect(ACTION_BY_ID.has(id)).toBe(true);
     }
     expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Tools', 'Settings', 'Help']);
+  });
+
+  it('keeps the BokslDir TUI parity matrix as the hard gate for incomplete actions', () => {
+    const rowsById = new Map(parityMatrix.tuiActions.map((row) => [row.tuiId, row]));
+    const guiOnlyExtensionIds = new Set(parityMatrix.guiOnlyExtensions.map((item) => item.guiActionId));
+    const mappedGuiIds = new Set(
+      parityMatrix.tuiActions.flatMap((row) =>
+        row.guiActionIds.filter((id) => !id.startsWith('__ui_motion.')),
+      ),
+    );
+
+    expect(parityMatrix.tuiActions).toHaveLength(64);
+    expect(rowsById.get('open_menu')).toMatchObject({ implementationStatus: 'implemented', priority: 'P0' });
+    expect(rowsById.get('open_menu')?.guiActionIds).toContain('menu.open');
+    expect(rowsById.get('copy')).toMatchObject({ implementationStatus: 'partial', priority: 'P0' });
+    expect(rowsById.get('move')).toMatchObject({ implementationStatus: 'partial', priority: 'P0' });
+    expect(rowsById.get('toggle_sel')).toMatchObject({ implementationStatus: 'partial', priority: 'P0' });
+    expect(rowsById.get('archive_extract_auto')).toMatchObject({ implementationStatus: 'missing' });
+
+    for (const action of ACTIONS) {
+      expect(mappedGuiIds.has(action.id) || guiOnlyExtensionIds.has(action.id)).toBe(true);
+    }
   });
 
   it('keeps operation-state safety transitions explicit', () => {
