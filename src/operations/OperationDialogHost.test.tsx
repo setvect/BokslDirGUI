@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTION_BY_ID } from '../actions/registry';
 import type { FileEntry } from '../domain/types';
 import { tauriClient } from '../tauri/client';
-import { OperationDialogHost } from './OperationDialogHost';
+import { OperationDialogHost, splitOperationProgressPath } from './OperationDialogHost';
 import { useOperationStore } from './operationStore';
 
 const sampleEntry: FileEntry = {
@@ -107,6 +107,15 @@ describe('OperationDialogHost', () => {
     expect(screen.getAllByText(sampleEntry.path)).toHaveLength(2);
   });
 
+  it('splits long operation paths with a middle ellipsis while preserving the full path metadata', () => {
+    const display = splitOperationProgressPath(longOperationPath, 64);
+
+    expect(display.full).toBe(longOperationPath);
+    expect(display.start.length + (display.end?.length ?? 0)).toBeLessThan(longOperationPath.length);
+    expect(display.start).toBe(longOperationPath.slice(0, display.start.length));
+    expect(longOperationPath.endsWith(display.end ?? '')).toBe(true);
+  });
+
   it('renders connected create directory input validation without stub warning', async () => {
     const user = userEvent.setup();
     const action = ACTION_BY_ID.get('file.mkdir');
@@ -199,7 +208,15 @@ describe('OperationDialogHost', () => {
 
     expect(screen.getByLabelText('Operation status').className).toContain('is-progress');
     expect(screen.getByLabelText('Operation status').getAttribute('data-commander-shortcuts-disabled')).toBe('true');
-    expect(screen.getByTitle(longOperationPath).className).toContain('operation-progress-path');
+    const progressPath = screen.getByTitle(longOperationPath);
+    expect(progressPath.className).toContain('operation-progress-path');
+    expect(progressPath.getAttribute('aria-label')).toBe(longOperationPath);
+    expect(progressPath.textContent).not.toBe(longOperationPath);
+    expect(progressPath.textContent).toContain('…');
+    expect(progressPath.querySelector('.operation-progress-path-start')).toBeTruthy();
+    expect(progressPath.querySelector('.operation-progress-path-end')).toBeTruthy();
+    expect(screen.getByText('Operation progress').closest('.operation-progress-layout')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancel' }).closest('.operation-progress-actions')).toBeTruthy();
     expect(screen.getByText(/2\.0 KB \/ 4\.0 KB/)).toBeTruthy();
     expect(screen.getByText(/1\.0 KB\/s/)).toBeTruthy();
     expect(screen.getByText(/ETA 1m 15s/)).toBeTruthy();

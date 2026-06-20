@@ -305,6 +305,60 @@ describe('CommanderShell', () => {
     }));
   });
 
+  it('focuses the directory exited from when Enter opens the virtual parent row', async () => {
+    const user = userEvent.setup();
+    const parentPath = SAMPLE_LISTINGS.right.entries[0].path;
+    const childPath = SAMPLE_LISTINGS.right.path;
+    const parentListing = createDirectoryListing(
+      'right',
+      parentPath,
+      [
+        {
+          path: '/demo/BokslDir/target',
+          name: '..',
+          kind: 'directory' as const,
+          sizeBytes: null,
+          modifiedAt: null,
+          createdAt: null,
+          permissions: null,
+          owner: null,
+          group: null,
+          isHidden: false,
+          isVirtual: true,
+        },
+        {
+          ...testEntry(parentPath, 'build'),
+          kind: 'directory' as const,
+          sizeBytes: null,
+          permissions: 'drwxr-xr-x',
+        },
+        {
+          ...testEntry(parentPath, 'deps'),
+          kind: 'directory' as const,
+          sizeBytes: null,
+          permissions: 'drwxr-xr-x',
+        },
+      ],
+      DEFAULT_SORT,
+      null,
+      12,
+    );
+    const dataSource = createFixturePanelDataSource(SAMPLE_LISTINGS, { [parentPath]: parentListing });
+    const { container } = renderCommander(dataSource);
+
+    await user.keyboard('gg');
+    expect(focusedRowText(container)).toContain('..');
+
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(activePanelLabel(container)).toContain(parentPath));
+    expect(focusedRowText(container)).toContain('build');
+    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-1');
+    expect(focusedRow(container)?.className).not.toContain('is-selected');
+    expect(focusedRow(container)?.textContent).not.toContain('deps');
+    expect(childPath).toBe(`${parentPath}/build`);
+  });
+
 
 
   it('opens directory rows by double-click and lets virtual parent rows navigate only', async () => {

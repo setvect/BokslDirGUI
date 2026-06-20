@@ -228,7 +228,7 @@ export function OperationDialogHost() {
               onPointerDownOutside={(event) => event.preventDefault()}
               {...progressKeyboardBoundaryProps}
             >
-              <div className="operation-section">
+              <div className="operation-section operation-progress-layout">
                 <Dialog.Title className="operation-section-title">Operation progress</Dialog.Title>
                 <div className="progress-bar" aria-label="operation progress">
                   <span style={{ width: `${progressPercent(visibleProgress.completedFiles, visibleProgress.totalFiles)}%` }} />
@@ -237,14 +237,14 @@ export function OperationDialogHost() {
                   <span>
                     {visibleProgress.kind} · {visibleProgress.state} · {visibleProgress.completedFiles}/{visibleProgress.totalFiles ?? 'unknown'} files
                   </span>
-                  <code className="operation-progress-path" title={visibleProgress.currentPath ?? ''}>
-                    {visibleProgress.currentPath ?? '—'}
-                  </code>
+                  <ProgressPath path={visibleProgress.currentPath} />
                 </Dialog.Description>
                 <p className="operation-progress-detail">
                   {formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes)} · {progressPercent(visibleProgress.completedFiles, visibleProgress.totalFiles)}% · {formatThroughput(visibleProgress.bytesPerSecond)} · ETA {formatEta(visibleProgress.etaSeconds)}
                 </p>
-                <button type="button" className="dialog-button secondary" onClick={cancelOperation}>Cancel</button>
+                <div className="operation-progress-actions">
+                  <button type="button" className="dialog-button secondary" onClick={cancelOperation}>Cancel</button>
+                </div>
               </div>
             </Dialog.Content>
           ) : null}
@@ -309,6 +309,7 @@ export function OperationDialogHost() {
 
 const OPERATION_PROGRESS_SURFACE_DELAY_MS = 450;
 const OPERATION_SUCCESS_AUTO_DISMISS_MS = 1200;
+const OPERATION_PROGRESS_PATH_MAX_CHARS = 96;
 
 const isTerminalOperationState = (state: OperationState) =>
   state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';
@@ -324,6 +325,39 @@ const progressPercent = (completed: number, total: number | null) => {
     return 0;
   }
   return Math.min(100, Math.round((completed / total) * 100));
+};
+
+function ProgressPath({ path }: { path: string | null }) {
+  const display = splitOperationProgressPath(path);
+  if (!display.end) {
+    return (
+      <code className="operation-progress-path" title={display.full} aria-label={display.full}>
+        <span className="operation-progress-path-single">{display.start}</span>
+      </code>
+    );
+  }
+  return (
+    <code className="operation-progress-path" title={display.full} aria-label={display.full}>
+      <span className="operation-progress-path-start">{display.start}</span>
+      <span className="operation-progress-path-mark" aria-hidden="true">…</span>
+      <span className="operation-progress-path-end">{display.end}</span>
+    </code>
+  );
+}
+
+export const splitOperationProgressPath = (path: string | null, maxChars = OPERATION_PROGRESS_PATH_MAX_CHARS) => {
+  const full = path ?? '—';
+  const chars = Array.from(full);
+  if (chars.length <= maxChars) {
+    return { full, start: full, end: null };
+  }
+  const suffixLength = Math.min(Math.max(32, Math.floor(maxChars * 0.45)), Math.max(1, maxChars - 24));
+  const prefixLength = Math.max(8, maxChars - suffixLength);
+  return {
+    full,
+    start: chars.slice(0, prefixLength).join(''),
+    end: chars.slice(-suffixLength).join(''),
+  };
 };
 
 const operationTargetLabel = (dialogKind: OperationDialogDraft['dialogKind']) => {

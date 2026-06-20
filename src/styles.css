@@ -905,9 +905,10 @@ button {
   top: 50%;
   left: 50%;
   width: min(620px, calc(100vw - 48px));
-  max-height: min(70vh, 520px);
+  height: min(280px, calc(100vh - 96px));
   transform: translate(-50%, -50%);
   z-index: 42;
+  overflow: hidden;
 }
 
 .operation-status-surface.is-attention {
@@ -924,26 +925,67 @@ button {
   background: #181818;
 }
 
+.operation-status-surface.is-progress .operation-section {
+  height: 100%;
+}
+
+.operation-progress-layout {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+  overflow: hidden;
+}
+
 .operation-progress-description {
   display: grid;
   gap: 6px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .operation-progress-description,
 .operation-progress-detail {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  min-width: 0;
 }
 
 .operation-progress-path {
-  display: block;
+  display: flex;
+  align-items: baseline;
   max-width: 100%;
   min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  white-space: normal;
+  overflow: hidden;
+  white-space: nowrap;
   color: #d8d8d8;
+}
+
+.operation-progress-path-single,
+.operation-progress-path-start {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.operation-progress-path-mark,
+.operation-progress-path-end {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.operation-progress-path-end {
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.operation-progress-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operation-progress-actions {
+  margin-top: auto;
 }
 
 .operation-status-surface.is-progress .dialog-button {

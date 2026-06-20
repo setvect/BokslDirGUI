@@ -811,9 +811,11 @@ export function CommanderShell({
   const openEntry = (panelId: PanelId, entry: FileEntry) => {
     setActivePanel(panelId);
     if (entry.kind === 'directory') {
+      const panel = panelState[panelId];
       void listPanel(panelId, entry.path, {
-        pushHistory: true,
+        pushHistory: entry.path !== panel.path,
         preserveSelection: false,
+        focusPath: entry.isVirtual ? panel.path : null,
       });
       return;
     }
