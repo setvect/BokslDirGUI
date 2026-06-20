@@ -527,7 +527,7 @@ button {
   z-index: 20;
   min-width: 260px;
   border: 1px solid var(--line-strong);
-  background: rgba(31, 31, 31, 0.98);
+  background: #181818;
   color: var(--text);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
@@ -543,7 +543,7 @@ button {
 .context-label {
   padding: 5px 9px 7px;
   border-bottom: 1px solid #353535;
-  color: var(--muted);
+  color: #b7b7b7;
   font-size: 13px;
 }
 
@@ -552,12 +552,13 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  gap: 24px;
   width: 100%;
   min-height: 26px;
   border: 0;
   padding: 3px 9px;
   background: transparent;
-  color: inherit;
+  color: #f2f2f2;
   text-align: left;
 }
 
@@ -579,7 +580,7 @@ button {
 
 .menu-submenu-hint {
   padding: 4px 9px 2px;
-  color: var(--muted);
+  color: #a9a9a9;
   font-size: 12px;
 }
 
@@ -591,16 +592,23 @@ button {
   outline: none;
 }
 
+.menu-item:hover kbd,
+.menu-item.is-focused kbd,
+.context-item[data-highlighted] kbd {
+  color: #e8f7ff;
+}
+
 .menu-item:disabled {
-  color: #5d5d5d;
+  color: #8f8f8f;
+  cursor: default;
+}
+
+.menu-item:disabled kbd {
+  color: #7aa0b8;
 }
 
 .context-menu {
   padding: 4px;
-}
-
-.context-item {
-  gap: 24px;
 }
 
 
