@@ -902,7 +902,9 @@ describe('operation store', () => {
     expect(longRunningExecutor).not.toHaveBeenCalled();
     expect(useOperationStore.getState().lastError?.messageKey).toBe('errors.confirmationRequired');
 
-    useOperationStore.getState().updateDialogInput('PERMANENT_DELETE');
+    expect(useOperationStore.getState().dialog?.requiredConfirmationPhrase).toBe('source.txt');
+
+    useOperationStore.getState().updateDialogInput('source.txt');
     await useOperationStore.getState().confirmDialog();
 
     expect(longRunningExecutor).toHaveBeenCalledOnce();

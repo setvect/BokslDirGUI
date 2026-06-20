@@ -27,8 +27,10 @@ import {
 } from '../actions/registry';
 import type { AppError, DirectoryListing, FileEntry, LocationList, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
+import { operationSummaryStatusLabel } from '../operations/operationLabels';
 import { dialogKindForAction, isOperationInFlight, useOperationStore, type AtomicCommandExecutor, type LongRunningOperationExecutor } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
+import { formatUserErrorMessage } from '../i18n-resources';
 import { actionNeedsConcreteSources, createActionContext, filterEnabledActions, resolveActionTargets } from './actionContext';
 import { createTauriPanelDataSource, type PanelDataSource, type PanelInitialLoadResult } from './panelDataSource';
 import {
@@ -369,7 +371,7 @@ export function CommanderShell({
         ...current,
         [panelId]: markPanelError(current[panelId], result.error),
       }));
-      setStatusMessage(`목록 읽기 실패: ${result.error.messageKey}${result.error.path ? ` · ${result.error.path}` : ''}`);
+      setStatusMessage(`목록 읽기 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
       shellRef.current?.focus({ preventScroll: true });
       return;
     }
@@ -405,7 +407,7 @@ export function CommanderShell({
     }
     if (!result.ok) {
       setPanelState((current) => ({ ...current, [panelId]: markPanelError(current[panelId], result.error) }));
-      setStatusMessage(`직접 이동 실패: ${result.error.messageKey}`);
+      setStatusMessage(`직접 이동 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
       return;
     }
     setPanelState((current) => ({
@@ -415,7 +417,7 @@ export function CommanderShell({
         showHidden: false,
       },
     }));
-    setStatusMessage(`Path · goto_path · ${result.data.path}`);
+    setStatusMessage(`이동 완료: ${result.data.path}`);
     shellRef.current?.focus({ preventScroll: true });
   };
 
@@ -550,7 +552,7 @@ export function CommanderShell({
     }
     const result = await mutationClient.saveSettings({ patch });
     if (!result.ok) {
-      setStatusMessage(`설정 저장 실패: ${result.error.messageKey}`);
+      setStatusMessage(`설정 저장 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
       return;
     }
     setSettings(normalizeSettings(result.data));
@@ -660,13 +662,13 @@ export function CommanderShell({
 
   const openLocationsList = async (panelId: PanelId) => {
     const requestId = ++locationsRequestRef.current;
-    setStatusMessage('Locations · list_locations');
+    setStatusMessage('위치 목록을 불러오는 중…');
     const result = await dataSource.listLocations();
     if (requestId !== locationsRequestRef.current) {
       return;
     }
     if (!result.ok) {
-      setStatusMessage(`Locations 실패: ${result.error.messageKey}`);
+      setStatusMessage(`위치 목록 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
       return;
     }
     setNavigationList({
@@ -831,13 +833,13 @@ export function CommanderShell({
 
   const openDefaultEntry = async (entry: FileEntry) => {
     if (!mutationClient.openDefault || !runtimeBackendAvailable) {
-      setStatusMessage(`기본 앱 열기 실패: backend unavailable · ${entry.name}`);
+      setStatusMessage(`기본 앱 열기 실패: 데스크톱 앱에서 다시 시도하세요. · ${entry.name}`);
       return;
     }
     setStatusMessage(`Open Default App · ${entry.name}`);
     const result = await mutationClient.openDefault({ path: entry.path });
     if (!result.ok) {
-      setStatusMessage(`기본 앱 열기 실패: ${result.error.messageKey}`);
+      setStatusMessage(`기본 앱 열기 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
       return;
     }
     setStatusMessage(`기본 앱 열기 완료: ${entry.name}`);
@@ -845,13 +847,13 @@ export function CommanderShell({
 
   const openArchiveListing = async (panelId: PanelId, entry: FileEntry) => {
     if (!mutationClient.archiveList || !runtimeBackendAvailable) {
-      setStatusMessage(`Archive Preview 실패: backend unavailable · ${entry.name}`);
+      setStatusMessage(`압축 파일 보기 실패: 데스크톱 앱에서 다시 시도하세요. · ${entry.name}`);
       return;
     }
-    setStatusMessage(`Archive Preview · ${entry.name}`);
+    setStatusMessage(`압축 파일 보기: ${entry.name}`);
     const result = await mutationClient.archiveList({ archivePath: entry.path });
     if (!result.ok) {
-      setStatusMessage(`Archive Preview 실패: ${result.error.messageKey}`);
+      setStatusMessage(`압축 파일 보기 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
       return;
     }
     setNavigationList({
@@ -1182,7 +1184,7 @@ export function CommanderShell({
             refreshPanel(panelOverride);
             refreshPanel(oppositePanel);
           }
-          setStatusMessage(`${labelForAction(action)} 완료 상태: ${summary.state}`);
+          setStatusMessage(`${labelForAction(action)} ${operationSummaryStatusLabel(summary, settings.language)}`);
         },
         onOperationStartError: (error: AppError) => {
           if (actionNeedsConcreteSources(actionId) && error.code === 'not_found') {
@@ -1203,7 +1205,7 @@ export function CommanderShell({
       return;
     }
 
-    setStatusMessage(`${labelForAction(action)} · ${action.runPath}`);
+    setStatusMessage(`${labelForAction(action)} 준비됨`);
   };
 
   const applyFilter = (panelId: PanelId, filterValue: string) => {
@@ -1307,7 +1309,7 @@ export function CommanderShell({
           right: current.right.length ? current.right : [loaded.session.rightPath ?? panelState.right.path],
         }));
       } else {
-        setStatusMessage(`설정 읽기 실패: ${result.error.messageKey}`);
+        setStatusMessage(`설정 읽기 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
       }
       setSettingsLoaded(true);
     });
@@ -1529,7 +1531,7 @@ export function CommanderShell({
       />
       {!runtimeBackendAvailable ? (
         <div className="runtime-warning" role="status">
-          브라우저 미리보기 모드입니다. 실제 복사/삭제/이동 같은 파일 작업은 Tauri 앱에서만 동작합니다. `npm run tauri:dev`로 실행하세요.
+          미리보기 모드입니다. 실제 복사/삭제/이동 같은 파일 작업은 데스크톱 앱에서만 동작합니다.
         </div>
       ) : null}
       <section
@@ -1544,6 +1546,7 @@ export function CommanderShell({
           rowHeightPx={viewMetrics.rowHeightPx}
           scale={viewMetrics.scale}
           sizeFormat={settings.sizeFormat}
+          language={settings.language}
           showIcons={settings.view.showIcons}
           operationBusy={operationBusy || panelState.left.loading || panelState.right.loading}
           backendAvailable={runtimeBackendAvailable}
@@ -1570,6 +1573,7 @@ export function CommanderShell({
           rowHeightPx={viewMetrics.rowHeightPx}
           scale={viewMetrics.scale}
           sizeFormat={settings.sizeFormat}
+          language={settings.language}
           showIcons={settings.view.showIcons}
           operationBusy={operationBusy || panelState.left.loading || panelState.right.loading}
           backendAvailable={runtimeBackendAvailable}
@@ -2188,6 +2192,7 @@ interface FilePanelProps {
   rowHeightPx: number;
   scale: number;
   sizeFormat: Settings['sizeFormat'];
+  language: Settings['language'];
   showIcons: boolean;
   operationBusy: boolean;
   backendAvailable: boolean;
@@ -2215,6 +2220,7 @@ function FilePanel({
   rowHeightPx,
   scale,
   sizeFormat,
+  language,
   showIcons,
   operationBusy,
   backendAvailable,
@@ -2374,7 +2380,7 @@ function FilePanel({
           <ContextMenu.Trigger asChild>
             <div ref={scrollRef} className="file-table-scroll" role="rowgroup">
               {panel.error || rows.length === 0 ? (
-                <PanelMessageRow panel={panel} />
+                <PanelMessageRow panel={panel} language={language} />
               ) : (
                 <div className="file-table-virtual-space" style={{ height: `${virtualizer.getTotalSize()}px` }}>
                   {renderedRows.map((virtualRow) => {
@@ -2453,12 +2459,12 @@ function FilePanel({
   );
 }
 
-function PanelMessageRow({ panel }: { panel: PanelNavigationState }) {
+function PanelMessageRow({ panel, language }: { panel: PanelNavigationState; language: Settings['language'] }) {
   let message = 'Empty directory';
   if (panel.loading) {
     message = 'Loading directory...';
   } else if (panel.error) {
-    message = `Error: ${panel.error.messageKey}`;
+    message = `Error: ${formatUserErrorMessage(language, panel.error)}`;
   }
   return (
     <div className="file-table-message" role="row" aria-live="polite">
@@ -3103,7 +3109,9 @@ const longRunningExecutorForAction = (
     return (dialog) => operationClient.startDelete({
       targets: dialog.sources.map((source) => source.path),
       mode: 'permanent',
-      confirmToken: dialog.inputValue.trim() === 'PERMANENT_DELETE' ? 'PERMANENT_DELETE' : undefined,
+      confirmToken: dialog.requiredConfirmationPhrase && dialog.inputValue.trim() === dialog.requiredConfirmationPhrase
+        ? 'PERMANENT_DELETE'
+        : undefined,
     });
   }
   if (actionId === 'archive.create') {

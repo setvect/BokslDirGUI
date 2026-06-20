@@ -28,7 +28,7 @@ export function ShortcutHelpDialog({ onClose }: { onClose(): void }) {
             <div className="shortcut-help-row" role="listitem" key={action.id}>
               <kbd>{shortcutLabelForAction(action)}</kbd>
               <span>{labelForAction(action)}</span>
-              <code>{action.id}</code>
+              <small>{categoryLabelForAction(action)}</small>
             </div>
           ))}
         </div>
@@ -49,11 +49,10 @@ export function HelpSearchDialog({ onClose }: { onClose(): void }) {
       return true;
     }
     return [
-      action.id,
       labelForAction(action),
-      action.category,
+      categoryLabelForAction(action),
       action.shortcutLabel ?? '',
-      action.runPath,
+      ...(action.menuPath ?? []),
     ].some((value) => value.toLowerCase().includes(normalizedQuery));
   });
 
@@ -62,10 +61,10 @@ export function HelpSearchDialog({ onClose }: { onClose(): void }) {
   }, []);
 
   return (
-    <CommanderOverlayDialog owner="help-search" title="Help Search" ariaLabel="help search" onClose={onClose}>
+    <CommanderOverlayDialog owner="help-search" title="기능 검색" ariaLabel="help search" onClose={onClose}>
       <div className="filter-form">
         <label>
-          <span>Help Search · action registry</span>
+          <span>기능 이름, 메뉴, 단축키로 검색</span>
           <input
             ref={inputRef}
             aria-label="Help search query"
@@ -84,7 +83,7 @@ export function HelpSearchDialog({ onClose }: { onClose(): void }) {
             <div className="shortcut-help-row" role="listitem" key={action.id}>
               <kbd>{shortcutLabelForAction(action)}</kbd>
               <span>{labelForAction(action)}</span>
-              <code>{action.id}</code>
+              <small>{categoryLabelForAction(action)}</small>
             </div>
           ))}
           {results.length === 0 ? <p className="dialog-empty">검색 결과가 없습니다.</p> : null}
@@ -97,12 +96,28 @@ export function HelpSearchDialog({ onClose }: { onClose(): void }) {
   );
 }
 
+const CATEGORY_LABELS: Record<AppActionCategory, string> = {
+  navigation: '이동',
+  panel: '패널',
+  selection: '선택',
+  file: '파일',
+  view: '보기',
+  archive: '압축',
+  settings: '설정',
+  help: '도움말',
+};
+
+type AppActionCategory = (typeof ACTIONS)[number]['category'];
+
+const categoryLabelForAction = (action: (typeof ACTIONS)[number]) =>
+  CATEGORY_LABELS[action.category] ?? action.category;
+
 export function AboutDialog({ onClose }: { onClose(): void }) {
   return (
     <CommanderOverlayDialog owner="about-dialog" title="BokslDirGUI" ariaLabel="about BokslDirGUI" onClose={onClose} className="about-dialog">
       <div className="filter-form">
-        <p>Tauri 2 + React + Rust 기반 dual-panel file commander.</p>
-        <p>목표: 기존 터미널 BokslDir의 키보드 중심 조작감과 기능 동등성 유지.</p>
+        <p>키보드 중심 듀얼 패널 파일 커맨더입니다.</p>
+        <p>목표: 기존 터미널 BokslDir의 조작감과 기능을 GUI 환경에서도 자연스럽게 유지합니다.</p>
         <div className="filter-actions">
           <button type="button" onClick={onClose}>닫기</button>
         </div>

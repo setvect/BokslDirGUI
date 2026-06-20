@@ -47,14 +47,25 @@ type ActionDefinition = Omit<AppAction, 'labelKey' | 'descriptionKey' | 'display
   isEnabled?: AppAction['isEnabled'];
 };
 
-const action = <T extends ActionDefinition>(definition: T): T & AppAction => ({
-  ...definition,
-  labelKey: `actions.${definition.id}.label`,
-  descriptionKey: `actions.${definition.id}.description`,
-  displayLabel: definition.displayLabel ?? definition.menuPath?.at(-1) ?? definition.id,
-  hotkeyLabel: definition.hotkeyLabel ?? definition.displayLabel ?? definition.menuPath?.at(-1) ?? definition.id,
-  isEnabled: definition.isEnabled ?? always,
-});
+const userFacingActionLabel = (definition: ActionDefinition) => {
+  const label = definition.displayLabel ?? definition.menuPath?.at(-1);
+  if (!label) {
+    throw new Error(`Missing user-facing label for action: ${definition.id}`);
+  }
+  return label;
+};
+
+const action = <T extends ActionDefinition>(definition: T): T & AppAction => {
+  const displayLabel = userFacingActionLabel(definition);
+  return {
+    ...definition,
+    labelKey: `actions.${definition.id}.label`,
+    descriptionKey: `actions.${definition.id}.description`,
+    displayLabel,
+    hotkeyLabel: definition.hotkeyLabel ?? displayLabel,
+    isEnabled: definition.isEnabled ?? always,
+  };
+};
 
 export const ACTIONS = [
   action({ id: 'menu.open', category: 'navigation', displayLabel: 'Menu', hotkeyLabel: 'Menu', shortcutLabel: 'F9', keyboardBindings: ['F9'], dangerLevel: 'none', runPath: 'UI state' }),

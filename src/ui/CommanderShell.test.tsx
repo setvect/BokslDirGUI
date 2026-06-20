@@ -550,7 +550,7 @@ describe('CommanderShell', () => {
     };
     renderCommander(createFixturePanelDataSource(), undefined, operationClient, false);
 
-    expect(screen.getByText(/브라우저 미리보기 모드입니다/)).toBeTruthy();
+    expect(screen.getByText(/미리보기 모드입니다/)).toBeTruthy();
 
     await user.keyboard('y');
     await user.keyboard('d');
@@ -605,7 +605,7 @@ describe('CommanderShell', () => {
 
     await user.keyboard('x');
 
-    expect(await screen.findByText('Move to opposite panel')).toBeTruthy();
+    expect(await screen.findByText('이동')).toBeTruthy();
     expect(operationClient.startMove).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: '확인' }));
@@ -666,7 +666,7 @@ describe('CommanderShell', () => {
     );
 
     await user.keyboard('d');
-    expect(await screen.findByText('Delete')).toBeTruthy();
+    expect(await screen.findByText('휴지통으로 이동')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '확인' }));
 
     await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
@@ -724,15 +724,15 @@ describe('CommanderShell', () => {
     );
 
     await user.keyboard('d');
-    expect(await screen.findByText('Delete')).toBeTruthy();
-    expect(screen.getByText('Delete target')).toBeTruthy();
+    expect(await screen.findByText('휴지통으로 이동')).toBeTruthy();
+    expect(screen.getAllByText(stalePath).length).toBeGreaterThan(0);
     await user.click(screen.getByRole('button', { name: '확인' }));
 
     await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
       targets: [stalePath],
       mode: 'trash',
     }));
-    await waitFor(() => expect(screen.queryByText('Delete')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('휴지통으로 이동')).toBeNull());
     expect(screen.queryByText(/not_found: errors.notFound/)).toBeNull();
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
       panelId: 'right',
@@ -762,7 +762,7 @@ describe('CommanderShell', () => {
     await user.keyboard('d');
 
     expect(operationClient.startDelete).not.toHaveBeenCalled();
-    expect(screen.queryByText('Delete')).toBeNull();
+    expect(screen.queryByText('휴지통으로 이동')).toBeNull();
     expect(await screen.findByText(/현재 컨텍스트에서는 사용할 수 없습니다/)).toBeTruthy();
   });
 
@@ -785,10 +785,12 @@ describe('CommanderShell', () => {
     );
 
     await user.keyboard('{Shift>}d{/Shift}');
-    expect(await screen.findByText('Permanent Delete')).toBeTruthy();
+    expect(await screen.findByText('영구 삭제')).toBeTruthy();
     expect(screen.getByRole('button', { name: '영구 삭제 확인' })).toHaveProperty('disabled', true);
+    expect(screen.queryByText(/PERMANENT_DELETE/)).toBeNull();
+    expect(screen.getByText(/계속하려면 “generic-array-6de08afde610f112”를 입력하세요/)).toBeTruthy();
 
-    await user.type(screen.getByLabelText('영구 삭제 확인 문구(PERMANENT_DELETE)'), 'PERMANENT_DELETE');
+    await user.type(screen.getByLabelText('영구 삭제 확인 문구'), 'generic-array-6de08afde610f112');
     await user.click(screen.getByRole('button', { name: '영구 삭제 확인' }));
 
     await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
@@ -931,10 +933,11 @@ describe('CommanderShell', () => {
     const { container } = renderCommander(createFixturePanelDataSource(), mutationClient);
 
     await user.keyboard('i');
-    expect(await screen.findByText('Properties')).toBeTruthy();
+    expect(await screen.findByText('파일 정보')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '확인' }));
     await waitFor(() => expect(mutationClient.getMetadata).toHaveBeenCalledOnce());
-    expect(screen.getByText(/absolutePath/)).toBeTruthy();
+    expect(screen.queryByText(/absolutePath/)).toBeNull();
+    expect(screen.getByText(/Architecture.md/)).toBeTruthy();
     useOperationStore.getState().closeDialog();
 
     await user.keyboard('{Tab}');
@@ -983,7 +986,7 @@ describe('CommanderShell', () => {
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
     await user.click(fileRow);
     await user.keyboard('o');
-    expect(await screen.findByText('Open with Default App')).toBeTruthy();
+    expect(await screen.findByText('기본 앱으로 열기')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '확인' }));
     await waitFor(() => expect(mutationClient.openDefault).toHaveBeenCalledWith({
       path: expect.stringContaining('Architecture.md'),
@@ -991,7 +994,7 @@ describe('CommanderShell', () => {
     useOperationStore.getState().closeDialog();
 
     await user.keyboard('e');
-    expect(await screen.findByText('Open Terminal Editor')).toBeTruthy();
+    expect(await screen.findByText('터미널 편집기로 열기')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '확인' }));
     await waitFor(() => expect(mutationClient.openExternalEditor).toHaveBeenCalledWith({
       path: expect.stringContaining('Architecture.md'),
@@ -1042,16 +1045,17 @@ describe('CommanderShell', () => {
 
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
     await user.keyboard(':');
-    const input = await screen.findByLabelText('실행할 명령(command arg1 arg2)');
+    const input = await screen.findByLabelText('실행할 명령');
     await user.type(input, 'echo hello');
-    await user.click(screen.getByRole('button', { name: 'Preview disabled' }));
+    await user.click(screen.getByRole('button', { name: '실행 확인' }));
 
     await waitFor(() => expect(mutationClient.prepareShellCommand).toHaveBeenCalledWith({
       workingDir: SAMPLE_LISTINGS.right.path,
       command: 'echo',
       args: ['hello'],
     }));
-    expect(screen.getAllByText(/shell-fingerprint/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/shell-fingerprint/)).toBeNull();
+    expect(screen.getAllByText(/실행 전 확인이 완료되었습니다/).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: '확인 후 실행' }));
     await waitFor(() => expect(mutationClient.runShellCommand).toHaveBeenCalledWith({
@@ -1077,7 +1081,7 @@ describe('CommanderShell', () => {
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('zc');
-    expect(await screen.findByText('Create Archive')).toBeTruthy();
+    expect(await screen.findByText('압축 생성')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '확인' }));
 
     await waitFor(() => expect(operationClient.archiveCreate).toHaveBeenCalledWith({
@@ -1115,7 +1119,7 @@ describe('CommanderShell', () => {
 
     await user.keyboard('{Tab}');
     await user.keyboard('za');
-    expect(await screen.findByText('Extract Archive')).toBeTruthy();
+    expect(await screen.findByText('압축 해제')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '확인' }));
 
     await waitFor(() => expect(operationClient.archiveExtract).toHaveBeenCalledWith({
@@ -1184,8 +1188,13 @@ describe('CommanderShell', () => {
 
     await user.click(screen.getByRole('button', { name: 'Help(H)' }));
     await user.click(await screen.findByText('Keyboard Help'));
-    expect(await screen.findByText('Keyboard Shortcuts')).toBeTruthy();
-    expect(screen.getByText('file.copy')).toBeTruthy();
+    const shortcutTitle = await screen.findByText('Keyboard Shortcuts');
+    const shortcutDialog = shortcutTitle.closest<HTMLElement>('[role="dialog"]');
+    if (!shortcutDialog) {
+      throw new Error('shortcut dialog is required');
+    }
+    expect(within(shortcutDialog).getByText('Copy')).toBeTruthy();
+    expect(within(shortcutDialog).queryByText('file.copy')).toBeNull();
   });
 
   it('uses an explicit Ctrl+Q/File Quit policy instead of a bare q shortcut', async () => {
@@ -1450,6 +1459,7 @@ describe('CommanderShell', () => {
     await user.click(screen.getByRole('button', { name: 'Help(H)' }));
     await user.click(await screen.findByText('Search'));
     expect(await screen.findByLabelText('Help search query')).toBeTruthy();
+    expect(screen.queryByText('action registry')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.click(screen.getByRole('button', { name: 'Help(H)' }));
@@ -1522,7 +1532,7 @@ describe('CommanderShell', () => {
       });
     });
 
-    expect(screen.getByText('Copy to opposite panel')).toBeTruthy();
+    expect(screen.getByText('복사')).toBeTruthy();
 
     act(() => {
       vi.advanceTimersByTime(901);
@@ -1549,7 +1559,7 @@ describe('CommanderShell', () => {
     const { container } = renderCommander();
 
     await user.keyboard('a');
-    expect(await screen.findByText('Create Directory')).toBeTruthy();
+    expect(await screen.findByText('새 폴더')).toBeTruthy();
 
     await user.keyboard('{Tab}');
 
@@ -1561,7 +1571,7 @@ describe('CommanderShell', () => {
     renderCommander();
 
     await user.keyboard('a');
-    expect(await screen.findByText('Create Directory')).toBeTruthy();
+    expect(await screen.findByText('새 폴더')).toBeTruthy();
     await waitFor(() => expect(commanderKeyboardOwners()).toContain('operation-dialog'));
 
     useOperationStore.getState().closeDialog();
@@ -1776,7 +1786,7 @@ describe('CommanderShell', () => {
     expect(screen.getByRole('menuitem', { name: /Refresh/ })).toBeTruthy();
     await user.click(screen.getByRole('menuitem', { name: /New Folder/ }));
 
-    expect(await screen.findByText('Create Directory')).toBeTruthy();
+    expect(await screen.findByText('새 폴더')).toBeTruthy();
     expect(screen.getByLabelText('새 폴더 이름')).toBeTruthy();
   });
 
@@ -1890,7 +1900,7 @@ describe('CommanderShell', () => {
     fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Theme/ }));
     await user.click(await screen.findByRole('menuitem', { name: /Light/ }));
 
-    expect(await screen.findByText('설정 저장 실패: errors.settingsSaveFailed')).toBeTruthy();
+    expect(await screen.findByText('설정 저장 실패: 설정 저장에 실패했습니다.')).toBeTruthy();
   });
 
   it('keeps browser preview settings local instead of invoking unavailable Tauri settings commands', async () => {
@@ -1908,7 +1918,7 @@ describe('CommanderShell', () => {
       runtimeBackendAvailable={false}
     />);
 
-    expect(await screen.findByText('브라우저 미리보기 모드입니다. 실제 복사/삭제/이동 같은 파일 작업은 Tauri 앱에서만 동작합니다. `npm run tauri:dev`로 실행하세요.')).toBeTruthy();
+    expect(await screen.findByText('미리보기 모드입니다. 실제 복사/삭제/이동 같은 파일 작업은 데스크톱 앱에서만 동작합니다.')).toBeTruthy();
     expect(loadSettings).not.toHaveBeenCalled();
 
     fireEvent.keyDown(document, { key: '=', metaKey: true });
@@ -1962,7 +1972,7 @@ describe('CommanderShell', () => {
     render(<CommanderShell dataSource={dataSource} />);
 
     expect(await screen.findByText('left-ok.txt')).toBeTruthy();
-    expect(screen.getByText('Error: errors.permissionDenied')).toBeTruthy();
+    expect(screen.getByText('Error: 권한이 거부되었습니다. · /blocked-right')).toBeTruthy();
   });
 
   it('renders mocked listDir error and empty states inside the panel', async () => {
@@ -1978,7 +1988,7 @@ describe('CommanderShell', () => {
       },
     });
     const { unmount } = render(<CommanderShell dataSource={errorSource} />);
-    expect((await screen.findAllByText('Error: errors.permissionDenied')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Error: 권한이 거부되었습니다. · /blocked')).length).toBeGreaterThan(0);
     unmount();
 
     const emptySource = mockedPanelDataSource({

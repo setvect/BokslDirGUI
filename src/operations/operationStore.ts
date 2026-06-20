@@ -35,7 +35,6 @@ export type DialogExecutionMode = 'atomicCommand' | 'longRunningOperation' | 'un
 export interface OperationDialogDraft {
   dialogKind: DialogKind;
   executionMode: DialogExecutionMode;
-  actionId: ActionId;
   title: string;
   description: string;
   panelId: PanelId;
@@ -45,13 +44,13 @@ export interface OperationDialogDraft {
   defaultDecision: ConflictDecision;
   primaryLabel: string;
   cancelLabel: string;
-  commandPath: string;
   backendExecutionStubbed: boolean;
   backendExecutionStubReasonKey: string | null;
   shellPreview: ShellCommandPreview | null;
   atomicResult: unknown | null;
   inputLabel: string | null;
   inputValue: string;
+  requiredConfirmationPhrase: string | null;
   validationErrorKey: string | null;
   atomicPending: boolean;
   operationPending: boolean;
@@ -183,7 +182,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       });
       return;
     }
-    const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue);
+    const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue, dialog.requiredConfirmationPhrase);
     if (validationErrorKey) {
       set({
         lastError: appError('confirmation_required', validationErrorKey, dialog.targetDir, true),
@@ -271,7 +270,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       dialog: {
         ...dialog,
         inputValue: value,
-        validationErrorKey: validateDialogInput(dialog.dialogKind, value),
+        validationErrorKey: validateDialogInput(dialog.dialogKind, value, dialog.requiredConfirmationPhrase),
       },
       lastError: null,
     });
@@ -286,7 +285,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       if (dialog.atomicPending) {
         return;
       }
-      const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue);
+      const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue, dialog.requiredConfirmationPhrase);
       if (validationErrorKey) {
         set((current) => ({
           dialog: { ...dialog, validationErrorKey },
@@ -334,7 +333,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
                 atomicPending: false,
                 shellPreview: shellPreviewResult,
                 atomicResult: shellPreviewResult,
-                primaryLabel: shellPreviewResult.policy.enabled ? '확인 후 실행' : 'Preview disabled',
+                primaryLabel: shellPreviewResult.policy.enabled ? '확인 후 실행' : '실행 확인',
               }
             : null,
           progress: isOperationInFlight(current) ? current.progress : null,
@@ -387,7 +386,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       if (dialog.operationPending || isOperationInFlight(get())) {
         return;
       }
-      const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue);
+      const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue, dialog.requiredConfirmationPhrase);
       if (validationErrorKey) {
         set({
           dialog: { ...dialog, validationErrorKey },
@@ -734,10 +733,10 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
   const isShell = dialogKind === 'shellCommand';
   const backendExecutionStubbed = isBackendExecutionStubbed(dialogKind, request);
   const inputValue = initialInputValueForDialog(dialogKind, request);
+  const requiredConfirmationPhrase = requiredConfirmationPhraseForDialog(dialogKind, request);
   return {
     dialogKind,
     executionMode: dialogExecutionModeForDialog(dialogKind),
-    actionId: request.action.id as ActionId,
     title,
     description: descriptionForDialog(dialogKind, request),
     panelId: request.panelId,
@@ -745,9 +744,8 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
     targetDir: targetForDialog(dialogKind, request),
     dangerLevel: request.action.dangerLevel,
     defaultDecision: isPermanentDelete ? 'cancel' : 'skip',
-    primaryLabel: isPermanentDelete ? '영구 삭제 확인' : isShell ? 'Preview disabled' : '확인',
-    cancelLabel: isPermanentDelete ? '취소(기본)' : '취소',
-    commandPath: request.action.runPath,
+    primaryLabel: isPermanentDelete ? '영구 삭제 확인' : isShell ? '실행 확인' : '확인',
+    cancelLabel: '취소',
     backendExecutionStubbed,
     backendExecutionStubReasonKey: backendExecutionStubbed
       ? 'operations.backendExecution.stubbedUntilCommandWiring'
@@ -756,7 +754,8 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
     atomicResult: null,
     inputLabel: inputLabelForDialog(dialogKind),
     inputValue,
-    validationErrorKey: validateDialogInput(dialogKind, inputValue),
+    requiredConfirmationPhrase,
+    validationErrorKey: validateDialogInput(dialogKind, inputValue, requiredConfirmationPhrase),
     atomicPending: false,
     operationPending: false,
     atomicExecutor: request.atomicExecutor ?? null,
@@ -781,20 +780,20 @@ const targetForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => 
 
 const titleForDialog = (dialogKind: DialogKind) => {
   const titles: Record<DialogKind, string> = {
-    copy: 'Copy to opposite panel',
-    move: 'Move to opposite panel',
-    trash: 'Delete',
-    deletePermanent: 'Permanent Delete',
-    rename: 'Rename Entry',
-    createDir: 'Create Directory',
-    properties: 'Properties',
-    archivePreview: 'Archive Preview',
-    archiveCreate: 'Create Archive',
-    archiveExtract: 'Extract Archive',
-    externalOpenDefault: 'Open with Default App',
-    externalReveal: 'Reveal in File Manager',
-    externalEditor: 'Open Terminal Editor',
-    shellCommand: 'Run Shell Command',
+    copy: '복사',
+    move: '이동',
+    trash: '휴지통으로 이동',
+    deletePermanent: '영구 삭제',
+    rename: '이름 변경',
+    createDir: '새 폴더',
+    properties: '파일 정보',
+    archivePreview: '압축 파일 보기',
+    archiveCreate: '압축 생성',
+    archiveExtract: '압축 해제',
+    externalOpenDefault: '기본 앱으로 열기',
+    externalReveal: '파일 위치 열기',
+    externalEditor: '터미널 편집기로 열기',
+    shellCommand: '쉘 명령 실행',
   };
   return titles[dialogKind];
 };
@@ -803,31 +802,31 @@ const descriptionForDialog = (dialogKind: DialogKind, request: OpenDialogRequest
   const count = request.sources.length;
   switch (dialogKind) {
     case 'copy':
-      return `${count}개 항목을 반대 패널로 복사합니다. 충돌 정책과 진행률은 operation event로 추적합니다.`;
+      return `${count}개 항목을 반대 패널로 복사합니다.`;
     case 'move':
-      return `${count}개 항목 이동은 destructive 작업입니다. 같은 파일시스템은 rename fast-path를 우선합니다.`;
+      return `${count}개 항목을 반대 패널로 이동합니다.`;
     case 'trash':
       return `${count}개 항목을 휴지통으로 보내기 전에 확인합니다. 자동 영구 삭제 전환은 금지됩니다.`;
     case 'deletePermanent':
-      return `${count}개 항목 영구 삭제는 되돌릴 수 없습니다. 기본 동작은 취소입니다.`;
+      return `${count}개 항목을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.`;
     case 'rename':
-      return '새 이름 입력과 중복/권한 검증을 위한 다이얼로그 셸입니다.';
+      return '선택한 항목의 새 이름을 입력합니다.';
     case 'createDir':
-      return '현재 패널 경로에 새 폴더 이름을 입력하는 다이얼로그 셸입니다.';
+      return '현재 폴더에 만들 새 폴더 이름을 입력합니다.';
     case 'archivePreview':
-      return '압축 파일 목록 미리보기 shell입니다. 7z는 fixture gate 통과 전 완료로 보지 않습니다.';
+      return '압축 파일 안의 항목을 미리 확인합니다.';
     case 'archiveCreate':
-      return `${count}개 항목 압축 생성 shell입니다. password는 로그/이벤트에 남기지 않습니다.`;
+      return `${count}개 항목을 압축 파일로 만듭니다.`;
     case 'archiveExtract':
-      return '압축 해제 target은 Rust에서 normalize하고 zip-slip을 차단해야 합니다.';
+      return '압축 파일을 대상 폴더에 풉니다.';
     case 'externalOpenDefault':
     case 'externalReveal':
     case 'externalEditor':
-      return '외부 앱 실행은 명시 확인과 실패 메시지 표시를 거친 뒤 command boundary에 연결됩니다.';
+      return '선택한 항목을 외부 앱으로 엽니다.';
     case 'shellCommand':
-      return 'Shell command는 기본 비활성입니다. prepare_shell_command preview/confirmToken 경계를 통과해야 실행됩니다.';
+      return '현재 폴더에서 실행할 명령을 확인합니다. 설정에서 허용된 경우에만 실행됩니다.';
     case 'properties':
-      return '선택 항목의 metadata/properties를 표시하는 shell입니다.';
+      return '선택한 항목의 정보를 확인합니다.';
   }
 };
 
@@ -909,13 +908,13 @@ const inputLabelForDialog = (dialogKind: DialogKind) => {
     return '새 이름';
   }
   if (dialogKind === 'deletePermanent') {
-    return '영구 삭제 확인 문구(PERMANENT_DELETE)';
+    return '영구 삭제 확인 문구';
   }
   if (dialogKind === 'archiveCreate') {
     return '압축 파일 이름(.zip 또는 .7z)';
   }
   if (dialogKind === 'shellCommand') {
-    return '실행할 명령(command arg1 arg2)';
+    return '실행할 명령';
   }
   return null;
 };
@@ -930,10 +929,20 @@ const initialInputValueForDialog = (dialogKind: DialogKind, request: OpenDialogR
   return '';
 };
 
-const validateDialogInput = (dialogKind: DialogKind, value: string) => {
+const requiredConfirmationPhraseForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
+  if (dialogKind !== 'deletePermanent') {
+    return null;
+  }
+  if (request.sources.length === 1 && request.sources[0]?.name) {
+    return request.sources[0].name;
+  }
+  return `삭제 ${request.sources.length}개`;
+};
+
+const validateDialogInput = (dialogKind: DialogKind, value: string, requiredConfirmationPhrase: string | null) => {
   const trimmed = value.trim();
   if (dialogKind === 'deletePermanent') {
-    return trimmed === 'PERMANENT_DELETE' ? null : 'errors.confirmationRequired';
+    return requiredConfirmationPhrase && trimmed === requiredConfirmationPhrase ? null : 'errors.confirmationRequired';
   }
   if (dialogKind === 'archiveCreate') {
     if (!trimmed || trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('\0')) {

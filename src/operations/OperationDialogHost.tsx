@@ -3,8 +3,16 @@ import { useEffect, useState } from 'react';
 import { useOperationStore, type OperationDialogDraft } from './operationStore';
 import { useCommanderKeyboardBoundaryProps } from '../ui/keyboardOwnership';
 import { tauriClient } from '../tauri/client';
-import type { OperationState, OperationSummary } from '../domain/types';
-import { translateMessageKey, type SupportedLanguage } from '../i18n-resources';
+import type {
+  ArchiveListing,
+  FileMetadata,
+  OperationState,
+  OperationSummary,
+  ShellCommandPreview,
+  ShellCommandResult,
+} from '../domain/types';
+import { formatUserErrorMessage, translateUserMessageKey, type SupportedLanguage } from '../i18n-resources';
+import { conflictDecisionLabel, operationKindLabel, operationStateLabel } from './operationLabels';
 
 export function OperationDialogHost({ language = 'en' }: { language?: SupportedLanguage } = {}) {
   const text = OPERATION_DIALOG_TEXT[language];
@@ -93,18 +101,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
             <>
               <Dialog.Title className="operation-title">{dialog.title}</Dialog.Title>
               <Dialog.Description className="operation-description">{dialog.description}</Dialog.Description>
-              <div className="operation-grid">
-                <span>{text.action}</span>
-                <strong>{dialog.actionId}</strong>
-                <span>{text.commandPath}</span>
-                <code>{dialog.commandPath}</code>
-                <span>{text.panel}</span>
-                <strong>{dialog.panelId.toUpperCase()}</strong>
-                <span>{operationTargetLabel(dialog.dialogKind)}</span>
-                <code>{dialog.targetDir ?? '—'}</code>
-                <span>{text.conflictDefault}</span>
-                <strong>{dialog.defaultDecision}</strong>
-              </div>
+              <OperationOverview dialog={dialog} language={language} text={text} />
               <div className="operation-section">
                 <h3>{text.sources}</h3>
                 {dialog.sources.length > 0 ? (
@@ -117,13 +114,12 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                     ))}
                   </ul>
                 ) : (
-                  <p className="operation-muted">현재 패널 경로 자체를 대상으로 하는 작업입니다.</p>
+                  <p className="operation-muted">{text.currentFolderTarget}</p>
                 )}
               </div>
               {dialog.backendExecutionStubbed ? (
                 <p className="operation-warning">
-                  실제 파일 변경은 아직 연결하지 않았습니다. 이 shell은 확인/상태/오류 UX만 검증합니다.
-                  {dialog.backendExecutionStubReasonKey ? ` (${dialog.backendExecutionStubReasonKey})` : null}
+                  {translateUserMessageKey(language, dialog.backendExecutionStubReasonKey)}
                 </p>
               ) : null}
               {dialog.inputLabel ? (
@@ -141,21 +137,24 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                     }}
                   />
                   {dialog.validationErrorKey ? (
-                    <span className="operation-error" role="alert">{dialog.validationErrorKey}</span>
+                    <span className="operation-error" role="alert">{translateUserMessageKey(language, dialog.validationErrorKey)}</span>
                   ) : null}
                 </label>
               ) : null}
               {dialog.shellPreview ? (
                 <div className="operation-section operation-shell-preview">
-                  <h3>Shell command policy</h3>
-                  <p>{dialog.shellPreview.policy.enabled ? 'enabled' : 'disabled'} · {dialog.shellPreview.policy.reasonKey}</p>
-                  <code>{dialog.shellPreview.fingerprint}</code>
+                  <h3>{text.shellCommand}</h3>
+                  <p>
+                    {dialog.shellPreview.policy.enabled
+                      ? text.shellCommandReady
+                      : translateUserMessageKey(language, dialog.shellPreview.policy.reasonKey)}
+                  </p>
                 </div>
               ) : null}
               {atomicResult ? (
                 <div className="operation-section operation-result">
-                  <h3>Result</h3>
-                  <pre>{formatAtomicResult(atomicResult)}</pre>
+                  <h3>{text.result}</h3>
+                  <OperationResultView value={atomicResult} language={language} text={text} />
                 </div>
               ) : null}
               {dialogProgress ? (
@@ -164,18 +163,19 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                   <div className="progress-bar" aria-label="operation progress">
                     <span style={{ width: `${progressPercent(dialogProgress.completedFiles, dialogProgress.totalFiles)}%` }} />
                   </div>
-                  <p>{dialogProgress.state} · {dialogProgress.completedFiles}/{dialogProgress.totalFiles ?? text.unknown} {text.files} · {dialogProgress.currentPath}</p>
+                  <p>{operationStateLabel(language, dialogProgress.state)} · {dialogProgress.completedFiles}/{dialogProgress.totalFiles ?? text.unknown} {text.files}</p>
+                  <ProgressPath path={dialogProgress.currentPath} />
                 </div>
               ) : null}
               {conflictPrompt ? (
                 <div className="operation-section conflict-dialog">
                   <h3>{text.conflictResolution}</h3>
+                  <p>{text.conflictPrompt}</p>
                   <p>{conflictPrompt.source.name} → {conflictPrompt.destination.name}</p>
-                  <p>{text.defaultDecision}: {conflictPrompt.defaultDecision}</p>
                   <div className="conflict-actions">
                     {conflictPrompt.availableDecisions.map((decision) => (
                       <button type="button" key={decision} onClick={() => resolveConflict(decision)}>
-                        {decision}
+                        {conflictDecisionLabel(language, decision)}
                       </button>
                     ))}
                   </div>
@@ -184,7 +184,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
               {summary ? (
                 <div className="operation-section">
                   <h3>{text.summary}</h3>
-                  <p>{summary.state} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</p>
+                  <p>{operationStateLabel(language, summary.state)} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</p>
                   {summary.errors.map((error) => (
                     <p className="operation-error" key={`${error.code}-${error.messageKey}`}>{formatOperationError(error, language)}</p>
                   ))}
@@ -237,7 +237,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 </div>
                 <Dialog.Description className="operation-progress-description">
                   <span>
-                    {visibleProgress.kind} · {visibleProgress.state} · {visibleProgress.completedFiles}/{visibleProgress.totalFiles ?? text.unknown} {text.files}
+                    {operationKindLabel(language, visibleProgress.kind)} · {operationStateLabel(language, visibleProgress.state)} · {visibleProgress.completedFiles}/{visibleProgress.totalFiles ?? text.unknown} {text.files}
                   </span>
                   <ProgressPath path={visibleProgress.currentPath} />
                 </Dialog.Description>
@@ -274,12 +274,12 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
               <div className="operation-section conflict-dialog">
                 <Dialog.Title>{text.conflictResolution}</Dialog.Title>
                 <Dialog.Description>
-                  {conflictPrompt.source.name} → {conflictPrompt.destination.name} · {text.defaultDecision}: {conflictPrompt.defaultDecision}
+                  {text.conflictPrompt} {conflictPrompt.source.name} → {conflictPrompt.destination.name}
                 </Dialog.Description>
                 <div className="conflict-actions">
                   {conflictPrompt.availableDecisions.map((decision) => (
                     <button type="button" key={decision} onClick={() => resolveConflict(decision)}>
-                      {decision}
+                      {conflictDecisionLabel(language, decision)}
                     </button>
                   ))}
                 </div>
@@ -288,7 +288,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
             {summaryNeedsAttention && summary ? (
               <div className="operation-section">
                 <Dialog.Title>{text.operationSummary}</Dialog.Title>
-                <Dialog.Description>{summary.kind} · {summary.state} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</Dialog.Description>
+                <Dialog.Description>{operationKindLabel(language, summary.kind)} · {operationStateLabel(language, summary.state)} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</Dialog.Description>
                 {summary.errors.map((error) => (
                   <p className="operation-error" key={`${error.code}-${error.messageKey}`}>{formatOperationError(error, language)}</p>
                 ))}
@@ -313,14 +313,32 @@ const OPERATION_PROGRESS_SURFACE_DELAY_MS = 450;
 const OPERATION_SUCCESS_AUTO_DISMISS_MS = 1200;
 const OPERATION_PROGRESS_PATH_MAX_CHARS = 96;
 const OPERATION_DIALOG_TEXT: Record<SupportedLanguage, {
-  action: string;
-  commandPath: string;
-  panel: string;
-  conflictDefault: string;
+  currentFolderTarget: string;
+  destination: string;
+  currentLocation: string;
+  irreversibleHint: string;
+  shellCommand: string;
+  shellCommandReady: string;
+  result: string;
+  resultComplete: string;
+  fileInfo: string;
+  archiveEntries: string;
+  commandOutput: string;
+  type: string;
+  size: string;
+  modified: string;
+  permissions: string;
+  exitCode: string;
+  stdout: string;
+  stderr: string;
+  noOutput: string;
+  encrypted: string;
+  yes: string;
+  no: string;
   sources: string;
   progress: string;
   conflictResolution: string;
-  defaultDecision: string;
+  conflictPrompt: string;
   summary: string;
   completed: string;
   failed: string;
@@ -335,14 +353,32 @@ const OPERATION_DIALOG_TEXT: Record<SupportedLanguage, {
   dismiss: string;
 }> = {
   ko: {
-    action: '작업',
-    commandPath: '명령 경로',
-    panel: '패널',
-    conflictDefault: '충돌 기본값',
+    currentFolderTarget: '현재 폴더 자체를 대상으로 하는 작업입니다.',
+    destination: '대상 위치',
+    currentLocation: '현재 위치',
+    irreversibleHint: '영구 삭제 후에는 되돌릴 수 없습니다.',
+    shellCommand: '쉘 명령',
+    shellCommandReady: '실행 전 확인이 완료되었습니다. 확인 후 실행할 수 있습니다.',
+    result: '결과',
+    resultComplete: '작업이 완료되었습니다.',
+    fileInfo: '파일 정보',
+    archiveEntries: '압축 파일 항목',
+    commandOutput: '명령 출력',
+    type: '종류',
+    size: '크기',
+    modified: '수정일',
+    permissions: '권한',
+    exitCode: '종료 코드',
+    stdout: '표준 출력',
+    stderr: '오류 출력',
+    noOutput: '출력 없음',
+    encrypted: '암호화',
+    yes: '예',
+    no: '아니오',
     sources: '대상 항목',
     progress: '진행',
     conflictResolution: '충돌 처리',
-    defaultDecision: '기본값',
+    conflictPrompt: '같은 이름의 항목이 이미 있습니다. 처리 방법을 선택하세요.',
     summary: '요약',
     completed: '완료',
     failed: '실패',
@@ -357,14 +393,32 @@ const OPERATION_DIALOG_TEXT: Record<SupportedLanguage, {
     dismiss: '닫기',
   },
   en: {
-    action: 'Action',
-    commandPath: 'Command path',
-    panel: 'Panel',
-    conflictDefault: 'Conflict default',
+    currentFolderTarget: 'This action targets the current folder.',
+    destination: 'Destination',
+    currentLocation: 'Current location',
+    irreversibleHint: 'Permanent deletion cannot be undone.',
+    shellCommand: 'Shell command',
+    shellCommandReady: 'The command is ready to run after confirmation.',
+    result: 'Result',
+    resultComplete: 'The operation completed.',
+    fileInfo: 'File information',
+    archiveEntries: 'Archive entries',
+    commandOutput: 'Command output',
+    type: 'Type',
+    size: 'Size',
+    modified: 'Modified',
+    permissions: 'Permissions',
+    exitCode: 'Exit code',
+    stdout: 'Standard output',
+    stderr: 'Error output',
+    noOutput: 'No output',
+    encrypted: 'Encrypted',
+    yes: 'Yes',
+    no: 'No',
     sources: 'Sources',
     progress: 'Progress',
     conflictResolution: 'Conflict resolution',
-    defaultDecision: 'default',
+    conflictPrompt: 'An item with the same name already exists. Choose how to continue.',
     summary: 'Summary',
     completed: 'completed',
     failed: 'failed',
@@ -379,6 +433,8 @@ const OPERATION_DIALOG_TEXT: Record<SupportedLanguage, {
     dismiss: 'Dismiss',
   },
 };
+
+type OperationDialogText = (typeof OPERATION_DIALOG_TEXT)[SupportedLanguage];
 
 const isTerminalOperationState = (state: OperationState) =>
   state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';
@@ -395,6 +451,95 @@ const progressPercent = (completed: number, total: number | null) => {
   }
   return Math.min(100, Math.round((completed / total) * 100));
 };
+
+const operationOverviewText = (
+  dialogKind: OperationDialogDraft['dialogKind'],
+  count: number,
+  language: SupportedLanguage,
+) => {
+  const item = language === 'ko' ? `${count}개 항목` : `${count} item${count === 1 ? '' : 's'}`;
+  const texts: Record<OperationDialogDraft['dialogKind'], string> = language === 'ko'
+    ? {
+      copy: `${item}을 대상 위치로 복사합니다.`,
+      move: `${item}을 대상 위치로 이동합니다.`,
+      trash: `${item}을 휴지통으로 보냅니다.`,
+      deletePermanent: `${item}을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.`,
+      rename: '선택한 항목의 이름을 변경합니다.',
+      createDir: '현재 위치에 새 폴더를 만듭니다.',
+      properties: '선택한 항목의 정보를 표시합니다.',
+      archivePreview: '압축 파일의 내용을 표시합니다.',
+      archiveCreate: `${item}을 압축 파일로 만듭니다.`,
+      archiveExtract: '압축 파일을 대상 위치에 풉니다.',
+      externalOpenDefault: '선택한 파일을 기본 앱으로 엽니다.',
+      externalReveal: '선택한 항목의 위치를 파일 관리자에서 엽니다.',
+      externalEditor: '선택한 파일을 터미널 편집기로 엽니다.',
+      shellCommand: '현재 위치에서 명령을 실행하기 전에 확인합니다.',
+    }
+    : {
+      copy: `Copy ${item} to the destination.`,
+      move: `Move ${item} to the destination.`,
+      trash: `Move ${item} to the trash.`,
+      deletePermanent: `Permanently delete ${item}. This cannot be undone.`,
+      rename: 'Rename the selected item.',
+      createDir: 'Create a folder in the current location.',
+      properties: 'Show information for the selected item.',
+      archivePreview: 'Show the contents of the archive.',
+      archiveCreate: `Create an archive from ${item}.`,
+      archiveExtract: 'Extract the archive to the destination.',
+      externalOpenDefault: 'Open the selected file with the default app.',
+      externalReveal: 'Reveal the selected item in the file manager.',
+      externalEditor: 'Open the selected file in the terminal editor.',
+      shellCommand: 'Review a command before running it in the current location.',
+    };
+  return texts[dialogKind];
+};
+
+const overviewPathLabel = (
+  dialogKind: OperationDialogDraft['dialogKind'],
+  text: OperationDialogText,
+) => {
+  if (dialogKind === 'copy' || dialogKind === 'move' || dialogKind === 'archiveExtract' || dialogKind === 'archiveCreate') {
+    return text.destination;
+  }
+  return text.currentLocation;
+};
+
+function OperationOverview({
+  dialog,
+  language,
+  text,
+}: {
+  dialog: OperationDialogDraft;
+  language: SupportedLanguage;
+  text: OperationDialogText;
+}) {
+  const count = dialog.sources.length || 1;
+  const destination = dialog.targetDir;
+  return (
+    <div className="operation-overview">
+      <p>{operationOverviewText(dialog.dialogKind, count, language)}</p>
+      {destination ? (
+        <div className="operation-overview-path">
+          <span>{overviewPathLabel(dialog.dialogKind, text)}</span>
+          <code title={destination}>{destination}</code>
+        </div>
+      ) : null}
+      {dialog.dialogKind === 'deletePermanent' ? (
+        <>
+          <p className="operation-warning is-inline">{text.irreversibleHint}</p>
+          {dialog.requiredConfirmationPhrase ? (
+            <p className="operation-muted">{confirmationPhraseInstruction(language, dialog.requiredConfirmationPhrase)}</p>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+const confirmationPhraseInstruction = (language: SupportedLanguage, phrase: string) =>
+  language === 'ko'
+    ? `계속하려면 “${phrase}”를 입력하세요.`
+    : `Type “${phrase}” to continue.`;
 
 function ProgressPath({ path }: { path: string | null }) {
   const display = splitOperationProgressPath(path);
@@ -429,16 +574,6 @@ export const splitOperationProgressPath = (path: string | null, maxChars = OPERA
   };
 };
 
-const operationTargetLabel = (dialogKind: OperationDialogDraft['dialogKind']) => {
-  if (dialogKind === 'trash' || dialogKind === 'deletePermanent') {
-    return 'Delete target';
-  }
-  if (dialogKind === 'rename' || dialogKind === 'properties' || dialogKind === 'archivePreview') {
-    return 'Source';
-  }
-  return 'Target';
-};
-
 const formatByteProgress = (completed: number, total: number | null, unknownLabel = 'unknown') => {
   if (total === null) {
     return `${formatBytes(completed)} / ${unknownLabel}`;
@@ -466,9 +601,9 @@ const formatEta = (etaSeconds: number | null, unknownLabel = 'unknown') => {
 };
 
 const formatOperationError = (
-  error: { code: string; messageKey: string },
+  error: { messageKey: string; path?: string | null },
   language: SupportedLanguage,
-) => `${error.code}: ${translateMessageKey(language, error.messageKey)}`;
+) => formatUserErrorMessage(language, error);
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) {
@@ -484,9 +619,113 @@ const formatBytes = (bytes: number) => {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 };
 
-const formatAtomicResult = (value: unknown) => {
-  if (typeof value === 'string') {
-    return value;
+function OperationResultView({
+  value,
+  language,
+  text,
+}: {
+  value: unknown;
+  language: SupportedLanguage;
+  text: OperationDialogText;
+}) {
+  if (isFileMetadata(value)) {
+    return (
+      <dl className="operation-result-list">
+        <div><dt>{text.fileInfo}</dt><dd>{value.name}</dd></div>
+        <div><dt>{text.currentLocation}</dt><dd><code title={value.absolutePath}>{value.absolutePath}</code></dd></div>
+        <div><dt>{text.type}</dt><dd>{metadataKindLabel(language, value.kind)}</dd></div>
+        <div><dt>{text.size}</dt><dd>{value.sizeBytes === null ? '—' : formatBytes(value.sizeBytes)}</dd></div>
+        <div><dt>{text.modified}</dt><dd>{value.modifiedAt ?? '—'}</dd></div>
+        <div><dt>{text.permissions}</dt><dd>{value.permissions ?? '—'}</dd></div>
+      </dl>
+    );
   }
-  return JSON.stringify(value, null, 2);
+  if (isArchiveListing(value)) {
+    return (
+      <div className="operation-result-stack">
+        <dl className="operation-result-list">
+          <div><dt>{text.currentLocation}</dt><dd><code title={value.archivePath}>{value.archivePath}</code></dd></div>
+          <div><dt>{text.encrypted}</dt><dd>{value.encrypted ? text.yes : text.no}</dd></div>
+        </dl>
+        <div>
+          <h4>{text.archiveEntries}</h4>
+          {value.entries.length > 0 ? (
+            <ul className="operation-result-items">
+              {value.entries.slice(0, 20).map((entry) => (
+                <li key={entry.path}>
+                  <span>{entry.name}</span>
+                  <small>{metadataKindLabel(language, entry.kind)}</small>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="operation-muted">{text.noOutput}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (isShellCommandPreview(value)) {
+    return <p>{value.policy.enabled ? text.shellCommandReady : translateUserMessageKey(language, value.policy.reasonKey)}</p>;
+  }
+  if (isShellCommandResult(value)) {
+    return (
+      <div className="operation-result-stack">
+        <dl className="operation-result-list">
+          <div><dt>{text.exitCode}</dt><dd>{value.exitCode ?? '—'}</dd></div>
+        </dl>
+        <CommandOutput title={text.stdout} output={value.stdout} emptyLabel={text.noOutput} />
+        <CommandOutput title={text.stderr} output={value.stderr} emptyLabel={text.noOutput} />
+      </div>
+    );
+  }
+  if (typeof value === 'string') {
+    return <p>{value}</p>;
+  }
+  return <p>{text.resultComplete}</p>;
+}
+
+function CommandOutput({ title, output, emptyLabel }: { title: string; output: string; emptyLabel: string }) {
+  return (
+    <div className="operation-command-output">
+      <h4>{title}</h4>
+      {output ? <pre>{output}</pre> : <p className="operation-muted">{emptyLabel}</p>}
+    </div>
+  );
+}
+
+const metadataKindLabel = (language: SupportedLanguage, kind: string) => {
+  const labels: Record<SupportedLanguage, Record<string, string>> = {
+    ko: { file: '파일', directory: '폴더', symlink: '링크', archive: '압축 파일', other: '기타' },
+    en: { file: 'File', directory: 'Folder', symlink: 'Link', archive: 'Archive', other: 'Other' },
+  };
+  return labels[language][kind] ?? kind;
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isFileMetadata = (value: unknown): value is FileMetadata =>
+  isRecord(value) &&
+  typeof value.absolutePath === 'string' &&
+  typeof value.name === 'string' &&
+  typeof value.kind === 'string';
+
+const isArchiveListing = (value: unknown): value is ArchiveListing =>
+  isRecord(value) &&
+  typeof value.archivePath === 'string' &&
+  Array.isArray(value.entries) &&
+  typeof value.encrypted === 'boolean';
+
+const isShellCommandPreview = (value: unknown): value is ShellCommandPreview =>
+  isRecord(value) &&
+  typeof value.confirmToken === 'string' &&
+  isRecord(value.policy) &&
+  typeof value.policy.enabled === 'boolean';
+
+const isShellCommandResult = (value: unknown): value is ShellCommandResult =>
+  isRecord(value) &&
+  (typeof value.exitCode === 'number' || value.exitCode === null) &&
+  typeof value.stdout === 'string' &&
+  typeof value.stderr === 'string' &&
+  typeof value.timedOut === 'boolean';

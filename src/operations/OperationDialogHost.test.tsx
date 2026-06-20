@@ -62,10 +62,11 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByText('Move to opposite panel')).toBeTruthy();
+    expect(screen.getByText('이동')).toBeTruthy();
     expect(screen.getByText('source.txt')).toBeTruthy();
-    expect(screen.getByText(/실제 파일 변경은 아직 연결하지 않았습니다/)).toBeTruthy();
-    expect(screen.getByText('start_move')).toBeTruthy();
+    expect(screen.getByText(/This screen is a preview before running the action/)).toBeTruthy();
+    expect(screen.queryByText('start_move')).toBeNull();
+    expect(screen.queryByText('file.move')).toBeNull();
   });
 
   it('warns when unconnected file-mutation dialogs are backend stubs', () => {
@@ -83,12 +84,12 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByText('Copy to opposite panel')).toBeTruthy();
-    expect(screen.getByText(/실제 파일 변경은 아직 연결하지 않았습니다/)).toBeTruthy();
-    expect(screen.getByText(/operations.backendExecution.stubbedUntilCommandWiring/)).toBeTruthy();
+    expect(screen.getByText('복사')).toBeTruthy();
+    expect(screen.getByText(/This screen is a preview before running the action/)).toBeTruthy();
+    expect(screen.queryByText(/operations.backendExecution.stubbedUntilCommandWiring/)).toBeNull();
   });
 
-  it('labels delete source paths as delete targets instead of a generic target directory', () => {
+  it('describes delete targets without exposing command metadata', () => {
     const action = ACTION_BY_ID.get('file.trash');
     if (!action) {
       throw new Error('file.trash action is required');
@@ -103,8 +104,10 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByText('Delete target')).toBeTruthy();
-    expect(screen.getAllByText(sampleEntry.path)).toHaveLength(2);
+    expect(screen.getByText('휴지통으로 이동')).toBeTruthy();
+    expect(screen.getAllByText(sampleEntry.path).length).toBeGreaterThan(0);
+    expect(screen.queryByText('start_delete trash')).toBeNull();
+    expect(screen.queryByText('skip')).toBeNull();
   });
 
   it('splits long operation paths with a middle ellipsis while preserving the full path metadata', () => {
@@ -137,13 +140,13 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByText('Create Directory')).toBeTruthy();
+    expect(screen.getByText('새 폴더')).toBeTruthy();
     expect(screen.queryByText(/실제 파일 변경은 아직 연결하지 않았습니다/)).toBeNull();
     const input = screen.getByLabelText('새 폴더 이름');
-    expect(screen.getByText('errors.invalidName')).toBeTruthy();
+    expect(screen.getByText('The name is invalid.')).toBeTruthy();
     await user.type(input, 'New Folder');
 
-    expect(screen.queryByText('errors.invalidName')).toBeNull();
+    expect(screen.queryByText('The name is invalid.')).toBeNull();
     await user.click(screen.getByRole('button', { name: '확인' }));
 
     expect(atomicExecutor).toHaveBeenCalledOnce();
@@ -277,7 +280,7 @@ describe('OperationDialogHost', () => {
     render(<OperationDialogHost language="ko" />);
 
     expect(screen.getByText('작업 오류')).toBeTruthy();
-    expect(screen.getByText(/파일 작업 진행 이벤트 수신에 실패했습니다/)).toBeTruthy();
+    expect(screen.getByText(/파일 작업 진행 상태를 확인하지 못했습니다/)).toBeTruthy();
     expect(screen.getByRole('button', { name: '닫기' })).toBeTruthy();
   });
 
@@ -321,8 +324,8 @@ describe('OperationDialogHost', () => {
     expect(screen.getByText('Conflict resolution')).toBeTruthy();
     expect(screen.queryByText('Progress')).toBeNull();
     expect(screen.queryByText(/waitingForConflict/)).toBeNull();
-    expect(screen.getByText('allOverwrite')).toBeTruthy();
-    expect(screen.getByText('cancel')).toBeTruthy();
+    expect(screen.getByText('Overwrite All')).toBeTruthy();
+    expect(screen.getByText('Cancel')).toBeTruthy();
   });
 
   it('centers conflict attention when no operation dialog is open', () => {
@@ -394,7 +397,7 @@ describe('OperationDialogHost', () => {
     expect(screen.queryByText('Operation progress')).toBeNull();
 
     act(() => {
-      screen.getByRole('button', { name: 'overwrite' }).click();
+      screen.getByRole('button', { name: 'Overwrite' }).click();
     });
 
     expect(useOperationStore.getState().conflictPrompt).toBeNull();

@@ -132,6 +132,13 @@ describe('action registry', () => {
     expect(copy.hotkeyLabel).toBe('Copy');
   });
 
+  it('never falls back to raw action IDs for user-facing labels', () => {
+    for (const action of ACTIONS) {
+      expect(labelForAction(action)).not.toBe(action.id);
+      expect(action.hotkeyLabel).not.toBe(action.id);
+    }
+  });
+
   it('applies contextScopes before action-specific enablement', () => {
     const archivePreview = ACTION_BY_ID.get('archive.preview');
     if (!archivePreview) {
