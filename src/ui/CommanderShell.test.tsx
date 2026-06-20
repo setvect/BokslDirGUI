@@ -1589,6 +1589,32 @@ describe('CommanderShell', () => {
     expect(screen.queryByRole('menu', { name: 'Edit menu' })).toBeNull();
   });
 
+  it('supports top-menu accelerator letters after F9', async () => {
+    const user = userEvent.setup();
+    const appController = { quit: vi.fn(async () => undefined) };
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        appController={appController}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+
+    await user.keyboard('{F9}v');
+    expect(await screen.findByRole('menu', { name: 'View menu' })).toBeTruthy();
+
+    await user.keyboard('s');
+    expect(await screen.findByRole('menu', { name: 'Settings menu' })).toBeTruthy();
+
+    await user.keyboard('f');
+    expect(await screen.findByRole('menu', { name: 'File menu' })).toBeTruthy();
+
+    await user.keyboard('q');
+    await waitFor(() => expect(appController.quit).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('menu', { name: 'File menu' })).toBeNull();
+  });
+
   it('supports submenu keyboard navigation from the F9 menu', async () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();

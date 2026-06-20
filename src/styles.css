@@ -322,14 +322,17 @@ button {
 
 .file-table-scroll {
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-color: #c8c8c8 #242424;
   scrollbar-width: thin;
 }
 
 .file-table-virtual-space {
   position: relative;
+  min-width: 0;
   min-height: 100%;
+  overflow: hidden;
 }
 
 .file-row {
@@ -667,7 +670,7 @@ button {
 
 .dialog-overlay {
   position: fixed;
-  inset: var(--top-menu-height) 0 calc(var(--status-height) + var(--hotkey-strip-height));
+  inset: 0;
   z-index: 30;
   background: rgba(0, 0, 0, 0.38);
 }

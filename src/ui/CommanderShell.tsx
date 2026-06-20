@@ -17,6 +17,7 @@ import {
   isActionAvailable,
   labelForAction,
   matchKeyboardShortcut,
+  menuRootAcceleratorFromRegistry,
   menuRootLabelFromRegistry,
   menuRootsFromRegistry,
   shortcutLabelForAction,
@@ -1618,7 +1619,7 @@ export function CommanderShell({
           onClose={closeOverlay}
         />
       ) : null}
-      <OperationDialogHost />
+      <OperationDialogHost language={settings.language} />
       {helpDialogOpen ? <ShortcutHelpDialog onClose={() => setHelpDialogOpen(false)} /> : null}
       {helpSearchOpen ? <HelpSearchDialog onClose={closeOverlay} /> : null}
       {aboutDialogOpen ? <AboutDialog onClose={closeOverlay} /> : null}
@@ -1683,12 +1684,14 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
 
   const roots = menuRootsFromRegistry();
   const openFromClosed = event.key === 'F9';
+  const accelerator = menuAcceleratorFromKeyboardEvent(event);
+  const acceleratedRootIndex = accelerator ? rootIndexForAccelerator(roots, accelerator) : -1;
   let state = runtime.getState();
   if (!state) {
-    if (openFromClosed) {
+    if (openFromClosed || (event.altKey && acceleratedRootIndex >= 0)) {
       event.preventDefault();
       event.stopPropagation();
-      runtime.open(0);
+      runtime.open(openFromClosed ? 0 : acceleratedRootIndex);
       return true;
     }
     return false;
@@ -1714,6 +1717,39 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
   const selectedNode = nodes[state.itemIndex];
   if (nodes.length === 0) {
     return true;
+  }
+
+  if (accelerator) {
+    if (acceleratedRootIndex >= 0) {
+      applyMenuState({ rootIndex: acceleratedRootIndex, itemIndex: 0, submenuIndex: null });
+      return true;
+    }
+
+    if (state.submenuIndex !== null && selectedNode?.kind === 'submenu') {
+      const childIndex = selectedNode.children.findIndex((child) => menuNodeAccelerator(child.label) === accelerator);
+      const child = childIndex >= 0 ? selectedNode.children[childIndex] : null;
+      if (child) {
+        applyMenuState({ ...state, submenuIndex: childIndex });
+        if (child.enabled) {
+          runtime.execute(child.action);
+        }
+        return true;
+      }
+    }
+
+    const nodeIndex = nodes.findIndex((node) => menuNodeAccelerator(node.label) === accelerator);
+    const node = nodeIndex >= 0 ? nodes[nodeIndex] : null;
+    if (node) {
+      if (node.kind === 'submenu') {
+        applyMenuState({ ...state, itemIndex: nodeIndex, submenuIndex: 0 });
+        return true;
+      }
+      applyMenuState({ ...state, itemIndex: nodeIndex, submenuIndex: null });
+      if (node.enabled) {
+        runtime.execute(node.action);
+      }
+      return true;
+    }
   }
 
   if (event.key === 'ArrowRight') {
@@ -1788,6 +1824,24 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
   }
 
   return true;
+};
+
+const menuAcceleratorFromKeyboardEvent = (event: KeyboardEvent) => {
+  if (event.ctrlKey || event.metaKey) {
+    return null;
+  }
+  if (event.code.startsWith('Key')) {
+    return event.code.slice(3).toUpperCase();
+  }
+  return Array.from(event.key).length === 1 ? menuNodeAccelerator(event.key) : null;
+};
+
+const rootIndexForAccelerator = (roots: readonly string[], accelerator: string) =>
+  roots.findIndex((root) => menuRootAcceleratorFromRegistry(root) === accelerator);
+
+const menuNodeAccelerator = (label: string) => {
+  const first = Array.from(label.trim()).find((character) => /[A-Za-z0-9]/.test(character));
+  return first ? first.toUpperCase() : null;
 };
 
 function TopMenuBar({ context, state, onOpenRoot, onClose, onStateChange, onOpenAction }: TopMenuBarProps) {

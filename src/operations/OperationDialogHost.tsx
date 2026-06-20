@@ -4,8 +4,10 @@ import { useOperationStore, type OperationDialogDraft } from './operationStore';
 import { useCommanderKeyboardBoundaryProps } from '../ui/keyboardOwnership';
 import { tauriClient } from '../tauri/client';
 import type { OperationState, OperationSummary } from '../domain/types';
+import { translateMessageKey, type SupportedLanguage } from '../i18n-resources';
 
-export function OperationDialogHost() {
+export function OperationDialogHost({ language = 'en' }: { language?: SupportedLanguage } = {}) {
+  const text = OPERATION_DIALOG_TEXT[language];
   const dialog = useOperationStore((state) => state.dialog);
   const progress = useOperationStore((state) => state.progress);
   const conflictPrompt = useOperationStore((state) => state.conflictPrompt);
@@ -92,19 +94,19 @@ export function OperationDialogHost() {
               <Dialog.Title className="operation-title">{dialog.title}</Dialog.Title>
               <Dialog.Description className="operation-description">{dialog.description}</Dialog.Description>
               <div className="operation-grid">
-                <span>Action</span>
+                <span>{text.action}</span>
                 <strong>{dialog.actionId}</strong>
-                <span>Command path</span>
+                <span>{text.commandPath}</span>
                 <code>{dialog.commandPath}</code>
-                <span>Panel</span>
+                <span>{text.panel}</span>
                 <strong>{dialog.panelId.toUpperCase()}</strong>
                 <span>{operationTargetLabel(dialog.dialogKind)}</span>
                 <code>{dialog.targetDir ?? '—'}</code>
-                <span>Conflict default</span>
+                <span>{text.conflictDefault}</span>
                 <strong>{dialog.defaultDecision}</strong>
               </div>
               <div className="operation-section">
-                <h3>Sources</h3>
+                <h3>{text.sources}</h3>
                 {dialog.sources.length > 0 ? (
                   <ul className="operation-source-list">
                     {dialog.sources.map((source) => (
@@ -158,18 +160,18 @@ export function OperationDialogHost() {
               ) : null}
               {dialogProgress ? (
                 <div className="operation-section">
-                  <h3>Progress</h3>
+                  <h3>{text.progress}</h3>
                   <div className="progress-bar" aria-label="operation progress">
                     <span style={{ width: `${progressPercent(dialogProgress.completedFiles, dialogProgress.totalFiles)}%` }} />
                   </div>
-                  <p>{dialogProgress.state} · {dialogProgress.completedFiles}/{dialogProgress.totalFiles ?? 'unknown'} files · {dialogProgress.currentPath}</p>
+                  <p>{dialogProgress.state} · {dialogProgress.completedFiles}/{dialogProgress.totalFiles ?? text.unknown} {text.files} · {dialogProgress.currentPath}</p>
                 </div>
               ) : null}
               {conflictPrompt ? (
                 <div className="operation-section conflict-dialog">
-                  <h3>Conflict resolution</h3>
+                  <h3>{text.conflictResolution}</h3>
                   <p>{conflictPrompt.source.name} → {conflictPrompt.destination.name}</p>
-                  <p>default: {conflictPrompt.defaultDecision}</p>
+                  <p>{text.defaultDecision}: {conflictPrompt.defaultDecision}</p>
                   <div className="conflict-actions">
                     {conflictPrompt.availableDecisions.map((decision) => (
                       <button type="button" key={decision} onClick={() => resolveConflict(decision)}>
@@ -181,19 +183,19 @@ export function OperationDialogHost() {
               ) : null}
               {summary ? (
                 <div className="operation-section">
-                  <h3>Summary</h3>
-                  <p>{summary.state} · completed {summary.completedFiles} · failed {summary.failedFiles}</p>
+                  <h3>{text.summary}</h3>
+                  <p>{summary.state} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</p>
                   {summary.errors.map((error) => (
-                    <p className="operation-error" key={`${error.code}-${error.messageKey}`}>{error.code}: {error.messageKey}</p>
+                    <p className="operation-error" key={`${error.code}-${error.messageKey}`}>{formatOperationError(error, language)}</p>
                   ))}
                 </div>
               ) : null}
               {lastError && !summary ? (
-                <p className="operation-error">{lastError.code}: {lastError.messageKey}</p>
+                <p className="operation-error">{formatOperationError(lastError, language)}</p>
               ) : null}
               <div className="operation-actions">
                 <Dialog.Close asChild>
-                  <button type="button" className="dialog-button secondary" onClick={closeDialog}>닫기</button>
+                  <button type="button" className="dialog-button secondary" onClick={closeDialog}>{text.dismiss}</button>
                 </Dialog.Close>
                 <button
                   type="button"
@@ -208,7 +210,7 @@ export function OperationDialogHost() {
                   disabled={Boolean(dialog.validationErrorKey) || dialog.atomicPending || dialog.operationPending}
                   onClick={() => void confirmDialog()}
                 >
-                  {dialog.atomicPending || dialog.operationPending ? '실행 중…' : dialog.primaryLabel}
+                  {dialog.atomicPending || dialog.operationPending ? text.running : dialog.primaryLabel}
                 </button>
               </div>
             </>
@@ -229,21 +231,21 @@ export function OperationDialogHost() {
               {...progressKeyboardBoundaryProps}
             >
               <div className="operation-section operation-progress-layout">
-                <Dialog.Title className="operation-section-title">Operation progress</Dialog.Title>
+                <Dialog.Title className="operation-section-title">{text.operationProgress}</Dialog.Title>
                 <div className="progress-bar" aria-label="operation progress">
                   <span style={{ width: `${progressPercent(visibleProgress.completedFiles, visibleProgress.totalFiles)}%` }} />
                 </div>
                 <Dialog.Description className="operation-progress-description">
                   <span>
-                    {visibleProgress.kind} · {visibleProgress.state} · {visibleProgress.completedFiles}/{visibleProgress.totalFiles ?? 'unknown'} files
+                    {visibleProgress.kind} · {visibleProgress.state} · {visibleProgress.completedFiles}/{visibleProgress.totalFiles ?? text.unknown} {text.files}
                   </span>
                   <ProgressPath path={visibleProgress.currentPath} />
                 </Dialog.Description>
                 <p className="operation-progress-detail">
-                  {formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes)} · {progressPercent(visibleProgress.completedFiles, visibleProgress.totalFiles)}% · {formatThroughput(visibleProgress.bytesPerSecond)} · ETA {formatEta(visibleProgress.etaSeconds)}
+                  {formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes, text.unknown)} · {progressPercent(visibleProgress.completedFiles, visibleProgress.totalFiles)}% · {formatThroughput(visibleProgress.bytesPerSecond, text.unknown)} · {text.eta} {formatEta(visibleProgress.etaSeconds, text.unknown)}
                 </p>
                 <div className="operation-progress-actions">
-                  <button type="button" className="dialog-button secondary" onClick={cancelOperation}>Cancel</button>
+                  <button type="button" className="dialog-button secondary" onClick={cancelOperation}>{text.cancel}</button>
                 </div>
               </div>
             </Dialog.Content>
@@ -270,9 +272,9 @@ export function OperationDialogHost() {
           >
             {conflictPrompt ? (
               <div className="operation-section conflict-dialog">
-                <Dialog.Title>Conflict resolution</Dialog.Title>
+                <Dialog.Title>{text.conflictResolution}</Dialog.Title>
                 <Dialog.Description>
-                  {conflictPrompt.source.name} → {conflictPrompt.destination.name} · default: {conflictPrompt.defaultDecision}
+                  {conflictPrompt.source.name} → {conflictPrompt.destination.name} · {text.defaultDecision}: {conflictPrompt.defaultDecision}
                 </Dialog.Description>
                 <div className="conflict-actions">
                   {conflictPrompt.availableDecisions.map((decision) => (
@@ -285,19 +287,19 @@ export function OperationDialogHost() {
             ) : null}
             {summaryNeedsAttention && summary ? (
               <div className="operation-section">
-                <Dialog.Title>Operation summary</Dialog.Title>
-                <Dialog.Description>{summary.kind} · {summary.state} · completed {summary.completedFiles} · failed {summary.failedFiles}</Dialog.Description>
+                <Dialog.Title>{text.operationSummary}</Dialog.Title>
+                <Dialog.Description>{summary.kind} · {summary.state} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</Dialog.Description>
                 {summary.errors.map((error) => (
-                  <p className="operation-error" key={`${error.code}-${error.messageKey}`}>{error.code}: {error.messageKey}</p>
+                  <p className="operation-error" key={`${error.code}-${error.messageKey}`}>{formatOperationError(error, language)}</p>
                 ))}
-                <button type="button" className="dialog-button secondary" onClick={clearSummary}>Dismiss</button>
+                <button type="button" className="dialog-button secondary" onClick={clearSummary}>{text.dismiss}</button>
               </div>
             ) : null}
             {lastError && !summary ? (
               <div className="operation-section">
-                <Dialog.Title>Operation error</Dialog.Title>
-                <Dialog.Description className="operation-error">{lastError.code}: {lastError.messageKey}</Dialog.Description>
-                <button type="button" className="dialog-button secondary" onClick={clearSummary}>Dismiss</button>
+                <Dialog.Title>{text.operationError}</Dialog.Title>
+                <Dialog.Description className="operation-error">{formatOperationError(lastError, language)}</Dialog.Description>
+                <button type="button" className="dialog-button secondary" onClick={clearSummary}>{text.dismiss}</button>
               </div>
             ) : null}
           </Dialog.Content>
@@ -310,6 +312,73 @@ export function OperationDialogHost() {
 const OPERATION_PROGRESS_SURFACE_DELAY_MS = 450;
 const OPERATION_SUCCESS_AUTO_DISMISS_MS = 1200;
 const OPERATION_PROGRESS_PATH_MAX_CHARS = 96;
+const OPERATION_DIALOG_TEXT: Record<SupportedLanguage, {
+  action: string;
+  commandPath: string;
+  panel: string;
+  conflictDefault: string;
+  sources: string;
+  progress: string;
+  conflictResolution: string;
+  defaultDecision: string;
+  summary: string;
+  completed: string;
+  failed: string;
+  running: string;
+  operationProgress: string;
+  operationSummary: string;
+  operationError: string;
+  files: string;
+  unknown: string;
+  eta: string;
+  cancel: string;
+  dismiss: string;
+}> = {
+  ko: {
+    action: '작업',
+    commandPath: '명령 경로',
+    panel: '패널',
+    conflictDefault: '충돌 기본값',
+    sources: '대상 항목',
+    progress: '진행',
+    conflictResolution: '충돌 처리',
+    defaultDecision: '기본값',
+    summary: '요약',
+    completed: '완료',
+    failed: '실패',
+    running: '실행 중…',
+    operationProgress: '작업 진행',
+    operationSummary: '작업 요약',
+    operationError: '작업 오류',
+    files: '개 파일',
+    unknown: '알 수 없음',
+    eta: '예상',
+    cancel: '취소',
+    dismiss: '닫기',
+  },
+  en: {
+    action: 'Action',
+    commandPath: 'Command path',
+    panel: 'Panel',
+    conflictDefault: 'Conflict default',
+    sources: 'Sources',
+    progress: 'Progress',
+    conflictResolution: 'Conflict resolution',
+    defaultDecision: 'default',
+    summary: 'Summary',
+    completed: 'completed',
+    failed: 'failed',
+    running: 'Running…',
+    operationProgress: 'Operation progress',
+    operationSummary: 'Operation summary',
+    operationError: 'Operation error',
+    files: 'files',
+    unknown: 'unknown',
+    eta: 'ETA',
+    cancel: 'Cancel',
+    dismiss: 'Dismiss',
+  },
+};
 
 const isTerminalOperationState = (state: OperationState) =>
   state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';
@@ -370,23 +439,23 @@ const operationTargetLabel = (dialogKind: OperationDialogDraft['dialogKind']) =>
   return 'Target';
 };
 
-const formatByteProgress = (completed: number, total: number | null) => {
+const formatByteProgress = (completed: number, total: number | null, unknownLabel = 'unknown') => {
   if (total === null) {
-    return `${formatBytes(completed)} / unknown`;
+    return `${formatBytes(completed)} / ${unknownLabel}`;
   }
   return `${formatBytes(completed)} / ${formatBytes(total)}`;
 };
 
-const formatThroughput = (bytesPerSecond: number | null) => {
+const formatThroughput = (bytesPerSecond: number | null, unknownLabel = 'unknown') => {
   if (bytesPerSecond === null) {
-    return 'speed unknown';
+    return unknownLabel;
   }
   return `${formatBytes(bytesPerSecond)}/s`;
 };
 
-const formatEta = (etaSeconds: number | null) => {
+const formatEta = (etaSeconds: number | null, unknownLabel = 'unknown') => {
   if (etaSeconds === null) {
-    return 'unknown';
+    return unknownLabel;
   }
   if (etaSeconds < 60) {
     return `${etaSeconds}s`;
@@ -395,6 +464,11 @@ const formatEta = (etaSeconds: number | null) => {
   const seconds = etaSeconds % 60;
   return `${minutes}m ${seconds}s`;
 };
+
+const formatOperationError = (
+  error: { code: string; messageKey: string },
+  language: SupportedLanguage,
+) => `${error.code}: ${translateMessageKey(language, error.messageKey)}`;
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) {

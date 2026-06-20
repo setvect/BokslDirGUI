@@ -170,7 +170,7 @@ describe('OperationDialogHost', () => {
     await user.type(screen.getByLabelText('새 폴더 이름'), 'New Folder');
     await user.click(screen.getByRole('button', { name: '확인' }));
 
-    const pendingButton = await screen.findByRole('button', { name: '실행 중…' });
+    const pendingButton = await screen.findByRole('button', { name: 'Running…' });
     expect(pendingButton).toHaveProperty('disabled', true);
     await user.click(pendingButton);
     expect(atomicExecutor).toHaveBeenCalledOnce();
@@ -261,6 +261,24 @@ describe('OperationDialogHost', () => {
 
     expect(useOperationStore.getState().summary).toBeNull();
     expect(useOperationStore.getState().progress).toBeNull();
+  });
+
+  it('uses the selected language for operation status and translated errors', () => {
+    useOperationStore.setState({
+      lastError: {
+        code: 'event_listen_failed',
+        messageKey: 'errors.operationEventListenFailed',
+        path: null,
+        details: {},
+        recoverable: true,
+      },
+    });
+
+    render(<OperationDialogHost language="ko" />);
+
+    expect(screen.getByText('작업 오류')).toBeTruthy();
+    expect(screen.getByText(/파일 작업 진행 이벤트 수신에 실패했습니다/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '닫기' })).toBeTruthy();
   });
 
   it('renders conflict resolution choices when an operation waits for conflict', () => {

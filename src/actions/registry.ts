@@ -227,6 +227,9 @@ export const menuRootLabelFromRegistry = (root: string) => {
   return accelerator ? `${root}(${accelerator})` : root;
 };
 
+export const menuRootAcceleratorFromRegistry = (root: string) =>
+  MENU_ROOT_ACCELERATORS.get(root) ?? null;
+
 export const shortcutLabelForAction = (action: AppAction) =>
   action.shortcutLabel
     ? (action.shortcutLabel === '/' ? '/' : action.shortcutLabel.split('/')[0])

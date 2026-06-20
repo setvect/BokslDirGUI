@@ -7,6 +7,7 @@ import {
   isActionAvailable,
   keyboardBindingCollisions,
   labelForAction,
+  menuRootAcceleratorFromRegistry,
   menuRootLabelFromRegistry,
   matchKeyboardShortcut,
   menuRootsFromRegistry,
@@ -122,6 +123,7 @@ describe('action registry', () => {
       'Settings(S)',
       'Help(H)',
     ]);
+    expect(menuRootsFromRegistry().map(menuRootAcceleratorFromRegistry)).toEqual(['F', 'E', 'V', 'G', 'A', 'S', 'H']);
     const copy = ACTION_BY_ID.get('file.copy');
     if (!copy) {
       throw new Error('file.copy action is required');
