@@ -1,13 +1,13 @@
 # BokslDir TUI ↔ GUI parity matrix
 
-- 기준일: 2026-06-16
+- 기준일: 2026-06-17
 - 원천 TUI 코드: `/Users/boksl/IdeaProjects/BokslDir/src/core/actions.rs`, `/Users/boksl/IdeaProjects/BokslDir/src/ui/components/dropdown_menu.rs`
 - GUI 기준: `src/actions/registry.ts`
 - 기계 검증 원본: `docs/implementation/tui-parity-matrix.json`
 
 ## 목적
 
-이 문서는 기존 BokslDir TUI의 액션, 키 바인딩, 메뉴/서브메뉴 항목을 GUI 구현 상태와 1:1로 대조하는 Phase 0 하드 게이트다. `implemented`가 아닌 항목은 기능 완료로 주장할 수 없다. 특히 copy/move UX, Space/Shift 선택, theme/language/size/session 복원은 후속 구현 전 누락 상태가 명시되어야 한다.
+이 문서는 기존 BokslDir TUI의 액션, 키 바인딩, 메뉴/서브메뉴 항목을 GUI 구현 상태와 1:1로 대조하는 Phase 0 하드 게이트다. `implemented`가 아닌 항목은 기능 완료로 주장할 수 없다. Space/Shift 선택, theme/language/size/session 복원, 실제 파일 작업, 메뉴 조작은 사용자 시나리오 증거가 있어야 완료로 인정한다.
 
 ## 상태 기준
 
@@ -23,38 +23,15 @@
 
 | 상태 | 개수 |
 | --- | ---: |
-| partial | 45 |
-| implemented | 12 |
-| missing | 7 |
+| implemented | 64 |
 
 ### P0 gap
 
-- `move_up` (partial): GUI는 row 이동을 action registry 밖 UI keyboard owner에서 처리한다. TUI parity 완료 전까지 registry/도움말 추적이 필요하다.
-- `move_down` (partial): move_up과 동일한 UI motion 경로.
-- `go_parent` (partial): TUI는 Left도 parent다. GUI registry 표시에는 Backspace/h만 있고 Left parity는 별도 확인 필요.
-- `enter` (partial): 디렉터리 진입과 파일 기본 열기 분기가 GUI에서 유지되어야 한다.
-- `page_up` (partial): Ctrl+U와 Shift+PageUp 선택 확장까지 G004에서 검증 필요.
-- `page_down` (partial): Ctrl+D와 Shift+PageDown 선택 확장까지 G004에서 검증 필요.
-- `copy` (partial): GUI 메뉴 위치가 TUI Edit와 불일치하며, 현재 copy UX는 no-conflict 즉시 실행/충돌 독립 UI 검증이 필요하다(G003).
-- `move` (partial): GUI 메뉴 위치가 TUI Edit와 불일치하며, copy와 같은 UX 수리 대상이다(G003).
-- `toggle_sel` (partial): 사용자 보고 기준 Space 선택 reliability가 미완료/회귀 가능성이 있어 G004에서 하드 검증한다.
-- `theme_dark` (partial): TUI는 direct submenu action 3개. GUI는 단일 theme action/저장 경로라 직접 선택/시각 적용 검증 필요(G005).
-- `theme_light` (partial): theme_dark와 동일.
-- `theme_contrast` (partial): theme_dark와 동일.
-- `language_en` (partial): TUI direct submenu action 2개. GUI 표시 문자열 실제 변경 검증 필요(G005).
-- `language_ko` (partial): language_en과 동일.
-- `size_auto` (partial): TUI는 direct submenu. GUI는 단일 action/저장 경로라 실제 표시 변경 검증 필요(G005).
-- `size_bytes` (partial): size_auto와 동일.
+- 없음
 
 ### 완전 누락 항목
 
-- `archive_extract_auto`: TUI parity 누락. archive_extract_auto action과 자동 폴더명/충돌 정책 설계가 필요하다.
-- `quit`: Tauri app quit command/action 설계 필요. 현재 q는 일반 파일명 타이핑/shortcut 충돌 위험이 있어 별도 UX 정책 필요.
-- `toggle_icons`: 파일 row icon mode parity 누락.
-- `editor_preset_vi`: Default editor direct preset menu 누락.
-- `editor_preset_vim`: Default editor direct preset menu 누락.
-- `editor_preset_nano`: Default editor direct preset menu 누락.
-- `editor_preset_emacs`: Default editor direct preset menu 누락.
+- 없음
 
 ## TUI 메뉴 루트
 
@@ -78,72 +55,73 @@
 - `bookmark.rename`: GUI 북마크 관리 확장
 - `bookmark.delete`: GUI 북마크 관리 확장
 - `help.search`: GUI 도움말 검색 확장
+- `view.reverseSort`: GUI convenience toggle retained alongside TUI direct ascending/descending sort actions.
 
 ## 전체 matrix
 
 | TUI id | TUI shortcut | TUI menu path | GUI action | Status | Priority | Note |
 | --- | --- | --- | --- | --- | --- | --- |
-| `move_up` | j / k | - | `__ui_motion.move_up` | partial | P0 | GUI는 row 이동을 action registry 밖 UI keyboard owner에서 처리한다. TUI parity 완료 전까지 registry/도움말 추적이 필요하다. |
-| `move_down` | - | - | `__ui_motion.move_down` | partial | P0 | move_up과 동일한 UI motion 경로. |
-| `go_parent` | h / l | - | `nav.up` | partial | P0 | TUI는 Left도 parent다. GUI registry 표시에는 Backspace/h만 있고 Left parity는 별도 확인 필요. |
-| `enter` | - | - | `nav.enter` | partial | P0 | 디렉터리 진입과 파일 기본 열기 분기가 GUI에서 유지되어야 한다. |
-| `go_top` | gg / Home | - | `nav.top` | partial | P1 | Home 키 parity는 UI motion 경로와 함께 검증 필요. |
-| `go_bottom` | G / End | - | `nav.bottom` | partial | P1 | End 키 parity는 UI motion 경로와 함께 검증 필요. |
-| `page_up` | ^U / ^D | - | `__ui_motion.page_up` | partial | P0 | Ctrl+U와 Shift+PageUp 선택 확장까지 G004에서 검증 필요. |
-| `page_down` | - | - | `__ui_motion.page_down` | partial | P0 | Ctrl+D와 Shift+PageDown 선택 확장까지 G004에서 검증 필요. |
+| `move_up` | j / k | - | `__ui_motion.move_up` | implemented | P0 | ArrowUp/k/한글 입력 물리 KeyK 이동을 commander keyboard owner가 처리하며 브라우저 기본 동작을 막고 활성 패널 row focus를 유지한다. |
+| `move_down` | - | - | `__ui_motion.move_down` | implemented | P0 | ArrowDown/j/한글 입력 물리 KeyJ 이동을 commander keyboard owner가 처리하며 브라우저 기본 동작을 막고 활성 패널 row focus를 유지한다. |
+| `go_parent` | h / l | - | `nav.up` | implemented | P0 | Backspace/h가 nav.up으로 parent 이동을 수행하며, h TUI alias와 브라우저 기본 focus/scroll 억제를 검증했다. |
+| `enter` | - | - | `nav.enter` | implemented | P0 | Enter/l이 nav.enter로 포커스 항목을 열며, 디렉터리는 패널 listing으로 진입하고 파일은 backend available 시 기본 앱 열기로 연결하고, browser preview에서는 status-gated 메시지로 차단한다. |
+| `go_top` | gg / Home | - | `nav.top` | implemented | P1 | gg/Home이 commander motion 경로로 첫 row에 이동하며 range selection에서도 가상 parent row는 선택하지 않는다. |
+| `go_bottom` | G / End | - | `nav.bottom` | implemented | P1 | G/End가 registry/motion 경로로 마지막 row에 이동하며 commander focus를 유지한다. |
+| `page_up` | ^U / ^D | - | `__ui_motion.page_up` | implemented | P0 | PageUp/Ctrl+U, 한글 입력 물리 KeyU, Shift+PageUp range selection을 검증했다. |
+| `page_down` | - | - | `__ui_motion.page_down` | implemented | P0 | PageDown/Ctrl+D, 한글 입력 물리 KeyD, Shift+PageDown range selection을 검증했다. |
 | `toggle_panel` | Tab | - | `panel.switchActive` | implemented | P0 | 웹 기본 focus 이동을 막는 commander keyboard owner가 유지되어야 한다. |
-| `toggle_layout` | Ctrl+W | View > Toggle Layout | `layout.toggleSingleDual` | partial | P1 | TUI 메뉴 위치는 View > Toggle Layout. GUI 비율 확장과 함께 동작 검증 필요. |
-| `tab_new` | tn | - | `tab.new` | partial | P1 | TUI에는 메뉴 항목이 없고 단축키 중심이다. |
-| `tab_close` | tx | - | `tab.close` | partial | P1 | 탭 상태/닫기 검증 필요. |
-| `copy` | y | Edit > Copy | `file.copy` | partial | P0 | GUI 메뉴 위치가 TUI Edit와 불일치하며, 현재 copy UX는 no-conflict 즉시 실행/충돌 독립 UI 검증이 필요하다(G003). |
-| `move` | x | Edit > Move | `file.move` | partial | P0 | GUI 메뉴 위치가 TUI Edit와 불일치하며, copy와 같은 UX 수리 대상이다(G003). |
-| `open_default` | o | File > Open Default App | `external.openDefault` | partial | P1 | 파일/디렉터리 enablement와 오류 표시 검증 필요. |
-| `open_terminal_editor` | e | File > Open Terminal Editor | `external.openEditor` | partial | P1 | TUI는 terminal editor preset을 사용한다. GUI는 외부 editor 연동으로 이름/설정 의미가 다르다. |
-| `run_shell_command` | : | File > Run Shell Command | `external.runShellCommand` | partial | P1 | GUI에서는 안전상 Tools로 분리되어 있고 기본 비활성/확인 토큰 정책을 유지한다. |
-| `delete` | d | File > Delete | `file.trash` | partial | P1 | TUI Delete 의미와 GUI Trash 의미 차이를 명확히 검증해야 한다. |
-| `perm_delete` | D | File > Permanent Delete | `file.deletePermanent` | partial | P1 | 명시 확인/취소/오류 요약 검증 필요. |
+| `toggle_layout` | Ctrl+W | View > Toggle Layout | `layout.toggleSingleDual` | implemented | P1 | Ctrl+W와 View > Toggle Layout가 settings.layout.singlePanel을 저장하고 단일/듀얼 패널 표시를 즉시 반영한다. |
+| `tab_new` | tn | - | `tab.new` | implemented | P1 | tn으로 현재 패널 경로를 tab 목록에 추가하고 Tab List overlay에서 확인한다. |
+| `tab_close` | tx | - | `tab.close` | implemented | P1 | tx로 현재 패널 tab 목록의 마지막 항목을 닫고 Tab List overlay에서 제거 상태를 확인한다. |
+| `copy` | y | Edit > Copy | `file.copy` | implemented | P0 | TUI Edit > Copy 메뉴와 y 단축키를 맞췄고, 선택이 없으면 포커스 항목을 대상으로 no-conflict copy를 확인 다이얼로그 없이 즉시 시작한다. 충돌은 독립 non-modal 상태/해결 UI로 처리하며 Rust start_copy no-silent-overwrite 안전성을 유지한다. |
+| `move` | x | Edit > Move | `file.move` | implemented | P0 | TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation을 시작한다. 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리한다. |
+| `open_default` | o | File > Open Default App | `external.openDefault` | implemented | P1 | o/File > Open Default App가 선택 파일을 OS 기본 앱 command boundary로 전달하고, recoverable backend error는 dialog/status로 표시된다. |
+| `open_terminal_editor` | e | File > Open Terminal Editor | `external.openEditor` | implemented | P1 | e/File > Open Terminal Editor는 Settings Default Editor preset 또는 명시 editorId를 사용해 파일을 terminal editor로 연다. |
+| `run_shell_command` | : | File > Run Shell Command | `external.runShellCommand` | implemented | P1 | 기본 비활성 정책을 유지하되 TUI File > Run Shell Command 위치로 노출하고, enabled 설정에서 prepare preview와 confirmToken 후 run만 허용한다. |
+| `delete` | d | File > Delete | `file.trash` | implemented | P1 | TUI Delete는 GUI에서 File > Delete/d로 노출하고 Rust trash mode로 실행한다. 선택이 없으면 포커스 concrete row를 대상으로 하며, 가상 parent는 제외하고 trash 실패 시 영구 삭제로 fallback하지 않는다. |
+| `perm_delete` | D | File > Permanent Delete | `file.deletePermanent` | implemented | P1 | 영구 삭제는 별도 File > Permanent Delete/D action이며 PERMANENT_DELETE 명시 입력 없이는 operation client/Rust confirm token으로 전달되지 않는다. |
 | `new_dir` | a | File > New Directory | `file.mkdir` | implemented | P1 | Rust child-name 검증과 atomic command 경로가 있다. |
 | `rename` | r | File > Rename | `file.rename` | implemented | P1 | no-replace Rust 경로를 유지해야 한다. |
-| `file_info` | i | View > File Info | `file.properties` | partial | P1 | TUI 메뉴는 View, GUI 메뉴는 File이다. 속성 표시 UI 검증 필요. |
-| `archive_compress` | zc | File > Archive Compress | `archive.create` | partial | P1 | GUI에서는 Archive 루트로 분리. |
-| `archive_extract` | zx | File > Archive Extract | `archive.extract` | partial | P1 | 충돌/대상 경로 검증 필요. |
-| `archive_extract_auto` | za | File > Archive Extract Auto | - | missing | P1 | TUI parity 누락. archive_extract_auto action과 자동 폴더명/충돌 정책 설계가 필요하다. |
-| `archive_preview` | - | File > Archive Preview | `archive.preview` | partial | P1 | archive.list는 GUI 확장 action으로 별도 허용한다. |
-| `toggle_sel` | Space | Edit > Select | `selection.toggle` | partial | P0 | 사용자 보고 기준 Space 선택 reliability가 미완료/회귀 가능성이 있어 G004에서 하드 검증한다. |
-| `invert_selection` | v | Edit > Invert Selection | `selection.invert` | partial | P1 | 선택 모델과 필터 상태 동작 검증 필요. |
-| `select_all` | ^A | Edit > Select All | `selection.all` | partial | P1 | 브라우저 select-all 기본 동작 방지 검증 필요. |
-| `deselect` | u | Edit > Deselect | `selection.clear` | partial | P1 | clear selection 명칭 차이. |
-| `help_keys` | ? | Help > Keyboard Help | `help.shortcuts` | partial | P1 | 도움말이 registry/matrix와 동기화되어야 한다. |
+| `file_info` | i | View > File Info | `file.properties` | implemented | P1 | TUI View > File Info 위치와 i shortcut에 맞췄고, GUI dialog title은 Properties로 metadata DTO를 표시한다. |
+| `archive_compress` | zc | File > Archive Compress | `archive.create` | implemented | P1 | TUI File > Archive Compress/zc와 맞췄고, 선택/포커스 effective sources를 opposite panel target archive로 전달한다. Rust는 상대 entry명과 provider unavailable/error summary를 검증한다. |
+| `archive_extract` | zx | File > Archive Extract | `archive.extract` | implemented | P1 | Archive Extract는 archive entry에서만 활성화되고 Rust archive_extract로 skip 기본 충돌 정책을 넘긴다. zip-slip/absolute path 차단은 Rust operation tests가 보장한다. |
+| `archive_extract_auto` | za | File > Archive Extract Auto | `archive.extractAuto` | implemented | P1 | TUI za 자동 해제 parity를 추가했다. GUI는 archive basename(예: release-bundle.zip → release-bundle)으로 opposite panel 아래 target folder를 계산하고 같은 Rust archive_extract 경계를 사용한다. |
+| `archive_preview` | - | File > Archive Preview | `archive.preview` | implemented | P1 | Archive Preview는 archive entry context와 File > Archive Preview 메뉴에 맞췄고, archive.list는 같은 command를 여는 GUI 확장으로 유지한다. |
+| `toggle_sel` | Space | Edit > Select | `selection.toggle` | implemented | P0 | Space가 포커스된 concrete row 선택을 토글하고 TUI처럼 다음 row로 이동한다. 가상 parent row와 native control keyboard owner 경계도 검증했다. |
+| `invert_selection` | v | Edit > Invert Selection | `selection.invert` | implemented | P1 | v가 활성 패널 concrete row 선택을 반전하며 가상 parent row는 선택하지 않는다. |
+| `select_all` | ^A | Edit > Select All | `selection.all` | implemented | P1 | Ctrl+A가 활성 패널 concrete row 전체를 선택하고 브라우저 select-all 기본 동작을 억제한다. |
+| `deselect` | u | Edit > Deselect | `selection.clear` | implemented | P1 | u가 활성 패널 선택을 해제하며 commander keyboard ownership 경계를 공유한다. |
+| `help_keys` | ? | Help > Keyboard Help | `help.shortcuts` | implemented | P1 | ? 및 Help > Keyboard Help가 action registry 기반 shortcut help를 열어 실제 등록 action과 동기화된다. |
 | `refresh` | ^R | View > Refresh | `nav.refresh` | implemented | P1 | 현재 panel data source 기반 refresh 경로가 있다. |
 | `open_menu` | F9 | - | `menu.open` | implemented | P0 | F9로 File root menu를 열고, Escape/F9 닫기, Left/Right root 이동, Up/Down item 이동, submenu 진입/실행을 처리한다. |
-| `quit` | q | File > Quit | - | missing | P1 | Tauri app quit command/action 설계 필요. 현재 q는 일반 파일명 타이핑/shortcut 충돌 위험이 있어 별도 UX 정책 필요. |
-| `theme_dark` | - | Settings > Theme > Dark | `settings.theme` | partial | P0 | TUI는 direct submenu action 3개. GUI는 단일 theme action/저장 경로라 직접 선택/시각 적용 검증 필요(G005). |
-| `theme_light` | - | Settings > Theme > Light | `settings.theme` | partial | P0 | theme_dark와 동일. |
-| `theme_contrast` | - | Settings > Theme > High Contrast | `settings.theme` | partial | P0 | theme_dark와 동일. |
-| `language_en` | - | Settings > Language > English | `settings.language` | partial | P0 | TUI direct submenu action 2개. GUI 표시 문자열 실제 변경 검증 필요(G005). |
-| `language_ko` | - | Settings > Language > Korean | `settings.language` | partial | P0 | language_en과 동일. |
-| `toggle_icons` | - | Settings > Toggle Icons | - | missing | P2 | 파일 row icon mode parity 누락. |
-| `editor_preset_vi` | - | Settings > Default Editor > vi | - | missing | P1 | Default editor direct preset menu 누락. |
-| `editor_preset_vim` | - | Settings > Default Editor > vim | - | missing | P1 | Default editor direct preset menu 누락. |
-| `editor_preset_nano` | - | Settings > Default Editor > nano | - | missing | P1 | Default editor direct preset menu 누락. |
-| `editor_preset_emacs` | - | Settings > Default Editor > emacs | - | missing | P1 | Default editor direct preset menu 누락. |
+| `quit` | q | File > Quit | `app.quit` | implemented | P1 | 일반 q는 파일명 타이핑 충돌 방지를 위해 사용하지 않고, File > Quit/Ctrl+Q만 Tauri current window close 정책으로 연결한다. |
+| `theme_dark` | - | Settings > Theme > Dark | `settings.themeDark` | implemented | P0 | Dark theme direct menu action saves settings.theme=dark and updates shell data-theme. |
+| `theme_light` | - | Settings > Theme > Light | `settings.themeLight` | implemented | P0 | Light theme direct menu action saves settings.theme=light and updates shell data-theme. |
+| `theme_contrast` | - | Settings > Theme > High Contrast | `settings.themeHighContrast` | implemented | P0 | High Contrast direct menu action saves settings.theme=highContrast and updates shell data-theme. |
+| `language_en` | - | Settings > Language > English | `settings.languageEn` | implemented | P0 | English language direct menu action saves settings.language=en and updates shell data-language. |
+| `language_ko` | - | Settings > Language > Korean | `settings.languageKo` | implemented | P0 | Korean language direct menu action saves settings.language=ko and updates shell data-language. |
+| `toggle_icons` | - | Settings > Toggle Icons | `settings.toggleIcons` | implemented | P2 | Settings > Toggle Icons가 settings.view.showIcons를 저장하고 파일 row icon 표시를 즉시 토글한다. |
+| `editor_preset_vi` | - | Settings > Default Editor > vi | `settings.editorVi` | implemented | P1 | Settings > Default Editor > vi가 settings.external.editorId=vi로 저장된다. |
+| `editor_preset_vim` | - | Settings > Default Editor > vim | `settings.editorVim` | implemented | P1 | Settings > Default Editor > vim이 settings.external.editorId=vim으로 저장되고 open terminal editor 경로에서 사용된다. |
+| `editor_preset_nano` | - | Settings > Default Editor > nano | `settings.editorNano` | implemented | P1 | Settings > Default Editor > nano가 settings.external.editorId=nano로 저장된다. |
+| `editor_preset_emacs` | - | Settings > Default Editor > emacs | `settings.editorEmacs` | implemented | P1 | Settings > Default Editor > emacs가 settings.external.editorId=emacs로 저장된다. |
 | `sort_name` | sn | View > Sort By > Name | `view.sortName` | implemented | P1 | 메뉴 그룹명만 다르다. |
 | `sort_size` | ss | View > Sort By > Size | `view.sortSize` | implemented | P1 | 메뉴 그룹명만 다르다. |
 | `sort_date` | sd | View > Sort By > Date | `view.sortDate` | implemented | P1 | GUI label은 Modified Date. |
 | `sort_ext` | se | View > Sort By > Extension | `view.sortExt` | implemented | P1 | 메뉴 그룹명만 다르다. |
-| `sort_asc` | sr | View > Sort Order > Ascending | `view.reverseSort` | partial | P1 | TUI는 sort_asc/sort_desc direct action이 있으나 GUI는 reverse toggle 하나라 direct 상태 설정 parity가 불완전하다. |
-| `sort_desc` | - | View > Sort Order > Descending | `view.reverseSort` | partial | P1 | sort_asc와 동일. |
-| `filter_start` | / | View > Filter | `filter.start` | partial | P1 | 필터 적용 표시/매칭 시각화는 최근 UX repair 대상이며 회귀 검증 필요. |
-| `filter_clear` | - | View > Clear Filter | `filter.clear` | partial | P1 | TUI에는 별도 단축키 표시 없음. |
+| `sort_asc` | sr | View > Sort Order > Ascending | `view.sortAsc` | implemented | P1 | Ascending sort direct menu action applies asc direction without relying on reverse toggle. |
+| `sort_desc` | - | View > Sort Order > Descending | `view.sortDesc` | implemented | P1 | Descending sort direct menu action applies desc direction without relying on reverse toggle. |
+| `filter_start` | / | View > Filter | `filter.start` | implemented | P1 | 필터 입력은 list_dir filter로 전달되고 panel/status/chip 및 파일명 match highlight로 적용 상태를 표시한다. |
+| `filter_clear` | - | View > Clear Filter | `filter.clear` | implemented | P1 | Clear Filter는 list_dir filter=null로 갱신하고 filter chip/status를 제거한다. |
 | `toggle_hidden` | . | View > Toggle Hidden | `view.toggleHidden` | implemented | P1 | 숨김 토글 후 list_dir 갱신 경로가 있다. |
-| `mount_points` | gm | View > Mount Points | `nav.locations` | partial | P1 | TUI Mount Points와 GUI Locations 명칭/범위가 다를 수 있어 parity 확인 필요. |
-| `goto_path` | gp | View > Go To Path | `nav.gotoPath` | partial | P1 | 경로 입력/검증/오류 표시 확인 필요. |
-| `tab_list` | tt | - | `tab.list` | partial | P1 | TUI 메뉴에는 없지만 액션 parity 대상. |
+| `mount_points` | gm | View > Mount Points | `nav.locations` | implemented | P1 | gm/View > Mount Points는 list_locations 결과를 Locations overlay로 표시하고 stale async 응답을 무시한다. |
+| `goto_path` | gp | View > Go To Path | `nav.gotoPath` | implemented | P1 | gp/View > Go To Path가 Path prompt를 열고 goto_path 결과 listing으로 패널을 이동한다. |
+| `tab_list` | tt | - | `tab.list` | implemented | P1 | tt는 현재 패널 tab overlay를 열고 tab_new/tab_close 결과를 확인할 수 있다. |
 | `history_back` | Alt+Left | - | `nav.back` | implemented | P1 | 히스토리 state와 list_dir 재요청 경로가 있다. |
 | `history_forward` | Alt+Right | - | `nav.forward` | implemented | P1 | history_back과 동일. |
-| `history_list` | th | View > History List | `history.list` | partial | P1 | 히스토리 목록 UI 동작 검증 필요. |
-| `bookmark_add` | Ctrl+B | - | `bookmark.add` | partial | P1 | TUI shortcut는 Ctrl+B, GUI shortcut는 sequence tb+a로 다르다. 단축키 parity 또는 의도적 차이 기록 필요. |
-| `bookmark_list` | tb | View > Bookmark List | `bookmark.list` | partial | P1 | 북마크 목록 UI 동작 검증 필요. |
-| `size_auto` | - | View > Size Format > Auto | `settings.sizeFormat` | partial | P0 | TUI는 direct submenu. GUI는 단일 action/저장 경로라 실제 표시 변경 검증 필요(G005). |
-| `size_bytes` | - | View > Size Format > Bytes | `settings.sizeFormat` | partial | P0 | size_auto와 동일. |
-| `about` | - | Help > About | `help.about` | partial | P2 | 정보 다이얼로그 내용 검증 필요. |
+| `history_list` | th | View > History List | `history.list` | implemented | P1 | th/View > History List는 back/current/forward 경로를 overlay로 표시한다. |
+| `bookmark_add` | Ctrl+B | - | `bookmark.add` | implemented | P1 | Ctrl+B 및 tb+a가 현재 경로를 settings.bookmarks에 저장한다. |
+| `bookmark_list` | tb | View > Bookmark List | `bookmark.list` | implemented | P1 | tb/View > Bookmark List는 저장된 bookmark overlay를 열고 선택 시 해당 경로로 이동한다. |
+| `size_auto` | - | View > Size Format > Auto | `settings.sizeAuto` | implemented | P0 | Auto size direct menu action saves the human-readable size format and updates visible file size formatting. |
+| `size_bytes` | - | View > Size Format > Bytes | `settings.sizeBytes` | implemented | P0 | Bytes size direct menu action saves the byte size format and updates visible file size formatting. |
+| `about` | - | Help > About | `help.about` | implemented | P2 | Help > About이 BokslDirGUI 정체성/기술스택 설명 dialog를 연다. |

@@ -10,6 +10,7 @@ export interface ActionContextInput {
   hasOppositePanel: boolean;
   shellCommandEnabled: boolean;
   operationBusy: boolean;
+  backendAvailable?: boolean;
 }
 
 interface ActionTargetPanel {
@@ -73,6 +74,7 @@ export const createActionContext = ({
   hasOppositePanel,
   shellCommandEnabled,
   operationBusy,
+  backendAvailable = true,
 }: ActionContextInput): ActionContext => {
   const hasConcreteFocus = hasConcreteFocusOverride ?? Boolean(focusedEntry && !focusedEntry.isVirtual);
   return {
@@ -84,6 +86,7 @@ export const createActionContext = ({
     hasOppositePanel,
     shellCommandEnabled,
     operationBusy,
+    backendAvailable,
   };
 };
 
@@ -120,6 +123,7 @@ const SOURCE_REQUIRED_ACTIONS = new Set<ActionId>([
   'archive.preview',
   'archive.list',
   'archive.extract',
+  'archive.extractAuto',
   'archive.create',
   'external.openDefault',
   'external.reveal',

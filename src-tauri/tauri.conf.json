@@ -15,8 +15,8 @@
         "title": "BokslDirGUI",
         "width": 1280,
         "height": 820,
-        "minWidth": 960,
-        "minHeight": 640,
+        "minWidth": 1080,
+        "minHeight": 680,
         "resizable": true,
         "fullscreen": false
       }

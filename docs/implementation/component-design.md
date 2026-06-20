@@ -44,23 +44,32 @@ App
 | 컴포넌트 | 책임 | 참조 상태 | 금지 사항 |
 | --- | --- | --- | --- |
 | `CommanderShell` | 전체 layout, active panel, global keyboard dispatch | activePanel, layoutMode | 파일 작업 직접 실행 |
-| `TopMenuBar` | File/Edit/View/Tools/Settings/Help | action registry | 독자 메뉴 정의 |
+| `TopMenuBar` | File/Edit/View/Go/Archive/Settings/Help | action registry | 독자 메뉴 정의 |
 | `DualPanelLayout` | panel ratio, splitter, single/dual mode | layout store | 패널 내부 상태 소유 |
 | `FilePanel` | panel-local state binding | panel store | global operation state 소유 |
 | `PanelHeader` | compact path chip, active marker, sort/filter indicators | panel/navigation state | bulky breadcrumb bar |
 | `PathControls` | back/forward/up/refresh/address edit/drive overlay | navigation store | persistent sidebar 강제 |
 | `FileTable` | virtualized rows, selection, keyboard row navigation | listing/selection state | 전체 DOM row 렌더링 |
-| `OperationDialog` | copy/move/delete/archive action confirmation/progress | operation store | Rust validation 우회 |
+| `OperationDialog` | move/delete/archive/external 등 명시 확인이 필요한 action의 preflight/confirm shell | operation store | Rust validation 우회 |
 | `ContextMenuLayer` | row/blank/context menu | action registry | 메뉴별 별도 handler |
 | `HistoryPopover` | panel별 back/forward 목록 표시 | navigation store | 전역 단일 history 가정 |
 | `BookmarkDialog` | 북마크 추가/이름 변경/삭제, 중복 방지 | navigation/settings store | panel history 직접 변조 |
 | `ExternalOpenDialog` | 기본 앱/파일 관리자/외부 에디터 실행 확인 및 실패 메시지 | action/settings state | 사용자 확인 없는 외부 실행 |
+| `OperationStatusSurface` | copy direct-start 및 닫힌 dialog 뒤의 progress/bytes/speed/ETA/conflict/summary/error non-modal 표시 | operation store + activeOperationController | 실행 중 controller/progress 분리 손실 |
 | `ConflictResolutionDialog` | `ConflictDecision` 선택과 apply-all 정책 표시 | operation store | enum 밖 결정값 생성 |
 | `CommandPalette` | action registry 검색/실행, Help 검색과 동일 ID 사용 | action registry | registry 밖 임의 command 실행 |
 | `BottomStatusStrip` | 파일/선택/활성 패널 상태와 짧은 transient status를 한 줄로 표시 | panel/action state | 조작을 막는 팝업 표시 |
 | `HotkeyStrip` | 화면 폭/확대 배율에 따라 우선순위 action hint를 가능한 만큼 표시 | action registry + measured width | 실제 action source 중복, 고정 개수 표시 |
 | `ShellCommandDialog` | 현재 경로 기준 shell command preview/confirm/result 표시, backend `prepare_shell_command` → `run_shell_command` 호출 흐름 소유 | action/operation/settings state | 확인 없이 명령 실행 |
 | `HelpDialog` | action registry 기반 도움말/검색/About | action registry | 하드코딩 단축키 목록 |
+
+
+### Operation UI split
+
+- `file.copy`는 TUI copy UX에 맞춰 no-conflict 경로에서 preflight 없이 `startLongRunningOperation`을 시작한다.
+- `file.move`, delete, archive extract/create처럼 destructive 또는 명시 확인이 필요한 작업은 `OperationDialog`에서 확인을 거친다.
+- operation이 시작된 뒤 사용자가 dialog를 닫아도 `activeOperationController`와 `progress`는 유지된다. 이후 backend summary/conflict/cancel event는 `OperationStatusSurface`에서 표시하고 panel refresh callback을 계속 실행한다.
+- backend가 실제 `operationId`를 반환하기 전 취소를 요청하면 synthetic pending id를 backend cancel에 보내지 않고, 실제 id가 확정된 즉시 cancel을 전달한다.
 
 ## 4. 상태 store 분리
 

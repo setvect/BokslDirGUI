@@ -17,12 +17,15 @@ export const entryIcon = (kind: EntryKind) => {
   }
 };
 
-export const formatSize = (entry: FileEntry) => {
+export const formatSize = (entry: FileEntry, mode: 'binary' | 'decimal' = 'binary') => {
   if (entry.kind === 'directory') {
     return '-';
   }
   if (entry.sizeBytes === null) {
     return '';
+  }
+  if (mode === 'decimal') {
+    return `${entry.sizeBytes} B`;
   }
   if (entry.sizeBytes < 1024) {
     return `${entry.sizeBytes} B`;

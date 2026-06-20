@@ -9,6 +9,8 @@ const commanderShortcutsEnabledProps = {};
 
 export type CommanderKeyboardOwner =
   | 'operation-dialog'
+  | 'operation-attention-dialog'
+  | 'operation-progress-dialog'
   | 'menu-popover'
   | 'context-menu'
   | 'filter-prompt'

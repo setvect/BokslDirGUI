@@ -61,6 +61,7 @@ export interface OperationDialogDraft {
   conflictResolver: ConflictResolver | null;
   onAtomicSuccess: AtomicCommandSuccessHandler | null;
   onOperationSummary: OperationSummaryHandler | null;
+  onOperationStartError: OperationStartErrorHandler | null;
 }
 
 export type AtomicCommandExecutor = (
@@ -76,6 +77,11 @@ export type LongRunningOperationExecutor = (
 export type LongRunningCancelExecutor = (operationId: string) => Promise<unknown>;
 export type ConflictResolver = (operationId: string, decision: ConflictDecision) => Promise<unknown>;
 export type OperationSummaryHandler = (summary: OperationSummary, dialog: OperationDialogDraft) => void;
+export type OperationStartErrorHandling = 'dismiss' | 'keep' | void;
+export type OperationStartErrorHandler = (
+  error: AppError,
+  dialog: OperationDialogDraft,
+) => OperationStartErrorHandling;
 
 export interface OpenDialogRequest {
   action: AppAction;
@@ -89,6 +95,16 @@ export interface OpenDialogRequest {
   conflictResolver?: ConflictResolver;
   onAtomicSuccess?: AtomicCommandSuccessHandler;
   onOperationSummary?: OperationSummaryHandler;
+  onOperationStartError?: OperationStartErrorHandler;
+}
+
+export interface ActiveOperationController {
+  operationId: string | null;
+  dialog: OperationDialogDraft;
+  cancelExecutor: LongRunningCancelExecutor | null;
+  conflictResolver: ConflictResolver | null;
+  onOperationSummary: OperationSummaryHandler | null;
+  cancelRequestedBeforeStart: boolean;
 }
 
 export interface OperationStoreState {
@@ -100,7 +116,9 @@ export interface OperationStoreState {
   lastError: AppError | null;
   lastConflictDecision: ConflictDecision | null;
   applyAllConflictDecision: Extract<ConflictDecision, 'allOverwrite' | 'allSkip'> | null;
+  activeOperationController: ActiveOperationController | null;
   openDialog(request: OpenDialogRequest): void;
+  startLongRunningOperation(request: OpenDialogRequest): Promise<void>;
   updateDialogInput(value: string): void;
   confirmDialog(): Promise<void>;
   applyOperationStarted(started: OperationStarted): void;
@@ -124,20 +142,125 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
   lastError: null,
   lastConflictDecision: null,
   applyAllConflictDecision: null,
+  activeOperationController: null,
   openDialog: (request) => {
     const dialogKind = dialogKindForAction(request.action.id as ActionId);
     if (!dialogKind) {
       return;
     }
-    set({
+    const operationInFlight = isOperationInFlight(get());
+    if (isLongRunningDialog(dialogKind) && operationInFlight) {
+      set({ lastError: appError('operation_busy', 'errors.operationBusy', request.targetDir ?? request.workingDir, true) });
+      return;
+    }
+    set((current) => ({
       dialog: buildDialogDraft(dialogKind, request),
-      progress: null,
+      progress: operationInFlight ? current.progress : null,
+      conflictPrompt: operationInFlight ? current.conflictPrompt : null,
+      summary: null,
+      lastError: null,
+      lastConflictDecision: operationInFlight ? current.lastConflictDecision : null,
+      applyAllConflictDecision: operationInFlight ? current.applyAllConflictDecision : null,
+      activeOperationController: operationInFlight ? current.activeOperationController : null,
+    }));
+  },
+  startLongRunningOperation: async (request) => {
+    const dialogKind = dialogKindForAction(request.action.id as ActionId);
+    if (!dialogKind || !isLongRunningDialog(dialogKind)) {
+      return;
+    }
+    if (isOperationInFlight(get())) {
+      set({ lastError: appError('operation_busy', 'errors.operationBusy', request.targetDir ?? request.workingDir, true) });
+      return;
+    }
+    const dialog = buildDialogDraft(dialogKind, request);
+    if (dialog.backendExecutionStubbed || !dialog.longRunningExecutor) {
+      set({
+        lastError: appError('unsupported', 'errors.commandNotConnected', dialog.targetDir, true),
+        summary: null,
+        progress: null,
+        conflictPrompt: null,
+      });
+      return;
+    }
+    const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue);
+    if (validationErrorKey) {
+      set({
+        lastError: appError('confirmation_required', validationErrorKey, dialog.targetDir, true),
+        summary: null,
+        progress: null,
+        conflictPrompt: null,
+      });
+      return;
+    }
+    set({
+      dialog: null,
+      progress: {
+        operationId: `pending-${dialog.dialogKind}-${Date.now()}`,
+        kind: operationKindForDialog(dialogKind),
+        state: 'queued',
+        totalFiles: dialog.sources.length || 1,
+        completedFiles: 0,
+        totalBytes: null,
+        completedBytes: 0,
+        currentPath: dialog.sources[0]?.path ?? dialog.targetDir,
+        bytesPerSecond: null,
+        etaSeconds: null,
+        recentErrorCount: 0,
+      },
       conflictPrompt: null,
       summary: null,
       lastError: null,
-      lastConflictDecision: null,
-      applyAllConflictDecision: null,
+      activeOperationController: {
+        operationId: null,
+        dialog,
+        cancelExecutor: dialog.cancelExecutor,
+        conflictResolver: dialog.conflictResolver,
+        onOperationSummary: dialog.onOperationSummary,
+        cancelRequestedBeforeStart: false,
+      },
     });
+    const result = await dialog.longRunningExecutor(dialog);
+    if (!result.ok) {
+      const errorHandling = dialog.onOperationStartError?.(result.error, dialog);
+      set({
+        lastError: errorHandling === 'dismiss' ? null : result.error,
+        progress: null,
+        conflictPrompt: null,
+        summary: null,
+        activeOperationController: null,
+      });
+      return;
+    }
+    const pendingController = get().activeOperationController;
+    const cancelRequestedBeforeStart = Boolean(pendingController?.cancelRequestedBeforeStart);
+    set((current) => ({
+      activeOperationController: current.activeOperationController
+        ? { ...current.activeOperationController, operationId: result.data.operationId }
+        : current.activeOperationController,
+    }));
+    if (cancelRequestedBeforeStart) {
+      void pendingController?.cancelExecutor?.(result.data.operationId);
+      set((current) => ({
+        progress: current.progress
+          ? { ...current.progress, operationId: result.data.operationId, kind: result.data.kind, state: 'cancelling' }
+          : {
+            operationId: result.data.operationId,
+            kind: result.data.kind,
+            state: 'cancelling',
+            totalFiles: null,
+            completedFiles: 0,
+            totalBytes: null,
+            completedBytes: 0,
+            currentPath: null,
+            bytesPerSecond: null,
+            etaSeconds: null,
+            recentErrorCount: 0,
+          },
+      }));
+      return;
+    }
+    get().applyOperationStarted(result.data);
   },
   updateDialogInput: (value) => {
     const dialog = get().dialog;
@@ -165,20 +288,22 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       }
       const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue);
       if (validationErrorKey) {
-        set({
+        set((current) => ({
           dialog: { ...dialog, validationErrorKey },
           lastError: appError('invalid_name', validationErrorKey, dialog.targetDir, true),
-          summary: null,
-          progress: null,
-        });
+          summary: isOperationInFlight(current) ? current.summary : null,
+          progress: isOperationInFlight(current) ? current.progress : null,
+          conflictPrompt: isOperationInFlight(current) ? current.conflictPrompt : null,
+        }));
         return;
       }
       if (!dialog.atomicExecutor) {
-        set({
+        set((current) => ({
           lastError: appError('unsupported', 'errors.commandNotConnected', dialog.targetDir, true),
-          summary: null,
-          progress: null,
-        });
+          summary: isOperationInFlight(current) ? current.summary : null,
+          progress: isOperationInFlight(current) ? current.progress : null,
+          conflictPrompt: isOperationInFlight(current) ? current.conflictPrompt : null,
+        }));
         return;
       }
 
@@ -192,8 +317,9 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         set((current) => ({
           dialog: current.dialog ? { ...current.dialog, atomicPending: false } : null,
           lastError: result.error,
-          summary: null,
-          progress: null,
+          summary: isOperationInFlight(current) ? current.summary : null,
+          progress: isOperationInFlight(current) ? current.progress : null,
+          conflictPrompt: isOperationInFlight(current) ? current.conflictPrompt : null,
         }));
         return;
       }
@@ -211,9 +337,9 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
                 primaryLabel: shellPreviewResult.policy.enabled ? '확인 후 실행' : 'Preview disabled',
               }
             : null,
-          progress: null,
-          conflictPrompt: null,
-          summary: null,
+          progress: isOperationInFlight(current) ? current.progress : null,
+          conflictPrompt: isOperationInFlight(current) ? current.conflictPrompt : null,
+          summary: isOperationInFlight(current) ? current.summary : null,
           lastError: null,
         }));
         return;
@@ -223,20 +349,20 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
           dialog: current.dialog
             ? { ...current.dialog, atomicPending: false, atomicResult: result.data }
             : null,
-          progress: null,
-          conflictPrompt: null,
-          summary: null,
+          progress: isOperationInFlight(current) ? current.progress : null,
+          conflictPrompt: isOperationInFlight(current) ? current.conflictPrompt : null,
+          summary: isOperationInFlight(current) ? current.summary : null,
           lastError: null,
         }));
         return;
       }
-      set({
+      set((current) => ({
         dialog: null,
-        progress: null,
-        conflictPrompt: null,
-        summary: null,
+        progress: isOperationInFlight(current) ? current.progress : null,
+        conflictPrompt: isOperationInFlight(current) ? current.conflictPrompt : null,
+        summary: isOperationInFlight(current) ? current.summary : null,
         lastError: null,
-      });
+      }));
       return;
     }
 
@@ -258,7 +384,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
     }
 
     if (dialog.longRunningExecutor) {
-      if (dialog.operationPending) {
+      if (dialog.operationPending || isOperationInFlight(get())) {
         return;
       }
       const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue);
@@ -272,12 +398,59 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         return;
       }
       set({ dialog: { ...dialog, operationPending: true }, lastError: null, summary: null });
+      set({
+        activeOperationController: {
+          operationId: null,
+          dialog,
+          cancelExecutor: dialog.cancelExecutor,
+          conflictResolver: dialog.conflictResolver,
+          onOperationSummary: dialog.onOperationSummary,
+          cancelRequestedBeforeStart: false,
+        },
+      });
       const result = await dialog.longRunningExecutor(dialog);
       if (!result.ok) {
+        const errorHandling = dialog.onOperationStartError?.(result.error, dialog);
         set((current) => ({
-          dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
-          lastError: result.error,
+          dialog: errorHandling === 'dismiss'
+            ? null
+            : current.dialog
+              ? { ...current.dialog, operationPending: false }
+              : null,
+          progress: null,
+          conflictPrompt: null,
+          activeOperationController: null,
+          lastError: errorHandling === 'dismiss' ? null : result.error,
           summary: null,
+        }));
+        return;
+      }
+      const pendingController = get().activeOperationController;
+      const cancelRequestedBeforeStart = Boolean(pendingController?.cancelRequestedBeforeStart);
+      set((current) => ({
+        activeOperationController: current.activeOperationController
+          ? { ...current.activeOperationController, operationId: result.data.operationId }
+          : current.activeOperationController,
+      }));
+      if (cancelRequestedBeforeStart) {
+        void pendingController?.cancelExecutor?.(result.data.operationId);
+        set((current) => ({
+          progress: current.progress
+            ? { ...current.progress, operationId: result.data.operationId, kind: result.data.kind, state: 'cancelling' }
+            : {
+              operationId: result.data.operationId,
+              kind: result.data.kind,
+              state: 'cancelling',
+              totalFiles: null,
+              completedFiles: 0,
+              totalBytes: null,
+              completedBytes: 0,
+              currentPath: null,
+              bytesPerSecond: null,
+              etaSeconds: null,
+              recentErrorCount: 0,
+            },
+          dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
         }));
         return;
       }
@@ -309,7 +482,8 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
   },
   applyOperationStarted: (started) => {
     const currentProgress = get().progress;
-    if (currentProgress?.operationId === started.operationId && isTerminalState(currentProgress.state)) {
+    if (currentProgress?.operationId === started.operationId) {
+      set({ lastError: null });
       return;
     }
     set({
@@ -331,18 +505,35 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
   },
   applyOperationProgress: (progress) => {
     const current = get().progress;
-    if (current && (current.operationId !== progress.operationId || isTerminalState(current.state))) {
+    const controller = get().activeOperationController;
+    if (current && isTerminalState(current.state)) {
       return;
     }
-    set({ progress, lastError: null });
+    if (current && current.operationId !== progress.operationId && !isPendingAliasForUnboundController(current, controller)) {
+      return;
+    }
+    set((state) => ({
+      progress,
+      activeOperationController: state.activeOperationController && !state.activeOperationController.operationId
+        ? { ...state.activeOperationController, operationId: progress.operationId }
+        : state.activeOperationController,
+      lastError: null,
+    }));
   },
   applyOperationConflict: (prompt) => {
     const progress = get().progress;
-    if (progress && (progress.operationId !== prompt.operationId || isTerminalState(progress.state))) {
+    const controller = get().activeOperationController;
+    if (progress && isTerminalState(progress.state)) {
+      return;
+    }
+    if (progress && progress.operationId !== prompt.operationId && !isPendingAliasForUnboundController(progress, controller)) {
       return;
     }
     set((current) => ({
       conflictPrompt: prompt,
+      activeOperationController: current.activeOperationController && !current.activeOperationController.operationId
+        ? { ...current.activeOperationController, operationId: prompt.operationId }
+        : current.activeOperationController,
       progress: current.progress
         ? { ...current.progress, operationId: prompt.operationId, state: 'waitingForConflict' }
         : null,
@@ -350,17 +541,21 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
   },
   applyOperationSummary: (summary) => {
     const currentProgress = get().progress;
-    if (currentProgress && currentProgress.operationId !== summary.operationId) {
+    const controller = get().activeOperationController;
+    if (currentProgress && currentProgress.operationId !== summary.operationId && !isPendingAliasForUnboundController(currentProgress, controller)) {
       return;
     }
     const dialog = get().dialog;
-    dialog?.onOperationSummary?.(summary, dialog);
+    const summaryDialog = dialog ?? controller?.dialog ?? null;
+    if (summaryDialog) {
+      (dialog?.onOperationSummary ?? controller?.onOperationSummary)?.(summary, summaryDialog);
+    }
     set((current) => ({
       summary,
       operationHistory: appendOperationHistory(current.operationHistory, summary),
       conflictPrompt: current.conflictPrompt?.operationId === summary.operationId ? null : current.conflictPrompt,
-      progress: current.progress && current.progress.operationId === summary.operationId
-        ? { ...current.progress, state: summary.state, completedFiles: summary.completedFiles, recentErrorCount: summary.failedFiles }
+      progress: current.progress && (current.progress.operationId === summary.operationId || current.progress.operationId.startsWith('pending-'))
+        ? { ...current.progress, operationId: summary.operationId, kind: summary.kind, state: summary.state, completedFiles: summary.completedFiles, recentErrorCount: summary.failedFiles }
         : current.progress ?? {
           operationId: summary.operationId,
           kind: summary.kind,
@@ -375,6 +570,9 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
           recentErrorCount: summary.failedFiles,
         },
       dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
+      activeOperationController: current.activeOperationController?.operationId === summary.operationId || !current.activeOperationController?.operationId
+        ? null
+        : current.activeOperationController,
       lastError: summary.errors[0] ?? null,
     }));
   },
@@ -382,6 +580,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
     set((current) => ({
       lastError: error,
       dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
+      activeOperationController: null,
     }));
   },
   resolveConflict: (decision) => {
@@ -391,20 +590,21 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       return;
     }
     const operationId = prompt.operationId;
-    const dialogKind = get().dialog?.dialogKind;
+    const controller = get().activeOperationController;
+    const dialogKind = get().dialog?.dialogKind ?? controller?.dialog.dialogKind;
     const kind = progress?.kind ?? (dialogKind && isLongRunningDialog(dialogKind)
       ? operationKindForDialog(dialogKind)
       : 'copy');
     const completedFiles = progress?.completedFiles ?? 0;
-    void get().dialog?.conflictResolver?.(operationId, decision);
+    void (get().dialog?.conflictResolver ?? controller?.conflictResolver)?.(operationId, decision);
     if (decision === 'cancel') {
       set({
         progress: progress
-          ? { ...progress, state: 'cancelled' }
+          ? { ...progress, state: 'cancelling' }
           : {
             operationId,
             kind,
-            state: 'cancelled',
+            state: 'cancelling',
             totalFiles: null,
             completedFiles,
             totalBytes: null,
@@ -414,25 +614,11 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
             etaSeconds: null,
             recentErrorCount: 0,
           },
-      summary: {
-        operationId,
-        kind,
-        state: 'cancelled',
-        completedFiles,
-        failedFiles: 0,
-        errors: [],
-      },
-      operationHistory: appendOperationHistory(get().operationHistory, {
-        operationId,
-        kind,
-        state: 'cancelled',
-        completedFiles,
-        failedFiles: 0,
-        errors: [],
-      }),
-      conflictPrompt: null,
-      lastConflictDecision: decision,
-      applyAllConflictDecision: null,
+        summary: null,
+        conflictPrompt: null,
+        lastConflictDecision: decision,
+        applyAllConflictDecision: null,
+        activeOperationController: controller ? { ...controller, operationId } : controller,
       });
       return;
     }
@@ -459,34 +645,64 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
   },
   cancelOperation: () => {
     const progress = get().progress;
+    const controller = get().activeOperationController;
     if (!progress) {
+      if (controller && !controller.operationId) {
+        set({
+          dialog: get().dialog ? { ...get().dialog!, operationPending: true } : null,
+          conflictPrompt: null,
+          activeOperationController: { ...controller, cancelRequestedBeforeStart: true },
+        });
+        return;
+      }
+      if (controller?.operationId) {
+        void controller.cancelExecutor?.(controller.operationId);
+        set({
+          dialog: get().dialog ? { ...get().dialog!, operationPending: false } : null,
+          conflictPrompt: null,
+          activeOperationController: { ...controller, cancelRequestedBeforeStart: false },
+        });
+        return;
+      }
       set({ dialog: null, conflictPrompt: null });
       return;
     }
-    void get().dialog?.cancelExecutor?.(progress.operationId);
+    const realOperationId = controller?.operationId ?? (progress.operationId.startsWith('pending-') ? null : progress.operationId);
+    if (controller && !realOperationId) {
+      set({
+        progress: { ...progress, state: 'cancelling' },
+        conflictPrompt: null,
+        activeOperationController: { ...controller, cancelRequestedBeforeStart: true },
+      });
+      return;
+    }
+    void (get().dialog?.cancelExecutor ?? controller?.cancelExecutor)?.(realOperationId ?? progress.operationId);
+    if (controller) {
+      set({
+        progress: { ...progress, operationId: realOperationId ?? progress.operationId, state: 'cancelling' },
+        conflictPrompt: null,
+        activeOperationController: realOperationId ? { ...controller, operationId: realOperationId } : controller,
+      });
+      return;
+    }
     set({
       progress: { ...progress, state: 'cancelling' },
       conflictPrompt: null,
-      summary: {
-        operationId: progress.operationId,
-        kind: progress.kind,
-        state: 'cancelled',
-        completedFiles: progress.completedFiles,
-        failedFiles: 0,
-        errors: [],
-      },
-      operationHistory: appendOperationHistory(get().operationHistory, {
-        operationId: progress.operationId,
-        kind: progress.kind,
-        state: 'cancelled',
-        completedFiles: progress.completedFiles,
-        failedFiles: 0,
-        errors: [],
-      }),
+      summary: null,
+      activeOperationController: null,
     });
   },
-  closeDialog: () => set({ dialog: null, progress: null, conflictPrompt: null, lastError: null }),
-  clearSummary: () => set({ summary: null, lastError: null }),
+  closeDialog: () => set((current) => {
+    if (isOperationInFlight(current)) {
+      return { dialog: null, lastError: null };
+    }
+    return { dialog: null, progress: null, conflictPrompt: null, lastError: null, activeOperationController: null };
+  }),
+  clearSummary: () => set((current) => ({
+    summary: null,
+    lastError: null,
+    progress: current.progress && isTerminalState(current.progress.state) ? null : current.progress,
+  })),
   clearOperationHistory: () => set({ operationHistory: [] }),
 }));
 
@@ -502,6 +718,7 @@ export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
     'archive.preview': 'archivePreview',
     'archive.list': 'archivePreview',
     'archive.extract': 'archiveExtract',
+    'archive.extractAuto': 'archiveExtract',
     'archive.create': 'archiveCreate',
     'external.openDefault': 'externalOpenDefault',
     'external.reveal': 'externalReveal',
@@ -548,6 +765,7 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
     conflictResolver: request.conflictResolver ?? null,
     onAtomicSuccess: request.onAtomicSuccess ?? null,
     onOperationSummary: request.onOperationSummary ?? null,
+    onOperationStartError: request.onOperationStartError ?? null,
   };
 };
 
@@ -565,7 +783,7 @@ const titleForDialog = (dialogKind: DialogKind) => {
   const titles: Record<DialogKind, string> = {
     copy: 'Copy to opposite panel',
     move: 'Move to opposite panel',
-    trash: 'Move to Trash',
+    trash: 'Delete',
     deletePermanent: 'Permanent Delete',
     rename: 'Rename Entry',
     createDir: 'Create Directory',
@@ -575,7 +793,7 @@ const titleForDialog = (dialogKind: DialogKind) => {
     archiveExtract: 'Extract Archive',
     externalOpenDefault: 'Open with Default App',
     externalReveal: 'Reveal in File Manager',
-    externalEditor: 'Open in External Editor',
+    externalEditor: 'Open Terminal Editor',
     shellCommand: 'Run Shell Command',
   };
   return titles[dialogKind];
@@ -743,6 +961,16 @@ const validateDialogInput = (dialogKind: DialogKind, value: string) => {
 
 const isTerminalState = (state: OperationState) =>
   state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';
+
+const isPendingOperationId = (operationId: string) => operationId.startsWith('pending-');
+
+const isPendingAliasForUnboundController = (
+  progress: OperationProgress,
+  controller: ActiveOperationController | null,
+) => isPendingOperationId(progress.operationId) && Boolean(controller) && !controller?.operationId;
+
+export const isOperationInFlight = (state: Pick<OperationStoreState, 'progress' | 'activeOperationController'>) =>
+  Boolean(state.activeOperationController) || Boolean(state.progress && !isTerminalState(state.progress.state));
 
 const MAX_OPERATION_HISTORY = 50;
 

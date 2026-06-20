@@ -1,4 +1,4 @@
-import { invoke, type InvokeArgs } from '@tauri-apps/api/core';
+import { invoke, isTauri, type InvokeArgs } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type {
   ActionResult,
@@ -79,6 +79,16 @@ export interface OperationEventHandlers {
   summary?(summary: OperationSummary): void;
   error?(error: AppError): void;
 }
+
+type TauriRuntimeGlobal = typeof globalThis & {
+  isTauri?: boolean;
+  __TAURI_INTERNALS__?: { invoke?: unknown };
+};
+
+export const isTauriRuntime = () => {
+  const runtimeGlobal = globalThis as TauriRuntimeGlobal;
+  return isTauri() || typeof runtimeGlobal.__TAURI_INTERNALS__?.invoke === 'function';
+};
 
 export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.listDir,
@@ -209,12 +219,21 @@ export const tauriClient = {
   loadSettings: () => invokeCommand<Settings>(COMMANDS.loadSettings),
   saveSettings: (input: { patch: Partial<Settings> }) => invokeCommand<Settings>(COMMANDS.saveSettings, input),
   listenOperationEvents: async (handlers: OperationEventHandlers) => {
-    const unlisten = await Promise.all([
-      listen<OperationProgress>('operation_progress', (event) => handlers.progress?.(event.payload)),
-      listen<ConflictPrompt>('operation_conflict', (event) => handlers.conflict?.(event.payload)),
-      listen<OperationSummary>('operation_summary', (event) => handlers.summary?.(event.payload)),
-      listen<AppError>('operation_error', (event) => handlers.error?.(event.payload)),
-    ]);
+    if (!isTauriRuntime()) {
+      return () => {};
+    }
+    const unlisten: Array<() => void> = [];
+    try {
+      unlisten.push(await listen<OperationProgress>('operation_progress', (event) => handlers.progress?.(event.payload)));
+      unlisten.push(await listen<ConflictPrompt>('operation_conflict', (event) => handlers.conflict?.(event.payload)));
+      unlisten.push(await listen<OperationSummary>('operation_summary', (event) => handlers.summary?.(event.payload)));
+      unlisten.push(await listen<AppError>('operation_error', (event) => handlers.error?.(event.payload)));
+    } catch (error) {
+      for (const cleanup of unlisten.splice(0)) {
+        cleanup();
+      }
+      throw error;
+    }
     return () => {
       for (const cleanup of unlisten) {
         cleanup();

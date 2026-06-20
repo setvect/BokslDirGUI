@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedFor": "BokslDirGUI Phase 0 parity hard gate",
-  "updatedAt": "2026-06-16",
+  "updatedAt": "2026-06-17",
   "statusVocabulary": [
     "implemented",
     "partial",
@@ -132,6 +132,10 @@
     {
       "guiActionId": "help.search",
       "reason": "GUI 도움말 검색 확장"
+    },
+    {
+      "guiActionId": "view.reverseSort",
+      "reason": "GUI convenience toggle retained alongside TUI direct ascending/descending sort actions."
     }
   ],
   "tuiActions": [
@@ -151,9 +155,10 @@
       ],
       "guiMenuPaths": [],
       "evidence": [
-        "src/ui/CommanderShell.tsx: handleMovementKey"
+        "src/ui/CommanderShell.tsx: handleMovementKey",
+        "src/ui/CommanderShell.test.tsx: moves focused row and TUI vim-style movement shortcuts"
       ],
-      "notes": "GUI는 row 이동을 action registry 밖 UI keyboard owner에서 처리한다. TUI parity 완료 전까지 registry/도움말 추적이 필요하다.",
+      "notes": "ArrowUp/k/한글 입력 물리 KeyK 이동을 commander keyboard owner가 처리하며 브라우저 기본 동작을 막고 활성 패널 row focus를 유지한다.",
       "tuiId": "move_up",
       "tuiLabel": "Move up",
       "tuiCategory": "Navigation",
@@ -162,7 +167,7 @@
         "k",
         "ArrowUp"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -177,9 +182,10 @@
       ],
       "guiMenuPaths": [],
       "evidence": [
-        "src/ui/CommanderShell.tsx: handleMovementKey"
+        "src/ui/CommanderShell.tsx: handleMovementKey",
+        "src/ui/CommanderShell.test.tsx: moves focused row and TUI vim-style movement shortcuts"
       ],
-      "notes": "move_up과 동일한 UI motion 경로.",
+      "notes": "ArrowDown/j/한글 입력 물리 KeyJ 이동을 commander keyboard owner가 처리하며 브라우저 기본 동작을 막고 활성 패널 row focus를 유지한다.",
       "tuiId": "move_down",
       "tuiLabel": "Move down",
       "tuiCategory": "Navigation",
@@ -188,7 +194,7 @@
         "j",
         "ArrowDown"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -211,10 +217,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: nav.up",
-        "src/ui/CommanderShell.tsx: openParentPath"
+        "src/actions/registry.ts: nav.up Backspace/h binding",
+        "src/ui/CommanderShell.tsx: navigateUp",
+        "src/ui/CommanderShell.test.tsx: h alias for parent navigation"
       ],
-      "notes": "TUI는 Left도 parent다. GUI registry 표시에는 Backspace/h만 있고 Left parity는 별도 확인 필요.",
+      "notes": "Backspace/h가 nav.up으로 parent 이동을 수행하며, h TUI alias와 브라우저 기본 focus/scroll 억제를 검증했다.",
       "tuiId": "go_parent",
       "tuiLabel": "Parent dir",
       "tuiCategory": "Navigation",
@@ -223,7 +230,7 @@
         "h",
         "ArrowLeft"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -242,10 +249,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: nav.enter",
-        "src/ui/CommanderShell.tsx: openFocusedEntry"
+        "src/actions/registry.ts: nav.enter Enter/l binding",
+        "src/ui/CommanderShell.tsx: openEntry",
+        "src/ui/CommanderShell.test.tsx: Enter and l open focused directory"
       ],
-      "notes": "디렉터리 진입과 파일 기본 열기 분기가 GUI에서 유지되어야 한다.",
+      "notes": "Enter/l이 nav.enter로 포커스 항목을 열며, 디렉터리는 패널 listing으로 진입하고 파일은 backend available 시 기본 앱 열기로 연결하고, browser preview에서는 status-gated 메시지로 차단한다.",
       "tuiId": "enter",
       "tuiLabel": "Enter dir",
       "tuiCategory": "Navigation",
@@ -254,7 +262,7 @@
         "l",
         "Enter"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -277,9 +285,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: nav.top"
+        "src/actions/registry.ts: nav.top gg binding",
+        "src/ui/CommanderShell.tsx: focusBoundaryEntry Home handling",
+        "src/ui/CommanderShell.test.tsx: Home/gg top movement"
       ],
-      "notes": "Home 키 parity는 UI motion 경로와 함께 검증 필요.",
+      "notes": "gg/Home이 commander motion 경로로 첫 row에 이동하며 range selection에서도 가상 parent row는 선택하지 않는다.",
       "tuiId": "go_top",
       "tuiLabel": "Top",
       "tuiCategory": "Navigation",
@@ -288,7 +298,7 @@
         "g g",
         "Home"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -307,9 +317,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: nav.bottom"
+        "src/actions/registry.ts: nav.bottom G binding",
+        "src/ui/CommanderShell.tsx: focusBoundaryEntry End handling",
+        "src/ui/CommanderShell.test.tsx: End/G bottom movement"
       ],
-      "notes": "End 키 parity는 UI motion 경로와 함께 검증 필요.",
+      "notes": "G/End가 registry/motion 경로로 마지막 row에 이동하며 commander focus를 유지한다.",
       "tuiId": "go_bottom",
       "tuiLabel": "Bottom",
       "tuiCategory": "Navigation",
@@ -318,7 +330,7 @@
         "G",
         "End"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -336,9 +348,10 @@
       ],
       "guiMenuPaths": [],
       "evidence": [
-        "src/ui/CommanderShell.tsx: handleMovementKey"
+        "src/ui/CommanderShell.tsx: handleMovementKey PageUp/Ctrl+U",
+        "src/ui/CommanderShell.test.tsx: shifted page and Korean physical Ctrl+U movement"
       ],
-      "notes": "Ctrl+U와 Shift+PageUp 선택 확장까지 G004에서 검증 필요.",
+      "notes": "PageUp/Ctrl+U, 한글 입력 물리 KeyU, Shift+PageUp range selection을 검증했다.",
       "tuiId": "page_up",
       "tuiLabel": "Half page up",
       "tuiCategory": "Navigation",
@@ -347,7 +360,7 @@
         "Ctrl+U",
         "PageUp"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -361,9 +374,10 @@
       ],
       "guiMenuPaths": [],
       "evidence": [
-        "src/ui/CommanderShell.tsx: handleMovementKey"
+        "src/ui/CommanderShell.tsx: handleMovementKey PageDown/Ctrl+D",
+        "src/ui/CommanderShell.test.tsx: shifted page and Korean physical Ctrl+D movement"
       ],
-      "notes": "Ctrl+D와 Shift+PageDown 선택 확장까지 G004에서 검증 필요.",
+      "notes": "PageDown/Ctrl+D, 한글 입력 물리 KeyD, Shift+PageDown range selection을 검증했다.",
       "tuiId": "page_down",
       "tuiLabel": "Half page down",
       "tuiCategory": "Navigation",
@@ -372,7 +386,7 @@
         "Ctrl+D",
         "PageDown"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -425,13 +439,14 @@
       "guiMenuPaths": [
         [
           "View",
-          "Single-Dual Panel"
+          "Toggle Layout"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: layout.toggleSingleDual"
+        "src/actions/registry.ts: layout.toggleSingleDual View/Toggle Layout",
+        "src/ui/CommanderShell.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help"
       ],
-      "notes": "TUI 메뉴 위치는 View > Toggle Layout. GUI 비율 확장과 함께 동작 검증 필요.",
+      "notes": "Ctrl+W와 View > Toggle Layout가 settings.layout.singlePanel을 저장하고 단일/듀얼 패널 표시를 즉시 반영한다.",
       "tuiId": "toggle_layout",
       "tuiLabel": "Toggle panel layout",
       "tuiCategory": "Navigation",
@@ -439,7 +454,7 @@
       "tuiKeyboardBindings": [
         "Ctrl+W"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -458,9 +473,10 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: tab.new"
+        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/actions/registry.ts: tab.new tn"
       ],
-      "notes": "TUI에는 메뉴 항목이 없고 단축키 중심이다.",
+      "notes": "tn으로 현재 패널 경로를 tab 목록에 추가하고 Tab List overlay에서 확인한다.",
       "tuiId": "tab_new",
       "tuiLabel": "New tab",
       "tuiCategory": "Navigation",
@@ -468,7 +484,7 @@
       "tuiKeyboardBindings": [
         "t n"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -487,9 +503,10 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: tab.close"
+        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/actions/registry.ts: tab.close tx"
       ],
-      "notes": "탭 상태/닫기 검증 필요.",
+      "notes": "tx로 현재 패널 tab 목록의 마지막 항목을 닫고 Tab List overlay에서 제거 상태를 확인한다.",
       "tuiId": "tab_close",
       "tuiLabel": "Close tab",
       "tuiCategory": "Navigation",
@@ -497,7 +514,7 @@
       "tuiKeyboardBindings": [
         "t x"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -520,15 +537,19 @@
       ],
       "guiMenuPaths": [
         [
-          "File",
+          "Edit",
           "Copy"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: file.copy",
-        "src-tauri/src/operation.rs: start_copy"
+        "src/actions/registry.ts: file.copy Edit menu binding",
+        "src/ui/CommanderShell.tsx: direct startLongRunningOperation for file.copy",
+        "src/operations/operationStore.ts: startLongRunningOperation with non-modal progress/conflict controller",
+        "src/ui/CommanderShell.test.tsx: copy shortcut/focused fallback starts client without preflight dialog",
+        "src/operations/operationStore.test.ts: direct copy without dialog and conflict resolver wiring",
+        "src-tauri/src/lib.rs tests: start_copy_recursively_copies_files_and_directories, conflict policies, cancel safety"
       ],
-      "notes": "GUI 메뉴 위치가 TUI Edit와 불일치하며, 현재 copy UX는 no-conflict 즉시 실행/충돌 독립 UI 검증이 필요하다(G003).",
+      "notes": "TUI Edit > Copy 메뉴와 y 단축키를 맞췄고, 선택이 없으면 포커스 항목을 대상으로 no-conflict copy를 확인 다이얼로그 없이 즉시 시작한다. 충돌은 독립 non-modal 상태/해결 UI로 처리하며 Rust start_copy no-silent-overwrite 안전성을 유지한다.",
       "tuiId": "copy",
       "tuiLabel": "Copy",
       "tuiCategory": "FileOperation",
@@ -536,7 +557,7 @@
       "tuiKeyboardBindings": [
         "y"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -559,15 +580,18 @@
       ],
       "guiMenuPaths": [
         [
-          "File",
+          "Edit",
           "Move"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: file.move",
-        "src-tauri/src/operation.rs: start_move"
+        "src/actions/registry.ts: file.move Edit menu binding",
+        "src/ui/CommanderShell.tsx: file.move opens operation dialog while file.copy direct-starts",
+        "src/ui/CommanderShell.test.tsx: requires explicit confirmation before a move reaches the operation client",
+        "src/operations/operationStore.ts: active operation controller preserves progress/conflict/summary callbacks",
+        "src-tauri/src/lib.rs tests: start_move_renames_to_target_directory and same-directory overwrite no-op safety"
       ],
-      "notes": "GUI 메뉴 위치가 TUI Edit와 불일치하며, copy와 같은 UX 수리 대상이다(G003).",
+      "notes": "TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation을 시작한다. 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리한다.",
       "tuiId": "move",
       "tuiLabel": "Move",
       "tuiCategory": "FileOperation",
@@ -575,7 +599,7 @@
       "tuiKeyboardBindings": [
         "x"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -595,14 +619,15 @@
       "guiMenuPaths": [
         [
           "File",
-          "Open Default"
+          "Open Default App"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: external.openDefault",
-        "src-tauri/src/lib.rs: open_default"
+        "src/actions/registry.ts: external.openDefault File/Open Default App",
+        "src/ui/CommanderShell.test.tsx: opens files through default app and configured external editor command paths",
+        "src-tauri/src/lib.rs: open_default dry-run/recoverable error command boundary"
       ],
-      "notes": "파일/디렉터리 enablement와 오류 표시 검증 필요.",
+      "notes": "o/File > Open Default App가 선택 파일을 OS 기본 앱 command boundary로 전달하고, recoverable backend error는 dialog/status로 표시된다.",
       "tuiId": "open_default",
       "tuiLabel": "Open with default app",
       "tuiCategory": "FileOperation",
@@ -610,7 +635,7 @@
       "tuiKeyboardBindings": [
         "o"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -630,14 +655,16 @@
       "guiMenuPaths": [
         [
           "File",
-          "Open in External Editor"
+          "Open Terminal Editor"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: external.openEditor",
-        "src-tauri/src/lib.rs: open_external_editor"
+        "src/actions/registry.ts: external.openEditor File/Open Terminal Editor",
+        "src/ui/CommanderShell.tsx: openExternalEditor receives persisted settings.external.editorId",
+        "src/ui/CommanderShell.test.tsx: opens files through default app and configured external editor command paths",
+        "src-tauri/src/lib.rs: open_external_editor validates configured/explicit editor"
       ],
-      "notes": "TUI는 terminal editor preset을 사용한다. GUI는 외부 editor 연동으로 이름/설정 의미가 다르다.",
+      "notes": "e/File > Open Terminal Editor는 Settings Default Editor preset 또는 명시 editorId를 사용해 파일을 terminal editor로 연다.",
       "tuiId": "open_terminal_editor",
       "tuiLabel": "Open in terminal editor",
       "tuiCategory": "FileOperation",
@@ -645,7 +672,7 @@
       "tuiKeyboardBindings": [
         "e"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -664,15 +691,16 @@
       ],
       "guiMenuPaths": [
         [
-          "Tools",
+          "File",
           "Run Shell Command"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: external.runShellCommand",
-        "src-tauri/src/lib.rs: prepare_shell_command/run_shell_command"
+        "src/actions/registry.ts: external.runShellCommand File/Run Shell Command",
+        "src/ui/CommanderShell.test.tsx: previews and then runs shell commands only after an enabled policy returns a confirm token",
+        "src-tauri/src/lib.rs: prepare_shell_command/run_shell_command one-shot confirm token tests"
       ],
-      "notes": "GUI에서는 안전상 Tools로 분리되어 있고 기본 비활성/확인 토큰 정책을 유지한다.",
+      "notes": "기본 비활성 정책을 유지하되 TUI File > Run Shell Command 위치로 노출하고, enabled 설정에서 prepare preview와 confirmToken 후 run만 허용한다.",
       "tuiId": "run_shell_command",
       "tuiLabel": "Run shell command",
       "tuiCategory": "FileOperation",
@@ -681,7 +709,7 @@
         ":",
         "Shift+:"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -705,14 +733,16 @@
       "guiMenuPaths": [
         [
           "File",
-          "Move to Trash"
+          "Delete"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: file.trash",
-        "src-tauri/src/operation.rs: start_delete"
+        "src/actions/registry.ts: file.trash maps d/File > Delete to start_delete trash",
+        "src/ui/CommanderShell.test.tsx: focused-row trash delete, virtual parent exclusion, panel refresh on operation summary",
+        "src-tauri/src/operation.rs: start_delete DeleteMode::Trash without permanent fallback",
+        "src-tauri/src/lib.rs: start_delete_trash_moves_without_permanent_fallback and failure keeps source tests"
       ],
-      "notes": "TUI Delete 의미와 GUI Trash 의미 차이를 명확히 검증해야 한다.",
+      "notes": "TUI Delete는 GUI에서 File > Delete/d로 노출하고 Rust trash mode로 실행한다. 선택이 없으면 포커스 concrete row를 대상으로 하며, 가상 parent는 제외하고 trash 실패 시 영구 삭제로 fallback하지 않는다.",
       "tuiId": "delete",
       "tuiLabel": "Delete",
       "tuiCategory": "FileOperation",
@@ -720,7 +750,7 @@
       "tuiKeyboardBindings": [
         "d"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -744,14 +774,16 @@
       "guiMenuPaths": [
         [
           "File",
-          "Delete Permanently"
+          "Permanent Delete"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: file.deletePermanent",
-        "src-tauri/src/operation.rs: DeleteMode::Permanent"
+        "src/actions/registry.ts: file.deletePermanent maps D/Shift+Delete and File > Permanent Delete",
+        "src/ui/CommanderShell.test.tsx: typed PERMANENT_DELETE confirmation before operation client execution",
+        "src/operations/operationStore.test.ts: permanent delete defaults to cancellation until confirmation text is typed",
+        "src-tauri/src/lib.rs: start_delete_requires_confirm_token_for_permanent_delete and start_delete_permanently_removes_confirmed_targets"
       ],
-      "notes": "명시 확인/취소/오류 요약 검증 필요.",
+      "notes": "영구 삭제는 별도 File > Permanent Delete/D action이며 PERMANENT_DELETE 명시 입력 없이는 operation client/Rust confirm token으로 전달되지 않는다.",
       "tuiId": "perm_delete",
       "tuiLabel": "Permanent delete",
       "tuiCategory": "FileOperation",
@@ -759,7 +791,7 @@
       "tuiKeyboardBindings": [
         "D"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -862,15 +894,16 @@
       ],
       "guiMenuPaths": [
         [
-          "File",
-          "Properties"
+          "View",
+          "File Info"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: file.properties",
-        "src-tauri/src/lib.rs: get_metadata"
+        "src/actions/registry.ts: file.properties is exposed at View > File Info with i shortcut",
+        "src/ui/CommanderShell.test.tsx: properties dialog calls getMetadata and displays metadata result",
+        "src-tauri/src/lib.rs: get_metadata returns normalized file metadata DTO"
       ],
-      "notes": "TUI 메뉴는 View, GUI 메뉴는 File이다. 속성 표시 UI 검증 필요.",
+      "notes": "TUI View > File Info 위치와 i shortcut에 맞췄고, GUI dialog title은 Properties로 metadata DTO를 표시한다.",
       "tuiId": "file_info",
       "tuiLabel": "File properties",
       "tuiCategory": "FileOperation",
@@ -878,7 +911,7 @@
       "tuiKeyboardBindings": [
         "i"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -897,15 +930,17 @@
       ],
       "guiMenuPaths": [
         [
-          "Archive",
-          "Create"
+          "File",
+          "Archive Compress"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: archive.create",
-        "src-tauri/src/lib.rs: archive_create"
+        "src/actions/registry.ts: archive.create maps zc/File > Archive Compress",
+        "src/ui/CommanderShell.test.tsx: archive creation calls archiveCreate with selected sources and opposite-panel target archive",
+        "src-tauri/src/lib.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names",
+        "src-tauri/src/operation.rs: archive create uses common_source_parent and unsafe absolute source defense"
       ],
-      "notes": "GUI에서는 Archive 루트로 분리.",
+      "notes": "TUI File > Archive Compress/zc와 맞췄고, 선택/포커스 effective sources를 opposite panel target archive로 전달한다. Rust는 상대 entry명과 provider unavailable/error summary를 검증한다.",
       "tuiId": "archive_compress",
       "tuiLabel": "Compress archive",
       "tuiCategory": "FileOperation",
@@ -913,7 +948,7 @@
       "tuiKeyboardBindings": [
         "z c"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -932,15 +967,17 @@
       ],
       "guiMenuPaths": [
         [
-          "Archive",
-          "Extract"
+          "File",
+          "Archive Extract"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: archive.extract",
-        "src-tauri/src/lib.rs: archive_extract"
+        "src/actions/registry.ts: archive.extract maps zx/File > Archive Extract",
+        "src/ui/CommanderShell.tsx: archive.extract calls archiveExtract with targetDir and skip conflict policy",
+        "src/ui/CommanderShell.test.tsx: auto-extract path exercises archiveExtract client and panel refresh on summary",
+        "src-tauri/src/lib.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names and archive_operations_reject_passwords_and_unsafe_entries"
       ],
-      "notes": "충돌/대상 경로 검증 필요.",
+      "notes": "Archive Extract는 archive entry에서만 활성화되고 Rust archive_extract로 skip 기본 충돌 정책을 넘긴다. zip-slip/absolute path 차단은 Rust operation tests가 보장한다.",
       "tuiId": "archive_extract",
       "tuiLabel": "Extract archive",
       "tuiCategory": "FileOperation",
@@ -948,7 +985,7 @@
       "tuiKeyboardBindings": [
         "z x"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -959,13 +996,25 @@
           "Archive Extract Auto"
         ]
       ],
-      "guiActionIds": [],
-      "guiShortcutLabels": [],
-      "guiMenuPaths": [],
-      "evidence": [
-        "src/actions/registry.ts: no archive auto-extract action"
+      "guiActionIds": [
+        "archive.extractAuto"
       ],
-      "notes": "TUI parity 누락. archive_extract_auto action과 자동 폴더명/충돌 정책 설계가 필요하다.",
+      "guiShortcutLabels": [
+        "za"
+      ],
+      "guiMenuPaths": [
+        [
+          "File",
+          "Archive Extract Auto"
+        ]
+      ],
+      "evidence": [
+        "src/actions/registry.ts: archive.extractAuto maps za/File > Archive Extract Auto",
+        "src/ui/CommanderShell.tsx: archiveAutoExtractFolderName derives target folder from archive basename",
+        "src/ui/CommanderShell.test.tsx: auto-extract derives release-bundle target folder and refreshes panels",
+        "src-tauri/src/operation.rs: archive_extract target normalization and unsafe entry defense"
+      ],
+      "notes": "TUI za 자동 해제 parity를 추가했다. GUI는 archive basename(예: release-bundle.zip → release-bundle)으로 opposite panel 아래 target folder를 계산하고 같은 Rust archive_extract 경계를 사용한다.",
       "tuiId": "archive_extract_auto",
       "tuiLabel": "Auto extract archive",
       "tuiCategory": "FileOperation",
@@ -973,7 +1022,7 @@
       "tuiKeyboardBindings": [
         "z a"
       ],
-      "implementationStatus": "missing",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -992,21 +1041,22 @@
       ],
       "guiMenuPaths": [
         [
-          "Archive",
-          "Preview"
+          "File",
+          "Archive Preview"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: archive.preview",
-        "src-tauri/src/lib.rs: archive_list"
+        "src/actions/registry.ts: archive.preview maps File > Archive Preview",
+        "src/ui/CommanderShell.test.tsx: archive preview/list dialog calls archiveList and displays entries",
+        "src-tauri/src/lib.rs: archive_list and archive_7z_provider_lists_real_fixture_when_available"
       ],
-      "notes": "archive.list는 GUI 확장 action으로 별도 허용한다.",
+      "notes": "Archive Preview는 archive entry context와 File > Archive Preview 메뉴에 맞췄고, archive.list는 같은 command를 여는 GUI 확장으로 유지한다.",
       "tuiId": "archive_preview",
       "tuiLabel": "Preview archive",
       "tuiCategory": "FileOperation",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1034,10 +1084,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: selection.toggle",
-        "src/ui/CommanderShell.tsx: selection handlers"
+        "src/actions/registry.ts: selection.toggle Space binding",
+        "src/ui/CommanderShell.tsx: toggleFocusedSelection",
+        "src/ui/CommanderShell.test.tsx: Space toggle/virtual row/native control ownership"
       ],
-      "notes": "사용자 보고 기준 Space 선택 reliability가 미완료/회귀 가능성이 있어 G004에서 하드 검증한다.",
+      "notes": "Space가 포커스된 concrete row 선택을 토글하고 TUI처럼 다음 row로 이동한다. 가상 parent row와 native control keyboard owner 경계도 검증했다.",
       "tuiId": "toggle_sel",
       "tuiLabel": "Toggle select",
       "tuiCategory": "Selection",
@@ -1045,7 +1096,7 @@
       "tuiKeyboardBindings": [
         "Space"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -1073,9 +1124,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: selection.invert"
+        "src/actions/registry.ts: selection.invert v binding",
+        "src/ui/CommanderShell.tsx: invertSelection",
+        "src/ui/CommanderShell.test.tsx: selection all/invert/clear shortcuts"
       ],
-      "notes": "선택 모델과 필터 상태 동작 검증 필요.",
+      "notes": "v가 활성 패널 concrete row 선택을 반전하며 가상 parent row는 선택하지 않는다.",
       "tuiId": "invert_selection",
       "tuiLabel": "Invert selection",
       "tuiCategory": "Selection",
@@ -1083,7 +1136,7 @@
       "tuiKeyboardBindings": [
         "v"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1111,9 +1164,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: selection.all"
+        "src/actions/registry.ts: selection.all Ctrl+A binding",
+        "src/ui/CommanderShell.tsx: selectAllEntries",
+        "src/ui/CommanderShell.test.tsx: selection all/invert/clear shortcuts"
       ],
-      "notes": "브라우저 select-all 기본 동작 방지 검증 필요.",
+      "notes": "Ctrl+A가 활성 패널 concrete row 전체를 선택하고 브라우저 select-all 기본 동작을 억제한다.",
       "tuiId": "select_all",
       "tuiLabel": "Select all",
       "tuiCategory": "Selection",
@@ -1121,7 +1176,7 @@
       "tuiKeyboardBindings": [
         "Ctrl+A"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1149,9 +1204,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: selection.clear"
+        "src/actions/registry.ts: selection.clear u binding",
+        "src/ui/CommanderShell.tsx: clearSelection",
+        "src/ui/CommanderShell.test.tsx: selection all/invert/clear shortcuts"
       ],
-      "notes": "clear selection 명칭 차이.",
+      "notes": "u가 활성 패널 선택을 해제하며 commander keyboard ownership 경계를 공유한다.",
       "tuiId": "deselect",
       "tuiLabel": "Deselect all",
       "tuiCategory": "Selection",
@@ -1159,7 +1216,7 @@
       "tuiKeyboardBindings": [
         "u"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1183,13 +1240,14 @@
       "guiMenuPaths": [
         [
           "Help",
-          "Shortcuts"
+          "Keyboard Help"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: help.shortcuts"
+        "src/actions/registry.ts: help.shortcuts Help/Keyboard Help",
+        "src/ui/CommanderShell.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help"
       ],
-      "notes": "도움말이 registry/matrix와 동기화되어야 한다.",
+      "notes": "? 및 Help > Keyboard Help가 action registry 기반 shortcut help를 열어 실제 등록 action과 동기화된다.",
       "tuiId": "help_keys",
       "tuiLabel": "Keyboard help",
       "tuiCategory": "System",
@@ -1197,7 +1255,7 @@
       "tuiKeyboardBindings": [
         "?"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1277,13 +1335,23 @@
           "Quit"
         ]
       ],
-      "guiActionIds": [],
-      "guiShortcutLabels": [],
-      "guiMenuPaths": [],
-      "evidence": [
-        "src/actions/registry.ts: no quit action"
+      "guiActionIds": [
+        "app.quit"
       ],
-      "notes": "Tauri app quit command/action 설계 필요. 현재 q는 일반 파일명 타이핑/shortcut 충돌 위험이 있어 별도 UX 정책 필요.",
+      "guiShortcutLabels": [
+        "Ctrl+Q"
+      ],
+      "guiMenuPaths": [
+        [
+          "File",
+          "Quit"
+        ]
+      ],
+      "evidence": [
+        "src/actions/registry.ts: app.quit File/Quit Ctrl+Q, no bare q binding",
+        "src/ui/CommanderShell.test.tsx: uses an explicit Ctrl+Q/File Quit policy instead of a bare q shortcut"
+      ],
+      "notes": "일반 q는 파일명 타이핑 충돌 방지를 위해 사용하지 않고, File > Quit/Ctrl+Q만 Tauri current window close 정책으로 연결한다.",
       "tuiId": "quit",
       "tuiLabel": "Quit",
       "tuiCategory": "System",
@@ -1292,7 +1360,7 @@
         "q",
         "Ctrl+C"
       ],
-      "implementationStatus": "missing",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1305,26 +1373,28 @@
         ]
       ],
       "guiActionIds": [
-        "settings.theme"
+        "settings.themeDark"
       ],
       "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "Settings",
-          "Theme"
+          "Theme",
+          "Dark"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: settings.theme",
-        "src-tauri/src/lib.rs: save_settings"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "TUI는 direct submenu action 3개. GUI는 단일 theme action/저장 경로라 직접 선택/시각 적용 검증 필요(G005).",
+      "notes": "Dark theme direct menu action saves settings.theme=dark and updates shell data-theme.",
       "tuiId": "theme_dark",
       "tuiLabel": "Dark theme",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -1337,25 +1407,28 @@
         ]
       ],
       "guiActionIds": [
-        "settings.theme"
+        "settings.themeLight"
       ],
       "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "Settings",
-          "Theme"
+          "Theme",
+          "Light"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: settings.theme"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "theme_dark와 동일.",
+      "notes": "Light theme direct menu action saves settings.theme=light and updates shell data-theme.",
       "tuiId": "theme_light",
       "tuiLabel": "Light theme",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -1368,25 +1441,28 @@
         ]
       ],
       "guiActionIds": [
-        "settings.theme"
+        "settings.themeHighContrast"
       ],
       "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "Settings",
-          "Theme"
+          "Theme",
+          "High Contrast"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: settings.theme"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "theme_dark와 동일.",
+      "notes": "High Contrast direct menu action saves settings.theme=highContrast and updates shell data-theme.",
       "tuiId": "theme_contrast",
       "tuiLabel": "High Contrast",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -1399,25 +1475,28 @@
         ]
       ],
       "guiActionIds": [
-        "settings.language"
+        "settings.languageEn"
       ],
       "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "Settings",
-          "Language"
+          "Language",
+          "English"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: settings.language"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "TUI direct submenu action 2개. GUI 표시 문자열 실제 변경 검증 필요(G005).",
+      "notes": "English language direct menu action saves settings.language=en and updates shell data-language.",
       "tuiId": "language_en",
       "tuiLabel": "Language: English",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -1430,25 +1509,28 @@
         ]
       ],
       "guiActionIds": [
-        "settings.language"
+        "settings.languageKo"
       ],
       "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "Settings",
-          "Language"
+          "Language",
+          "Korean"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: settings.language"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "language_en과 동일.",
+      "notes": "Korean language direct menu action saves settings.language=ko and updates shell data-language.",
       "tuiId": "language_ko",
       "tuiLabel": "Language: Korean",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -1459,19 +1541,29 @@
           "Toggle Icons"
         ]
       ],
-      "guiActionIds": [],
-      "guiShortcutLabels": [],
-      "guiMenuPaths": [],
-      "evidence": [
-        "src/actions/registry.ts: no toggle icons action"
+      "guiActionIds": [
+        "settings.toggleIcons"
       ],
-      "notes": "파일 row icon mode parity 누락.",
+      "guiShortcutLabels": [],
+      "guiMenuPaths": [
+        [
+          "Settings",
+          "Toggle Icons"
+        ]
+      ],
+      "evidence": [
+        "src/actions/registry.ts: settings.toggleIcons",
+        "src/ui/CommanderShell.tsx: settings.view.showIcons controls entry-icon rendering",
+        "src/ui/CommanderShell.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help",
+        "src-tauri/src/lib.rs: Settings.view.showIcons persistence"
+      ],
+      "notes": "Settings > Toggle Icons가 settings.view.showIcons를 저장하고 파일 row icon 표시를 즉시 토글한다.",
       "tuiId": "toggle_icons",
       "tuiLabel": "Toggle icons",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "missing",
+      "implementationStatus": "implemented",
       "priority": "P2"
     },
     {
@@ -1483,19 +1575,29 @@
           "vi"
         ]
       ],
-      "guiActionIds": [],
-      "guiShortcutLabels": [],
-      "guiMenuPaths": [],
-      "evidence": [
-        "src/actions/registry.ts: no editor preset actions"
+      "guiActionIds": [
+        "settings.editorVi"
       ],
-      "notes": "Default editor direct preset menu 누락.",
+      "guiShortcutLabels": [],
+      "guiMenuPaths": [
+        [
+          "Settings",
+          "Default Editor",
+          "vi"
+        ]
+      ],
+      "evidence": [
+        "src/actions/registry.ts: settings.editorVi",
+        "src/ui/CommanderShell.tsx: applyDirectSetting saves external.editorId=vi",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+      ],
+      "notes": "Settings > Default Editor > vi가 settings.external.editorId=vi로 저장된다.",
       "tuiId": "editor_preset_vi",
       "tuiLabel": "Default editor: vi",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "missing",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1507,19 +1609,29 @@
           "vim"
         ]
       ],
-      "guiActionIds": [],
-      "guiShortcutLabels": [],
-      "guiMenuPaths": [],
-      "evidence": [
-        "src/actions/registry.ts: no editor preset actions"
+      "guiActionIds": [
+        "settings.editorVim"
       ],
-      "notes": "Default editor direct preset menu 누락.",
+      "guiShortcutLabels": [],
+      "guiMenuPaths": [
+        [
+          "Settings",
+          "Default Editor",
+          "vim"
+        ]
+      ],
+      "evidence": [
+        "src/actions/registry.ts: settings.editorVim",
+        "src/ui/CommanderShell.tsx: applyDirectSetting saves external.editorId=vim",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+      ],
+      "notes": "Settings > Default Editor > vim이 settings.external.editorId=vim으로 저장되고 open terminal editor 경로에서 사용된다.",
       "tuiId": "editor_preset_vim",
       "tuiLabel": "Default editor: vim",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "missing",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1531,19 +1643,29 @@
           "nano"
         ]
       ],
-      "guiActionIds": [],
-      "guiShortcutLabels": [],
-      "guiMenuPaths": [],
-      "evidence": [
-        "src/actions/registry.ts: no editor preset actions"
+      "guiActionIds": [
+        "settings.editorNano"
       ],
-      "notes": "Default editor direct preset menu 누락.",
+      "guiShortcutLabels": [],
+      "guiMenuPaths": [
+        [
+          "Settings",
+          "Default Editor",
+          "nano"
+        ]
+      ],
+      "evidence": [
+        "src/actions/registry.ts: settings.editorNano",
+        "src/ui/CommanderShell.tsx: applyDirectSetting saves external.editorId=nano",
+        "src/actions/registry.test.ts: editor preset menu path coverage"
+      ],
+      "notes": "Settings > Default Editor > nano가 settings.external.editorId=nano로 저장된다.",
       "tuiId": "editor_preset_nano",
       "tuiLabel": "Default editor: nano",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "missing",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1555,19 +1677,29 @@
           "emacs"
         ]
       ],
-      "guiActionIds": [],
-      "guiShortcutLabels": [],
-      "guiMenuPaths": [],
-      "evidence": [
-        "src/actions/registry.ts: no editor preset actions"
+      "guiActionIds": [
+        "settings.editorEmacs"
       ],
-      "notes": "Default editor direct preset menu 누락.",
+      "guiShortcutLabels": [],
+      "guiMenuPaths": [
+        [
+          "Settings",
+          "Default Editor",
+          "emacs"
+        ]
+      ],
+      "evidence": [
+        "src/actions/registry.ts: settings.editorEmacs",
+        "src/ui/CommanderShell.tsx: applyDirectSetting saves external.editorId=emacs",
+        "src/actions/registry.test.ts: editor preset menu path coverage"
+      ],
+      "notes": "Settings > Default Editor > emacs가 settings.external.editorId=emacs로 저장된다.",
       "tuiId": "editor_preset_emacs",
       "tuiLabel": "Default editor: emacs",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "missing",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1725,7 +1857,7 @@
         ]
       ],
       "guiActionIds": [
-        "view.reverseSort"
+        "view.sortAsc"
       ],
       "guiShortcutLabels": [
         "sr"
@@ -1734,13 +1866,15 @@
         [
           "View",
           "Sort",
-          "Reverse"
+          "Ascending"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: view.reverseSort"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "TUI는 sort_asc/sort_desc direct action이 있으나 GUI는 reverse toggle 하나라 direct 상태 설정 parity가 불완전하다.",
+      "notes": "Ascending sort direct menu action applies asc direction without relying on reverse toggle.",
       "tuiId": "sort_asc",
       "tuiLabel": "Reverse order",
       "tuiCategory": "Sort",
@@ -1748,7 +1882,7 @@
       "tuiKeyboardBindings": [
         "s r"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1761,26 +1895,28 @@
         ]
       ],
       "guiActionIds": [
-        "view.reverseSort"
+        "view.sortDesc"
       ],
       "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "View",
           "Sort",
-          "Reverse"
+          "Descending"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: view.reverseSort"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "sort_asc와 동일.",
+      "notes": "Descending sort direct menu action applies desc direction without relying on reverse toggle.",
       "tuiId": "sort_desc",
       "tuiLabel": "Descending",
       "tuiCategory": "Sort",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1808,10 +1944,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: filter.start",
-        "src/ui/CommanderShell.tsx: FilterPrompt"
+        "src/ui/CommanderShell.tsx: FilterPrompt and panel filter status/chip/highlight",
+        "src/ui/CommanderShell.test.tsx: applies typed filters and preserves them through refresh until clear",
+        "src/ui/CommanderShell.test.tsx: keeps filter indicators in sync from panel state while listDir is pending"
       ],
-      "notes": "필터 적용 표시/매칭 시각화는 최근 UX repair 대상이며 회귀 검증 필요.",
+      "notes": "필터 입력은 list_dir filter로 전달되고 panel/status/chip 및 파일명 match highlight로 적용 상태를 표시한다.",
       "tuiId": "filter_start",
       "tuiLabel": "Filter",
       "tuiCategory": "Filter",
@@ -1819,7 +1956,7 @@
       "tuiKeyboardBindings": [
         "/"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1843,15 +1980,16 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: filter.clear"
+        "src/ui/CommanderShell.tsx: filter.clear sends filter null to listPanel",
+        "src/ui/CommanderShell.test.tsx: applies typed filters and preserves them through refresh until clear"
       ],
-      "notes": "TUI에는 별도 단축키 표시 없음.",
+      "notes": "Clear Filter는 list_dir filter=null로 갱신하고 filter chip/status를 제거한다.",
       "tuiId": "filter_clear",
       "tuiLabel": "Clear filter",
       "tuiCategory": "Filter",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1905,15 +2043,17 @@
       ],
       "guiMenuPaths": [
         [
-          "Go",
-          "Locations"
+          "View",
+          "Mount Points"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: nav.locations",
-        "src-tauri/src/lib.rs: list_locations"
+        "src/actions/registry.ts: nav.locations View/Mount Points",
+        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.test.tsx: ignores stale async location palette results",
+        "src-tauri/src/lib.rs: list_locations returns home/roots/recent/bookmarks"
       ],
-      "notes": "TUI Mount Points와 GUI Locations 명칭/범위가 다를 수 있어 parity 확인 필요.",
+      "notes": "gm/View > Mount Points는 list_locations 결과를 Locations overlay로 표시하고 stale async 응답을 무시한다.",
       "tuiId": "mount_points",
       "tuiLabel": "Mount points",
       "tuiCategory": "Navigation",
@@ -1921,7 +2061,7 @@
       "tuiKeyboardBindings": [
         "g m"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1940,15 +2080,16 @@
       ],
       "guiMenuPaths": [
         [
-          "Go",
-          "Path"
+          "View",
+          "Go To Path"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: nav.gotoPath",
-        "src-tauri/src/lib.rs: goto_path"
+        "src/actions/registry.ts: nav.gotoPath View/Go To Path",
+        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src-tauri/src/lib.rs: goto_path/list_dir path validation"
       ],
-      "notes": "경로 입력/검증/오류 표시 확인 필요.",
+      "notes": "gp/View > Go To Path가 Path prompt를 열고 goto_path 결과 listing으로 패널을 이동한다.",
       "tuiId": "goto_path",
       "tuiLabel": "Go to path",
       "tuiCategory": "Navigation",
@@ -1956,7 +2097,7 @@
       "tuiKeyboardBindings": [
         "g p"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -1975,9 +2116,10 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: tab.list"
+        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/actions/registry.ts: tab.list tt"
       ],
-      "notes": "TUI 메뉴에는 없지만 액션 parity 대상.",
+      "notes": "tt는 현재 패널 tab overlay를 열고 tab_new/tab_close 결과를 확인할 수 있다.",
       "tuiId": "tab_list",
       "tuiLabel": "Show tab list",
       "tuiCategory": "Navigation",
@@ -1985,7 +2127,7 @@
       "tuiKeyboardBindings": [
         "t t"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -2064,14 +2206,15 @@
       ],
       "guiMenuPaths": [
         [
-          "Go",
-          "History"
+          "View",
+          "History List"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: history.list"
+        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.test.tsx: keeps per-panel history and parent navigation on the listDir path"
       ],
-      "notes": "히스토리 목록 UI 동작 검증 필요.",
+      "notes": "th/View > History List는 back/current/forward 경로를 overlay로 표시한다.",
       "tuiId": "history_list",
       "tuiLabel": "Show history list",
       "tuiCategory": "Navigation",
@@ -2079,7 +2222,7 @@
       "tuiKeyboardBindings": [
         "t h"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -2089,20 +2232,21 @@
         "bookmark.add"
       ],
       "guiShortcutLabels": [
+        "Ctrl+B",
         "tb+a"
       ],
       "guiMenuPaths": [
         [
-          "Go",
-          "Bookmark",
-          "Add"
+          "View",
+          "Bookmark Add"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: bookmark.add",
-        "src-tauri/src/lib.rs: save_settings"
+        "src/actions/registry.ts: bookmark.add Ctrl+B/tb+a View/Bookmark Add",
+        "src/ui/CommanderShell.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help",
+        "src-tauri/src/lib.rs: settings persist bookmarks and list_locations includes bookmarks"
       ],
-      "notes": "TUI shortcut는 Ctrl+B, GUI shortcut는 sequence tb+a로 다르다. 단축키 parity 또는 의도적 차이 기록 필요.",
+      "notes": "Ctrl+B 및 tb+a가 현재 경로를 settings.bookmarks에 저장한다.",
       "tuiId": "bookmark_add",
       "tuiLabel": "Add bookmark",
       "tuiCategory": "Navigation",
@@ -2110,7 +2254,7 @@
       "tuiKeyboardBindings": [
         "Ctrl+B"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -2129,14 +2273,15 @@
       ],
       "guiMenuPaths": [
         [
-          "Go",
-          "Bookmarks"
+          "View",
+          "Bookmark List"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: bookmark.list"
+        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/actions/registry.ts: bookmark.list View/Bookmark List"
       ],
-      "notes": "북마크 목록 UI 동작 검증 필요.",
+      "notes": "tb/View > Bookmark List는 저장된 bookmark overlay를 열고 선택 시 해당 경로로 이동한다.",
       "tuiId": "bookmark_list",
       "tuiLabel": "Show bookmark list",
       "tuiCategory": "Navigation",
@@ -2144,7 +2289,7 @@
       "tuiKeyboardBindings": [
         "t b"
       ],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P1"
     },
     {
@@ -2157,25 +2302,28 @@
         ]
       ],
       "guiActionIds": [
-        "settings.sizeFormat"
+        "settings.sizeAuto"
       ],
       "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "Settings",
-          "File Size Format"
+          "File Size Format",
+          "Auto"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: settings.sizeFormat"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "TUI는 direct submenu. GUI는 단일 action/저장 경로라 실제 표시 변경 검증 필요(G005).",
+      "notes": "Auto size direct menu action saves the human-readable size format and updates visible file size formatting.",
       "tuiId": "size_auto",
       "tuiLabel": "Size: Auto",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -2188,25 +2336,28 @@
         ]
       ],
       "guiActionIds": [
-        "settings.sizeFormat"
+        "settings.sizeBytes"
       ],
       "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "Settings",
-          "File Size Format"
+          "File Size Format",
+          "Bytes"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: settings.sizeFormat"
+        "src/actions/registry.ts: direct Settings/View submenu action",
+        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
+        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
       ],
-      "notes": "size_auto와 동일.",
+      "notes": "Bytes size direct menu action saves the byte size format and updates visible file size formatting.",
       "tuiId": "size_bytes",
       "tuiLabel": "Size: Bytes",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P0"
     },
     {
@@ -2228,15 +2379,16 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: help.about"
+        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderOverlays.tsx: AboutDialog BokslDirGUI"
       ],
-      "notes": "정보 다이얼로그 내용 검증 필요.",
+      "notes": "Help > About이 BokslDirGUI 정체성/기술스택 설명 dialog를 연다.",
       "tuiId": "about",
       "tuiLabel": "About",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "partial",
+      "implementationStatus": "implemented",
       "priority": "P2"
     }
   ]

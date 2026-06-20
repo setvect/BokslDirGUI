@@ -23,6 +23,8 @@ const requiredActionIds: ActionId[] = [
   'view.sortDate',
   'view.sortExt',
   'view.reverseSort',
+  'view.sortAsc',
+  'view.sortDesc',
   'filter.start',
   'filter.clear',
   'view.toggleHidden',
@@ -42,10 +44,21 @@ const requiredActionIds: ActionId[] = [
   'bookmark.list',
   'bookmark.rename',
   'bookmark.delete',
-  'settings.theme',
-  'settings.language',
-  'settings.sizeFormat',
+  'settings.themeDark',
+  'settings.themeLight',
+  'settings.themeHighContrast',
+  'settings.languageEn',
+  'settings.languageKo',
+  'settings.editorVi',
+  'settings.editorVim',
+  'settings.editorNano',
+  'settings.editorEmacs',
+  'settings.toggleIcons',
+  'settings.sizeAuto',
+  'settings.sizeBytes',
   'archive.preview',
+  'app.quit',
+  'external.openDefault',
   'external.openEditor',
   'external.runShellCommand',
   'help.search',
@@ -71,20 +84,41 @@ describe('action registry', () => {
     expect(action?.runPath).toContain('run_shell_command');
   });
 
+  it('keeps external integration and editor preset menu paths aligned with TUI parity rows', () => {
+    expect(ACTION_BY_ID.get('external.openDefault')?.menuPath).toEqual(['File', 'Open Default App']);
+    expect(ACTION_BY_ID.get('external.openEditor')?.menuPath).toEqual(['File', 'Open Terminal Editor']);
+    expect(ACTION_BY_ID.get('external.runShellCommand')?.menuPath).toEqual(['File', 'Run Shell Command']);
+    expect(ACTION_BY_ID.get('app.quit')?.menuPath).toEqual(['File', 'Quit']);
+    expect(ACTION_BY_ID.get('nav.gotoPath')?.menuPath).toEqual(['View', 'Go To Path']);
+    expect(ACTION_BY_ID.get('nav.locations')?.menuPath).toEqual(['View', 'Mount Points']);
+    expect(ACTION_BY_ID.get('history.list')?.menuPath).toEqual(['View', 'History List']);
+    expect(ACTION_BY_ID.get('bookmark.add')?.menuPath).toEqual(['View', 'Bookmark Add']);
+    expect(ACTION_BY_ID.get('bookmark.list')?.menuPath).toEqual(['View', 'Bookmark List']);
+    expect(ACTION_BY_ID.get('layout.toggleSingleDual')?.menuPath).toEqual(['View', 'Toggle Layout']);
+    expect(ACTION_BY_ID.get('help.shortcuts')?.menuPath).toEqual(['Help', 'Keyboard Help']);
+    expect(ACTION_BY_ID.get('settings.toggleIcons')?.menuPath).toEqual(['Settings', 'Toggle Icons']);
+    expect(ACTION_BY_ID.get('settings.editorVi')?.menuPath).toEqual(['Settings', 'Default Editor', 'vi']);
+    expect(ACTION_BY_ID.get('settings.editorVim')?.menuPath).toEqual(['Settings', 'Default Editor', 'vim']);
+    expect(ACTION_BY_ID.get('settings.editorNano')?.menuPath).toEqual(['Settings', 'Default Editor', 'nano']);
+    expect(ACTION_BY_ID.get('settings.editorEmacs')?.menuPath).toEqual(['Settings', 'Default Editor', 'emacs']);
+  });
+
   it('marks irreversible permanent delete distinctly from trash', () => {
     expect(ACTION_BY_ID.get('file.trash')?.dangerLevel).toBe('destructive');
     expect(ACTION_BY_ID.get('file.deletePermanent')?.dangerLevel).toBe('irreversible');
+    expect(ACTION_BY_ID.get('file.trash')?.menuPath).toEqual(['File', 'Delete']);
+    expect(ACTION_BY_ID.get('file.deletePermanent')?.menuPath).toEqual(['File', 'Permanent Delete']);
+    expect(ACTION_BY_ID.get('file.properties')?.menuPath).toEqual(['View', 'File Info']);
   });
 
   it('derives menu roots and display labels from the registry', () => {
-    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Tools', 'Settings', 'Help']);
+    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Settings', 'Help']);
     expect(menuRootsFromRegistry().map(menuRootLabelFromRegistry)).toEqual([
       'File(F)',
       'Edit(E)',
       'View(V)',
       'Go(G)',
       'Archive(A)',
-      'Tools(T)',
       'Settings(S)',
       'Help(H)',
     ]);
@@ -110,6 +144,7 @@ describe('action registry', () => {
       hasOppositePanel: true,
       shellCommandEnabled: false,
       operationBusy: false,
+      backendAvailable: true,
     };
 
     expect(isActionAvailable(archivePreview, baseContext)).toBe(false);
@@ -128,7 +163,13 @@ describe('action registry', () => {
     expect(actionForKeyboardShortcut(key('ㅇ', { code: 'KeyD', shiftKey: true }))?.id).toBe('file.deletePermanent');
     expect(actionForKeyboardShortcut(key('Delete', { shiftKey: true }))?.id).toBe('file.deletePermanent');
     expect(actionForKeyboardShortcut(key('ㅎ', { code: 'KeyG', shiftKey: true }))?.id).toBe('nav.bottom');
+    const pendingArchive = matchKeyboardShortcut(key('z'));
+    expect(actionForKeyboardShortcut(key('a'), pendingArchive.sequence)?.id).toBe('archive.extractAuto');
     expect(actionForKeyboardShortcut(key('a', { ctrlKey: true }))?.id).toBe('selection.all');
+    expect(actionForKeyboardShortcut(key('b', { ctrlKey: true }))?.id).toBe('bookmark.add');
+    expect(actionForKeyboardShortcut(key('q', { ctrlKey: true }))?.id).toBe('app.quit');
+    expect(actionForKeyboardShortcut(key('q', { metaKey: true }))?.id).toBe('app.quit');
+    expect(actionForKeyboardShortcut(key('q'))).toBeNull();
     expect(ACTION_BY_ID.get('archive.preview')?.shortcutLabel).toBe('Enter on archive');
     expect(ACTION_BY_ID.get('archive.preview')?.keyboardBindings).toBeUndefined();
   });

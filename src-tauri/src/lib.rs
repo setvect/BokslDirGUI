@@ -207,15 +207,39 @@ impl Default for LayoutSettings {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+struct SessionSettings {
+    left_path: Option<String>,
+    right_path: Option<String>,
+    active_panel: PanelId,
+}
+
+impl Default for SessionSettings {
+    fn default() -> Self {
+        Self {
+            left_path: None,
+            right_path: None,
+            active_panel: PanelId::Right,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 struct ViewSettings {
     #[serde(default)]
     zoom_step: i32,
     #[serde(default = "default_view_density")]
     density: String,
+    #[serde(default = "default_show_icons")]
+    show_icons: bool,
 }
 
 fn default_view_density() -> String {
     "compact".to_string()
+}
+
+fn default_show_icons() -> bool {
+    true
 }
 
 impl Default for ViewSettings {
@@ -223,6 +247,7 @@ impl Default for ViewSettings {
         Self {
             zoom_step: 0,
             density: "compact".to_string(),
+            show_icons: true,
         }
     }
 }
@@ -238,6 +263,8 @@ struct Settings {
     bookmarks: Vec<BookmarkLocation>,
     layout: LayoutSettings,
     #[serde(default)]
+    session: SessionSettings,
+    #[serde(default)]
     view: ViewSettings,
 }
 
@@ -251,6 +278,7 @@ impl Default for Settings {
             external: ExternalSettings::default(),
             bookmarks: Vec::new(),
             layout: LayoutSettings::default(),
+            session: SessionSettings::default(),
             view: ViewSettings::default(),
         }
     }
@@ -1112,7 +1140,7 @@ mod archive {
             })?;
         let output = Command::new(binary)
             .arg("l")
-            .arg("-ba")
+            .arg("-slt")
             .arg(archive)
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
@@ -1131,13 +1159,7 @@ mod archive {
                     .collect::<String>(),
             ));
         }
-        let text = String::from_utf8_lossy(&output.stdout);
-        Ok(text
-            .lines()
-            .filter_map(|line| line.split_whitespace().last())
-            .filter(|name| !name.is_empty())
-            .map(str::to_string)
-            .collect())
+        Ok(parse_7z_slt_paths(&output.stdout))
     }
 
     fn parse_list_output(
@@ -1165,6 +1187,33 @@ mod archive {
             .filter(|line| !line.is_empty())
             .map(str::to_string)
             .collect())
+    }
+
+    pub(super) fn parse_7z_slt_paths(stdout: &[u8]) -> Vec<String> {
+        let text = String::from_utf8_lossy(stdout);
+        let mut in_entries = false;
+        text.lines()
+            .filter_map(|line| {
+                let trimmed = line.trim();
+                if trimmed.starts_with("----------") {
+                    in_entries = true;
+                    return None;
+                }
+                if !in_entries {
+                    return None;
+                }
+                trimmed
+                    .strip_prefix("Path = ")
+                    .map(str::trim)
+                    .filter(|path| !path.is_empty())
+                    .map(str::to_string)
+            })
+            .collect()
+    }
+
+    #[cfg(test)]
+    pub(super) fn parse_7z_slt_paths_for_test(stdout: &[u8]) -> Vec<String> {
+        parse_7z_slt_paths(stdout)
     }
 
     fn archive_entry_for_name(archive: &Path, name: &str) -> FileEntry {
@@ -2434,15 +2483,25 @@ mod tests {
         let saved = save_settings(serde_json::json!({
             "bookmarks": [{ "id": "root", "label": "Root", "path": fixture.root.to_string_lossy() }],
             "layout": { "singlePanel": true, "ratio": "70:30" },
-            "view": { "zoomStep": 2, "density": "compact" },
+            "session": { "leftPath": fixture.root.to_string_lossy(), "rightPath": fixture.root.to_string_lossy(), "activePanel": "left" },
+            "view": { "zoomStep": 2, "density": "compact", "showIcons": false },
             "theme": "highContrast",
-            "language": "en"
+            "language": "en",
+            "external": { "editorId": "vim", "shellCommand": { "enabled": true } }
         }))
         .expect("settings patch should be saved");
         assert_eq!(saved.bookmarks[0].label, "Root");
         assert!(saved.layout.single_panel);
         assert_eq!(saved.layout.ratio, "70:30");
         assert_eq!(saved.view.zoom_step, 2);
+        assert!(!saved.view.show_icons);
+        assert_eq!(saved.external.editor_id.as_deref(), Some("vim"));
+        assert!(saved.external.shell_command.enabled);
+        assert_eq!(saved.session.active_panel, PanelId::Left);
+        assert_eq!(
+            saved.session.left_path.as_deref(),
+            Some(fixture.root.to_string_lossy().as_ref())
+        );
         assert!(settings_path.is_file());
 
         let locations = list_locations().expect("locations should load bookmark settings");
@@ -2688,14 +2747,95 @@ mod tests {
     }
 
     #[test]
+    fn external_archive_provider_is_killed_when_operation_is_cancelled() {
+        let Some((result, elapsed)) = operation::external_archive_command_cancel_for_test() else {
+            return;
+        };
+        let error = result.expect_err("cancelled external provider should return cancellation");
+        assert_eq!(error.code, "operation_cancelled");
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "cancel should kill the external provider promptly, elapsed={elapsed:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn archive_extract_preflight_listing_provider_is_killed_when_cancelled() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+        let fixture = TempFixture::new();
+        let fake_unzip = fixture.root.join("unzip");
+        fs::write(&fake_unzip, "#!/bin/sh\nwhile :; do :; done\n")
+            .expect("fake unzip provider should be written");
+        let mut permissions = fs::metadata(&fake_unzip)
+            .expect("fake unzip metadata should exist")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fake_unzip, permissions)
+            .expect("fake unzip provider should be executable");
+        let archive = fixture.root.join("blocked.zip");
+        File::create(&archive).expect("blocked archive fixture should be created");
+        let old_path = env::var_os("PATH");
+        let next_path = match old_path.as_ref() {
+            Some(path) => format!(
+                "{}:{}",
+                fixture.root.to_string_lossy(),
+                path.to_string_lossy()
+            ),
+            None => fixture.root.to_string_lossy().into_owned(),
+        };
+        env::set_var("PATH", next_path);
+
+        let (result, elapsed) = operation::archive_entry_listing_cancel_for_test(archive);
+
+        match old_path {
+            Some(path) => env::set_var("PATH", path),
+            None => env::remove_var("PATH"),
+        }
+        let error = result.expect_err("cancelled archive listing should return cancellation");
+        assert_eq!(error.code, "operation_cancelled");
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "cancel should kill the archive listing provider promptly, elapsed={elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn archive_7z_slt_parser_preserves_spaces_and_unsafe_paths() {
+        let paths = archive::parse_7z_slt_paths_for_test(
+            b"Path = fixture.7z\nType = 7z\n----------\nPath = dir/my file.txt\nSize = 5\nPath = ../escape file.txt\nSize = 1\n",
+        );
+
+        assert_eq!(
+            paths,
+            vec![
+                "dir/my file.txt".to_string(),
+                "../escape file.txt".to_string()
+            ]
+        );
+        assert!(!operation::archive_entry_is_unsafe_for_test(&paths[0]));
+        assert!(operation::archive_entry_is_unsafe_for_test(&paths[1]));
+    }
+
+    #[test]
     fn archive_7z_provider_lists_real_fixture_when_available() {
         let Some(binary) = archive::seven_zip_binary_for_test() else {
             return;
         };
         let fixture = TempFixture::new();
+        fs::write(fixture.root.join("space name.txt"), b"space")
+            .expect("space-name fixture should be written");
         let archive_path = fixture.root.join("provider-fixture.7z");
         let output = Command::new(binary)
-            .args(["a", "-bd", "provider-fixture.7z", "alpha.txt"])
+            .args([
+                "a",
+                "-bd",
+                "provider-fixture.7z",
+                "alpha.txt",
+                "space name.txt",
+            ])
             .current_dir(&fixture.root)
             .output()
             .expect("7z provider should be executable");
@@ -2711,6 +2851,10 @@ mod tests {
             .entries
             .iter()
             .any(|entry| entry.name == "alpha.txt"));
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.name == "space name.txt"));
     }
 
     fn command_available(command: &str) -> bool {

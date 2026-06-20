@@ -3,7 +3,9 @@ import {
   BACKEND_IMPLEMENTED_COMMANDS,
   COMMANDS,
   isBackendImplementedCommand,
+  isTauriRuntime,
   normalizeInvokeError,
+  tauriClient,
 } from './client';
 
 describe('Tauri command names', () => {
@@ -77,4 +79,56 @@ describe('Tauri command names', () => {
       recoverable: true,
     });
   });
+
+  it('treats operation event listening as a no-op in plain browser mode', async () => {
+    const previousIsTauri = (globalThis as { isTauri?: boolean }).isTauri;
+    const previousInternals = (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    delete (globalThis as { isTauri?: boolean }).isTauri;
+    delete (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+
+    try {
+      expect(isTauriRuntime()).toBe(false);
+      const cleanup = await tauriClient.listenOperationEvents({
+        error: () => {
+          throw new Error('plain browser event subscription must not emit operation errors');
+        },
+      });
+
+      expect(cleanup()).toBeUndefined();
+    } finally {
+      if (previousIsTauri === undefined) {
+        delete (globalThis as { isTauri?: boolean }).isTauri;
+      } else {
+        (globalThis as { isTauri?: boolean }).isTauri = previousIsTauri;
+      }
+      if (previousInternals === undefined) {
+        delete (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+      } else {
+        (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = previousInternals;
+      }
+    }
+  });
+
+  it('detects Tauri runtime through internal invoke fallback', () => {
+    const previousIsTauri = (globalThis as { isTauri?: boolean }).isTauri;
+    const previousInternals = (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    delete (globalThis as { isTauri?: boolean }).isTauri;
+    (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = { invoke: () => undefined };
+
+    try {
+      expect(isTauriRuntime()).toBe(true);
+    } finally {
+      if (previousIsTauri === undefined) {
+        delete (globalThis as { isTauri?: boolean }).isTauri;
+      } else {
+        (globalThis as { isTauri?: boolean }).isTauri = previousIsTauri;
+      }
+      if (previousInternals === undefined) {
+        delete (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+      } else {
+        (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = previousInternals;
+      }
+    }
+  });
+
 });

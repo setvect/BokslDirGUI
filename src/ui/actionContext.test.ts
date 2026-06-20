@@ -106,11 +106,11 @@ describe('action context helpers', () => {
     expect(isActionAvailable(archivePreview, fileContext)).toBe(false);
     expect(isActionAvailable(archivePreview, archiveContext)).toBe(true);
     expect(contextMenuActions(archiveEntry, archiveContext).map((action) => action.id)).toEqual(
-      expect.arrayContaining(['archive.preview', 'archive.list', 'archive.extract']),
+      expect.arrayContaining(['archive.preview', 'archive.list', 'archive.extract', 'archive.extractAuto']),
     );
   });
 
   it('derives top-level menu roots from registry metadata', () => {
-    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Tools', 'Settings', 'Help']);
+    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Settings', 'Help']);
   });
 });

@@ -1,12 +1,14 @@
 use super::*;
-use std::process::Command;
-use std::sync::Condvar;
+use std::io::Read;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Condvar};
 use std::thread;
 use std::time::Duration;
 
 static OP_COUNTER: AtomicU64 = AtomicU64::new(0);
 static CANCELLED: OnceLock<Mutex<BTreeMap<String, bool>>> = OnceLock::new();
 static CONFLICTS: OnceLock<(Mutex<BTreeMap<String, ConflictState>>, Condvar)> = OnceLock::new();
+static EXTERNAL_PROCESSES: OnceLock<Mutex<BTreeMap<String, Arc<Mutex<Child>>>>> = OnceLock::new();
 const PERMANENT_DELETE_CONFIRM_TOKEN: &str = "PERMANENT_DELETE";
 const CONFLICT_WAIT_POLL_MS: u64 = 200;
 
@@ -362,15 +364,30 @@ pub(super) fn start_archive_extract(
 }
 
 pub(super) fn cancel_operation(operation_id: String) -> CommandResult<CancelAck> {
-    cancelled_registry()
-        .lock()
-        .expect("cancel registry lock should not be poisoned")
-        .insert(operation_id.clone(), true);
-    let (_, cvar) = conflict_registry();
-    cvar.notify_all();
+    let registered = {
+        let mut guard = cancelled_registry()
+            .lock()
+            .expect("cancel registry lock should not be poisoned");
+        match guard.get_mut(&operation_id) {
+            Some(cancelled) => {
+                *cancelled = true;
+                true
+            }
+            None => false,
+        }
+    };
+    if registered {
+        kill_registered_external_process(&operation_id);
+        let (_, cvar) = conflict_registry();
+        cvar.notify_all();
+    }
     Ok(CancelAck {
         operation_id,
-        state: OperationState::Cancelling,
+        state: if registered {
+            OperationState::Cancelling
+        } else {
+            OperationState::Cancelled
+        },
     })
 }
 
@@ -382,12 +399,13 @@ pub(super) fn resolve_conflict(
     let mut guard = lock
         .lock()
         .expect("conflict registry lock should not be poisoned");
-    let state = guard.entry(operation_id.clone()).or_default();
-    if decision == ConflictDecision::AllOverwrite || decision == ConflictDecision::AllSkip {
-        state.apply_all_decision = Some(decision);
+    if let Some(state) = guard.get_mut(&operation_id) {
+        if decision == ConflictDecision::AllOverwrite || decision == ConflictDecision::AllSkip {
+            state.apply_all_decision = Some(decision);
+        }
+        state.pending_decision = Some(decision);
+        cvar.notify_all();
     }
-    state.pending_decision = Some(decision);
-    cvar.notify_all();
     Ok(ConflictAck {
         operation_id,
         decision,
@@ -507,6 +525,9 @@ fn run_copy(
                     &mut stats,
                     kind,
                 ) {
+                    if is_operation_cancelled_error(&error) {
+                        return Err(cancel_summary(operation_id, kind, &stats));
+                    }
                     stats.failed_files += 1;
                     stats.errors.push(error);
                 }
@@ -515,6 +536,9 @@ fn run_copy(
             ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {}
         }
         if let Err(error) = copy_tree(app, operation_id, source, &target_dir, &mut stats, kind) {
+            if is_operation_cancelled_error(&error) {
+                return Err(cancel_summary(operation_id, kind, &stats));
+            }
             stats.failed_files += 1;
             stats.errors.push(error);
         }
@@ -640,6 +664,9 @@ fn run_move(
                     &mut stats,
                     kind,
                 ) {
+                    if is_operation_cancelled_error(&error) {
+                        return cancel_summary(operation_id, kind, &stats);
+                    }
                     stats.failed_files += 1;
                     stats.errors.push(error);
                     continue;
@@ -678,6 +705,9 @@ fn run_move(
                 if let Err(error) =
                     copy_tree(app, operation_id, source, &target_dir, &mut stats, kind)
                 {
+                    if is_operation_cancelled_error(&error) {
+                        return cancel_summary(operation_id, kind, &stats);
+                    }
                     stats.failed_files += 1;
                     stats.errors.push(error);
                     continue;
@@ -880,11 +910,11 @@ fn run_archive_create(
     let command_result = if archive_format == "zip"
         || target.extension().and_then(|value| value.to_str()) == Some("zip")
     {
-        run_zip_create(&target, &sources)
+        run_zip_create(operation_id, &target, &sources)
     } else if archive_format == "7z"
         || target.extension().and_then(|value| value.to_str()) == Some("7z")
     {
-        run_7z_create(&target, &sources)
+        run_7z_create(operation_id, &target, &sources)
     } else {
         Err(AppError::new(
             "unsupported",
@@ -908,6 +938,9 @@ fn run_archive_create(
                 Some(&target),
             );
             summary_from_stats(operation_id, kind, &stats)
+        }
+        Err(error) if is_operation_cancelled_error(&error) => {
+            cancel_summary(operation_id, kind, &stats)
         }
         Err(error) => error_summary(operation_id, kind, error),
     }
@@ -938,6 +971,16 @@ fn run_archive_extract(
         Ok(path) => path,
         Err(error) => return error_summary(operation_id, kind, error),
     };
+    let target_candidate = PathBuf::from(&target_dir);
+    if !target_candidate.exists() {
+        if let Err(error) = fs::create_dir_all(&target_candidate) {
+            return error_summary(
+                operation_id,
+                kind,
+                map_io_error(error, Some(&target_candidate)),
+            );
+        }
+    }
     let target = match navigation::canonical_existing_path(&target_dir) {
         Ok(path) => path,
         Err(error) => return error_summary(operation_id, kind, error),
@@ -950,8 +993,24 @@ fn run_archive_extract(
         );
     }
 
-    let entries = match super::archive::list_archive_entry_names(&archive) {
+    let mut stats = OperationStats::new(0, 0);
+    emit_progress(
+        app,
+        operation_id,
+        kind,
+        OperationState::Scanning,
+        &stats,
+        Some(&archive),
+    );
+    if is_cancelled(operation_id) {
+        return cancel_summary(operation_id, kind, &stats);
+    }
+
+    let entries = match list_archive_entry_names_for_operation(operation_id, &archive) {
         Ok(entries) => entries,
+        Err(error) if is_operation_cancelled_error(&error) => {
+            return cancel_summary(operation_id, kind, &stats)
+        }
         Err(error) => return error_summary(operation_id, kind, error),
     };
     if let Some(unsafe_entry) = entries.iter().find(|entry| archive_entry_is_unsafe(entry)) {
@@ -967,8 +1026,7 @@ fn run_archive_extract(
             .with_detail("entry", unsafe_entry),
         );
     }
-
-    let mut stats = OperationStats::new(entries.len() as u64, 0);
+    stats.total_files = entries.len() as u64;
     emit_progress(
         app,
         operation_id,
@@ -982,9 +1040,9 @@ fn run_archive_extract(
     }
 
     let command_result = if archive.extension().and_then(|value| value.to_str()) == Some("zip") {
-        run_zip_extract(&archive, &target, policy)
+        run_zip_extract(operation_id, &archive, &target, policy)
     } else if archive.extension().and_then(|value| value.to_str()) == Some("7z") {
-        run_7z_extract(&archive, &target, policy)
+        run_7z_extract(operation_id, &archive, &target, policy)
     } else {
         Err(AppError::new(
             "unsupported",
@@ -1007,11 +1065,14 @@ fn run_archive_extract(
             );
             summary_from_stats(operation_id, kind, &stats)
         }
+        Err(error) if is_operation_cancelled_error(&error) => {
+            cancel_summary(operation_id, kind, &stats)
+        }
         Err(error) => error_summary(operation_id, kind, error),
     }
 }
 
-fn run_zip_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
+fn run_zip_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
     let zip = external_binary("zip").ok_or_else(|| {
         AppError::new(
             "unsupported",
@@ -1030,10 +1091,10 @@ fn run_zip_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
         })?);
     }
-    run_external_command(command, Some(target))
+    run_external_command(operation_id, command, Some(target))
 }
 
-fn run_7z_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
+fn run_7z_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
     let seven_zip = external_binary("7zz")
         .or_else(|| external_binary("7z"))
         .ok_or_else(|| {
@@ -1054,7 +1115,7 @@ fn run_7z_create(target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
         })?);
     }
-    run_external_command(command, Some(target))
+    run_external_command(operation_id, command, Some(target))
 }
 
 fn common_source_parent(sources: &[PathBuf], target: &Path) -> CommandResult<PathBuf> {
@@ -1079,7 +1140,12 @@ fn common_source_parent(sources: &[PathBuf], target: &Path) -> CommandResult<Pat
     Ok(first_parent.to_path_buf())
 }
 
-fn run_zip_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> CommandResult<()> {
+fn run_zip_extract(
+    operation_id: &str,
+    archive: &Path,
+    target: &Path,
+    policy: ConflictDecision,
+) -> CommandResult<()> {
     let unzip = external_binary("unzip").ok_or_else(|| {
         AppError::new(
             "unsupported",
@@ -1099,18 +1165,23 @@ fn run_zip_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> C
         }
         ConflictDecision::Cancel => {
             return Err(AppError::new(
-                "cancelled",
-                "errors.cancelled",
+                "operation_cancelled",
+                "errors.operationCancelled",
                 Some(archive),
                 true,
             ));
         }
     }
     command.arg("-q").arg(archive).arg("-d").arg(target);
-    run_external_command(command, Some(archive))
+    run_external_command(operation_id, command, Some(archive))
 }
 
-fn run_7z_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> CommandResult<()> {
+fn run_7z_extract(
+    operation_id: &str,
+    archive: &Path,
+    target: &Path,
+    policy: ConflictDecision,
+) -> CommandResult<()> {
     let seven_zip = external_binary("7zz")
         .or_else(|| external_binary("7z"))
         .ok_or_else(|| {
@@ -1133,8 +1204,8 @@ fn run_7z_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> Co
         }
         ConflictDecision::Cancel => {
             return Err(AppError::new(
-                "cancelled",
-                "errors.cancelled",
+                "operation_cancelled",
+                "errors.operationCancelled",
                 Some(archive),
                 true,
             ));
@@ -1143,15 +1214,154 @@ fn run_7z_extract(archive: &Path, target: &Path, policy: ConflictDecision) -> Co
     command
         .arg(format!("-o{}", target.to_string_lossy()))
         .arg(archive);
-    run_external_command(command, Some(archive))
+    run_external_command(operation_id, command, Some(archive))
 }
 
-fn run_external_command(mut command: Command, path: Option<&Path>) -> CommandResult<()> {
-    let output = command
-        .output()
-        .map_err(|error| map_io_error(error, path))?;
-    if output.status.success() {
-        return Ok(());
+fn list_archive_entry_names_for_operation(
+    operation_id: &str,
+    archive: &Path,
+) -> CommandResult<Vec<String>> {
+    match archive
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("zip") => list_zip_entries_for_operation(operation_id, archive),
+        Some("7z") => list_7z_entries_for_operation(operation_id, archive),
+        _ => Err(AppError::new(
+            "unsupported",
+            "errors.archiveFormatUnsupported",
+            Some(archive),
+            true,
+        )),
+    }
+}
+
+fn list_zip_entries_for_operation(
+    operation_id: &str,
+    archive: &Path,
+) -> CommandResult<Vec<String>> {
+    let unzip = external_binary("unzip").ok_or_else(|| {
+        AppError::new(
+            "unsupported",
+            "errors.archiveProviderUnavailable",
+            Some(archive),
+            true,
+        )
+        .with_detail("provider", "unzip")
+    })?;
+    let mut command = Command::new(unzip);
+    command.arg("-Z1").arg(archive);
+    let stdout = run_external_command_capture(operation_id, command, Some(archive))?;
+    Ok(String::from_utf8_lossy(&stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect())
+}
+
+fn list_7z_entries_for_operation(operation_id: &str, archive: &Path) -> CommandResult<Vec<String>> {
+    let seven_zip = external_binary("7zz")
+        .or_else(|| external_binary("7z"))
+        .ok_or_else(|| {
+            AppError::new(
+                "unsupported",
+                "errors.archiveProviderUnavailable",
+                Some(archive),
+                true,
+            )
+            .with_detail("provider", "7z")
+        })?;
+    let mut command = Command::new(seven_zip);
+    command.arg("l").arg("-slt").arg(archive);
+    let stdout = run_external_command_capture(operation_id, command, Some(archive))?;
+    Ok(super::archive::parse_7z_slt_paths(&stdout))
+}
+
+fn run_external_command(
+    operation_id: &str,
+    command: Command,
+    path: Option<&Path>,
+) -> CommandResult<()> {
+    run_external_command_capture(operation_id, command, path).map(|_| ())
+}
+
+fn run_external_command_capture(
+    operation_id: &str,
+    mut command: Command,
+    path: Option<&Path>,
+) -> CommandResult<Vec<u8>> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| map_io_error(error, path))?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let mut stdout_reader = stdout.map(|mut stdout| {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = stdout.read_to_end(&mut bytes);
+            bytes
+        })
+    });
+    let mut stderr_reader = stderr.map(|mut stderr| {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = stderr.read_to_end(&mut bytes);
+            bytes
+        })
+    });
+    let child_handle = Arc::new(Mutex::new(child));
+    register_external_process(operation_id, Arc::clone(&child_handle));
+
+    let status = loop {
+        if is_cancelled(operation_id) {
+            kill_external_child(&child_handle);
+        }
+        let status = match child_handle
+            .lock()
+            .expect("external process lock should not be poisoned")
+            .try_wait()
+        {
+            Ok(status) => status,
+            Err(error) => {
+                kill_external_child(&child_handle);
+                unregister_external_process(operation_id);
+                if let Some(reader) = stdout_reader.take() {
+                    let _ = reader.join();
+                }
+                if let Some(reader) = stderr_reader.take() {
+                    let _ = reader.join();
+                }
+                return Err(map_io_error(error, path));
+            }
+        };
+        if let Some(status) = status {
+            break status;
+        }
+        thread::sleep(Duration::from_millis(50));
+    };
+    unregister_external_process(operation_id);
+
+    let stdout = match stdout_reader.take() {
+        Some(reader) => reader.join().unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let stderr = match stderr_reader.take() {
+        Some(reader) => reader.join().unwrap_or_default(),
+        None => Vec::new(),
+    };
+
+    if is_cancelled(operation_id) {
+        return Err(AppError::new(
+            "operation_cancelled",
+            "errors.operationCancelled",
+            path,
+            true,
+        ));
+    }
+    if status.success() {
+        return Ok(stdout);
     }
     Err(AppError::new(
         "external_command_failed",
@@ -1161,14 +1371,13 @@ fn run_external_command(mut command: Command, path: Option<&Path>) -> CommandRes
     )
     .with_detail(
         "exitCode",
-        output
-            .status
+        status
             .code()
             .map_or_else(|| "signal".to_string(), |code| code.to_string()),
     )
     .with_detail(
         "stderr",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&stderr)
             .chars()
             .take(512)
             .collect::<String>(),
@@ -1215,6 +1424,49 @@ pub(super) fn archive_create_summary_for_test(
         format,
         password,
     )
+}
+
+#[cfg(test)]
+pub(super) fn external_archive_command_cancel_for_test() -> Option<(CommandResult<()>, Duration)> {
+    let sleep = external_binary("sleep")?;
+    let operation_id = next_operation_id(OperationKind::ArchiveCreate);
+    register_operation(&operation_id);
+    let worker_operation_id = operation_id.clone();
+    let worker = thread::spawn(move || {
+        let started_at = Instant::now();
+        let mut command = Command::new(sleep);
+        command.arg("10");
+        let result = run_external_command(&worker_operation_id, command, None);
+        (result, started_at.elapsed())
+    });
+    thread::sleep(Duration::from_millis(150));
+    let _ = cancel_operation(operation_id.clone());
+    let outcome = worker
+        .join()
+        .expect("external cancel test worker should finish");
+    finish_operation(&operation_id);
+    Some(outcome)
+}
+
+#[cfg(test)]
+pub(super) fn archive_entry_listing_cancel_for_test(
+    archive: PathBuf,
+) -> (CommandResult<Vec<String>>, Duration) {
+    let operation_id = next_operation_id(OperationKind::ArchiveExtract);
+    register_operation(&operation_id);
+    let worker_operation_id = operation_id.clone();
+    let worker = thread::spawn(move || {
+        let started_at = Instant::now();
+        let result = list_archive_entry_names_for_operation(&worker_operation_id, &archive);
+        (result, started_at.elapsed())
+    });
+    thread::sleep(Duration::from_millis(150));
+    let _ = cancel_operation(operation_id.clone());
+    let outcome = worker
+        .join()
+        .expect("archive listing cancel test worker should finish");
+    finish_operation(&operation_id);
+    outcome
 }
 
 fn copy_tree(
@@ -1624,6 +1876,9 @@ fn wait_for_conflict_decision(
         if is_cancelled(operation_id) {
             return ConflictDecision::Cancel;
         }
+        if !is_operation_registered(operation_id) {
+            return ConflictDecision::Cancel;
+        }
         let state = guard.entry(operation_id.to_string()).or_default();
         if let Some(decision) = state.apply_all_decision {
             return decision;
@@ -1680,6 +1935,7 @@ fn register_operation(operation_id: &str) {
 }
 
 fn finish_operation(operation_id: &str) {
+    unregister_external_process(operation_id);
     cancelled_registry()
         .lock()
         .expect("cancel registry lock should not be poisoned")
@@ -1700,6 +1956,17 @@ fn is_cancelled(operation_id: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn is_operation_registered(operation_id: &str) -> bool {
+    cancelled_registry()
+        .lock()
+        .expect("cancel registry lock should not be poisoned")
+        .contains_key(operation_id)
+}
+
+fn is_operation_cancelled_error(error: &AppError) -> bool {
+    error.code == "operation_cancelled"
+}
+
 fn should_cancel_for_test(operation_id: &str, stats: &OperationStats) -> bool {
     let should_cancel = stats
         .cancel_after_completed
@@ -1712,6 +1979,42 @@ fn should_cancel_for_test(operation_id: &str, stats: &OperationStats) -> bool {
 
 fn cancelled_registry() -> &'static Mutex<BTreeMap<String, bool>> {
     CANCELLED.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn external_process_registry() -> &'static Mutex<BTreeMap<String, Arc<Mutex<Child>>>> {
+    EXTERNAL_PROCESSES.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn register_external_process(operation_id: &str, child: Arc<Mutex<Child>>) {
+    external_process_registry()
+        .lock()
+        .expect("external process registry lock should not be poisoned")
+        .insert(operation_id.to_string(), child);
+}
+
+fn unregister_external_process(operation_id: &str) {
+    external_process_registry()
+        .lock()
+        .expect("external process registry lock should not be poisoned")
+        .remove(operation_id);
+}
+
+fn kill_registered_external_process(operation_id: &str) {
+    let child = external_process_registry()
+        .lock()
+        .expect("external process registry lock should not be poisoned")
+        .get(operation_id)
+        .cloned();
+    if let Some(child) = child {
+        kill_external_child(&child);
+    }
+}
+
+fn kill_external_child(child: &Arc<Mutex<Child>>) {
+    let _ = child
+        .lock()
+        .expect("external process lock should not be poisoned")
+        .kill();
 }
 
 fn summary_from_stats(

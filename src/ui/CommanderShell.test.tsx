@@ -16,7 +16,16 @@ import { commanderKeyboardOwners, useCommanderKeyboardOwner } from './keyboardOw
 
 afterEach(() => {
   vi.useRealTimers();
-  useOperationStore.getState().closeDialog();
+  useOperationStore.setState({
+    dialog: null,
+    progress: null,
+    conflictPrompt: null,
+    summary: null,
+    lastError: null,
+    lastConflictDecision: null,
+    applyAllConflictDecision: null,
+    activeOperationController: null,
+  });
   cleanup();
 });
 
@@ -24,11 +33,13 @@ const commanderElement = (
   dataSource: PanelDataSource = createFixturePanelDataSource(),
   mutationClient?: ComponentProps<typeof CommanderShell>['mutationClient'],
   operationClient?: ComponentProps<typeof CommanderShell>['operationClient'],
+  runtimeBackendAvailable = true,
 ) => (
   <CommanderShell
     dataSource={dataSource}
     mutationClient={mutationClient}
     operationClient={operationClient}
+    runtimeBackendAvailable={runtimeBackendAvailable}
     initialFocusIndex={INITIAL_FOCUS_INDEX}
     initialSelectedPaths={INITIAL_SELECTED_PATHS}
   />
@@ -38,7 +49,8 @@ const renderCommander = (
   dataSource: PanelDataSource = createFixturePanelDataSource(),
   mutationClient?: ComponentProps<typeof CommanderShell>['mutationClient'],
   operationClient?: ComponentProps<typeof CommanderShell>['operationClient'],
-) => render(commanderElement(dataSource, mutationClient, operationClient));
+  runtimeBackendAvailable = true,
+) => render(commanderElement(dataSource, mutationClient, operationClient, runtimeBackendAvailable));
 
 describe('CommanderShell', () => {
   it('renders a TUI-faithful dual-panel commander canvas', () => {
@@ -450,21 +462,120 @@ describe('CommanderShell', () => {
     expect(activePanelLabel(document.body)).toContain(pending[1].input.path);
   });
 
-  it('dispatches registry single-key shortcuts through operation dialogs', async () => {
+  it('dispatches the copy shortcut directly to the operation client without a preflight dialog', async () => {
     const user = userEvent.setup();
-    renderCommander();
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-shortcut', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('y');
 
-    expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
-    expect(screen.getByText('file.copy')).toBeTruthy();
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: expect.any(Array),
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+    expect(screen.queryByText('Copy to opposite panel')).toBeNull();
+    expect(screen.queryByLabelText('Operation status')).toBeNull();
+    expect(await screen.findByLabelText('Operation status', {}, { timeout: 1000 })).toBeTruthy();
+  });
+
+  it('disables real file mutation shortcuts in plain browser preview mode', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient, false);
+
+    expect(screen.getByText(/브라우저 미리보기 모드입니다/)).toBeTruthy();
+
+    await user.keyboard('y');
+    await user.keyboard('d');
+
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+    expect(operationClient.startDelete).not.toHaveBeenCalled();
+    expect(await screen.findByText(/현재 컨텍스트에서는 사용할 수 없습니다/)).toBeTruthy();
+  });
+
+  it('blocks file-operation shortcuts while another operation is in flight', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    useOperationStore.setState({
+      progress: {
+        operationId: 'op-busy',
+        kind: 'copy',
+        state: 'running',
+        totalFiles: 1,
+        completedFiles: 0,
+        totalBytes: null,
+        completedBytes: 0,
+        currentPath: SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right]?.path ?? null,
+        bytesPerSecond: null,
+        etaSeconds: null,
+        recentErrorCount: 0,
+      },
+    });
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+    await user.keyboard('y');
+
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+    expect(await screen.findByText(/현재 컨텍스트에서는 사용할 수 없습니다/)).toBeTruthy();
+  });
+
+  it('requires explicit confirmation before a move reaches the operation client', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-move-confirmed', kind: 'move' as const, state: 'queued' as const } })),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+    await user.keyboard('x');
+
+    expect(await screen.findByText('Move to opposite panel')).toBeTruthy();
+    expect(operationClient.startMove).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(operationClient.startMove).toHaveBeenCalledWith({
+      sources: expect.any(Array),
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
   });
 
   it('uses the focused row as the file-operation source when nothing is explicitly selected', async () => {
     const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-focused-copy', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
     render(
       <CommanderShell
         dataSource={createFixturePanelDataSource()}
+        operationClient={operationClient}
         initialFocusIndex={INITIAL_FOCUS_INDEX}
         initialSelectedPaths={{ left: [], right: [] }}
       />,
@@ -472,12 +583,165 @@ describe('CommanderShell', () => {
 
     await user.keyboard('y');
 
-    expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
-    const dialog = screen.getByText('Copy to opposite panel').closest('.operation-dialog');
-    if (!dialog) {
-      throw new Error('operation dialog is required');
-    }
-    expect(within(dialog as HTMLElement).getByText('generic-array-6de08afde610f112')).toBeTruthy();
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: [expect.stringContaining('generic-array-6de08afde610f112')],
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+    expect(screen.queryByText('Copy to opposite panel')).toBeNull();
+  });
+
+  it('uses the focused concrete row for delete and refreshes panels after the backend summary', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir');
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-trash-focused', kind: 'trash' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={dataSource}
+        operationClient={operationClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={{ left: [], right: [] }}
+      />,
+    );
+
+    await user.keyboard('d');
+    expect(await screen.findByText('Delete')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
+      targets: [expect.stringContaining('generic-array-6de08afde610f112')],
+      mode: 'trash',
+    }));
+
+    act(() => useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-trash-focused',
+      kind: 'trash',
+      state: 'completed',
+      completedFiles: 1,
+      failedFiles: 0,
+      errors: [],
+    }));
+
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'right',
+      path: SAMPLE_LISTINGS.right.path,
+    })));
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'left',
+      path: SAMPLE_LISTINGS.left.path,
+    })));
+  });
+
+  it('dismisses stale delete dialogs and refreshes the source panel when the backend reports not_found before start', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir');
+    const stalePath = SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right].path;
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(async () => ({
+        ok: false as const,
+        error: {
+          code: 'not_found',
+          messageKey: 'errors.notFound',
+          path: stalePath,
+          details: {},
+          recoverable: true,
+        },
+      })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={dataSource}
+        operationClient={operationClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={{ left: [], right: [] }}
+      />,
+    );
+
+    await user.keyboard('d');
+    expect(await screen.findByText('Delete')).toBeTruthy();
+    expect(screen.getByText('Delete target')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
+      targets: [stalePath],
+      mode: 'trash',
+    }));
+    await waitFor(() => expect(screen.queryByText('Delete')).toBeNull());
+    expect(screen.queryByText(/not_found: errors.notFound/)).toBeNull();
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'right',
+      path: SAMPLE_LISTINGS.right.path,
+    })));
+    expect(await screen.findByText(/Delete 대상이 이미 없습니다/)).toBeTruthy();
+  });
+
+  it('blocks delete on the virtual parent row before it reaches the operation client', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        operationClient={operationClient}
+        initialFocusIndex={{ left: 0, right: 0 }}
+        initialSelectedPaths={{ left: [], right: [] }}
+      />,
+    );
+
+    await user.keyboard('d');
+
+    expect(operationClient.startDelete).not.toHaveBeenCalled();
+    expect(screen.queryByText('Delete')).toBeNull();
+    expect(await screen.findByText(/현재 컨텍스트에서는 사용할 수 없습니다/)).toBeTruthy();
+  });
+
+  it('requires typed confirmation before permanent delete reaches the operation client', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-permanent-ui', kind: 'delete' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        operationClient={operationClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={{ left: [], right: [] }}
+      />,
+    );
+
+    await user.keyboard('{Shift>}d{/Shift}');
+    expect(await screen.findByText('Permanent Delete')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '영구 삭제 확인' })).toHaveProperty('disabled', true);
+
+    await user.type(screen.getByLabelText('영구 삭제 확인 문구(PERMANENT_DELETE)'), 'PERMANENT_DELETE');
+    await user.click(screen.getByRole('button', { name: '영구 삭제 확인' }));
+
+    await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
+      targets: [expect.stringContaining('generic-array-6de08afde610f112')],
+      mode: 'permanent',
+      confirmToken: 'PERMANENT_DELETE',
+    }));
   });
 
 
@@ -494,14 +758,15 @@ describe('CommanderShell', () => {
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('y');
-    expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '확인' }));
 
     await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
       sources: expect.any(Array),
       targetDir: SAMPLE_LISTINGS.left.path,
       policy: 'skip',
     }));
+    expect(screen.queryByText('Copy to opposite panel')).toBeNull();
+    expect(screen.queryByLabelText('Operation status')).toBeNull();
+    expect(await screen.findByLabelText('Operation status', {}, { timeout: 1000 })).toBeTruthy();
     expect(useOperationStore.getState().progress).toMatchObject({ operationId: 'op-copy-ui', kind: 'copy' });
   });
 
@@ -631,6 +896,199 @@ describe('CommanderShell', () => {
     expect(screen.getByText(/inside.txt/)).toBeTruthy();
   });
 
+  it('opens files through default app and configured external editor command paths', async () => {
+    const user = userEvent.setup();
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      loadSettings: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          schemaVersion: 1,
+          theme: 'dark' as const,
+          language: 'ko' as const,
+          sizeFormat: 'binary' as const,
+          external: { editorId: 'vim', shellCommand: { enabled: false } },
+          bookmarks: [],
+          layout: { singlePanel: false, ratio: '50:50' as const },
+          session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+          view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+        },
+      })),
+      openDefault: vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } })),
+      openExternalEditor: vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } })),
+    };
+    const { container } = renderCommander(createFixturePanelDataSource(), mutationClient);
+    await screen.findByText('Architecture.md');
+    await user.keyboard('{Tab}');
+    const fileRow = rowByText(container, 'Architecture.md');
+    if (!fileRow) {
+      throw new Error('file row is required');
+    }
+
+    await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
+    await user.click(fileRow);
+    await user.keyboard('o');
+    expect(await screen.findByText('Open with Default App')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+    await waitFor(() => expect(mutationClient.openDefault).toHaveBeenCalledWith({
+      path: expect.stringContaining('Architecture.md'),
+    }));
+    useOperationStore.getState().closeDialog();
+
+    await user.keyboard('e');
+    expect(await screen.findByText('Open Terminal Editor')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+    await waitFor(() => expect(mutationClient.openExternalEditor).toHaveBeenCalledWith({
+      path: expect.stringContaining('Architecture.md'),
+      editorId: 'vim',
+    }));
+  });
+
+  it('previews and then runs shell commands only after an enabled policy returns a confirm token', async () => {
+    const user = userEvent.setup();
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      loadSettings: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          schemaVersion: 1,
+          theme: 'dark' as const,
+          language: 'ko' as const,
+          sizeFormat: 'binary' as const,
+          external: { editorId: null, shellCommand: { enabled: true } },
+          bookmarks: [],
+          layout: { singlePanel: false, ratio: '50:50' as const },
+          session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+          view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+        },
+      })),
+      prepareShellCommand: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          confirmToken: 'confirm-shell-token',
+          expiresAt: '2026-06-17T23:00:00+09:00',
+          fingerprint: 'shell-fingerprint',
+          requiresConfirmation: true as const,
+          policy: { enabled: true, reasonKey: null },
+        },
+      })),
+      runShellCommand: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          exitCode: 0,
+          stdout: 'hello\n',
+          stderr: '',
+          timedOut: false,
+        },
+      })),
+    };
+    renderCommander(createFixturePanelDataSource(), mutationClient);
+
+    await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
+    await user.keyboard(':');
+    const input = await screen.findByLabelText('실행할 명령(command arg1 arg2)');
+    await user.type(input, 'echo hello');
+    await user.click(screen.getByRole('button', { name: 'Preview disabled' }));
+
+    await waitFor(() => expect(mutationClient.prepareShellCommand).toHaveBeenCalledWith({
+      workingDir: SAMPLE_LISTINGS.right.path,
+      command: 'echo',
+      args: ['hello'],
+    }));
+    expect(screen.getAllByText(/shell-fingerprint/).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: '확인 후 실행' }));
+    await waitFor(() => expect(mutationClient.runShellCommand).toHaveBeenCalledWith({
+      workingDir: SAMPLE_LISTINGS.right.path,
+      command: 'echo',
+      args: ['hello'],
+      confirmToken: 'confirm-shell-token',
+    }));
+    expect(screen.getByText(/hello/)).toBeTruthy();
+  });
+
+  it('starts archive creation through the connected operation client with the opposite panel target', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveCreate: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-create', kind: 'archiveCreate' as const, state: 'queued' as const } })),
+      archiveExtract: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+    await user.keyboard('zc');
+    expect(await screen.findByText('Create Archive')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(operationClient.archiveCreate).toHaveBeenCalledWith({
+      sources: [expect.stringContaining('generic-array-6de08afde610f112')],
+      targetArchive: expect.stringMatching(new RegExp(`^${SAMPLE_LISTINGS.left.path}/archive-\\d+\\.zip$`)),
+      format: 'zip',
+    }));
+  });
+
+  it('uses auto-extract to derive a target folder from the archive name and refresh panels', async () => {
+    const user = userEvent.setup();
+    const archiveEntry = SAMPLE_LISTINGS.left.entries.find((entry) => entry.name === 'release-bundle.zip');
+    if (!archiveEntry) {
+      throw new Error('archive fixture is required');
+    }
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir');
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveCreate: vi.fn(),
+      archiveExtract: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-extract-auto', kind: 'archiveExtract' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={dataSource}
+        operationClient={operationClient}
+        initialFocusIndex={{ left: 4, right: INITIAL_FOCUS_INDEX.right }}
+        initialSelectedPaths={{ left: [archiveEntry.path], right: [] }}
+      />,
+    );
+
+    await user.keyboard('{Tab}');
+    await user.keyboard('za');
+    expect(await screen.findByText('Extract Archive')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '확인' }));
+
+    await waitFor(() => expect(operationClient.archiveExtract).toHaveBeenCalledWith({
+      archivePath: expect.stringContaining('release-bundle.zip'),
+      targetDir: `${SAMPLE_LISTINGS.right.path}/release-bundle`,
+      policy: 'skip',
+    }));
+
+    act(() => useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-archive-extract-auto',
+      kind: 'archiveExtract',
+      state: 'completed',
+      completedFiles: 1,
+      failedFiles: 0,
+      errors: [],
+    }));
+
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'left',
+      path: SAMPLE_LISTINGS.left.path,
+    })));
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'right',
+      path: SAMPLE_LISTINGS.right.path,
+    })));
+  });
+
   it('persists bookmark/layout settings and opens registry-derived shortcut help', async () => {
     const user = userEvent.setup();
     const saveSettings = vi.fn(async ({ patch }: { patch: object }) => ({
@@ -643,7 +1101,8 @@ describe('CommanderShell', () => {
         external: { editorId: null, shellCommand: { enabled: false } },
         bookmarks: [],
         layout: { singlePanel: false, ratio: '50:50' as const },
-        view: { zoomStep: 0, density: 'compact' as const },
+        session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+        view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
         ...patch,
       },
     }));
@@ -657,15 +1116,91 @@ describe('CommanderShell', () => {
     }));
 
     await user.click(screen.getByRole('button', { name: 'View(V)' }));
-    await user.click(await screen.findByText('Single-Dual Panel'));
+    await user.click(await screen.findByText('Toggle Layout'));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
       patch: expect.objectContaining({ layout: expect.objectContaining({ singlePanel: true }) }),
     }));
 
+    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
+    await user.click(await screen.findByText('Toggle Icons'));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: expect.objectContaining({ view: expect.objectContaining({ showIcons: false }) }),
+    }));
+    expect(document.querySelector('.entry-icon')).toBeNull();
+
     await user.click(screen.getByRole('button', { name: 'Help(H)' }));
-    await user.click(await screen.findByText('Shortcuts'));
+    await user.click(await screen.findByText('Keyboard Help'));
     expect(await screen.findByText('Keyboard Shortcuts')).toBeTruthy();
     expect(screen.getByText('file.copy')).toBeTruthy();
+  });
+
+  it('uses an explicit Ctrl+Q/File Quit policy instead of a bare q shortcut', async () => {
+    const appController = { quit: vi.fn(async () => undefined) };
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        appController={appController}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ' })).toBe(true);
+    expect(appController.quit).not.toHaveBeenCalled();
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(false);
+    await waitFor(() => expect(appController.quit).toHaveBeenCalledOnce());
+  });
+
+  it('keeps browser preview Quit from calling the Tauri window API', async () => {
+    const appController = { quit: vi.fn(async () => undefined) };
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        appController={appController}
+        runtimeBackendAvailable={false}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(false);
+
+    expect(appController.quit).not.toHaveBeenCalled();
+    expect(await screen.findByText(/브라우저 미리보기에서는 앱 종료를 실행할 수 없습니다/)).toBeTruthy();
+  });
+
+  it('blocks Quit while a file operation is in flight', async () => {
+    const appController = { quit: vi.fn(async () => undefined) };
+    useOperationStore.setState({
+      progress: {
+        operationId: 'op-copy-active',
+        kind: 'copy',
+        state: 'running',
+        totalFiles: 2,
+        completedFiles: 1,
+        totalBytes: null,
+        completedBytes: 0,
+        currentPath: '/tmp/source.txt',
+        bytesPerSecond: null,
+        etaSeconds: null,
+        recentErrorCount: 0,
+      },
+    });
+
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        appController={appController}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(false);
+
+    expect(appController.quit).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Quit 차단/)).toBeTruthy();
   });
 
   it('starts panel-to-panel drag copy through the operation client', async () => {
@@ -685,8 +1220,6 @@ describe('CommanderShell', () => {
 
     fireEvent.dragStart(sourceRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
     fireEvent.drop(leftPanel, { dataTransfer: { files: [] } });
-    await waitFor(() => expect(screen.getByText('Copy to opposite panel')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '확인' }));
 
     await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
       sources: [expect.stringContaining('generic-array-7534a23a150ae5e7')],
@@ -717,8 +1250,6 @@ describe('CommanderShell', () => {
     const externalFile = new File(['hello'], 'incoming.txt', { type: 'text/plain', lastModified: 1_700_000_000_000 });
     Object.defineProperty(externalFile, 'path', { value: '/tmp/incoming.txt' });
     fireEvent.drop(leftPanel, { dataTransfer: { files: [externalFile] } });
-    await waitFor(() => expect(screen.getByText('Copy to opposite panel')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '확인' }));
 
     await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
       sources: ['/tmp/incoming.txt'],
@@ -770,9 +1301,70 @@ describe('CommanderShell', () => {
     expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-32');
   });
 
+  it('extends selection with shifted page and boundary movement keys', async () => {
+    const { container } = renderCommander();
+    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+
+    fireEvent.keyDown(document, { key: 'PageDown', shiftKey: true });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-21');
+    expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length).toBeGreaterThanOrEqual(11);
+
+    fireEvent.keyDown(document, { key: 'PageUp', shiftKey: true });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-9');
+    expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.keyDown(document, { key: 'End', shiftKey: true });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-32');
+    expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length).toBeGreaterThanOrEqual(10);
+
+    fireEvent.keyDown(document, { key: 'Home', shiftKey: true });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
+    expect(rowByText(container, '..')?.className).not.toContain('is-selected');
+  });
+
+  it('applies selection all, invert, and clear shortcuts without browser defaults', () => {
+    const { container } = renderCommander();
+
+    expect(fireEvent.keyDown(document, { key: 'a', code: 'KeyA', ctrlKey: true })).toBe(false);
+    const afterSelectAll = [...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length;
+    expect(afterSelectAll).toBeGreaterThan(20);
+    expect(rowByText(container, '..')?.className).not.toContain('is-selected');
+
+    expect(fireEvent.keyDown(document, { key: 'v', code: 'KeyV' })).toBe(false);
+    expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')]).toHaveLength(0);
+
+    expect(fireEvent.keyDown(document, { key: 'u', code: 'KeyU' })).toBe(false);
+    expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')]).toHaveLength(0);
+  });
+
+  it('uses h and l aliases for parent navigation and directory entry', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir');
+    renderCommander(dataSource);
+
+    await user.keyboard('l');
+    expect(await screen.findByText('README.md')).toBeTruthy();
+    expect(activePanelLabel(document.body)).toContain('generic-array-6de08afde610f112');
+
+    await user.keyboard('h');
+    await waitFor(() => expect(activePanelLabel(document.body)).toContain(SAMPLE_LISTINGS.right.path));
+    expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'right',
+      path: SAMPLE_LISTINGS.right.path,
+    }));
+  });
+
   it('opens path, location, tab, history, bookmark, help search, and about overlays', async () => {
     const user = userEvent.setup();
     renderCommander();
+
+    await user.keyboard('gp');
+    const pathInput = await screen.findByLabelText('Path');
+    await user.clear(pathInput);
+    await user.type(pathInput, '/tmp/navigation-target');
+    await user.click(screen.getByRole('button', { name: '이동' }));
+    expect(await screen.findByText('README.md')).toBeTruthy();
 
     await user.keyboard('gm');
     expect(await screen.findByRole('dialog', { name: 'Locations' })).toBeTruthy();
@@ -781,7 +1373,15 @@ describe('CommanderShell', () => {
     await user.keyboard('tn');
     await user.keyboard('tt');
     const tabDialog = await screen.findByRole('dialog', { name: 'RIGHT Tabs' });
-    expect(within(tabDialog).getAllByText(SAMPLE_LISTINGS.right.path)).toHaveLength(2);
+    expect(within(tabDialog).getByText(SAMPLE_LISTINGS.right.path)).toBeTruthy();
+    expect(within(tabDialog).getByText('/tmp/navigation-target')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+
+    await user.keyboard('tx');
+    await user.keyboard('tt');
+    const closedTabDialog = await screen.findByRole('dialog', { name: 'RIGHT Tabs' });
+    expect(within(closedTabDialog).getByText(SAMPLE_LISTINGS.right.path)).toBeTruthy();
+    expect(within(closedTabDialog).queryByText('/tmp/navigation-target')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('th');
@@ -894,8 +1494,8 @@ describe('CommanderShell', () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
 
-    await user.keyboard('y');
-    expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
+    await user.keyboard('a');
+    expect(await screen.findByText('Create Directory')).toBeTruthy();
 
     await user.keyboard('{Tab}');
 
@@ -906,8 +1506,8 @@ describe('CommanderShell', () => {
     const user = userEvent.setup();
     renderCommander();
 
-    await user.keyboard('y');
-    expect(await screen.findByText('Copy to opposite panel')).toBeTruthy();
+    await user.keyboard('a');
+    expect(await screen.findByText('Create Directory')).toBeTruthy();
     await waitFor(() => expect(commanderKeyboardOwners()).toContain('operation-dialog'));
 
     useOperationStore.getState().closeDialog();
@@ -1028,7 +1628,8 @@ describe('CommanderShell', () => {
         external: { editorId: null, shellCommand: { enabled: false } },
         bookmarks: [],
         layout: { singlePanel: false, ratio: '50:50' as const },
-        view: { zoomStep: patch.view?.zoomStep ?? 0, density: 'compact' as const },
+        session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+        view: { zoomStep: patch.view?.zoomStep ?? 0, density: 'compact' as const, showIcons: patch.view?.showIcons ?? true },
       },
     }));
     renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
@@ -1064,6 +1665,177 @@ describe('CommanderShell', () => {
 
     expect(await screen.findByText('README.md')).toBeTruthy();
     expect(activePanelLabel(document.body)).toContain('getrandom-24ce5e891f8ae242');
+  });
+
+
+  it('opens the focused row context menu from keyboard menu keys', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+
+    fireEvent.keyDown(document, { key: 'F10', shiftKey: true });
+    await user.click(await screen.findByRole('menuitem', { name: /Open/ }));
+
+    expect(await screen.findByText('README.md')).toBeTruthy();
+    expect(activePanelLabel(document.body)).toContain('generic-array-6de08afde610f112');
+  });
+
+  it('opens a blank-area context menu for panel-scope actions', async () => {
+    const user = userEvent.setup();
+    const createDir = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...SAMPLE_LISTINGS.right.entries[0], path: `${SAMPLE_LISTINGS.right.path}/New Folder`, name: 'New Folder', kind: 'directory' as const },
+    }));
+    const { container } = renderCommander(createFixturePanelDataSource(), { createDir, renameEntry: vi.fn() });
+    const blankArea = container.querySelector<HTMLElement>('.file-panel.is-active .file-table-scroll');
+
+    if (!blankArea) {
+      throw new Error('blank panel area is required');
+    }
+    fireEvent.contextMenu(blankArea);
+    expect(await screen.findByRole('menuitem', { name: /New Folder/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Refresh/ })).toBeTruthy();
+    await user.click(screen.getByRole('menuitem', { name: /New Folder/ }));
+
+    expect(await screen.findByText('Create Directory')).toBeTruthy();
+    expect(screen.getByLabelText('새 폴더 이름')).toBeTruthy();
+  });
+
+
+  it('applies direct Settings menu actions visibly and persists them', async () => {
+    const user = userEvent.setup();
+    const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
+      ok: true as const,
+      data: {
+        schemaVersion: 1,
+        theme: patch.theme ?? 'dark' as const,
+        language: patch.language ?? 'ko' as const,
+        sizeFormat: patch.sizeFormat ?? 'binary' as const,
+        external: patch.external ?? { editorId: null, shellCommand: { enabled: false } },
+        bookmarks: [],
+        layout: { singlePanel: false, ratio: '50:50' as const },
+        session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+        view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+      },
+    }));
+    renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+
+    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Theme/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /Light/ }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { theme: 'light' } }));
+    expect(shell.getAttribute('data-theme')).toBe('light');
+
+    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Language/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /English/ }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { language: 'en' } }));
+    expect(shell.getAttribute('data-language')).toBe('en');
+
+    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Default Editor/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /vim/ }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: { external: { editorId: 'vim', shellCommand: { enabled: false } } },
+    }));
+    expect(await screen.findByText('Default editor · vim')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /File Size Format/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /Bytes/ }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { sizeFormat: 'decimal' } }));
+    expect(shell.getAttribute('data-size-format')).toBe('decimal');
+    expect(screen.getByText('23100 B')).toBeTruthy();
+  });
+
+  it('restores saved session panel paths and persists later navigation paths', async () => {
+    const loadSettings = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        schemaVersion: 1,
+        theme: 'dark' as const,
+        language: 'ko' as const,
+        sizeFormat: 'binary' as const,
+        external: { editorId: null, shellCommand: { enabled: false } },
+        bookmarks: [],
+        layout: { singlePanel: false, ratio: '50:50' as const },
+        session: { leftPath: '/saved/left', rightPath: '/saved-right', activePanel: 'left' as const },
+        view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+      },
+    }));
+    const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
+      ok: true as const,
+      data: {
+        schemaVersion: 1,
+        theme: 'dark' as const,
+        language: 'ko' as const,
+        sizeFormat: 'binary' as const,
+        external: { editorId: null, shellCommand: { enabled: false } },
+        bookmarks: [],
+        layout: { singlePanel: false, ratio: '50:50' as const },
+        session: patch.session ?? { leftPath: '/saved/left', rightPath: '/saved-right', activePanel: 'left' as const },
+        view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+      },
+    }));
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: true,
+      initial: emptyListings('/boot-left', '/boot-right'),
+    });
+
+    render(<CommanderShell dataSource={dataSource} mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), loadSettings, saveSettings }} />);
+
+    await waitFor(() => expect(dataSource.listDir).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'left', path: '/saved/left' })));
+    expect(dataSource.listDir).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right', path: '/saved-right' }));
+    expect(dataSource.loadInitialListings).not.toHaveBeenCalled();
+    expect(await screen.findAllByText('child.txt')).toHaveLength(2);
+    expect(activePanelLabel(document.body)).toContain('left panel');
+
+    await userEvent.setup().keyboard('h');
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: expect.objectContaining({
+        session: expect.objectContaining({ activePanel: 'left', leftPath: '/saved' }),
+      }),
+    }));
+  });
+
+  it('reports settings save failures instead of pretending persistence succeeded', async () => {
+    const user = userEvent.setup();
+    const saveSettings = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'save_failed', messageKey: 'errors.settingsSaveFailed', path: null, details: {}, retryable: true, recoverable: true },
+    }));
+    renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+
+    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Theme/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /Light/ }));
+
+    expect(await screen.findByText('설정 저장 실패: errors.settingsSaveFailed')).toBeTruthy();
+  });
+
+  it('keeps browser preview settings local instead of invoking unavailable Tauri settings commands', async () => {
+    const loadSettings = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'io_error', messageKey: 'errors.tauriInvokeFailed', path: null, details: {}, retryable: true, recoverable: true },
+    }));
+    const saveSettings = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'io_error', messageKey: 'errors.tauriInvokeFailed', path: null, details: {}, retryable: true, recoverable: true },
+    }));
+    render(<CommanderShell
+      dataSource={createFixturePanelDataSource()}
+      mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), loadSettings, saveSettings }}
+      runtimeBackendAvailable={false}
+    />);
+
+    expect(await screen.findByText('브라우저 미리보기 모드입니다. 실제 복사/삭제/이동 같은 파일 작업은 Tauri 앱에서만 동작합니다. `npm run tauri:dev`로 실행하세요.')).toBeTruthy();
+    expect(loadSettings).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document, { key: '=', metaKey: true });
+
+    expect(await screen.findByText('Zoom · 110%')).toBeTruthy();
+    expect(saveSettings).not.toHaveBeenCalled();
+    expect(screen.queryByText(/설정 읽기 실패|설정 저장 실패/)).toBeNull();
   });
 
   it('loads initial listings through a mocked Tauri-backed provider', async () => {

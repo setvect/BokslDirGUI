@@ -46,8 +46,17 @@ describe('full-scope verification harness', () => {
       'layout.ratio50',
       'layout.ratio70Left',
       'layout.ratio70Right',
+      'app.quit',
       'archive.preview',
+      'archive.extractAuto',
+      'external.openDefault',
+      'external.openEditor',
       'external.runShellCommand',
+      'settings.editorVi',
+      'settings.editorVim',
+      'settings.editorNano',
+      'settings.editorEmacs',
+      'settings.toggleIcons',
       'help.search',
       'help.about',
     ] as const;
@@ -55,7 +64,7 @@ describe('full-scope verification harness', () => {
     for (const id of requiredIds) {
       expect(ACTION_BY_ID.has(id)).toBe(true);
     }
-    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Tools', 'Settings', 'Help']);
+    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Settings', 'Help']);
   });
 
   it('keeps the BokslDir TUI parity matrix as the hard gate for incomplete actions', () => {
@@ -70,10 +79,37 @@ describe('full-scope verification harness', () => {
     expect(parityMatrix.tuiActions).toHaveLength(64);
     expect(rowsById.get('open_menu')).toMatchObject({ implementationStatus: 'implemented', priority: 'P0' });
     expect(rowsById.get('open_menu')?.guiActionIds).toContain('menu.open');
-    expect(rowsById.get('copy')).toMatchObject({ implementationStatus: 'partial', priority: 'P0' });
-    expect(rowsById.get('move')).toMatchObject({ implementationStatus: 'partial', priority: 'P0' });
-    expect(rowsById.get('toggle_sel')).toMatchObject({ implementationStatus: 'partial', priority: 'P0' });
-    expect(rowsById.get('archive_extract_auto')).toMatchObject({ implementationStatus: 'missing' });
+    expect(rowsById.get('copy')).toMatchObject({ implementationStatus: 'implemented', priority: 'P0' });
+    expect(rowsById.get('copy')?.guiMenuPaths).toContainEqual(['Edit', 'Copy']);
+    expect(rowsById.get('move')).toMatchObject({ implementationStatus: 'implemented', priority: 'P0' });
+    expect(rowsById.get('move')?.guiMenuPaths).toContainEqual(['Edit', 'Move']);
+    expect(rowsById.get('delete')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('delete')?.guiMenuPaths).toContainEqual(['File', 'Delete']);
+    expect(rowsById.get('perm_delete')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('perm_delete')?.guiMenuPaths).toContainEqual(['File', 'Permanent Delete']);
+    expect(rowsById.get('file_info')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('file_info')?.guiMenuPaths).toContainEqual(['View', 'File Info']);
+    for (const id of ['move_up', 'move_down', 'go_parent', 'enter', 'page_up', 'page_down', 'toggle_sel'] as const) {
+      expect(rowsById.get(id)).toMatchObject({ implementationStatus: 'implemented', priority: 'P0' });
+    }
+    expect(rowsById.get('archive_compress')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('archive_extract')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('archive_extract_auto')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('archive_preview')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('archive_extract_auto')?.guiActionIds).toContain('archive.extractAuto');
+    expect(rowsById.get('open_default')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('open_default')?.guiMenuPaths).toContainEqual(['File', 'Open Default App']);
+    expect(rowsById.get('open_terminal_editor')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('open_terminal_editor')?.guiMenuPaths).toContainEqual(['File', 'Open Terminal Editor']);
+    expect(rowsById.get('run_shell_command')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('run_shell_command')?.guiMenuPaths).toContainEqual(['File', 'Run Shell Command']);
+    expect(rowsById.get('editor_preset_vi')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('editor_preset_vim')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('editor_preset_nano')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('editor_preset_emacs')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    for (const id of ['toggle_layout', 'tab_new', 'tab_close', 'help_keys', 'quit', 'toggle_icons', 'filter_start', 'filter_clear', 'mount_points', 'goto_path', 'tab_list', 'history_list', 'bookmark_add', 'bookmark_list', 'about'] as const) {
+      expect(rowsById.get(id)).toMatchObject({ implementationStatus: 'implemented' });
+    }
 
     for (const action of ACTIONS) {
       expect(mappedGuiIds.has(action.id) || guiOnlyExtensionIds.has(action.id)).toBe(true);
@@ -133,7 +169,7 @@ describe('full-scope verification harness', () => {
     expect(isActionAvailable(archivePreview, context)).toBe(false);
     expect(isActionAvailable(archivePreview, archiveContext)).toBe(true);
     expect(contextMenuActions(archiveEntry, archiveContext).map((action) => action.id)).toEqual(
-      expect.arrayContaining(['archive.preview', 'archive.list', 'archive.extract']),
+      expect.arrayContaining(['archive.preview', 'archive.list', 'archive.extract', 'archive.extractAuto']),
     );
   });
 });

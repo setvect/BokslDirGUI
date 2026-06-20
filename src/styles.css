@@ -286,7 +286,7 @@ button {
 .file-table-heading {
   height: calc(30px * var(--commander-scale));
   border-bottom: 1px solid #3a3a3a;
-  color: #515151;
+  color: #a8a8a8;
   font-weight: 700;
 }
 
@@ -339,9 +339,30 @@ button {
   right: 0;
   height: var(--row-height);
   border: 0;
-  color: var(--text);
+  color: #e7e7e7;
   outline: none;
   cursor: default;
+}
+
+.file-row .file-cell-size,
+.file-row .file-cell-modified,
+.file-row .file-cell-created,
+.file-row .file-cell-permissions,
+.file-row .file-cell-owner {
+  color: #b9c3cc;
+}
+
+.file-row.entry-row-kind-directory {
+  color: #7fd0ff;
+}
+
+.file-row.entry-row-kind-directory .file-cell-name {
+  color: #7fd0ff;
+}
+
+.file-row.entry-row-kind-file .file-cell-name,
+.file-row.entry-row-kind-unknown .file-cell-name {
+  color: #e7e7e7;
 }
 
 .file-row:hover {
@@ -349,7 +370,12 @@ button {
 }
 
 .file-row.is-focused {
-  background: #0b85d6;
+  background: #006fbd;
+  color: #fff;
+}
+
+.file-row.is-focused .file-cell,
+.file-row.is-selected .file-cell {
   color: #fff;
 }
 
@@ -386,10 +412,6 @@ button {
 .middle-ellipsis-end {
   flex: 0 0 auto;
   white-space: nowrap;
-}
-
-.entry-row-kind-directory {
-  color: var(--cyan);
 }
 
 .entry-row-kind-executable {
@@ -645,7 +667,7 @@ button {
 
 .dialog-overlay {
   position: fixed;
-  inset: 31px 0 56px;
+  inset: var(--top-menu-height) 0 calc(var(--status-height) + var(--hotkey-strip-height));
   z-index: 30;
   background: rgba(0, 0, 0, 0.38);
 }
@@ -713,7 +735,8 @@ button {
   background: #1a1a1a;
 }
 
-.operation-section h3 {
+.operation-section h3,
+.operation-section-title {
   margin: 0;
   color: #f1f1f1;
   font-size: 14px;
@@ -862,6 +885,72 @@ button {
   background: var(--blue);
 }
 
+
+.operation-status-surface {
+  position: fixed;
+  z-index: 24;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  background: rgba(22, 22, 22, 0.96);
+  color: var(--text);
+  padding: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
+}
+
+.operation-status-surface.is-progress {
+  top: 50%;
+  left: 50%;
+  width: min(620px, calc(100vw - 48px));
+  max-height: min(70vh, 520px);
+  transform: translate(-50%, -50%);
+  z-index: 42;
+}
+
+.operation-status-surface.is-attention {
+  top: 50%;
+  left: 50%;
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(70vh, 520px);
+  transform: translate(-50%, -50%);
+  z-index: 42;
+}
+
+.operation-status-surface .operation-section {
+  min-width: 0;
+  background: #181818;
+}
+
+.operation-progress-description {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.operation-progress-description,
+.operation-progress-detail {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.operation-progress-path {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  color: #d8d8d8;
+}
+
+.operation-status-surface.is-progress .dialog-button {
+  width: 100%;
+  max-width: 100%;
+}
+
 .operation-actions {
   display: flex;
   justify-content: flex-end;
@@ -909,4 +998,49 @@ button {
 .conflict-actions button:hover {
   border-color: var(--cyan);
   color: #fff;
+}
+
+.commander-shell[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-raised: #e9eef5;
+  --line: #b8c2cc;
+  --line-strong: #006cb8;
+  --text: #1d2733;
+  --muted: #5f6b7a;
+  --blue: #005ea8;
+  --blue-dim: #4a86b9;
+  --cyan: #0078c8;
+  --green: #247a36;
+  --danger: #b42318;
+}
+
+.commander-shell[data-theme="highContrast"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #050505;
+  --surface-raised: #111111;
+  --line: #f0f0f0;
+  --line-strong: #00ffff;
+  --text: #ffffff;
+  --muted: #d0d0d0;
+  --blue: #00b7ff;
+  --blue-dim: #80dbff;
+  --cyan: #00ffff;
+  --green: #00ff66;
+  --danger: #ff4040;
+}
+
+.runtime-warning {
+  position: absolute;
+  top: var(--top-menu-height);
+  right: 0;
+  left: 0;
+  z-index: 12;
+  border-bottom: 1px solid #6b4f00;
+  background: #2a2108;
+  color: #ffd166;
+  padding: 6px 10px;
+  font-size: calc(var(--commander-font-size) * 0.82);
 }

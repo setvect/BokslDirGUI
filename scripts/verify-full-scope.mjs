@@ -151,36 +151,123 @@ addCheck(
   'F9 menu may be implemented only when registry and shell keyboard state machine evidence exist',
 );
 addCheck(
-  'TUI parity matrix records copy/move menu mismatch and incomplete UX',
-  ['copy', 'move'].every((id) => {
-    const row = parityRowsById.get(id);
+  'TUI parity matrix records copy as implemented only with Edit menu and direct operation evidence',
+  (() => {
+    const row = parityRowsById.get('copy');
+    const source = read('src/ui/CommanderShell.tsx');
+    const store = read('src/operations/operationStore.ts');
     return row?.priority === 'P0'
-      && row.implementationStatus !== 'implemented'
+      && row.implementationStatus === 'implemented'
       && rowHasMenuPath(row, 'Edit')
-      && row.guiMenuPaths?.some((menuPath) => menuPath[0] === 'File');
+      && row.guiMenuPaths?.some((menuPath) => menuPath[0] === 'Edit')
+      && source.includes("if (actionId === 'file.copy')")
+      && source.includes('startLongRunningOperation(operationRequest)')
+      && store.includes('startLongRunningOperation');
+  })(),
+  'copy may be implemented only when it is on the TUI Edit menu and starts real operations without a preflight dialog',
+);
+addCheck(
+  'TUI parity matrix records move as implemented only with Edit menu and explicit confirmation evidence',
+  (() => {
+    const row = parityRowsById.get('move');
+    const source = read('src/ui/CommanderShell.tsx');
+    const tests = read('src/ui/CommanderShell.test.tsx');
+    return row?.priority === 'P0'
+      && row.implementationStatus === 'implemented'
+      && rowHasMenuPath(row, 'Edit')
+      && row.guiMenuPaths?.some((menuPath) => menuPath[0] === 'Edit')
+      && source.includes("if (actionId === 'file.copy')")
+      && source.includes('openOperationDialog(operationRequest)')
+      && tests.includes('requires explicit confirmation before a move reaches the operation client');
+  })(),
+  'move may be implemented only when it is on the TUI Edit menu and requires explicit confirmation before start_move',
+);
+addCheck(
+  'TUI parity matrix records movement and selection rows as implemented only with keyboard evidence',
+  ['move_up', 'move_down', 'go_parent', 'enter', 'page_up', 'page_down', 'toggle_sel', 'select_all', 'invert_selection', 'deselect'].every((id) => {
+    const row = parityRowsById.get(id);
+    return row?.implementationStatus === 'implemented'
+      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'));
+  })
+    && read('src/ui/CommanderShell.test.tsx').includes('extends selection with shifted page and boundary movement keys')
+    && read('src/ui/CommanderShell.test.tsx').includes('applies selection all, invert, and clear shortcuts'),
+  'movement/selection rows may be implemented only after keyboard/default-suppression tests exist',
+);
+addCheck(
+  'TUI parity matrix records settings and direct sort rows as implemented only with direct action evidence',
+  ['theme_dark', 'theme_light', 'theme_contrast', 'language_en', 'language_ko', 'size_auto', 'size_bytes', 'sort_asc', 'sort_desc'].every((id) => {
+    const row = parityRowsById.get(id);
+    return row?.implementationStatus === 'implemented'
+      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'))
+      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
   }),
-  'copy/move currently differ from TUI Edit menu and need G003 UX repair',
+  'settings/theme/language/size and direct sort rows require direct menu actions plus runtime tests before completion',
 );
 addCheck(
-  'TUI parity matrix records selection reliability as incomplete P0',
-  parityRowsById.get('toggle_sel')?.priority === 'P0'
-    && parityRowsById.get('toggle_sel')?.implementationStatus !== 'implemented'
-    && parityRowsById.get('toggle_sel')?.tuiKeyboardBindings?.includes('Space'),
-  'Space selection must not be falsely marked complete before G004',
+  'TUI parity matrix records safe mutation rows as implemented only with confirmation and backend evidence',
+  ['delete', 'perm_delete', 'file_info'].every((id) => {
+    const row = parityRowsById.get(id);
+    return row?.implementationStatus === 'implemented'
+      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'))
+      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+  })
+    && parityRowsById.get('delete')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Delete')
+    && parityRowsById.get('perm_delete')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Permanent Delete')
+    && parityRowsById.get('file_info')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'View > File Info')
+    && read('src/ui/CommanderShell.test.tsx').includes('uses the focused concrete row for delete')
+    && read('src/ui/CommanderShell.test.tsx').includes('blocks delete on the virtual parent row')
+    && read('src/ui/CommanderShell.test.tsx').includes('requires typed confirmation before permanent delete'),
+  'delete/permanent delete/file info require TUI menu paths, effective target fallback, virtual exclusion, confirmation, and metadata tests',
 );
 addCheck(
-  'TUI parity matrix records settings direct-submenu parity as incomplete',
-  ['theme_dark', 'theme_light', 'theme_contrast', 'language_en', 'language_ko', 'size_auto', 'size_bytes'].every(
-    (id) => parityRowsById.get(id)?.implementationStatus !== 'implemented',
-  ),
-  'theme/language/size format require direct visible behavior before completion',
+  'TUI parity matrix records no known missing TUI actions after parity completion stories',
+  parityRows.every((row) => row.implementationStatus !== 'missing'),
+  parityRows.filter((row) => row.implementationStatus === 'missing').map((row) => row.tuiId).join(', ') || 'ok',
 );
 addCheck(
-  'TUI parity matrix records known missing TUI actions',
-  ['archive_extract_auto', 'quit', 'toggle_icons', 'editor_preset_vi', 'editor_preset_vim', 'editor_preset_nano', 'editor_preset_emacs'].every(
-    (id) => parityRowsById.get(id)?.implementationStatus === 'missing',
-  ),
-  'missing TUI parity must stay visible until implemented',
+  'TUI parity matrix records external/editor/shell rows as implemented only with runtime and menu evidence',
+  ['open_default', 'open_terminal_editor', 'run_shell_command', 'editor_preset_vi', 'editor_preset_vim', 'editor_preset_nano', 'editor_preset_emacs'].every((id) => {
+    const row = parityRowsById.get(id);
+    return row?.implementationStatus === 'implemented'
+      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx') || item.includes('registry.test.ts'))
+      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+  })
+    && parityRowsById.get('open_default')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Open Default App')
+    && parityRowsById.get('open_terminal_editor')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Open Terminal Editor')
+    && parityRowsById.get('run_shell_command')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Run Shell Command')
+    && read('src/ui/CommanderShell.tsx').includes('settings.external.editorId')
+    && read('src/ui/CommanderShell.test.tsx').includes('opens files through default app and configured external editor command paths')
+    && read('src/ui/CommanderShell.test.tsx').includes('previews and then runs shell commands only after an enabled policy returns a confirm token'),
+  'external open/editor/shell rows require File menu parity, persisted editor preset, shell preview/confirm/run, and tests',
+);
+addCheck(
+  'TUI parity matrix records archive rows as implemented only with auto-extract and backend evidence',
+  ['archive_compress', 'archive_extract', 'archive_extract_auto', 'archive_preview'].every((id) => {
+    const row = parityRowsById.get(id);
+    return row?.implementationStatus === 'implemented'
+      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'))
+      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+  })
+    && registry.includes("id: 'archive.extractAuto'")
+    && read('src/ui/CommanderShell.tsx').includes('archiveAutoExtractFolderName')
+    && read('src/ui/CommanderShell.test.tsx').includes('uses auto-extract to derive a target folder')
+    && read('src-tauri/src/operation.rs').includes('archive_entry_is_unsafe'),
+  'archive rows require create/extract/auto/preview action mappings, target derivation, UI tests, and Rust unsafe-path defense',
+);
+addCheck(
+  'TUI parity matrix records remaining navigation/view/help rows as implemented only with user-scenario evidence',
+  ['toggle_layout', 'tab_new', 'tab_close', 'help_keys', 'quit', 'toggle_icons', 'filter_start', 'filter_clear', 'mount_points', 'goto_path', 'tab_list', 'history_list', 'bookmark_add', 'bookmark_list', 'about'].every((id) => {
+    const row = parityRowsById.get(id);
+    return row?.implementationStatus === 'implemented'
+      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx') || item.includes('registry.test.ts'))
+      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+  })
+    && registry.includes("id: 'app.quit'")
+    && registry.includes("id: 'settings.toggleIcons'")
+    && read('src/ui/CommanderShell.test.tsx').includes('uses an explicit Ctrl+Q/File Quit policy')
+    && read('src/ui/CommanderShell.test.tsx').includes('opens path, location, tab, history, bookmark, help search, and about overlays')
+    && read('src/ui/CommanderShell.test.tsx').includes('applies typed filters and preserves them through refresh until clear'),
+  'remaining rows require real overlay/settings/menu/quit/filter tests before implemented status',
 );
 const matrixMappedGuiIds = new Set(
   parityRows.flatMap((row) => row.guiActionIds ?? []).filter((id) => !id.startsWith('__ui_motion.')),
@@ -220,9 +307,11 @@ const requiredActionIds = [
   'file.mkdir',
   'file.rename',
   'file.properties',
+  'app.quit',
   'archive.preview',
   'archive.create',
   'archive.extract',
+  'archive.extractAuto',
   'external.openDefault',
   'external.reveal',
   'external.openEditor',
@@ -243,9 +332,18 @@ const requiredActionIds = [
   'bookmark.list',
   'bookmark.rename',
   'bookmark.delete',
-  'settings.theme',
-  'settings.language',
-  'settings.sizeFormat',
+  'settings.themeDark',
+  'settings.themeLight',
+  'settings.themeHighContrast',
+  'settings.languageEn',
+  'settings.languageKo',
+  'settings.editorVi',
+  'settings.editorVim',
+  'settings.editorNano',
+  'settings.editorEmacs',
+  'settings.toggleIcons',
+  'settings.sizeAuto',
+  'settings.sizeBytes',
   'layout.ratio50',
   'layout.ratio70Left',
   'layout.ratio70Right',
@@ -346,6 +444,7 @@ for (const token of ['COMMANDER_SHORTCUTS_DISABLED_SELECTOR', 'commanderShortcut
 }
 
 const operationStore = read('src/operations/operationStore.ts');
+const operationStoreTest = read('src/operations/operationStore.test.ts');
 for (const dialogKind of ['copy', 'move', 'trash', 'deletePermanent', 'rename', 'createDir', 'archiveCreate', 'archiveExtract', 'externalEditor', 'shellCommand']) {
   addCheck(`operation dialog supports ${dialogKind}`, operationStore.includes(`'${dialogKind}'`), 'G005 dialog shell coverage');
 }
@@ -356,8 +455,13 @@ addCheck('operation store separates long-running operation execution mode', oper
 addCheck('operation store validates safe mutation names', operationStore.includes('validateDialogInput') && operationStore.includes('errors.invalidName'), 'create_dir/rename_entry dialog names must be validated before Rust command execution');
 addCheck('operation store exposes atomic executor seam', operationStore.includes('AtomicCommandExecutor') && operationStore.includes('onAtomicSuccess'), 'Connected atomic commands must use request/response execution, not progress stubs');
 addCheck('operation store exposes long-running executor seam', operationStore.includes('LongRunningOperationExecutor') && operationStore.includes('applyOperationProgress') && operationStore.includes('applyOperationSummary'), 'copy/move/delete/trash must consume backend operation events instead of preview-only stubs');
+addCheck('operation store preserves active controller when dismissing long-running dialog', operationStore.includes('closeDialog: () => set((current) =>') && operationStore.includes('if (isOperationInFlight(current))'), 'closing a confirmed long-running dialog must not detach summary refresh/cancel/conflict callbacks');
 addCheck('operation store guards duplicate atomic submissions', operationStore.includes('atomicPending') && operationStore.includes('if (dialog.atomicPending)'), 'create_dir/rename_entry dialogs must not submit duplicate filesystem requests while pending');
-addCheck('operation store guards duplicate long-running submissions', operationStore.includes('operationPending') && operationStore.includes('if (dialog.operationPending)'), 'long-running operation dialogs must not submit duplicate filesystem requests while pending');
+addCheck('operation store guards duplicate long-running submissions', operationStore.includes('operationPending') && operationStore.includes('isOperationInFlight(get())'), 'long-running operation dialogs must not submit duplicate or concurrent filesystem requests while pending');
+addCheck('operation store defers pending-start cancellation until real operation id', operationStore.includes('cancelRequestedBeforeStart') && operationStoreTest.includes('defers pending-start cancellation until the real backend operation id is known') && operationStoreTest.includes('defers confirmed-dialog pending-start cancellation until the real backend operation id is known'), 'pending synthetic operation ids must not be sent to backend cancel or detach the active controller');
+addCheck('operation store accepts real events while direct start uses pending alias', operationStore.includes('isPendingAliasForUnboundController') && operationStoreTest.includes('accepts real backend progress and summary while direct copy is still bound to a pending id'), 'fast backend events must not be dropped while frontend start promise still has a synthetic pending id');
+addCheck('operation store preserves controller across atomic dialogs', operationStoreTest.includes('preserves an active operation controller when opening an atomic dialog'), 'opening properties/info dialogs during active operations must not detach summary/cancel/conflict callbacks');
+addCheck('operation store dismisses terminal status surface', operationStore.includes('isTerminalState(current.progress.state) ? null : current.progress') && operationStoreTest.includes('clears terminal progress when dismissing the operation summary'), 'summary dismiss must clear terminal progress so the non-modal status surface can close');
 for (const conflictState of ['lastConflictDecision', 'applyAllConflictDecision', 'allOverwrite', 'allSkip']) {
   addCheck(`operation conflict model includes ${conflictState}`, operationStore.includes(conflictState), 'Conflict apply-all decisions are explicit');
 }
@@ -383,6 +487,27 @@ addCheck('rust trash does not fall back to permanent delete', rustBackend.includ
 addCheck('rust archive commands use safe external provider boundary', rustBackend.includes('archive_entry_is_unsafe') && rustBackend.includes('common_source_parent') && rustBackend.includes('errors.archiveProviderUnavailable'), 'archive create/extract/list must avoid unsafe paths and absolute source entries');
 addCheck('rust shell command is gated by settings and one-shot token', rustBackend.includes('ShellCommandPolicy') && rustBackend.includes('consume_token') && rustBackend.includes('used = true'), 'shell command must stay disabled by default and require a confirm token');
 addCheck('rust settings persist bookmarks and layout', rustBackend.includes('BOKSLDIRGUI_SETTINGS_PATH') && rustBackend.includes('validate_settings') && rustBackend.includes('layout.ratio'), 'settings must persist bookmark/layout GUI state safely');
+
+const tauriDefaultCapability = JSON.parse(read('src-tauri/capabilities/default.json'));
+const tauriDefaultPermissions = new Set(tauriDefaultCapability.permissions ?? []);
+addCheck(
+  'tauri default capability is bound to main window',
+  tauriDefaultCapability.identifier === 'default'
+    && Array.isArray(tauriDefaultCapability.windows)
+    && tauriDefaultCapability.windows.includes('main'),
+  'src-tauri/capabilities/default.json',
+);
+addCheck(
+  'tauri default capability grants operation event listen/unlisten',
+  tauriDefaultPermissions.has('core:event:default')
+    || (tauriDefaultPermissions.has('core:event:allow-listen') && tauriDefaultPermissions.has('core:event:allow-unlisten')),
+  'operation_progress/operation_summary listeners require Tauri event ACL permissions',
+);
+addCheck(
+  'tauri default capability grants app quit window close',
+  tauriDefaultPermissions.has('core:window:default') || tauriDefaultPermissions.has('core:window:allow-close'),
+  'app.quit uses getCurrentWindow().close() and requires the Tauri window close ACL permission',
+);
 
 const tauriConf = JSON.parse(read('src-tauri/tauri.conf.json'));
 addCheck(

@@ -66,7 +66,7 @@
 
 - 우클릭 컨텍스트 메뉴는 row/blank/selection scope별 항목이 다르다.
 - 메뉴/단축키/컨텍스트 메뉴가 같은 action 결과를 낸다.
-- `view.sortName`/`view.sortSize`/`view.sortDate`/`view.sortExt`/`view.reverseSort`, `filter.start`/`filter.clear`, `view.toggleHidden`, `selection.invert`/`selection.clear`, `layout.toggleSingleDual`, `history.list`, `bookmark.add`/`bookmark.list`, `settings.theme`/`settings.language`/`settings.sizeFormat`, `archive.preview`, `help.search`/`help.about` action이 registry에 존재하고 UI에서 같은 enablement를 사용한다.
+- `view.sortName`/`view.sortSize`/`view.sortDate`/`view.sortExt`/`view.reverseSort`, `filter.start`/`filter.clear`, `view.toggleHidden`, `selection.invert`/`selection.clear`, `layout.toggleSingleDual`, `history.list`, `bookmark.add`/`bookmark.list`, `settings.themeDark`/`settings.themeLight`/`settings.themeHighContrast`, `settings.languageEn`/`settings.languageKo`, `settings.sizeAuto`/`settings.sizeBytes`, `archive.preview`, `help.search`/`help.about` action이 registry에 존재하고 UI에서 같은 enablement를 사용한다.
 - Space는 focused concrete row 선택을 토글한 뒤 다음 row로 이동하고, `..` virtual row에서는 선택하지 않고 아래 row로 이동한다.
 - 명시 선택이 없는 파일 작업은 focused concrete row를 effective source로 사용하며, registry enablement와 operation dialog source 목록이 같은 대상을 보여야 한다.
 - path/refresh/back/up 같은 non-modal control 클릭 뒤에는 shell이 keyboard owner를 되찾아 다음 Space/화살표 입력이 commander 동작으로 처리되어야 한다.
