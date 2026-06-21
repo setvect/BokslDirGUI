@@ -35,20 +35,15 @@ export type DialogExecutionMode = 'atomicCommand' | 'longRunningOperation' | 'un
 export interface OperationDialogDraft {
   dialogKind: DialogKind;
   executionMode: DialogExecutionMode;
-  title: string;
-  description: string;
   panelId: PanelId;
   sources: FileEntry[];
   targetDir: string | null;
   dangerLevel: DangerLevel;
   defaultDecision: ConflictDecision;
-  primaryLabel: string;
-  cancelLabel: string;
   backendExecutionStubbed: boolean;
   backendExecutionStubReasonKey: string | null;
   shellPreview: ShellCommandPreview | null;
   atomicResult: unknown | null;
-  inputLabel: string | null;
   inputValue: string;
   requiredConfirmationPhrase: string | null;
   validationErrorKey: string | null;
@@ -271,6 +266,12 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         ...dialog,
         inputValue: value,
         validationErrorKey: validateDialogInput(dialog.dialogKind, value, dialog.requiredConfirmationPhrase),
+        ...(dialog.dialogKind === 'shellCommand'
+          ? {
+              shellPreview: disabledShellPreview(dialog.targetDir ?? ''),
+              atomicResult: null,
+            }
+          : null),
       },
       lastError: null,
     });
@@ -333,7 +334,6 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
                 atomicPending: false,
                 shellPreview: shellPreviewResult,
                 atomicResult: shellPreviewResult,
-                primaryLabel: shellPreviewResult.policy.enabled ? '확인 후 실행' : '실행 확인',
               }
             : null,
           progress: isOperationInFlight(current) ? current.progress : null,
@@ -449,14 +449,12 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
               etaSeconds: null,
               recentErrorCount: 0,
             },
-          dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
+          dialog: null,
         }));
         return;
       }
       get().applyOperationStarted(result.data);
-      set((current) => ({
-        dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
-      }));
+      set({ dialog: null });
       return;
     }
 
@@ -728,7 +726,6 @@ export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
 };
 
 const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): OperationDialogDraft => {
-  const title = titleForDialog(dialogKind);
   const isPermanentDelete = dialogKind === 'deletePermanent';
   const isShell = dialogKind === 'shellCommand';
   const backendExecutionStubbed = isBackendExecutionStubbed(dialogKind, request);
@@ -737,22 +734,17 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
   return {
     dialogKind,
     executionMode: dialogExecutionModeForDialog(dialogKind),
-    title,
-    description: descriptionForDialog(dialogKind, request),
     panelId: request.panelId,
     sources: request.sources,
     targetDir: targetForDialog(dialogKind, request),
     dangerLevel: request.action.dangerLevel,
     defaultDecision: isPermanentDelete ? 'cancel' : 'skip',
-    primaryLabel: isPermanentDelete ? '영구 삭제 확인' : isShell ? '실행 확인' : '확인',
-    cancelLabel: '취소',
     backendExecutionStubbed,
     backendExecutionStubReasonKey: backendExecutionStubbed
       ? 'operations.backendExecution.stubbedUntilCommandWiring'
       : null,
     shellPreview: isShell ? disabledShellPreview(request.workingDir) : null,
     atomicResult: null,
-    inputLabel: inputLabelForDialog(dialogKind),
     inputValue,
     requiredConfirmationPhrase,
     validationErrorKey: validateDialogInput(dialogKind, inputValue, requiredConfirmationPhrase),
@@ -776,58 +768,6 @@ const targetForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => 
     return request.workingDir;
   }
   return request.sources[0]?.path ?? request.workingDir;
-};
-
-const titleForDialog = (dialogKind: DialogKind) => {
-  const titles: Record<DialogKind, string> = {
-    copy: '복사',
-    move: '이동',
-    trash: '휴지통으로 이동',
-    deletePermanent: '영구 삭제',
-    rename: '이름 변경',
-    createDir: '새 폴더',
-    properties: '파일 정보',
-    archivePreview: '압축 파일 보기',
-    archiveCreate: '압축 생성',
-    archiveExtract: '압축 해제',
-    externalOpenDefault: '기본 앱으로 열기',
-    externalReveal: '파일 위치 열기',
-    externalEditor: '터미널 편집기로 열기',
-    shellCommand: '쉘 명령 실행',
-  };
-  return titles[dialogKind];
-};
-
-const descriptionForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
-  const count = request.sources.length;
-  switch (dialogKind) {
-    case 'copy':
-      return `${count}개 항목을 반대 패널로 복사합니다.`;
-    case 'move':
-      return `${count}개 항목을 반대 패널로 이동합니다.`;
-    case 'trash':
-      return `${count}개 항목을 휴지통으로 보내기 전에 확인합니다. 자동 영구 삭제 전환은 금지됩니다.`;
-    case 'deletePermanent':
-      return `${count}개 항목을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.`;
-    case 'rename':
-      return '선택한 항목의 새 이름을 입력합니다.';
-    case 'createDir':
-      return '현재 폴더에 만들 새 폴더 이름을 입력합니다.';
-    case 'archivePreview':
-      return '압축 파일 안의 항목을 미리 확인합니다.';
-    case 'archiveCreate':
-      return `${count}개 항목을 압축 파일로 만듭니다.`;
-    case 'archiveExtract':
-      return '압축 파일을 대상 폴더에 풉니다.';
-    case 'externalOpenDefault':
-    case 'externalReveal':
-    case 'externalEditor':
-      return '선택한 항목을 외부 앱으로 엽니다.';
-    case 'shellCommand':
-      return '현재 폴더에서 실행할 명령을 확인합니다. 설정에서 허용된 경우에만 실행됩니다.';
-    case 'properties':
-      return '선택한 항목의 정보를 확인합니다.';
-  }
 };
 
 type LongRunningDialogKind =
@@ -898,25 +838,6 @@ const isBackendExecutionStubbed = (dialogKind: DialogKind, request: OpenDialogRe
     return !request.atomicExecutor;
   }
   return dialogExecutionModeForDialog(dialogKind) === 'atomicCommand' && !request.atomicExecutor;
-};
-
-const inputLabelForDialog = (dialogKind: DialogKind) => {
-  if (dialogKind === 'createDir') {
-    return '새 폴더 이름';
-  }
-  if (dialogKind === 'rename') {
-    return '새 이름';
-  }
-  if (dialogKind === 'deletePermanent') {
-    return '영구 삭제 확인 문구';
-  }
-  if (dialogKind === 'archiveCreate') {
-    return '압축 파일 이름(.zip 또는 .7z)';
-  }
-  if (dialogKind === 'shellCommand') {
-    return '실행할 명령';
-  }
-  return null;
 };
 
 const initialInputValueForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {

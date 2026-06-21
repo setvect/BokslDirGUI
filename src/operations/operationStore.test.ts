@@ -287,6 +287,7 @@ describe('operation store', () => {
     await useOperationStore.getState().confirmDialog();
 
     expect(longRunningExecutor).toHaveBeenCalledOnce();
+    expect(useOperationStore.getState().dialog).toBeNull();
     expect(useOperationStore.getState().progress).toMatchObject({
       operationId: 'op-copy-1',
       kind: 'copy',
@@ -531,6 +532,7 @@ describe('operation store', () => {
       kind: 'move',
       state: 'cancelling',
     });
+    expect(useOperationStore.getState().dialog).toBeNull();
     expect(useOperationStore.getState().activeOperationController?.operationId).toBe('op-move-real');
   });
 
@@ -599,7 +601,7 @@ describe('operation store', () => {
     expect(useOperationStore.getState().operationHistory).toHaveLength(0);
   });
 
-  it('keeps an active operation controller after closing a confirmed long-running dialog', async () => {
+  it('keeps an active operation controller after a confirmed long-running dialog closes', async () => {
     const action = ACTION_BY_ID.get('file.move');
     if (!action) {
       throw new Error('file.move action is required');
@@ -619,7 +621,6 @@ describe('operation store', () => {
     });
 
     await useOperationStore.getState().confirmDialog();
-    useOperationStore.getState().closeDialog();
 
     expect(useOperationStore.getState().dialog).toBeNull();
     expect(useOperationStore.getState().activeOperationController?.operationId).toBe('op-move-dialog');

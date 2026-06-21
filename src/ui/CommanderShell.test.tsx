@@ -291,12 +291,16 @@ describe('CommanderShell', () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();
     const listDirSpy = vi.spyOn(dataSource, 'listDir');
-    renderCommander(dataSource);
+    const { container } = renderCommander(dataSource);
 
     await user.keyboard('{Enter}');
 
     expect(await screen.findByText('README.md')).toBeTruthy();
     expect(activePanelLabel(document.body)).toContain('generic-array-6de08afde610f112');
+    await waitFor(() => expect(focusedRowText(container)).toContain('README.md'));
+    expect(
+      screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant'),
+    ).toBe('commander-row-right-1');
     expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
       panelId: 'right',
       path: SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right].path,
@@ -411,7 +415,7 @@ describe('CommanderShell', () => {
     await user.keyboard('/');
     const input = await screen.findByLabelText('Filter pattern');
     await user.type(input, 'generic');
-    await user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await user.click(screen.getByRole('button', { name: '필터 적용' }));
 
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({ filter: 'generic' })));
     expect(screen.getAllByText('Filter: generic').length).toBeGreaterThanOrEqual(1);
@@ -422,7 +426,7 @@ describe('CommanderShell', () => {
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({ filter: 'generic' })));
 
     await user.keyboard('/');
-    await user.click(await screen.findByRole('button', { name: 'Clear filter' }));
+    await user.click(await screen.findByRole('button', { name: '필터 해제' }));
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({ filter: null })));
     expect(screen.queryByText('Filter: generic')).toBeNull();
   });
@@ -441,7 +445,7 @@ describe('CommanderShell', () => {
 
     await user.keyboard('/');
     await user.type(await screen.findByLabelText('Filter pattern'), 'generic');
-    await user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await user.click(screen.getByRole('button', { name: '필터 적용' }));
 
     await waitFor(() => expect(pending).toHaveLength(1));
     expect(screen.getAllByText('Filter: generic').length).toBeGreaterThanOrEqual(1);
@@ -605,10 +609,10 @@ describe('CommanderShell', () => {
 
     await user.keyboard('x');
 
-    expect(await screen.findByText('이동')).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: '이동' })).toBeTruthy();
     expect(operationClient.startMove).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    await user.click(screen.getByRole('button', { name: '이동' }));
 
     await waitFor(() => expect(operationClient.startMove).toHaveBeenCalledWith({
       sources: expect.any(Array),
@@ -645,6 +649,46 @@ describe('CommanderShell', () => {
     expect(screen.queryByText('Copy to opposite panel')).toBeNull();
   });
 
+  it('refreshes both panels when a partially completed copy is cancelled', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir');
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-cancelled', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(dataSource, undefined, operationClient);
+
+    await user.keyboard('y');
+
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: [expect.stringContaining('generic-array-6de08afde610f112')],
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+
+    act(() => useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-copy-cancelled',
+      kind: 'copy',
+      state: 'cancelled',
+      completedFiles: 1,
+      failedFiles: 0,
+      errors: [],
+    }));
+
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'left',
+      path: SAMPLE_LISTINGS.left.path,
+    })));
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'right',
+      path: SAMPLE_LISTINGS.right.path,
+    })));
+  });
+
   it('uses the focused concrete row for delete and refreshes panels after the backend summary', async () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();
@@ -666,8 +710,8 @@ describe('CommanderShell', () => {
     );
 
     await user.keyboard('d');
-    expect(await screen.findByText('휴지통으로 이동')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    expect(await screen.findByRole('dialog', { name: '휴지통으로 이동' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '휴지통으로 이동' }));
 
     await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
       targets: [expect.stringContaining('generic-array-6de08afde610f112')],
@@ -724,15 +768,15 @@ describe('CommanderShell', () => {
     );
 
     await user.keyboard('d');
-    expect(await screen.findByText('휴지통으로 이동')).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: '휴지통으로 이동' })).toBeTruthy();
     expect(screen.getAllByText(stalePath).length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    await user.click(screen.getByRole('button', { name: '휴지통으로 이동' }));
 
     await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
       targets: [stalePath],
       mode: 'trash',
     }));
-    await waitFor(() => expect(screen.queryByText('휴지통으로 이동')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '휴지통으로 이동' })).toBeNull());
     expect(screen.queryByText(/not_found: errors.notFound/)).toBeNull();
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
       panelId: 'right',
@@ -785,13 +829,13 @@ describe('CommanderShell', () => {
     );
 
     await user.keyboard('{Shift>}d{/Shift}');
-    expect(await screen.findByText('영구 삭제')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '영구 삭제 확인' })).toHaveProperty('disabled', true);
+    expect(await screen.findByRole('dialog', { name: '영구 삭제' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '영구 삭제' })).toHaveProperty('disabled', true);
     expect(screen.queryByText(/PERMANENT_DELETE/)).toBeNull();
     expect(screen.getByText(/계속하려면 “generic-array-6de08afde610f112”를 입력하세요/)).toBeTruthy();
 
     await user.type(screen.getByLabelText('영구 삭제 확인 문구'), 'generic-array-6de08afde610f112');
-    await user.click(screen.getByRole('button', { name: '영구 삭제 확인' }));
+    await user.click(screen.getByRole('button', { name: '영구 삭제' }));
 
     await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
       targets: [expect.stringContaining('generic-array-6de08afde610f112')],
@@ -850,7 +894,7 @@ describe('CommanderShell', () => {
     await user.keyboard('a');
     const input = await screen.findByLabelText('새 폴더 이름');
     await user.type(input, 'New Folder');
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    await user.click(screen.getByRole('button', { name: '새 폴더 만들기' }));
 
     await waitFor(() => expect(mutationClient.createDir).toHaveBeenCalledWith({
       parent: SAMPLE_LISTINGS.right.path,
@@ -889,7 +933,7 @@ describe('CommanderShell', () => {
     const input = await screen.findByLabelText('새 이름');
     await user.clear(input);
     await user.type(input, 'renamed-entry');
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    await user.click(screen.getByRole('button', { name: '이름 변경' }));
 
     await waitFor(() => expect(mutationClient.renameEntry).toHaveBeenCalledWith({
       path: original.path,
@@ -934,7 +978,7 @@ describe('CommanderShell', () => {
 
     await user.keyboard('i');
     expect(await screen.findByText('파일 정보')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    await user.click(screen.getByRole('button', { name: '정보 보기' }));
     await waitFor(() => expect(mutationClient.getMetadata).toHaveBeenCalledOnce());
     expect(screen.queryByText(/absolutePath/)).toBeNull();
     expect(screen.getByText(/Architecture.md/)).toBeTruthy();
@@ -947,7 +991,7 @@ describe('CommanderShell', () => {
     }
     fireEvent.contextMenu(archiveRow);
     await user.click(await screen.findByText('Preview'));
-    await user.click(await screen.findByRole('button', { name: '확인' }));
+    await user.click(await screen.findByRole('button', { name: '압축 내용 보기' }));
 
     await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath: archiveEntry.path }));
     expect(screen.getByText(/inside.txt/)).toBeTruthy();
@@ -986,16 +1030,16 @@ describe('CommanderShell', () => {
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
     await user.click(fileRow);
     await user.keyboard('o');
-    expect(await screen.findByText('기본 앱으로 열기')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    expect(await screen.findByRole('dialog', { name: '기본 앱으로 열기' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '기본 앱으로 열기' }));
     await waitFor(() => expect(mutationClient.openDefault).toHaveBeenCalledWith({
       path: expect.stringContaining('Architecture.md'),
     }));
     useOperationStore.getState().closeDialog();
 
     await user.keyboard('e');
-    expect(await screen.findByText('터미널 편집기로 열기')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    expect(await screen.findByRole('dialog', { name: '터미널 편집기로 열기' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '편집기로 열기' }));
     await waitFor(() => expect(mutationClient.openExternalEditor).toHaveBeenCalledWith({
       path: expect.stringContaining('Architecture.md'),
       editorId: 'vim',
@@ -1081,8 +1125,8 @@ describe('CommanderShell', () => {
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('zc');
-    expect(await screen.findByText('압축 생성')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    expect(await screen.findByRole('dialog', { name: '압축 생성' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '압축 생성' }));
 
     await waitFor(() => expect(operationClient.archiveCreate).toHaveBeenCalledWith({
       sources: [expect.stringContaining('generic-array-6de08afde610f112')],
@@ -1119,8 +1163,8 @@ describe('CommanderShell', () => {
 
     await user.keyboard('{Tab}');
     await user.keyboard('za');
-    expect(await screen.findByText('압축 해제')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    expect(await screen.findByRole('dialog', { name: '압축 해제' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '압축 해제' }));
 
     await waitFor(() => expect(operationClient.archiveExtract).toHaveBeenCalledWith({
       archivePath: expect.stringContaining('release-bundle.zip'),
@@ -1532,7 +1576,7 @@ describe('CommanderShell', () => {
       });
     });
 
-    expect(screen.getByText('복사')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: '복사' })).toBeTruthy();
 
     act(() => {
       vi.advanceTimersByTime(901);

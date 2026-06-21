@@ -46,6 +46,7 @@ import {
   parentNavigationEntryOf,
   parentPathOf,
   replacePanelListing,
+  type FocusFallbackMode,
   type PanelNavigationState,
   type PanelStateById,
 } from './panelState';
@@ -206,6 +207,7 @@ interface ListPanelOptions {
   preserveSelection?: boolean;
   preserveFocusPath?: string | null;
   focusPath?: string | null;
+  focusFallback?: FocusFallbackMode;
   sort?: SortSpec;
   filter?: string | null;
   showHidden?: boolean;
@@ -386,6 +388,7 @@ export function CommanderShell({
           preserveSelection: options.preserveSelection,
           preserveFocusPath: options.preserveFocusPath,
           focusPath: options.focusPath,
+          focusFallback: options.focusFallback,
         }),
         showHidden,
       },
@@ -413,7 +416,10 @@ export function CommanderShell({
     setPanelState((current) => ({
       ...current,
       [panelId]: {
-        ...replacePanelListing(current[panelId], result.data, { pushHistory: true }),
+        ...replacePanelListing(current[panelId], result.data, {
+          pushHistory: true,
+          focusFallback: 'first-concrete',
+        }),
         showHidden: false,
       },
     }));
@@ -819,6 +825,7 @@ export function CommanderShell({
         pushHistory: entry.path !== panel.path,
         preserveSelection: false,
         focusPath: entry.isVirtual ? panel.path : null,
+        focusFallback: entry.isVirtual ? undefined : 'first-concrete',
       });
       return;
     }
@@ -1180,10 +1187,8 @@ export function CommanderShell({
           setStatusMessage(`${labelForAction(action)} 완료`);
         },
         onOperationSummary: (summary: OperationSummary) => {
-          if (summary.state === 'completed' || summary.state === 'completedWithErrors') {
-            refreshPanel(panelOverride);
-            refreshPanel(oppositePanel);
-          }
+          refreshPanel(panelOverride);
+          refreshPanel(oppositePanel);
           setStatusMessage(`${labelForAction(action)} ${operationSummaryStatusLabel(summary, settings.language)}`);
         },
         onOperationStartError: (error: AppError) => {

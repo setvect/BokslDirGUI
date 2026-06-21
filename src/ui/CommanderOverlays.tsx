@@ -176,10 +176,10 @@ export function PathPrompt({ panel, onApply, onCancel }: {
   };
 
   return (
-    <CommanderOverlayDialog owner="path-prompt" title="Go to Path" ariaLabel="go to path" onClose={onCancel}>
+    <CommanderOverlayDialog owner="path-prompt" title="경로 이동" ariaLabel="go to path" onClose={onCancel}>
       <form className="filter-form" onSubmit={handleSubmit}>
         <label>
-          <span>Go to Path · {panel.listing.panelId.toUpperCase()}</span>
+          <span>경로 이동 · {panel.listing.panelId.toUpperCase()}</span>
           <input
             ref={inputRef}
             aria-label="Path"
@@ -194,8 +194,8 @@ export function PathPrompt({ panel, onApply, onCancel }: {
           />
         </label>
         <div className="filter-actions">
-          <button type="submit">이동</button>
           <button type="button" onClick={onCancel}>취소</button>
+          <button type="submit" className="primary">이동</button>
         </div>
       </form>
     </CommanderOverlayDialog>
@@ -220,10 +220,10 @@ export function FilterPrompt({ panel, onApply, onCancel }: {
   };
 
   return (
-    <CommanderOverlayDialog owner="filter-prompt" title="Filter" ariaLabel="filter entries" onClose={onCancel}>
+    <CommanderOverlayDialog owner="filter-prompt" title="필터" ariaLabel="filter entries" onClose={onCancel}>
       <form className="filter-form" onSubmit={handleSubmit}>
         <label>
-          <span>Filter · {panel.path}</span>
+          <span>필터 · {panel.path}</span>
           <input
             ref={inputRef}
             aria-label="Filter pattern"
@@ -238,9 +238,9 @@ export function FilterPrompt({ panel, onApply, onCancel }: {
           />
         </label>
         <div className="filter-actions">
-          <button type="submit">Apply filter</button>
-          {panel.filter ? <button type="button" onClick={() => onApply('')}>Clear filter</button> : null}
-          <button type="button" onClick={onCancel}>Cancel</button>
+          <button type="button" onClick={onCancel}>취소</button>
+          {panel.filter ? <button type="button" onClick={() => onApply('')}>필터 해제</button> : null}
+          <button type="submit" className="primary">필터 적용</button>
         </div>
       </form>
     </CommanderOverlayDialog>

@@ -661,6 +661,11 @@ button {
   padding: 5px 10px;
 }
 
+.filter-actions button.primary {
+  border-color: var(--blue);
+  background: var(--blue-dim);
+}
+
 @media (max-width: 1180px) {
   .top-menu {
     gap: 8px;
@@ -1087,6 +1092,17 @@ button {
   background: var(--blue-dim);
 }
 
+.dialog-button.danger {
+  border-color: #a85545;
+  background: #4a211c;
+  color: #ffe6df;
+}
+
+.dialog-button.safe-default {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(32, 160, 255, 0.35);
+}
+
 .dialog-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
@@ -1107,6 +1123,17 @@ button {
   background: #252525;
   color: #f2f2f2;
   padding: 5px 9px;
+}
+
+.conflict-actions button.danger {
+  border-color: #a85545;
+  background: #4a211c;
+  color: #ffe6df;
+}
+
+.conflict-actions button.safe-default {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(32, 160, 255, 0.35);
 }
 
 .conflict-actions button:hover {

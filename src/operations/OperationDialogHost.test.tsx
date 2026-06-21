@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { act } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,7 +47,7 @@ describe('OperationDialogHost', () => {
     });
   });
 
-  it('renders a safe destructive-operation shell without executing files', () => {
+  it('renders a safe destructive-operation shell without duplicate close/cancel controls', async () => {
     const action = ACTION_BY_ID.get('file.move');
     if (!action) {
       throw new Error('file.move action is required');
@@ -62,11 +62,15 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByText('이동')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: '이동' })).toBeTruthy();
     expect(screen.getByText('source.txt')).toBeTruthy();
     expect(screen.getByText(/This screen is a preview before running the action/)).toBeTruthy();
     expect(screen.queryByText('start_move')).toBeNull();
     expect(screen.queryByText('file.move')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '이동' })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' })));
   });
 
   it('warns when unconnected file-mutation dialogs are backend stubs', () => {
@@ -84,7 +88,7 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByText('복사')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: '복사' })).toBeTruthy();
     expect(screen.getByText(/This screen is a preview before running the action/)).toBeTruthy();
     expect(screen.queryByText(/operations.backendExecution.stubbedUntilCommandWiring/)).toBeNull();
   });
@@ -104,10 +108,42 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByText('휴지통으로 이동')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: '휴지통으로 이동' })).toBeTruthy();
     expect(screen.getAllByText(sampleEntry.path).length).toBeGreaterThan(0);
     expect(screen.queryByText('start_delete trash')).toBeNull();
     expect(screen.queryByText('skip')).toBeNull();
+  });
+
+  it('closes the delete confirmation dialog after the trash operation starts', async () => {
+    const user = userEvent.setup();
+    const action = ACTION_BY_ID.get('file.trash');
+    if (!action) {
+      throw new Error('file.trash action is required');
+    }
+    const longRunningExecutor = vi.fn(async () => ({
+      ok: true as const,
+      data: { operationId: 'op-trash-started', kind: 'delete' as const, state: 'queued' as const },
+    }));
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'right',
+      sources: [sampleEntry],
+      targetDir: sampleEntry.path,
+      workingDir: '/tmp',
+      longRunningExecutor,
+    });
+
+    render(<OperationDialogHost language="ko" />);
+
+    await user.click(screen.getByRole('button', { name: '휴지통으로 이동' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '휴지통으로 이동' })).toBeNull());
+    expect(longRunningExecutor).toHaveBeenCalledOnce();
+    expect(useOperationStore.getState().progress).toMatchObject({
+      operationId: 'op-trash-started',
+      kind: 'delete',
+      state: 'queued',
+    });
   });
 
   it('splits long operation paths with a middle ellipsis while preserving the full path metadata', () => {
@@ -143,11 +179,12 @@ describe('OperationDialogHost', () => {
     expect(screen.getByText('새 폴더')).toBeTruthy();
     expect(screen.queryByText(/실제 파일 변경은 아직 연결하지 않았습니다/)).toBeNull();
     const input = screen.getByLabelText('새 폴더 이름');
+    await waitFor(() => expect(document.activeElement).toBe(input));
     expect(screen.getByText('The name is invalid.')).toBeTruthy();
     await user.type(input, 'New Folder');
 
     expect(screen.queryByText('The name is invalid.')).toBeNull();
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    await user.click(screen.getByRole('button', { name: '새 폴더 만들기' }));
 
     expect(atomicExecutor).toHaveBeenCalledOnce();
   });
@@ -171,7 +208,7 @@ describe('OperationDialogHost', () => {
     render(<OperationDialogHost />);
 
     await user.type(screen.getByLabelText('새 폴더 이름'), 'New Folder');
-    await user.click(screen.getByRole('button', { name: '확인' }));
+    await user.click(screen.getByRole('button', { name: '새 폴더 만들기' }));
 
     const pendingButton = await screen.findByRole('button', { name: 'Running…' });
     expect(pendingButton).toHaveProperty('disabled', true);
@@ -223,6 +260,74 @@ describe('OperationDialogHost', () => {
     expect(screen.getByText(/2\.0 KB \/ 4\.0 KB/)).toBeTruthy();
     expect(screen.getByText(/1\.0 KB\/s/)).toBeTruthy();
     expect(screen.getByText(/ETA 1m 15s/)).toBeTruthy();
+  });
+
+  it('keeps the progress modal visible across non-terminal state transitions for the same operation', () => {
+    vi.useFakeTimers();
+    useOperationStore.setState({
+      dialog: null,
+      progress: {
+        operationId: 'op-progress-stable',
+        kind: 'copy',
+        state: 'validating',
+        totalFiles: 20622,
+        completedFiles: 0,
+        totalBytes: 252 * 1024 * 1024,
+        completedBytes: 0,
+        currentPath: longOperationPath,
+        bytesPerSecond: null,
+        etaSeconds: null,
+        recentErrorCount: 0,
+      },
+      conflictPrompt: null,
+      summary: null,
+      lastError: null,
+    });
+
+    render(<OperationDialogHost />);
+
+    act(() => {
+      vi.advanceTimersByTime(451);
+    });
+
+    expect(screen.getByLabelText('Operation status')).toBeTruthy();
+
+    act(() => {
+      useOperationStore.getState().applyOperationProgress({
+        operationId: 'op-progress-stable',
+        kind: 'copy',
+        state: 'queued',
+        totalFiles: 20622,
+        completedFiles: 0,
+        totalBytes: 252 * 1024 * 1024,
+        completedBytes: 0,
+        currentPath: longOperationPath,
+        bytesPerSecond: null,
+        etaSeconds: null,
+        recentErrorCount: 0,
+      });
+    });
+
+    expect(screen.getByLabelText('Operation status')).toBeTruthy();
+
+    act(() => {
+      useOperationStore.getState().applyOperationProgress({
+        operationId: 'op-progress-stable',
+        kind: 'copy',
+        state: 'running',
+        totalFiles: 20622,
+        completedFiles: 10138,
+        totalBytes: 252 * 1024 * 1024,
+        completedBytes: 165 * 1024 * 1024,
+        currentPath: longOperationPath,
+        bytesPerSecond: 83 * 1024 * 1024,
+        etaSeconds: 1,
+        recentErrorCount: 0,
+      });
+    });
+
+    expect(screen.getByLabelText('Operation status')).toBeTruthy();
+    expect(screen.getByText(/10138\/20622/)).toBeTruthy();
   });
 
   it('does not keep a popup for successful completed operations and auto-clears the terminal summary', () => {
@@ -325,7 +430,43 @@ describe('OperationDialogHost', () => {
     expect(screen.queryByText('Progress')).toBeNull();
     expect(screen.queryByText(/waitingForConflict/)).toBeNull();
     expect(screen.getByText('Overwrite All')).toBeTruthy();
-    expect(screen.getByText('Cancel')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Cancel' })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Skip' }).className).toContain('safe-default');
+    expect(screen.getByRole('button', { name: 'Overwrite' }).className).toContain('danger');
+  });
+
+  it('shows only a close action after an atomic information result is loaded', async () => {
+    const user = userEvent.setup();
+    const action = ACTION_BY_ID.get('file.properties');
+    if (!action) {
+      throw new Error('file.properties action is required');
+    }
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'left',
+      sources: [sampleEntry],
+      targetDir: null,
+      workingDir: '/tmp',
+      atomicExecutor: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          ...sampleEntry,
+          absolutePath: sampleEntry.path,
+          extension: 'txt',
+          mimeType: 'text/plain',
+          readonly: false,
+        },
+      })),
+    });
+
+    render(<OperationDialogHost />);
+
+    await user.click(screen.getByRole('button', { name: '정보 보기' }));
+
+    expect(await screen.findByText('File information')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '정보 보기' })).toBeNull();
   });
 
   it('centers conflict attention when no operation dialog is open', () => {
@@ -441,12 +582,21 @@ describe('OperationDialogHost', () => {
       sources: [sampleEntry],
       targetDir: null,
       workingDir: '/tmp',
-      atomicExecutor: vi.fn(async () => ({ ok: true as const, data: sampleEntry })),
+      atomicExecutor: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          ...sampleEntry,
+          absolutePath: sampleEntry.path,
+          extension: 'txt',
+          mimeType: 'text/plain',
+          readonly: false,
+        },
+      })),
     });
 
     render(<OperationDialogHost />);
 
-    await user.click(screen.getByRole('button', { name: '취소' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(cancelExecutor).not.toHaveBeenCalled();
     expect(useOperationStore.getState().dialog).toBeNull();

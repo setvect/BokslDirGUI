@@ -1,10 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useOperationStore, type OperationDialogDraft } from './operationStore';
 import { useCommanderKeyboardBoundaryProps } from '../ui/keyboardOwnership';
 import { tauriClient } from '../tauri/client';
 import type {
   ArchiveListing,
+  ConflictDecision,
+  ConflictPrompt,
   FileMetadata,
   OperationState,
   OperationSummary,
@@ -34,6 +36,8 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
   const applyOperationError = useOperationStore((state) => state.applyOperationError);
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('operation-dialog', Boolean(dialog));
   const [progressDelayElapsed, setProgressDelayElapsed] = useState(false);
+  const dialogInputRef = useRef<HTMLInputElement>(null);
+  const defaultDialogButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -72,16 +76,19 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
   const visibleProgress = dialogProgress && !progressIsTerminal && progressDelayElapsed ? dialogProgress : null;
   const progressSurfaceOpen = !dialog && !attentionSurfaceOpen && Boolean(visibleProgress);
   const progressKeyboardBoundaryProps = useCommanderKeyboardBoundaryProps('operation-progress-dialog', progressSurfaceOpen);
+  const progressDelayBlocked = !progress || progressIsTerminal || progress.state === 'waitingForConflict' || Boolean(conflictPrompt);
 
   useEffect(() => {
-    if (!progress || isTerminalOperationState(progress.state) || progress.state === 'waitingForConflict' || conflictPrompt) {
+    if (progressDelayBlocked) {
       setProgressDelayElapsed(false);
       return;
     }
-    setProgressDelayElapsed(false);
+    if (progressDelayElapsed) {
+      return;
+    }
     const timeout = window.setTimeout(() => setProgressDelayElapsed(true), OPERATION_PROGRESS_SURFACE_DELAY_MS);
     return () => window.clearTimeout(timeout);
-  }, [conflictPrompt, progress?.operationId, progress?.state]);
+  }, [progressDelayBlocked, progressDelayElapsed]);
 
   useEffect(() => {
     if (!summary || summaryRequiresAttention(summary)) {
@@ -91,16 +98,75 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
     return () => window.clearTimeout(timeout);
   }, [clearSummary, summary]);
 
+  const dialogTitle = dialog ? operationDialogTitle(dialog.dialogKind) : '';
+  const dialogDescription = dialog ? operationDialogDescription(dialog) : '';
+  const dialogInputLabel = dialog ? operationDialogInputLabel(dialog.dialogKind) : null;
+  const dialogActions = dialog && !conflictPrompt
+    ? operationDialogActions({
+        dialog,
+        atomicResult,
+        inputLabel: dialogInputLabel,
+        text,
+        confirmDialog,
+        cancelOperation,
+        closeDialog,
+      })
+    : [];
+  const shouldFocusInput = Boolean(dialog && shouldFocusOperationInput(dialogInputLabel, dialog, atomicResult));
+  const focusSignature = dialog ? dialogFocusSignature(dialog, atomicResult, dialogInputLabel) : null;
+  const lastFocusSignatureRef = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (!dialog || !focusSignature) {
+      lastFocusSignatureRef.current = null;
+      return;
+    }
+    if (lastFocusSignatureRef.current === focusSignature) {
+      return;
+    }
+    lastFocusSignatureRef.current = focusSignature;
+
+    const focusTarget = () => {
+      if (shouldFocusInput) {
+        const input = dialogInputRef.current;
+        if (!input) {
+          return false;
+        }
+        input.focus({ preventScroll: true });
+        if (input.value === dialog.inputValue) {
+          input.select();
+        }
+        return true;
+      }
+      const button = defaultDialogButtonRef.current;
+      if (!button) {
+        return false;
+      }
+      button.focus({ preventScroll: true });
+      return true;
+    };
+
+    if (focusTarget()) {
+      return;
+    }
+    const timeout = window.setTimeout(focusTarget, 0);
+    return () => window.clearTimeout(timeout);
+  }, [dialog, focusSignature, shouldFocusInput]);
+
   return (
     <>
       <Dialog.Root open={Boolean(dialog)} onOpenChange={(open) => { if (!open) closeDialog(); }}>
         <Dialog.Portal>
           <Dialog.Overlay className="dialog-overlay" />
-          <Dialog.Content className="operation-dialog" {...keyboardBoundaryProps}>
+          <Dialog.Content
+            className="operation-dialog"
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            {...keyboardBoundaryProps}
+          >
             {dialog ? (
             <>
-              <Dialog.Title className="operation-title">{dialog.title}</Dialog.Title>
-              <Dialog.Description className="operation-description">{dialog.description}</Dialog.Description>
+              <Dialog.Title className="operation-title">{dialogTitle}</Dialog.Title>
+              <Dialog.Description className="operation-description">{dialogDescription}</Dialog.Description>
               <OperationOverview dialog={dialog} language={language} text={text} />
               <div className="operation-section">
                 <h3>{text.sources}</h3>
@@ -122,11 +188,12 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                   {translateUserMessageKey(language, dialog.backendExecutionStubReasonKey)}
                 </p>
               ) : null}
-              {dialog.inputLabel ? (
+              {dialogInputLabel ? (
                 <label className="operation-field">
-                  <span>{dialog.inputLabel}</span>
+                  <span>{dialogInputLabel}</span>
                   <input
-                    aria-label={dialog.inputLabel}
+                    ref={dialogInputRef}
+                    aria-label={dialogInputLabel}
                     value={dialog.inputValue}
                     onChange={(event) => updateDialogInput(event.currentTarget.value)}
                     onKeyDown={(event) => {
@@ -174,7 +241,13 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                   <p>{conflictPrompt.source.name} → {conflictPrompt.destination.name}</p>
                   <div className="conflict-actions">
                     {conflictPrompt.availableDecisions.map((decision) => (
-                      <button type="button" key={decision} onClick={() => resolveConflict(decision)}>
+                      <button
+                        type="button"
+                        key={decision}
+                        className={conflictDecisionButtonClassName(decision, conflictPrompt)}
+                        autoFocus={isDefaultConflictDecision(decision, conflictPrompt)}
+                        onClick={() => resolveConflict(decision)}
+                      >
                         {conflictDecisionLabel(language, decision)}
                       </button>
                     ))}
@@ -194,24 +267,25 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 <p className="operation-error">{formatOperationError(lastError, language)}</p>
               ) : null}
               <div className="operation-actions">
-                <Dialog.Close asChild>
-                  <button type="button" className="dialog-button secondary" onClick={closeDialog}>{text.dismiss}</button>
-                </Dialog.Close>
-                <button
-                  type="button"
-                  className="dialog-button secondary"
-                  onClick={dialog.executionMode === 'atomicCommand' ? closeDialog : cancelOperation}
-                >
-                  {dialog.cancelLabel}
-                </button>
-                <button
-                  type="button"
-                  className="dialog-button primary"
-                  disabled={Boolean(dialog.validationErrorKey) || dialog.atomicPending || dialog.operationPending}
-                  onClick={() => void confirmDialog()}
-                >
-                  {dialog.atomicPending || dialog.operationPending ? text.running : dialog.primaryLabel}
-                </button>
+                {dialogActions.map((action) => {
+                  const button = (
+                    <button
+                      key={action.key}
+                      ref={action.autoFocus ? defaultDialogButtonRef : undefined}
+                      type="button"
+                      className={action.className}
+                      disabled={action.disabled}
+                      onClick={action.onClick}
+                    >
+                      {action.label}
+                    </button>
+                  );
+                  return action.closeWrapper ? (
+                    <Dialog.Close asChild key={action.key}>
+                      {button}
+                    </Dialog.Close>
+                  ) : button;
+                })}
               </div>
             </>
             ) : null}
@@ -278,7 +352,13 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 </Dialog.Description>
                 <div className="conflict-actions">
                   {conflictPrompt.availableDecisions.map((decision) => (
-                    <button type="button" key={decision} onClick={() => resolveConflict(decision)}>
+                    <button
+                      type="button"
+                      key={decision}
+                      className={conflictDecisionButtonClassName(decision, conflictPrompt)}
+                      autoFocus={isDefaultConflictDecision(decision, conflictPrompt)}
+                      onClick={() => resolveConflict(decision)}
+                    >
                       {conflictDecisionLabel(language, decision)}
                     </button>
                   ))}
@@ -435,6 +515,231 @@ const OPERATION_DIALOG_TEXT: Record<SupportedLanguage, {
 };
 
 type OperationDialogText = (typeof OPERATION_DIALOG_TEXT)[SupportedLanguage];
+
+type OperationDialogKind = OperationDialogDraft['dialogKind'];
+
+// Keep user-facing dialog copy in the presentation layer. The store carries semantic
+// operation state; this helper family derives the visible modal contract from it.
+const operationDialogTitle = (dialogKind: OperationDialogKind) => {
+  const titles: Record<OperationDialogKind, string> = {
+    copy: '복사',
+    move: '이동',
+    trash: '휴지통으로 이동',
+    deletePermanent: '영구 삭제',
+    rename: '이름 변경',
+    createDir: '새 폴더',
+    properties: '파일 정보',
+    archivePreview: '압축 파일 보기',
+    archiveCreate: '압축 생성',
+    archiveExtract: '압축 해제',
+    externalOpenDefault: '기본 앱으로 열기',
+    externalReveal: '파일 위치 열기',
+    externalEditor: '터미널 편집기로 열기',
+    shellCommand: '쉘 명령 실행',
+  };
+  return titles[dialogKind];
+};
+
+const operationDialogDescription = (dialog: OperationDialogDraft) => {
+  const count = dialog.sources.length;
+  switch (dialog.dialogKind) {
+    case 'copy':
+      return `${count}개 항목을 반대 패널로 복사합니다.`;
+    case 'move':
+      return `${count}개 항목을 반대 패널로 이동합니다.`;
+    case 'trash':
+      return `${count}개 항목을 휴지통으로 보내기 전에 확인합니다. 자동 영구 삭제 전환은 금지됩니다.`;
+    case 'deletePermanent':
+      return `${count}개 항목을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.`;
+    case 'rename':
+      return '선택한 항목의 새 이름을 입력합니다.';
+    case 'createDir':
+      return '현재 폴더에 만들 새 폴더 이름을 입력합니다.';
+    case 'archivePreview':
+      return '압축 파일 안의 항목을 미리 확인합니다.';
+    case 'archiveCreate':
+      return `${count}개 항목을 압축 파일로 만듭니다.`;
+    case 'archiveExtract':
+      return '압축 파일을 대상 폴더에 풉니다.';
+    case 'externalOpenDefault':
+    case 'externalReveal':
+    case 'externalEditor':
+      return '선택한 항목을 외부 앱으로 엽니다.';
+    case 'shellCommand':
+      return '현재 폴더에서 실행할 명령을 확인합니다. 설정에서 허용된 경우에만 실행됩니다.';
+    case 'properties':
+      return '선택한 항목의 정보를 확인합니다.';
+  }
+};
+
+const operationDialogPrimaryLabel = (dialog: OperationDialogDraft, atomicResult: unknown) => {
+  if (hasRunnableShellPreview(dialog, atomicResult)) {
+    return '확인 후 실행';
+  }
+  const labels: Record<OperationDialogKind, string> = {
+    copy: '복사',
+    move: '이동',
+    trash: '휴지통으로 이동',
+    deletePermanent: '영구 삭제',
+    rename: '이름 변경',
+    createDir: '새 폴더 만들기',
+    properties: '정보 보기',
+    archivePreview: '압축 내용 보기',
+    archiveCreate: '압축 생성',
+    archiveExtract: '압축 해제',
+    externalOpenDefault: '기본 앱으로 열기',
+    externalReveal: '파일 위치 열기',
+    externalEditor: '편집기로 열기',
+    shellCommand: '실행 확인',
+  };
+  return labels[dialog.dialogKind];
+};
+
+const operationDialogInputLabel = (dialogKind: OperationDialogKind) => {
+  if (dialogKind === 'createDir') {
+    return '새 폴더 이름';
+  }
+  if (dialogKind === 'rename') {
+    return '새 이름';
+  }
+  if (dialogKind === 'deletePermanent') {
+    return '영구 삭제 확인 문구';
+  }
+  if (dialogKind === 'archiveCreate') {
+    return '압축 파일 이름(.zip 또는 .7z)';
+  }
+  if (dialogKind === 'shellCommand') {
+    return '실행할 명령';
+  }
+  return null;
+};
+
+interface OperationDialogAction {
+  key: string;
+  label: string;
+  className: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  closeWrapper?: boolean;
+  onClick(): void;
+}
+
+const operationDialogActions = ({
+  dialog,
+  atomicResult,
+  inputLabel,
+  text,
+  confirmDialog,
+  cancelOperation,
+  closeDialog,
+}: {
+  dialog: OperationDialogDraft;
+  atomicResult: unknown;
+  inputLabel: string | null;
+  text: OperationDialogText;
+  confirmDialog(): Promise<void>;
+  cancelOperation(): void;
+  closeDialog(): void;
+}): OperationDialogAction[] => {
+  if (shouldShowCloseOnlyAction(dialog, atomicResult)) {
+    return [{
+      key: 'close',
+      label: text.dismiss,
+      className: 'dialog-button secondary safe-default',
+      autoFocus: true,
+      closeWrapper: true,
+      onClick: closeDialog,
+    }];
+  }
+
+  const cancelShouldOwnFocus = shouldFocusCancelAction(inputLabel, dialog, atomicResult);
+  const primaryDisabled = Boolean(dialog.validationErrorKey) || dialog.atomicPending || dialog.operationPending;
+  const primaryShouldOwnFocus = !cancelShouldOwnFocus && !shouldFocusOperationInput(inputLabel, dialog, atomicResult) && !primaryDisabled;
+
+  return [
+    {
+      key: 'cancel',
+      label: text.cancel,
+      className: `dialog-button secondary${cancelShouldOwnFocus ? ' safe-default' : ''}`,
+      autoFocus: cancelShouldOwnFocus,
+      onClick: dialog.executionMode === 'atomicCommand' ? closeDialog : cancelOperation,
+    },
+    {
+      key: 'confirm',
+      label: dialog.atomicPending || dialog.operationPending ? text.running : operationDialogPrimaryLabel(dialog, atomicResult),
+      className: `dialog-button primary${isDangerousDialog(dialog) ? ' danger' : ''}`,
+      disabled: primaryDisabled,
+      autoFocus: primaryShouldOwnFocus,
+      onClick: () => { void confirmDialog(); },
+    },
+  ];
+};
+
+const shouldShowCloseOnlyAction = (dialog: OperationDialogDraft, atomicResult: unknown) => {
+  if (!atomicResult) {
+    return false;
+  }
+  return !hasRunnableShellPreview(dialog, atomicResult);
+};
+
+const shouldFocusOperationInput = (inputLabel: string | null, dialog: OperationDialogDraft, atomicResult: unknown) =>
+  Boolean(inputLabel && !shouldShowCloseOnlyAction(dialog, atomicResult));
+
+const dialogFocusSignature = (
+  dialog: OperationDialogDraft,
+  atomicResult: unknown,
+  inputLabel: string | null,
+) => [
+  dialog.dialogKind,
+  inputLabel ?? '',
+  dialog.sources.map((source) => source.path).join('|'),
+  dialog.targetDir ?? '',
+  atomicResult ? 'result' : 'draft',
+  isShellCommandPreview(atomicResult) ? atomicResult.confirmToken : '',
+].join('\u0000');
+
+const shouldFocusCancelAction = (inputLabel: string | null, dialog: OperationDialogDraft, atomicResult: unknown) => {
+  if (shouldFocusOperationInput(inputLabel, dialog, atomicResult)) {
+    return false;
+  }
+  if (dialog.executionMode === 'longRunningOperation') {
+    return true;
+  }
+  return isDangerousDialog(dialog);
+};
+
+const hasRunnableShellPreview = (dialog: OperationDialogDraft, atomicResult: unknown) =>
+  dialog.dialogKind === 'shellCommand' &&
+  isShellCommandPreview(atomicResult) &&
+  atomicResult.policy.enabled === true &&
+  atomicResult.confirmToken !== 'disabled';
+
+const isDangerousDialog = (dialog: OperationDialogDraft) =>
+  dialog.dialogKind === 'deletePermanent' ||
+  dialog.dialogKind === 'trash' ||
+  dialog.dangerLevel === 'destructive' ||
+  dialog.dangerLevel === 'irreversible';
+
+const isDefaultConflictDecision = (decision: ConflictDecision, prompt: ConflictPrompt) => {
+  if (prompt.availableDecisions.includes(prompt.defaultDecision)) {
+    return decision === prompt.defaultDecision;
+  }
+  if (prompt.availableDecisions.includes('skip')) {
+    return decision === 'skip';
+  }
+  return decision === 'cancel';
+};
+
+const conflictDecisionButtonClassName = (decision: ConflictDecision, prompt: ConflictPrompt) => {
+  const classes = ['dialog-button', 'conflict-button'];
+  if (decision === 'overwrite' || decision === 'allOverwrite') {
+    classes.push('danger');
+  }
+  if (isDefaultConflictDecision(decision, prompt)) {
+    classes.push('safe-default');
+  }
+  return classes.join(' ');
+};
 
 const isTerminalOperationState = (state: OperationState) =>
   state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';

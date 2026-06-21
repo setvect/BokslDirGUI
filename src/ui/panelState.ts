@@ -23,6 +23,7 @@ export interface PanelNavigationState {
 }
 
 export type PanelStateById = Record<PanelId, PanelNavigationState>;
+export type FocusFallbackMode = 'preserve-index' | 'first-concrete';
 
 interface PanelStateOptions {
   focusedIndex?: number;
@@ -92,12 +93,15 @@ export const replacePanelListing = (
     preserveSelection?: boolean;
     preserveFocusPath?: string | null;
     focusPath?: string | null;
+    focusFallback?: FocusFallbackMode;
   } = {},
 ): PanelNavigationState => {
   const focusPath = options.focusPath ?? options.preserveFocusPath ?? null;
   const focusedIndex = focusPath
     ? indexOfPathOrDefault(listing.entries, focusPath, 0)
-    : clampFocusedIndex(current.focusedIndex, listing.entries.length);
+    : options.focusFallback === 'first-concrete'
+      ? firstConcreteEntryIndexOrDefault(listing.entries, 0)
+      : clampFocusedIndex(current.focusedIndex, listing.entries.length);
   const selectedPaths = options.preserveSelection
     ? pruneSelection(current.selectedPaths, listing.entries)
     : [];
@@ -173,6 +177,11 @@ const pruneSelection = (selectedPaths: string[], entries: FileEntry[]) => {
 
 const indexOfPathOrDefault = (entries: FileEntry[], path: string, defaultIndex: number) => {
   const found = entries.findIndex((entry) => entry.path === path);
+  return found >= 0 ? found : clampFocusedIndex(defaultIndex, entries.length);
+};
+
+const firstConcreteEntryIndexOrDefault = (entries: FileEntry[], defaultIndex: number) => {
+  const found = entries.findIndex((entry) => !entry.isVirtual);
   return found >= 0 ? found : clampFocusedIndex(defaultIndex, entries.length);
 };
 
