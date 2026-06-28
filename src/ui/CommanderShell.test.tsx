@@ -1353,7 +1353,7 @@ describe('CommanderShell', () => {
     expect(within(shortcutDialog).queryByText('file.copy')).toBeNull();
   });
 
-  it('uses an explicit Ctrl+Q/File Quit policy instead of a bare q shortcut', async () => {
+  it('uses an explicit Cmd+Q/File Quit policy instead of a bare q shortcut', async () => {
     const appController = { quit: vi.fn(async () => undefined) };
     render(
       <CommanderShell
@@ -1367,8 +1367,22 @@ describe('CommanderShell', () => {
     expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ' })).toBe(true);
     expect(appController.quit).not.toHaveBeenCalled();
 
-    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(false);
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(true);
+    expect(appController.quit).not.toHaveBeenCalled();
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', metaKey: true })).toBe(false);
     await waitFor(() => expect(appController.quit).toHaveBeenCalledOnce());
+  });
+
+  it('shows the macOS quit shortcut label as Cmd+Q in the File menu', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+
+    await user.keyboard('{F9}{ArrowDown}');
+
+    const fileMenu = await screen.findByRole('menu', { name: '파일(F) menu' });
+    expect(within(fileMenu).getByText('Cmd+Q')).toBeTruthy();
+    expect(within(fileMenu).queryByText('Ctrl+Q')).toBeNull();
   });
 
   it('keeps browser preview Quit from calling the Tauri window API', async () => {
@@ -1383,7 +1397,7 @@ describe('CommanderShell', () => {
       />,
     );
 
-    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(false);
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', metaKey: true })).toBe(false);
 
     expect(appController.quit).not.toHaveBeenCalled();
     expect(await screen.findByText(/브라우저 미리보기에서는 앱 종료를 실행할 수 없습니다/)).toBeTruthy();
@@ -1416,7 +1430,7 @@ describe('CommanderShell', () => {
       />,
     );
 
-    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(false);
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', metaKey: true })).toBe(false);
 
     expect(appController.quit).not.toHaveBeenCalled();
     expect(await screen.findByText(/Quit 차단/)).toBeTruthy();
@@ -1806,6 +1820,57 @@ describe('CommanderShell', () => {
     expect(await screen.findByRole('menu', { name: '파일(F) menu' })).toBeTruthy();
 
     await user.keyboard('q');
+    await waitFor(() => expect(appController.quit).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('menu', { name: '파일(F) menu' })).toBeNull();
+  });
+
+  it('keeps Cmd+Q available while the top menu bar is focused', async () => {
+    const user = userEvent.setup();
+    const appController = { quit: vi.fn(async () => undefined) };
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        appController={appController}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+
+    await user.keyboard('{F9}');
+
+    expect(screen.getByRole('button', { name: '파일(F)' }).getAttribute('data-state')).toBe('focused');
+    expect(screen.queryByRole('menu', { name: '파일(F) menu' })).toBeNull();
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(false);
+    expect(appController.quit).not.toHaveBeenCalled();
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', metaKey: true })).toBe(false);
+
+    await waitFor(() => expect(appController.quit).toHaveBeenCalledOnce());
+  });
+
+  it('keeps Cmd+Q available while a top menu popover owns keyboard focus', async () => {
+    const user = userEvent.setup();
+    const appController = { quit: vi.fn(async () => undefined) };
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        appController={appController}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+
+    await user.keyboard('{F9}{ArrowDown}');
+
+    expect(await screen.findByRole('menu', { name: '파일(F) menu' })).toBeTruthy();
+    await waitFor(() => expect(commanderKeyboardOwners()).toEqual(['menu-popover']));
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', ctrlKey: true })).toBe(false);
+    expect(appController.quit).not.toHaveBeenCalled();
+
+    expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', metaKey: true })).toBe(false);
+
     await waitFor(() => expect(appController.quit).toHaveBeenCalledOnce());
     expect(screen.queryByRole('menu', { name: '파일(F) menu' })).toBeNull();
   });

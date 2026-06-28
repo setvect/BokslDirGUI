@@ -94,7 +94,7 @@
 | `help_keys` | ? | Help > Keyboard Help | `help.shortcuts` | implemented | P1 | ? 및 Help > Keyboard Help가 action registry 기반 shortcut help를 열어 실제 등록 action과 동기화된다. |
 | `refresh` | ^R | View > Refresh | `nav.refresh` | implemented | P1 | 현재 panel data source 기반 refresh 경로가 있다. |
 | `open_menu` | F9 | - | `menu.open` | implemented | P0 | F9로 File root menu를 열고, Escape/F9 닫기, Left/Right root 이동, Up/Down item 이동, submenu 진입/실행을 처리한다. |
-| `quit` | q | File > Quit | `app.quit` | implemented | P1 | 일반 q는 파일명 타이핑 충돌 방지를 위해 사용하지 않고, File > Quit/Ctrl+Q만 Tauri current window close 정책으로 연결한다. |
+| `quit` | q | File > Quit | `app.quit` | implemented | P1 | 일반 q는 파일명 타이핑 충돌 방지를 위해 사용하지 않고, File > Quit/Cmd+Q만 Tauri current window close 정책으로 연결한다. |
 | `theme_dark` | - | Settings > Theme > Dark | `settings.themeDark` | implemented | P0 | Dark theme direct menu action saves settings.theme=dark and updates shell data-theme. |
 | `theme_light` | - | Settings > Theme > Light | `settings.themeLight` | implemented | P0 | Light theme direct menu action saves settings.theme=light and updates shell data-theme. |
 | `theme_contrast` | - | Settings > Theme > High Contrast | `settings.themeHighContrast` | implemented | P0 | High Contrast direct menu action saves settings.theme=highContrast and updates shell data-theme. |

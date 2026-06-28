@@ -265,7 +265,7 @@ addCheck(
   })
     && registry.includes("id: 'app.quit'")
     && registry.includes("id: 'settings.toggleIcons'")
-    && read('src/ui/CommanderShell.test.tsx').includes('uses an explicit Ctrl+Q/File Quit policy')
+    && read('src/ui/CommanderShell.test.tsx').includes('uses an explicit Cmd+Q/File Quit policy')
     && read('src/ui/CommanderShell.test.tsx').includes('opens path, location, tab, history, bookmark, help search, and about overlays')
     && read('src/ui/CommanderShell.test.tsx').includes('applies typed filters and preserves them through refresh until clear'),
   'remaining rows require real overlay/settings/menu/quit/filter tests before implemented status',

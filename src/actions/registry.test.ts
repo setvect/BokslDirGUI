@@ -186,7 +186,7 @@ describe('action registry', () => {
     expect(actionForKeyboardShortcut(key('a'), pendingArchive.sequence)?.id).toBe('archive.extractAuto');
     expect(actionForKeyboardShortcut(key('a', { ctrlKey: true }))?.id).toBe('selection.all');
     expect(actionForKeyboardShortcut(key('b', { ctrlKey: true }))?.id).toBe('bookmark.add');
-    expect(actionForKeyboardShortcut(key('q', { ctrlKey: true }))?.id).toBe('app.quit');
+    expect(actionForKeyboardShortcut(key('q', { ctrlKey: true }))).toBeNull();
     expect(actionForKeyboardShortcut(key('q', { metaKey: true }))?.id).toBe('app.quit');
     expect(actionForKeyboardShortcut(key('q'))).toBeNull();
     expect(ACTION_BY_ID.get('archive.preview')?.shortcutLabel).toBe('Enter on archive');

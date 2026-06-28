@@ -1480,6 +1480,22 @@ export function CommanderShell({
       const onlyTopMenuOwnsKeyboard = activeKeyboardOwners.length === 0
         || activeKeyboardOwners.every((owner) => owner === 'menu-popover');
 
+      const topMenuGlobalShortcutMatch = topMenuOpen && onlyTopMenuOwnsKeyboard && (event.ctrlKey || event.metaKey)
+        ? matchKeyboardShortcut(event, [])
+        : null;
+      if (
+        topMenuGlobalShortcutMatch?.status === 'matched'
+        && topMenuGlobalShortcutMatch.action.id === 'app.quit'
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        clearShortcutSequence();
+        setTopMenuState(null);
+        runtime.handleAction(topMenuGlobalShortcutMatch.action);
+        shellRef.current?.focus({ preventScroll: true });
+        return;
+      }
+
       if (topMenuOpen && onlyTopMenuOwnsKeyboard && handleTopMenuKeyDown(event, topMenuRuntime)) {
         clearShortcutSequence();
         return;

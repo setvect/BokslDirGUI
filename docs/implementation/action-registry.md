@@ -45,7 +45,7 @@ interface AppAction {
 | `file.deletePermanent` | file | D/Shift+Delete | File/Permanent Delete | irreversible | start_delete permanent |
 | `file.mkdir` | file | a/F7 | File/New Folder | safe | create_dir |
 | `file.rename` | file | r/F2 | File/Rename | destructive | rename_entry |
-| `app.quit` | file | Ctrl+Q | File/Quit | none | getCurrentWindow().close safety policy |
+| `app.quit` | file | Cmd+Q | File/Quit | none | getCurrentWindow().close safety policy |
 | `file.properties` | file | i | View/File Info | safe | get_metadata |
 | `archive.list` | archive | Enter on archive | Archive/Open Archive | safe | archive_list |
 | `archive.extract` | archive | zx | File/Archive Extract | destructive | archive_extract |

@@ -91,7 +91,7 @@ export const ACTIONS = [
   action({ id: 'file.deletePermanent', category: 'file', displayLabel: 'Permanent Delete', hotkeyLabel: 'PermDel', shortcutLabel: 'D/Shift+Delete', keyboardBindings: ['Shift+D', 'Shift+Delete'], menuPath: ['File', 'Permanent Delete'], contextScopes: ['selection'], dangerLevel: 'irreversible', command: COMMANDS.startDelete, runPath: 'start_delete permanent', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'file.mkdir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutate }),
   action({ id: 'file.rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutate(c) }),
-  action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Ctrl+Q', keyboardBindings: ['Ctrl+Q'], menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close safety-gated by explicit menu/Ctrl+Q' }),
+  action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Cmd+Q', keyboardBindings: ['Cmd+Q'], menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close safety-gated by explicit menu/Cmd+Q' }),
   action({ id: 'file.properties', category: 'file', displayLabel: 'File Info', hotkeyLabel: 'Info', shortcutLabel: 'i', keyboardBindings: ['i'], menuPath: ['View', 'File Info'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.getMetadata, runPath: 'get_metadata', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
   action({ id: 'archive.preview', category: 'archive', displayLabel: 'Preview', shortcutLabel: 'Enter on archive', menuPath: ['File', 'Archive Preview'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
   action({ id: 'archive.list', category: 'archive', shortcutLabel: 'Enter on archive', menuPath: ['Archive', 'Open Archive'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
@@ -342,7 +342,8 @@ const eventToBindingToken = (event: KeyboardShortcutEvent) => {
   const key = normalizeEventKey(physicalKey);
   const modifiers = [
     event.altKey ? 'Alt' : null,
-    event.ctrlKey || event.metaKey ? 'Ctrl' : null,
+    event.ctrlKey ? 'Ctrl' : null,
+    event.metaKey ? 'Cmd' : null,
     event.shiftKey && shouldKeepShiftModifier(physicalKey) ? 'Shift' : null,
   ].filter(Boolean);
   return [...modifiers, key].join('+');
@@ -384,5 +385,13 @@ const normalizeBindingToken = (token: string) =>
 const toAriaKeyShortcut = (binding: string) =>
   binding
     .split('+')
-    .map((part) => (part === 'Ctrl' ? 'Control' : part))
+    .map((part) => {
+      if (part === 'Ctrl') {
+        return 'Control';
+      }
+      if (part === 'Cmd') {
+        return 'Meta';
+      }
+      return part;
+    })
     .join('+');

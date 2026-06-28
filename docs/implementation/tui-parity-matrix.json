@@ -1339,7 +1339,7 @@
         "app.quit"
       ],
       "guiShortcutLabels": [
-        "Ctrl+Q"
+        "Cmd+Q"
       ],
       "guiMenuPaths": [
         [
@@ -1348,10 +1348,10 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: app.quit File/Quit Ctrl+Q, no bare q binding",
-        "src/ui/CommanderShell.test.tsx: uses an explicit Ctrl+Q/File Quit policy instead of a bare q shortcut"
+        "src/actions/registry.ts: app.quit File/Quit Cmd+Q, no bare q binding",
+        "src/ui/CommanderShell.test.tsx: uses an explicit Cmd+Q/File Quit policy instead of a bare q shortcut"
       ],
-      "notes": "일반 q는 파일명 타이핑 충돌 방지를 위해 사용하지 않고, File > Quit/Ctrl+Q만 Tauri current window close 정책으로 연결한다.",
+      "notes": "일반 q는 파일명 타이핑 충돌 방지를 위해 사용하지 않고, File > Quit/Cmd+Q만 Tauri current window close 정책으로 연결한다.",
       "tuiId": "quit",
       "tuiLabel": "Quit",
       "tuiCategory": "System",
