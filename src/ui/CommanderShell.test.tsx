@@ -621,6 +621,41 @@ describe('CommanderShell', () => {
     }));
   });
 
+  it('moves operation dialog button focus with arrow keys', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-trash-arrow-nav', kind: 'trash' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        operationClient={operationClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={{ left: [], right: [] }}
+      />,
+    );
+
+    await user.keyboard('d');
+    expect(await screen.findByRole('dialog', { name: '휴지통으로 이동' })).toBeTruthy();
+
+    const cancelButton = screen.getByRole('button', { name: '취소' });
+    const confirmButton = screen.getByRole('button', { name: '휴지통으로 이동' });
+    await waitFor(() => expect(document.activeElement).toBe(cancelButton));
+
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(confirmButton);
+
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(cancelButton);
+
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(confirmButton);
+  });
+
   it('uses the focused row as the file-operation source when nothing is explicitly selected', async () => {
     const user = userEvent.setup();
     const operationClient = {

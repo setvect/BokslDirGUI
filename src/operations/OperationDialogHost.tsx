@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useOperationStore, type OperationDialogDraft } from './operationStore';
 import { useCommanderKeyboardBoundaryProps } from '../ui/keyboardOwnership';
 import { tauriClient } from '../tauri/client';
@@ -240,7 +240,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                   <h3>{text.conflictResolution}</h3>
                   <p>{text.conflictPrompt}</p>
                   <p>{conflictPrompt.source.name} → {conflictPrompt.destination.name}</p>
-                  <div className="conflict-actions">
+                  <div className="conflict-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
                     {conflictPrompt.availableDecisions.map((decision) => (
                       <button
                         type="button"
@@ -267,7 +267,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
               {lastError && !summary ? (
                 <p className="operation-error">{formatOperationError(lastError, language)}</p>
               ) : null}
-              <div className="operation-actions">
+              <div className="operation-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
                 {dialogActions.map((action) => {
                   const button = (
                     <button
@@ -319,7 +319,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 <p className="operation-progress-detail">
                   {formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes, text.unknown)} · {progressPercentLabel(visibleProgress)}% · {formatThroughput(visibleProgress.bytesPerSecond, text.unknown)} · {text.eta} {formatEta(visibleProgress.etaSeconds, text.unknown)}
                 </p>
-                <div className="operation-progress-actions">
+                <div className="operation-progress-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
                   <button type="button" className="dialog-button secondary" onClick={cancelOperation}>{text.cancel}</button>
                 </div>
               </div>
@@ -351,7 +351,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 <Dialog.Description>
                   {text.conflictPrompt} {conflictPrompt.source.name} → {conflictPrompt.destination.name}
                 </Dialog.Description>
-                <div className="conflict-actions">
+                <div className="conflict-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
                   {conflictPrompt.availableDecisions.map((decision) => (
                     <button
                       type="button"
@@ -389,6 +389,38 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
     </>
   );
 }
+
+const DIALOG_BUTTON_SELECTOR = 'button:not(:disabled):not([aria-disabled="true"])';
+
+const handleDialogButtonGroupKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+  const direction = dialogButtonNavigationDirection(event.key);
+  if (direction === 0) {
+    return;
+  }
+
+  const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(DIALOG_BUTTON_SELECTOR));
+  if (buttons.length < 2) {
+    return;
+  }
+
+  const activeButtonIndex = buttons.findIndex((button) => button === document.activeElement);
+  const currentIndex = activeButtonIndex >= 0 ? activeButtonIndex : 0;
+  const nextIndex = (currentIndex + direction + buttons.length) % buttons.length;
+
+  event.preventDefault();
+  event.stopPropagation();
+  buttons[nextIndex].focus({ preventScroll: true });
+};
+
+const dialogButtonNavigationDirection = (key: string) => {
+  if (key === 'ArrowRight' || key === 'ArrowDown') {
+    return 1;
+  }
+  if (key === 'ArrowLeft' || key === 'ArrowUp') {
+    return -1;
+  }
+  return 0;
+};
 
 const OPERATION_PROGRESS_SURFACE_DELAY_MS = 450;
 const OPERATION_SUCCESS_AUTO_DISMISS_MS = 1200;
