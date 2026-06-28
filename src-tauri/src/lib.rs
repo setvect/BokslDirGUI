@@ -402,6 +402,7 @@ struct OperationSummary {
     state: OperationState,
     completed_files: u64,
     failed_files: u64,
+    skipped_files: u64,
     errors: Vec<AppError>,
 }
 

@@ -649,6 +649,83 @@ describe('CommanderShell', () => {
     expect(screen.queryByText('Copy to opposite panel')).toBeNull();
   });
 
+  it('clears source selection after a fully successful copy summary', async () => {
+    const user = userEvent.setup();
+    const selectedPaths = SAMPLE_LISTINGS.right.entries.slice(8, 11).map((entry) => entry.path);
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-clear-selection', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        operationClient={operationClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={{ left: [], right: selectedPaths }}
+      />,
+    );
+
+    expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(3);
+
+    await user.keyboard('y');
+
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: selectedPaths,
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+
+    act(() => useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-copy-clear-selection',
+      kind: 'copy',
+      state: 'completed',
+      completedFiles: 3,
+      failedFiles: 0,
+      skippedFiles: 0,
+      errors: [],
+    }));
+
+    await waitFor(() => expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(0));
+  });
+
+  it('keeps source selection when a copy summary reports skipped items', async () => {
+    const user = userEvent.setup();
+    const selectedPaths = SAMPLE_LISTINGS.right.entries.slice(8, 11).map((entry) => entry.path);
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-skipped-selection', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        operationClient={operationClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={{ left: [], right: selectedPaths }}
+      />,
+    );
+
+    await user.keyboard('y');
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalled());
+
+    act(() => useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-copy-skipped-selection',
+      kind: 'copy',
+      state: 'completed',
+      completedFiles: 0,
+      failedFiles: 0,
+      skippedFiles: 3,
+      errors: [],
+    }));
+
+    await waitFor(() => expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(3));
+  });
+
   it('refreshes both panels when a partially completed copy is cancelled', async () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();

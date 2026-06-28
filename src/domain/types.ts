@@ -124,6 +124,7 @@ export interface OperationSummary {
   state: Extract<OperationState, 'completed' | 'completedWithErrors' | 'failed' | 'cancelled'>;
   completedFiles: number;
   failedFiles: number;
+  skippedFiles?: number;
   errors: AppError[];
 }
 

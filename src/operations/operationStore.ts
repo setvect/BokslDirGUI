@@ -557,7 +557,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
           operationId: summary.operationId,
           kind: summary.kind,
           state: summary.state,
-          totalFiles: summary.completedFiles + summary.failedFiles,
+          totalFiles: summary.completedFiles + summary.failedFiles + (summary.skippedFiles ?? 0),
           completedFiles: summary.completedFiles,
           totalBytes: null,
           completedBytes: 0,

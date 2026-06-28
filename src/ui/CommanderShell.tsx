@@ -28,7 +28,7 @@ import {
 import type { AppError, DirectoryListing, FileEntry, LocationList, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { operationSummaryStatusLabel } from '../operations/operationLabels';
-import { dialogKindForAction, isOperationInFlight, useOperationStore, type AtomicCommandExecutor, type LongRunningOperationExecutor } from '../operations/operationStore';
+import { dialogKindForAction, isOperationInFlight, useOperationStore, type AtomicCommandExecutor, type DialogKind, type LongRunningOperationExecutor, type OperationDialogDraft } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
 import { formatUserErrorMessage } from '../i18n-resources';
 import { actionNeedsConcreteSources, createActionContext, filterEnabledActions, resolveActionTargets } from './actionContext';
@@ -1186,9 +1186,19 @@ export function CommanderShell({
           }
           setStatusMessage(`${labelForAction(action)} 완료`);
         },
-        onOperationSummary: (summary: OperationSummary) => {
-          refreshPanel(panelOverride);
-          refreshPanel(oppositePanel);
+        onOperationSummary: (summary: OperationSummary, dialog: OperationDialogDraft) => {
+          if (shouldClearSourceSelectionAfterOperation(summary, dialog.dialogKind)) {
+            selectionAnchorRef.current[dialog.panelId] = null;
+            setPanelState((current) => ({
+              ...current,
+              [dialog.panelId]: {
+                ...current[dialog.panelId],
+                selectedPaths: [],
+              },
+            }));
+          }
+          refreshPanel(dialog.panelId);
+          refreshPanel(oppositePanelOf(dialog.panelId));
           setStatusMessage(`${labelForAction(action)} ${operationSummaryStatusLabel(summary, settings.language)}`);
         },
         onOperationStartError: (error: AppError) => {
@@ -2559,6 +2569,24 @@ const contextMenuSources = (entry: FileEntry, listing: DirectoryListing, selecte
   const selectedEntries = listing.entries.filter((candidate) => selectedSet.has(candidate.path) && !candidate.isVirtual);
   return selectedEntries.length > 0 ? selectedEntries : [entry];
 };
+
+
+const shouldClearSourceSelectionAfterOperation = (
+  summary: OperationSummary,
+  dialogKind: DialogKind,
+) => {
+  const skippedFiles = summary.skippedFiles ?? 0;
+  return summary.state === 'completed' && summary.failedFiles === 0 && skippedFiles === 0 && sourceSelectionConsumingDialogKinds.has(dialogKind);
+};
+
+const sourceSelectionConsumingDialogKinds = new Set<DialogKind>([
+  'copy',
+  'move',
+  'trash',
+  'deletePermanent',
+  'archiveCreate',
+  'archiveExtract',
+]);
 
 const sourcesBelongToListing = (sources: readonly FileEntry[], listing: DirectoryListing) => {
   const listingPaths = new Set(listing.entries.filter((entry) => !entry.isVirtual).map((entry) => entry.path));

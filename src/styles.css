@@ -1122,8 +1122,16 @@ button {
 
 .conflict-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+.conflict-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .conflict-actions button {

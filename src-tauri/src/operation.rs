@@ -34,6 +34,7 @@ struct OperationStats {
     completed_files: u64,
     completed_bytes: u64,
     failed_files: u64,
+    skipped_files: u64,
     errors: Vec<AppError>,
     started_at: Instant,
     cancel_after_completed: Option<u64>,
@@ -47,6 +48,7 @@ impl OperationStats {
             completed_files: 0,
             completed_bytes: 0,
             failed_files: 0,
+            skipped_files: 0,
             errors: Vec::new(),
             started_at: Instant::now(),
             cancel_after_completed: None,
@@ -501,6 +503,7 @@ fn run_copy(
         };
         let destination = target_dir.join(&source_name);
         if same_path(source, &destination) {
+            stats.skipped_files += 1;
             continue;
         }
         let decision = handle_conflict(
@@ -513,7 +516,10 @@ fn run_copy(
             kind,
         );
         match decision {
-            ConflictDecision::Skip | ConflictDecision::AllSkip => continue,
+            ConflictDecision::Skip | ConflictDecision::AllSkip => {
+                stats.skipped_files += 1;
+                continue;
+            }
             ConflictDecision::Cancel => return Err(cancel_summary(operation_id, kind, &stats)),
             ConflictDecision::Overwrite | ConflictDecision::AllOverwrite
                 if path_is_occupied(&destination) =>
@@ -640,6 +646,7 @@ fn run_move(
         };
         let destination = target_dir.join(name);
         if same_path(source, &destination) {
+            stats.skipped_files += 1;
             continue;
         }
         let decision = handle_conflict(
@@ -652,7 +659,10 @@ fn run_move(
             kind,
         );
         match decision {
-            ConflictDecision::Skip | ConflictDecision::AllSkip => continue,
+            ConflictDecision::Skip | ConflictDecision::AllSkip => {
+                stats.skipped_files += 1;
+                continue;
+            }
             ConflictDecision::Cancel => return cancel_summary(operation_id, kind, &stats),
             ConflictDecision::Overwrite | ConflictDecision::AllOverwrite
                 if path_is_occupied(&destination) =>
@@ -2105,6 +2115,7 @@ fn summary_from_stats(
         state,
         completed_files: stats.completed_files,
         failed_files: stats.failed_files,
+        skipped_files: stats.skipped_files,
         errors: stats.errors.clone(),
     }
 }
@@ -2116,6 +2127,7 @@ fn error_summary(operation_id: &str, kind: OperationKind, error: AppError) -> Op
         state: OperationState::Failed,
         completed_files: 0,
         failed_files: 1,
+        skipped_files: 0,
         errors: vec![error],
     }
 }
@@ -2131,6 +2143,7 @@ fn cancel_summary(
         state: OperationState::Cancelled,
         completed_files: stats.completed_files,
         failed_files: stats.failed_files,
+        skipped_files: stats.skipped_files,
         errors: stats.errors.clone(),
     }
 }
