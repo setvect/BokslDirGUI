@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="BokslDirGUI app icon">
+  <defs>
+    <linearGradient id="iconBg" x1="128" y1="72" x2="896" y2="944" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2c2d31"/>
+      <stop offset="0.52" stop-color="#171819"/>
+      <stop offset="1" stop-color="#08090a"/>
+    </linearGradient>
+    <radialGradient id="topLight" cx="50%" cy="0%" r="80%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="panelFill" x1="150" y1="220" x2="874" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17191b"/>
+      <stop offset="1" stop-color="#070809"/>
+    </linearGradient>
+    <linearGradient id="panelHeader" x1="150" y1="224" x2="874" y2="304" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#25272b"/>
+      <stop offset="1" stop-color="#121416"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#23b5ff"/>
+      <stop offset="1" stop-color="#0072d8"/>
+    </linearGradient>
+    <linearGradient id="folderBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#31b8ff"/>
+      <stop offset="1" stop-color="#006fce"/>
+    </linearGradient>
+    <linearGradient id="folderGray" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#777a7d"/>
+      <stop offset="1" stop-color="#383a3d"/>
+    </linearGradient>
+    <filter id="outerShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="30" stdDeviation="36" flood-color="#000000" flood-opacity="0.48"/>
+    </filter>
+    <filter id="blueGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="11" flood-color="#059cff" flood-opacity="0.88"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="24" flood-color="#0072d8" flood-opacity="0.38"/>
+    </filter>
+    <filter id="softShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <clipPath id="squircle">
+      <rect x="88" y="92" width="848" height="848" rx="170" ry="170"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" fill="none"/>
+  <g filter="url(#outerShadow)">
+    <g clip-path="url(#squircle)">
+      <rect x="88" y="92" width="848" height="848" rx="170" fill="url(#iconBg)"/>
+      <rect x="88" y="92" width="848" height="350" fill="url(#topLight)"/>
+      <path d="M88 456h848v484H88z" fill="#08090a" opacity="0.16"/>
+    </g>
+    <rect x="88" y="92" width="848" height="848" rx="170" fill="none" stroke="#4a4d52" stroke-width="4" opacity="0.72"/>
+  </g>
+
+  <g filter="url(#softShadow)">
+    <rect x="154" y="248" width="338" height="538" rx="30" fill="url(#panelFill)" stroke="url(#blue)" stroke-width="8" filter="url(#blueGlow)"/>
+    <rect x="166" y="260" width="314" height="92" rx="21" fill="url(#panelHeader)" opacity="0.96"/>
+    <path d="M166 351h314" stroke="#25282c" stroke-width="4" opacity="0.9"/>
+
+    <rect x="532" y="248" width="338" height="538" rx="30" fill="url(#panelFill)" stroke="#55575c" stroke-width="5"/>
+    <rect x="542" y="260" width="318" height="92" rx="21" fill="url(#panelHeader)" opacity="0.92"/>
+    <path d="M542 351h318" stroke="#25282c" stroke-width="4" opacity="0.82"/>
+  </g>
+
+  <g id="leftRows">
+    <path d="M214 298h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderBlue)"/>
+    <rect x="400" y="317" width="42" height="8" rx="4" fill="#129fff" opacity="0.9"/>
+
+    <path d="M214 408h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderBlue)" opacity="0.9"/>
+    <rect x="332" y="427" width="112" height="11" rx="5.5" fill="#b9bdc1" opacity="0.76"/>
+    <rect x="410" y="450" width="42" height="8" rx="4" fill="#777b80" opacity="0.76"/>
+
+    <path d="M214 498h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderGray)"/>
+    <rect x="332" y="517" width="98" height="11" rx="5.5" fill="#a4a7aa" opacity="0.64"/>
+    <rect x="410" y="540" width="38" height="8" rx="4" fill="#65696d" opacity="0.72"/>
+
+    <path d="M214 588h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderGray)"/>
+    <rect x="332" y="607" width="112" height="11" rx="5.5" fill="#a4a7aa" opacity="0.58"/>
+    <rect x="410" y="630" width="42" height="8" rx="4" fill="#65696d" opacity="0.68"/>
+
+    <path d="M214 678h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderGray)" opacity="0.92"/>
+    <rect x="332" y="697" width="96" height="11" rx="5.5" fill="#a4a7aa" opacity="0.5"/>
+  </g>
+
+  <g id="rightRows" opacity="0.78">
+    <path d="M590 298h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderGray)"/>
+    <rect x="776" y="317" width="42" height="8" rx="4" fill="#96999d" opacity="0.8"/>
+
+    <path d="M590 408h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderGray)"/>
+    <rect x="708" y="427" width="112" height="11" rx="5.5" fill="#a4a7aa" opacity="0.64"/>
+    <rect x="786" y="450" width="42" height="8" rx="4" fill="#65696d" opacity="0.72"/>
+
+    <path d="M590 498h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderGray)" opacity="0.9"/>
+    <rect x="708" y="517" width="98" height="11" rx="5.5" fill="#a4a7aa" opacity="0.56"/>
+    <rect x="786" y="540" width="38" height="8" rx="4" fill="#65696d" opacity="0.65"/>
+
+    <path d="M590 588h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderGray)" opacity="0.86"/>
+    <rect x="708" y="607" width="112" height="11" rx="5.5" fill="#a4a7aa" opacity="0.5"/>
+
+    <path d="M590 678h54c10 0 18 8 18 18v28c0 10-8 18-18 18h-66c-10 0-18-8-18-18v-38c0-10 8-18 18-18h24l12 10z" fill="url(#folderGray)" opacity="0.8"/>
+    <rect x="708" y="697" width="84" height="11" rx="5.5" fill="#a4a7aa" opacity="0.44"/>
+  </g>
+
+  <g filter="url(#blueGlow)">
+    <path d="M214 688l32 30-32 30" fill="none" stroke="#129fff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="274" y="686" width="28" height="62" rx="5" fill="url(#blue)"/>
+  </g>
+</svg>
