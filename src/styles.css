@@ -19,6 +19,9 @@
   --top-menu-text: #ededed;
   --top-menu-active-bg: #3a3a3d;
   --top-menu-active-text: #fff;
+  --top-menu-focused-bg: #006fbd;
+  --top-menu-focused-text: #fff;
+  --top-menu-focused-outline: #37b9ff;
   --clock-text: #aaa;
   --panel-zone-bg: #181818;
   --panel-bg: #1a1a1a;
@@ -213,6 +216,13 @@ button {
   background: var(--top-menu-active-bg);
   color: var(--top-menu-active-text);
   outline: none;
+}
+
+.menu-trigger[data-state='focused'] {
+  background: var(--top-menu-focused-bg);
+  color: var(--top-menu-focused-text);
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--top-menu-focused-outline);
 }
 
 .clock {
@@ -1293,6 +1303,9 @@ body[data-theme="light"] {
   --top-menu-text: #15202b;
   --top-menu-active-bg: #d1d9e4;
   --top-menu-active-text: #101828;
+  --top-menu-focused-bg: #005ea8;
+  --top-menu-focused-text: #ffffff;
+  --top-menu-focused-outline: #0078c8;
   --clock-text: #52606e;
   --panel-zone-bg: #eef2f6;
   --panel-bg: #ffffff;
@@ -1405,6 +1418,9 @@ body[data-theme="highContrast"] {
   --top-menu-text: #ffffff;
   --top-menu-active-bg: #ffff00;
   --top-menu-active-text: #000000;
+  --top-menu-focused-bg: #ffff00;
+  --top-menu-focused-text: #000000;
+  --top-menu-focused-outline: #00ffff;
   --clock-text: #ffffff;
   --panel-zone-bg: #000000;
   --panel-bg: #000000;

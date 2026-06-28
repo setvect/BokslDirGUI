@@ -184,6 +184,7 @@ interface TopMenuState {
   rootIndex: number;
   itemIndex: number;
   submenuIndex: number | null;
+  menuOpen: boolean;
 }
 
 interface MenuActionNode {
@@ -211,7 +212,7 @@ interface TopMenuKeyboardRuntime {
   context: ActionContext;
   settings: Settings;
   getState(): TopMenuState | null;
-  open(rootIndex?: number): void;
+  open(rootIndex?: number, menuOpen?: boolean): void;
   close(): void;
   setState(next: TopMenuState): void;
   execute(action: AppAction): void;
@@ -895,13 +896,13 @@ export function CommanderShell({
     setStatusMessage(null);
   };
 
-  const openTopMenu = (rootIndex = 0) => {
+  const openTopMenu = (rootIndex = 0, menuOpen = true) => {
     const rootCount = menuRootsFromRegistry().length;
     if (rootCount === 0) {
       return;
     }
     const nextRootIndex = clampNumber(rootIndex, 0, rootCount - 1);
-    setTopMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null });
+    setTopMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null, menuOpen });
     setStatusMessage(statusText.menu(menuRootLabelFromRegistry(menuRootsFromRegistry()[nextRootIndex], settings.language)));
   };
 
@@ -921,7 +922,7 @@ export function CommanderShell({
       if (topMenuState) {
         closeTopMenu();
       } else {
-        openTopMenu(0);
+        openTopMenu(0, false);
       }
       return;
     }
@@ -1689,7 +1690,7 @@ interface TopMenuBarProps {
   settings: Settings;
   context: Parameters<AppAction['isEnabled']>[0];
   state: TopMenuState | null;
-  onOpenRoot(rootIndex?: number): void;
+  onOpenRoot(rootIndex?: number, menuOpen?: boolean): void;
   onClose(): void;
   onStateChange(next: TopMenuState): void;
   onOpenAction(action: AppAction): void;
@@ -1795,7 +1796,7 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
     if (openFromClosed || (event.altKey && acceleratedRootIndex >= 0)) {
       event.preventDefault();
       event.stopPropagation();
-      runtime.open(openFromClosed ? 0 : acceleratedRootIndex);
+      runtime.open(openFromClosed ? 0 : acceleratedRootIndex, !openFromClosed);
       return true;
     }
     return false;
@@ -1815,17 +1816,21 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
 
   const moveRoot = (delta: number) => {
     const nextRootIndex = (state!.rootIndex + delta + roots.length) % roots.length;
-    applyMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null });
+    applyMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null, menuOpen: state!.menuOpen });
   };
   const nodes = menuNodesForRoot(roots[state.rootIndex], runtime.context, runtime.settings);
   const selectedNode = nodes[state.itemIndex];
-  if (nodes.length === 0) {
+  if (nodes.length === 0 && state.menuOpen) {
     return true;
   }
 
   if (accelerator) {
     if (acceleratedRootIndex >= 0) {
-      applyMenuState({ rootIndex: acceleratedRootIndex, itemIndex: 0, submenuIndex: null });
+      applyMenuState({ rootIndex: acceleratedRootIndex, itemIndex: 0, submenuIndex: null, menuOpen: state.menuOpen });
+      return true;
+    }
+
+    if (!state.menuOpen) {
       return true;
     }
 
@@ -1857,6 +1862,10 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
   }
 
   if (event.key === 'ArrowRight') {
+    if (!state.menuOpen) {
+      moveRoot(1);
+      return true;
+    }
     if (selectedNode?.kind === 'submenu' && state.submenuIndex === null) {
       applyMenuState({ ...state, submenuIndex: 0 });
       return true;
@@ -1866,6 +1875,10 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
   }
 
   if (event.key === 'ArrowLeft') {
+    if (!state.menuOpen) {
+      moveRoot(-1);
+      return true;
+    }
     if (state.submenuIndex !== null) {
       applyMenuState({ ...state, submenuIndex: null });
       return true;
@@ -1875,6 +1888,10 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
   }
 
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    if (!state.menuOpen) {
+      applyMenuState({ ...state, itemIndex: event.key === 'ArrowUp' ? Math.max(0, nodes.length - 1) : 0, submenuIndex: null, menuOpen: true });
+      return true;
+    }
     const delta = event.key === 'ArrowDown' ? 1 : -1;
     if (state.submenuIndex !== null && selectedNode?.kind === 'submenu') {
       const childCount = selectedNode.children.length;
@@ -1893,16 +1910,22 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
   }
 
   if (event.key === 'Home') {
-    applyMenuState({ ...state, itemIndex: 0, submenuIndex: null });
+    applyMenuState(state.menuOpen ? { ...state, itemIndex: 0, submenuIndex: null } : { ...state, rootIndex: 0, itemIndex: 0, submenuIndex: null });
     return true;
   }
 
   if (event.key === 'End') {
-    applyMenuState({ ...state, itemIndex: Math.max(0, nodes.length - 1), submenuIndex: null });
+    applyMenuState(state.menuOpen
+      ? { ...state, itemIndex: Math.max(0, nodes.length - 1), submenuIndex: null }
+      : { ...state, rootIndex: Math.max(0, roots.length - 1), itemIndex: 0, submenuIndex: null });
     return true;
   }
 
   if (event.key === 'Enter' || event.key === ' ') {
+    if (!state.menuOpen) {
+      applyMenuState({ ...state, itemIndex: 0, submenuIndex: null, menuOpen: true });
+      return true;
+    }
     if (selectedNode?.kind === 'submenu') {
       if (state.submenuIndex === null) {
         applyMenuState({ ...state, submenuIndex: 0 });
@@ -1945,26 +1968,27 @@ function TopMenuBar({ language, settings, context, state, onOpenRoot, onClose, o
   const now = useLocalClock();
   const roots = menuRootsFromRegistry();
   const activeRoot = state ? roots[state.rootIndex] : null;
-  const activeNodes = activeRoot ? menuNodesForRoot(activeRoot, context, settings) : [];
+  const activeNodes = activeRoot && state?.menuOpen ? menuNodesForRoot(activeRoot, context, settings) : [];
 
   return (
     <header className="top-menu" aria-label="application menu">
       <div className="brand" aria-label="application name">{COMMANDER_UI_TEXT[language].brand}</div>
       <nav className="menu-list" aria-label="primary actions">
         {roots.map((root, rootIndex) => {
-          const isOpen = state?.rootIndex === rootIndex;
+          const isActiveRoot = state?.rootIndex === rootIndex;
+          const isMenuOpen = Boolean(isActiveRoot && state?.menuOpen);
           return (
             <button
               key={root}
               type="button"
               className="menu-trigger"
               aria-haspopup="menu"
-              aria-expanded={isOpen}
-              data-state={isOpen ? 'open' : 'closed'}
-              onClick={() => (isOpen ? onClose() : onOpenRoot(rootIndex))}
+              aria-expanded={isMenuOpen}
+              data-state={isActiveRoot ? (isMenuOpen ? 'open' : 'focused') : 'closed'}
+              onClick={() => (isMenuOpen ? onClose() : onOpenRoot(rootIndex, true))}
               onMouseEnter={() => {
                 if (state) {
-                  onOpenRoot(rootIndex);
+                  onOpenRoot(rootIndex, state.menuOpen);
                 }
               }}
             >
@@ -1974,7 +1998,7 @@ function TopMenuBar({ language, settings, context, state, onOpenRoot, onClose, o
         })}
       </nav>
       <time className="clock" dateTime={now.toISOString()}>{formatLocalClock(now)}</time>
-      {state && activeRoot ? (
+      {state?.menuOpen && activeRoot ? (
         <MenuPopoverContent
           language={language}
           root={activeRoot}

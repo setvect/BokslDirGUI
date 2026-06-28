@@ -1737,19 +1737,26 @@ describe('CommanderShell', () => {
     await waitFor(() => expect(commanderKeyboardOwners()).toContain('menu-popover'));
   });
 
-  it('opens the top menu with F9 and navigates root menus with the keyboard', async () => {
+  it('focuses only the top menu bar with F9 and opens the focused menu on Down', async () => {
     const user = userEvent.setup();
     renderCommander();
 
     await user.keyboard('{F9}');
 
-    const fileMenu = await screen.findByRole('menu', { name: '파일(F) menu' });
-    expect(within(fileMenu).getAllByRole('menuitem')[0].textContent).toContain('열기');
-    expect(within(fileMenu).getAllByRole('menuitem')[0].className).toContain('is-focused');
-    expect(commanderKeyboardOwners()).toContain('menu-popover');
+    const fileTrigger = screen.getByRole('button', { name: '파일(F)' });
+    expect(fileTrigger.getAttribute('data-state')).toBe('focused');
+    expect(fileTrigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('menu', { name: '파일(F) menu' })).toBeNull();
+    expect(commanderKeyboardOwners()).not.toContain('menu-popover');
 
     await user.keyboard('{ArrowRight}');
-    expect(await screen.findByRole('menu', { name: '편집(E) menu' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '편집(E)' }).getAttribute('data-state')).toBe('focused');
+    expect(screen.queryByRole('menu', { name: '편집(E) menu' })).toBeNull();
+
+    await user.keyboard('{ArrowDown}');
+    const fileMenu = await screen.findByRole('menu', { name: '편집(E) menu' });
+    expect(within(fileMenu).getAllByRole('menuitem')[0].className).toContain('is-focused');
+    expect(commanderKeyboardOwners()).toContain('menu-popover');
 
     await user.keyboard('{F9}');
     expect(screen.queryByRole('menu', { name: '편집(E) menu' })).toBeNull();
@@ -1760,6 +1767,10 @@ describe('CommanderShell', () => {
     renderCommander();
 
     await user.keyboard('{F9}v');
+    expect(screen.getByRole('button', { name: '보기(V)' }).getAttribute('data-state')).toBe('focused');
+    expect(screen.queryByRole('menu', { name: '보기(V) menu' })).toBeNull();
+
+    await user.keyboard('{ArrowDown}');
     expect(await screen.findByRole('menu', { name: '보기(V) menu' })).toBeTruthy();
 
     await user.keyboard('{ArrowRight}');
@@ -1781,9 +1792,14 @@ describe('CommanderShell', () => {
     );
 
     await user.keyboard('{F9}v');
-    expect(await screen.findByRole('menu', { name: '보기(V) menu' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '보기(V)' }).getAttribute('data-state')).toBe('focused');
+    expect(screen.queryByRole('menu', { name: '보기(V) menu' })).toBeNull();
 
     await user.keyboard('s');
+    expect(screen.getByRole('button', { name: '설정(S)' }).getAttribute('data-state')).toBe('focused');
+    expect(screen.queryByRole('menu', { name: '설정(S) menu' })).toBeNull();
+
+    await user.keyboard('{ArrowDown}');
     expect(await screen.findByRole('menu', { name: '설정(S) menu' })).toBeTruthy();
 
     await user.keyboard('f');
@@ -1802,8 +1818,11 @@ describe('CommanderShell', () => {
 
     await user.keyboard('{F9}');
     await user.keyboard('{ArrowRight}');
-    expect(await screen.findByRole('menu', { name: '편집(E) menu' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '편집(E)' }).getAttribute('data-state')).toBe('focused');
     await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('button', { name: '보기(V)' }).getAttribute('data-state')).toBe('focused');
+    expect(screen.queryByRole('menu', { name: '보기(V) menu' })).toBeNull();
+    await user.keyboard('{ArrowDown}');
     expect(await screen.findByRole('menu', { name: '보기(V) menu' })).toBeTruthy();
 
     for (let index = 0; index < 8; index += 1) {
