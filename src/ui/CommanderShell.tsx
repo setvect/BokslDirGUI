@@ -193,6 +193,8 @@ interface MenuActionNode {
   accelerator: string | null;
   action: AppAction;
   enabled: boolean;
+  checkable: boolean;
+  checked: boolean;
 }
 
 interface MenuSubmenuNode {
@@ -207,7 +209,7 @@ type MenuNode = MenuActionNode | MenuSubmenuNode;
 
 interface TopMenuKeyboardRuntime {
   context: ActionContext;
-  language: Settings['language'];
+  settings: Settings;
   getState(): TopMenuState | null;
   open(rootIndex?: number): void;
   close(): void;
@@ -565,8 +567,7 @@ export function CommanderShell({
   };
 
   const saveSettingsPatch = async (patch: Partial<Settings>, successMessage: string | null, options: { silent?: boolean } = {}) => {
-    const optimistic = mergeSettings(settings, patch);
-    setSettings(optimistic);
+    setSettings((current) => mergeSettings(current, patch));
     if (!options.silent && successMessage) {
       setStatusMessage(successMessage);
     }
@@ -1315,7 +1316,7 @@ export function CommanderShell({
   };
   topMenuKeyboardRuntimeRef.current = {
     context,
-    language: settings.language,
+    settings,
     getState: () => topMenuStateRef.current,
     open: openTopMenu,
     close: closeTopMenu,
@@ -1553,6 +1554,7 @@ export function CommanderShell({
     >
       <TopMenuBar
         language={settings.language}
+        settings={settings}
         context={context}
         state={topMenuState}
         onOpenRoot={openTopMenu}
@@ -1671,6 +1673,7 @@ export function CommanderShell({
 
 interface TopMenuBarProps {
   language: Settings['language'];
+  settings: Settings;
   context: Parameters<AppAction['isEnabled']>[0];
   state: TopMenuState | null;
   onOpenRoot(rootIndex?: number): void;
@@ -1679,7 +1682,8 @@ interface TopMenuBarProps {
   onOpenAction(action: AppAction): void;
 }
 
-const menuNodesForRoot = (root: string, context: ActionContext, language: Settings['language']): MenuNode[] => {
+const menuNodesForRoot = (root: string, context: ActionContext, settings: Settings): MenuNode[] => {
+  const language = settings.language;
   const nodes: MenuNode[] = [];
   const submenuByLabel = new Map<string, MenuSubmenuNode>();
 
@@ -1707,6 +1711,8 @@ const menuNodesForRoot = (root: string, context: ActionContext, language: Settin
         accelerator: menuLabelAccelerator(acceleratorSegments.at(-1) ?? action.displayLabel),
         action,
         enabled: isActionAvailable(action, context),
+        checkable: isCheckableMenuAction(action),
+        checked: isCheckedMenuAction(action, settings),
       });
       continue;
     }
@@ -1718,10 +1724,48 @@ const menuNodesForRoot = (root: string, context: ActionContext, language: Settin
       accelerator: menuLabelAccelerator(acceleratorSegments[0] ?? action.displayLabel),
       action,
       enabled: isActionAvailable(action, context),
+      checkable: isCheckableMenuAction(action),
+      checked: isCheckedMenuAction(action, settings),
     });
   }
 
   return nodes;
+};
+
+const CHECKABLE_MENU_ACTION_IDS = new Set<ActionId>([
+  'settings.themeDark',
+  'settings.themeLight',
+  'settings.themeHighContrast',
+  'settings.languageEn',
+  'settings.languageKo',
+  'settings.editorVi',
+  'settings.editorVim',
+  'settings.editorNano',
+  'settings.editorEmacs',
+  'settings.sizeAuto',
+  'settings.sizeBytes',
+  'settings.toggleIcons',
+]);
+
+const isCheckableMenuAction = (action: AppAction) =>
+  CHECKABLE_MENU_ACTION_IDS.has(action.id as ActionId);
+
+const isCheckedMenuAction = (action: AppAction, settings: Settings) => {
+  const actionId = action.id as ActionId;
+  return (
+    (actionId === 'settings.themeDark' && settings.theme === 'dark') ||
+    (actionId === 'settings.themeLight' && settings.theme === 'light') ||
+    (actionId === 'settings.themeHighContrast' && settings.theme === 'highContrast') ||
+    (actionId === 'settings.languageEn' && settings.language === 'en') ||
+    (actionId === 'settings.languageKo' && settings.language === 'ko') ||
+    (actionId === 'settings.editorVi' && settings.external.editorId === 'vi') ||
+    (actionId === 'settings.editorVim' && settings.external.editorId === 'vim') ||
+    (actionId === 'settings.editorNano' && settings.external.editorId === 'nano') ||
+    (actionId === 'settings.editorEmacs' && settings.external.editorId === 'emacs') ||
+    (actionId === 'settings.sizeAuto' && settings.sizeFormat === 'binary') ||
+    (actionId === 'settings.sizeBytes' && settings.sizeFormat === 'decimal') ||
+    (actionId === 'settings.toggleIcons' && settings.view.showIcons)
+  );
 };
 
 const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRuntime | null) => {
@@ -1760,7 +1804,7 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
     const nextRootIndex = (state!.rootIndex + delta + roots.length) % roots.length;
     applyMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null });
   };
-  const nodes = menuNodesForRoot(roots[state.rootIndex], runtime.context, runtime.language);
+  const nodes = menuNodesForRoot(roots[state.rootIndex], runtime.context, runtime.settings);
   const selectedNode = nodes[state.itemIndex];
   if (nodes.length === 0) {
     return true;
@@ -1884,11 +1928,11 @@ const menuLabelAccelerator = (label: string) => {
   return first ? first.toUpperCase() : null;
 };
 
-function TopMenuBar({ language, context, state, onOpenRoot, onClose, onStateChange, onOpenAction }: TopMenuBarProps) {
+function TopMenuBar({ language, settings, context, state, onOpenRoot, onClose, onStateChange, onOpenAction }: TopMenuBarProps) {
   const now = useLocalClock();
   const roots = menuRootsFromRegistry();
   const activeRoot = state ? roots[state.rootIndex] : null;
-  const activeNodes = activeRoot ? menuNodesForRoot(activeRoot, context, language) : [];
+  const activeNodes = activeRoot ? menuNodesForRoot(activeRoot, context, settings) : [];
 
   return (
     <header className="top-menu" aria-label="application menu">
@@ -1942,7 +1986,6 @@ function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateCh
   onOpenAction(action: AppAction): void;
 }) {
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('menu-popover');
-  const selectedNode = nodes[state.itemIndex];
 
   return (
     <div
@@ -1952,7 +1995,6 @@ function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateCh
       style={{ '--menu-root-index': rootIndex } as CSSProperties}
       {...keyboardBoundaryProps}
     >
-      <div className="menu-popover-title">{menuRootLabelFromRegistry(root, language)}</div>
       {nodes.map((node, itemIndex) => {
         const focused = state.itemIndex === itemIndex;
         if (node.kind === 'submenu') {
@@ -1978,7 +2020,7 @@ function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateCh
                       key={child.id}
                       type="button"
                       role="menuitem"
-                      className={`menu-item ${state.submenuIndex === submenuIndex ? 'is-focused' : ''}`}
+                      className={`menu-item ${child.checkable ? 'is-checkable' : ''} ${state.submenuIndex === submenuIndex ? 'is-focused' : ''}`}
                       disabled={!child.enabled}
                       onMouseEnter={() => onStateChange({ ...state, itemIndex, submenuIndex })}
                       onClick={() => {
@@ -1986,9 +2028,12 @@ function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateCh
                           onOpenAction(child.action);
                         }
                       }}
+                      data-checked={child.checkable ? (child.checked ? 'true' : 'false') : undefined}
+                      aria-checked={child.checkable ? child.checked : undefined}
                     >
+                      {child.checkable ? <span className="menu-checkmark" aria-hidden="true">{child.checked ? '✓' : ''}</span> : null}
                       <span>{child.label}</span>
-                      <kbd>{shortcutLabelForAction(child.action)}</kbd>
+                      <kbd>{menuShortcutLabel(child.action)}</kbd>
                     </button>
                   ))}
                 </div>
@@ -2010,18 +2055,28 @@ function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateCh
                 onOpenAction(node.action);
               }
             }}
+            data-checked={node.checkable ? (node.checked ? 'true' : 'false') : undefined}
+            aria-checked={node.checkable ? node.checked : undefined}
           >
             <span>{node.label}</span>
-            <kbd>{shortcutLabelForAction(node.action)}</kbd>
+            {node.checkable ? (
+              <kbd className="menu-checkmark-inline" aria-hidden="true">{node.checked ? '✓' : ''}</kbd>
+            ) : (
+              <kbd>{menuShortcutLabel(node.action)}</kbd>
+            )}
           </button>
         );
       })}
-      {selectedNode?.kind === 'submenu' && state.submenuIndex === null ? (
-        <div className="menu-submenu-hint" aria-hidden="true">→ submenu</div>
-      ) : null}
     </div>
   );
 }
+
+const menuShortcutLabel = (action: AppAction) => {
+  if (!action.shortcutLabel && !action.keyboardBindings?.length) {
+    return '';
+  }
+  return shortcutLabelForAction(action);
+};
 
 export interface PanelColumnLayout {
   showModified: boolean;

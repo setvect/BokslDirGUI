@@ -1982,16 +1982,31 @@ describe('CommanderShell', () => {
     const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
+    const toggleIconsItem = await screen.findByRole('menuitem', { name: /아이콘 전환/ });
+    expect(toggleIconsItem.getAttribute('data-checked')).toBe('true');
+    expect(toggleIconsItem.querySelector('.menu-checkmark-inline')?.textContent).toBe('✓');
     fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
     await user.click(await screen.findByRole('menuitem', { name: /라이트/ }));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { theme: 'light' } }));
     expect(shell.getAttribute('data-theme')).toBe('light');
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
-    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /언어/ }));
+    const languageSubmenu = await screen.findByRole('menuitem', { name: /언어/ });
+    expect(languageSubmenu.querySelector('.menu-checkmark')).toBeNull();
+    fireEvent.mouseEnter(languageSubmenu);
+    expect((await screen.findByRole('menuitem', { name: /한국어/ })).getAttribute('data-checked')).toBe('true');
+    expect((await screen.findByRole('menuitem', { name: /영어/ })).getAttribute('data-checked')).toBe('false');
     await user.click(await screen.findByRole('menuitem', { name: /영어/ }));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { language: 'en' } }));
     expect(shell.getAttribute('data-language')).toBe('en');
+
+    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
+    const englishLanguageSubmenu = await screen.findByRole('menuitem', { name: /Language/ });
+    expect(englishLanguageSubmenu.querySelector('.menu-checkmark')).toBeNull();
+    fireEvent.mouseEnter(englishLanguageSubmenu);
+    expect((await screen.findByRole('menuitem', { name: /^English$/ })).getAttribute('data-checked')).toBe('true');
+    expect((await screen.findByRole('menuitem', { name: /^Korean$/ })).getAttribute('data-checked')).toBe('false');
+    await user.keyboard('{Escape}');
 
     await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
     fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Default Editor/ }));

@@ -539,7 +539,6 @@ button {
   padding: 6px;
 }
 
-.menu-popover-title,
 .context-label {
   padding: 5px 9px 7px;
   border-bottom: 1px solid #353535;
@@ -550,7 +549,6 @@ button {
 .menu-item,
 .context-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 24px;
   width: 100%;
@@ -560,6 +558,29 @@ button {
   background: transparent;
   color: #f2f2f2;
   text-align: left;
+}
+
+.menu-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.menu-item.is-checkable {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+}
+
+.context-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.menu-checkmark {
+  color: var(--cyan);
+  text-align: center;
+}
+
+.menu-checkmark-inline {
+  min-width: 1.2ch;
+  color: var(--cyan);
+  text-align: right;
 }
 
 .menu-entry-with-submenu {
