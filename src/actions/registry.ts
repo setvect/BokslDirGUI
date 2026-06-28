@@ -1,4 +1,5 @@
 import type { PanelId } from '../domain/types';
+import { ACTION_LABELS, HOTKEY_LABELS, MENU_SEGMENT_LABELS, type SupportedLanguage } from '../i18n-resources';
 import { COMMANDS, type TauriCommandName } from '../tauri/client';
 
 export type ActionCategory = 'navigation' | 'selection' | 'file' | 'archive' | 'view' | 'panel' | 'settings' | 'help';
@@ -228,14 +229,27 @@ export const actionMatchesContextScope = (action: AppAction, context: ActionCont
 export const isActionAvailable = (action: AppAction, context: ActionContext) =>
   action.isEnabled(context) && actionMatchesContextScope(action, context);
 
-export const labelForAction = (action: AppAction) => action.displayLabel;
+
+export const menuSegmentLabel = (segment: string, language: SupportedLanguage = 'en') =>
+  MENU_SEGMENT_LABELS[language][segment] ?? segment;
+
+export const menuPathSegmentsForAction = (action: AppAction, language: SupportedLanguage = 'en') =>
+  action.menuPath?.map((segment) => menuSegmentLabel(segment, language));
+
+export const labelForAction = (action: AppAction, language: SupportedLanguage = 'en') =>
+  ACTION_LABELS[language][action.id] ?? menuSegmentLabel(action.displayLabel, language);
+
+export const hotkeyLabelForAction = (action: AppAction, language: SupportedLanguage = 'en') =>
+  HOTKEY_LABELS[language][action.id] ?? action.hotkeyLabel;
+
 
 export const actionsForMenu = (menuRoot: string) =>
   ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot);
 
-export const menuRootLabelFromRegistry = (root: string) => {
+export const menuRootLabelFromRegistry = (root: string, language: SupportedLanguage = 'en') => {
   const accelerator = MENU_ROOT_ACCELERATORS.get(root);
-  return accelerator ? `${root}(${accelerator})` : root;
+  const label = menuSegmentLabel(root, language);
+  return accelerator ? `${label}(${accelerator})` : label;
 };
 
 export const menuRootAcceleratorFromRegistry = (root: string) =>

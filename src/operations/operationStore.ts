@@ -857,7 +857,7 @@ const requiredConfirmationPhraseForDialog = (dialogKind: DialogKind, request: Op
   if (request.sources.length === 1 && request.sources[0]?.name) {
     return request.sources[0].name;
   }
-  return `삭제 ${request.sources.length}개`;
+  return `DELETE ${request.sources.length}`;
 };
 
 const validateDialogInput = (dialogKind: DialogKind, value: string, requiredConfirmationPhrase: string | null) => {

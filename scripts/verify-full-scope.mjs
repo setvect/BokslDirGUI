@@ -13,6 +13,7 @@ for (const script of ['typecheck', 'test', 'build', 'check', 'rust:test', 'verif
 }
 
 const registry = read('src/actions/registry.ts');
+const i18nResources = read('src/i18n-resources.ts');
 const registryActionIds = [...registry.matchAll(/id: '([^']+)'/g)].map((match) => match[1]);
 const registryActionIdSet = new Set(registryActionIds);
 
@@ -418,7 +419,7 @@ addCheck(
 );
 addCheck(
   'commander shell exposes real filter input path',
-  commanderShell.includes('FilterPrompt') && commanderOverlays.includes('Filter pattern') && commanderShell.includes("Object.hasOwn(options, 'filter')"),
+  commanderShell.includes('FilterPrompt') && (commanderOverlays.includes('Filter pattern') || i18nResources.includes('filterPattern')) && commanderShell.includes("Object.hasOwn(options, 'filter')"),
   'filter.start/filter.clear must send explicit non-null/null filter values to list_dir',
 );
 addCheck(
@@ -553,7 +554,6 @@ for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.prepareShellCommand', '
   addCheck(`full-scope test covers ${token}`, fullScopeTest.includes(token), 'Semantic verification beyond static smoke');
 }
 
-const i18nResources = read('src/i18n-resources.ts');
 for (const token of ['I18N_RESOURCES', "'ko'", "'en'", 'errors.archiveFormatUnsupported', 'errors.shellCommandDisabled']) {
   addCheck(`i18n resources include ${token}`, i18nResources.includes(token), 'message keys must have Korean and English resources');
 }

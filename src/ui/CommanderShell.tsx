@@ -13,12 +13,15 @@ import {
   ACTION_BY_ID,
   ariaKeyShortcutsFromRegistry,
   actionsForMenu,
+  hotkeyLabelForAction,
   hotkeyStripActionsFromRegistry,
   isActionAvailable,
   labelForAction,
   matchKeyboardShortcut,
   menuRootAcceleratorFromRegistry,
+  menuPathSegmentsForAction,
   menuRootLabelFromRegistry,
+  menuSegmentLabel,
   menuRootsFromRegistry,
   shortcutLabelForAction,
   type ActionContext,
@@ -30,7 +33,16 @@ import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { operationSummaryStatusLabel } from '../operations/operationLabels';
 import { dialogKindForAction, isOperationInFlight, useOperationStore, type AtomicCommandExecutor, type DialogKind, type LongRunningOperationExecutor, type OperationDialogDraft } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
-import { formatUserErrorMessage } from '../i18n-resources';
+import {
+  COMMANDER_NAVIGATION_TEXT,
+  COMMANDER_STATUS_TEXT,
+  COMMANDER_UI_TEXT,
+  FILE_ENTRY_TEXT,
+  HOTKEY_STRIP_TEXT,
+  METADATA_KIND_LABELS,
+  PANEL_ID_LABELS,
+  formatUserErrorMessage,
+} from '../i18n-resources';
 import { actionNeedsConcreteSources, createActionContext, filterEnabledActions, resolveActionTargets } from './actionContext';
 import { createTauriPanelDataSource, type PanelDataSource, type PanelInitialLoadResult } from './panelDataSource';
 import {
@@ -178,6 +190,7 @@ interface MenuActionNode {
   kind: 'action';
   id: string;
   label: string;
+  accelerator: string | null;
   action: AppAction;
   enabled: boolean;
 }
@@ -186,6 +199,7 @@ interface MenuSubmenuNode {
   kind: 'submenu';
   id: string;
   label: string;
+  accelerator: string | null;
   children: MenuActionNode[];
 }
 
@@ -193,6 +207,7 @@ type MenuNode = MenuActionNode | MenuSubmenuNode;
 
 interface TopMenuKeyboardRuntime {
   context: ActionContext;
+  language: Settings['language'];
   getState(): TopMenuState | null;
   open(rootIndex?: number): void;
   close(): void;
@@ -270,6 +285,8 @@ export function CommanderShell({
   }));
   const [dragSource, setDragSource] = useState<{ panelId: PanelId; entry: FileEntry } | null>(null);
   const viewMetrics = viewMetricsForSettings(settings.view);
+  const statusText = COMMANDER_STATUS_TEXT[settings.language];
+  const navigationText = COMMANDER_NAVIGATION_TEXT[settings.language];
   const shellStyle = {
     '--commander-scale': String(viewMetrics.scale),
     '--commander-font-size': `${viewMetrics.fontSizePx}px`,
@@ -373,7 +390,7 @@ export function CommanderShell({
         ...current,
         [panelId]: markPanelError(current[panelId], result.error),
       }));
-      setStatusMessage(`목록 읽기 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
+      setStatusMessage(statusText.listFailed(formatUserErrorMessage(settings.language, result.error)));
       shellRef.current?.focus({ preventScroll: true });
       return;
     }
@@ -410,7 +427,7 @@ export function CommanderShell({
     }
     if (!result.ok) {
       setPanelState((current) => ({ ...current, [panelId]: markPanelError(current[panelId], result.error) }));
-      setStatusMessage(`직접 이동 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
+      setStatusMessage(statusText.gotoFailed(formatUserErrorMessage(settings.language, result.error)));
       return;
     }
     setPanelState((current) => ({
@@ -423,7 +440,7 @@ export function CommanderShell({
         showHidden: false,
       },
     }));
-    setStatusMessage(`이동 완료: ${result.data.path}`);
+    setStatusMessage(statusText.gotoCompleted(result.data.path));
     shellRef.current?.focus({ preventScroll: true });
   };
 
@@ -462,7 +479,7 @@ export function CommanderShell({
     const panel = panelState[panelId];
     const targetPath = panel.historyBack.at(-1);
     if (!targetPath) {
-      setStatusMessage('뒤로 이동할 history가 없습니다.');
+      setStatusMessage(statusText.noBackHistory);
       return;
     }
     void listPanel(panelId, targetPath, {
@@ -475,7 +492,7 @@ export function CommanderShell({
     const panel = panelState[panelId];
     const targetPath = panel.historyForward[0];
     if (!targetPath) {
-      setStatusMessage('앞으로 이동할 history가 없습니다.');
+      setStatusMessage(statusText.noForwardHistory);
       return;
     }
     void listPanel(panelId, targetPath, {
@@ -502,7 +519,7 @@ export function CommanderShell({
 
     if (focusedEntry.isVirtual) {
       focusEntry(panelId, panel.focusedIndex + 1);
-      setStatusMessage('가상 항목은 선택 대상으로 표시하지 않습니다.');
+      setStatusMessage(statusText.virtualEntryNotSelectable);
       return;
     }
 
@@ -558,7 +575,7 @@ export function CommanderShell({
     }
     const result = await mutationClient.saveSettings({ patch });
     if (!result.ok) {
-      setStatusMessage(`설정 저장 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
+      setStatusMessage(statusText.settingsSaveFailed(formatUserErrorMessage(settings.language, result.error)));
       return;
     }
     setSettings(normalizeSettings(result.data));
@@ -598,7 +615,7 @@ export function CommanderShell({
     const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
     void saveSettingsPatch({
       bookmarks: [...bookmarks.filter((item) => item.path !== panel.path), bookmark],
-    }, `Bookmark 추가: ${bookmark.label}`);
+    }, statusText.bookmarkAdded(bookmark.label));
   };
 
   const renameBookmarkForPanel = (panelId: PanelId) => {
@@ -607,7 +624,7 @@ export function CommanderShell({
     const next = bookmarks.map((bookmark) =>
       bookmark.path === panel.path ? { ...bookmark, label: `${shortenPath(panel.path)} · renamed` } : bookmark,
     );
-    void saveSettingsPatch({ bookmarks: next }, `Bookmark 이름 변경: ${shortenPath(panel.path)}`);
+    void saveSettingsPatch({ bookmarks: next }, statusText.bookmarkRenamed(shortenPath(panel.path)));
   };
 
   const deleteBookmarkForPanel = (panelId: PanelId) => {
@@ -615,7 +632,7 @@ export function CommanderShell({
     const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
     void saveSettingsPatch({
       bookmarks: bookmarks.filter((bookmark) => bookmark.path !== panel.path),
-    }, `Bookmark 삭제: ${shortenPath(panel.path)}`);
+    }, statusText.bookmarkDeleted(shortenPath(panel.path)));
   };
 
   const openBookmarkList = (panelId: PanelId) => {
@@ -623,7 +640,7 @@ export function CommanderShell({
     setNavigationList({
       kind: 'bookmarks',
       panelId,
-      title: 'Bookmarks',
+      title: navigationText.bookmarksTitle,
       items: bookmarks.map((bookmark) => ({
         id: bookmark.id,
         label: bookmark.label,
@@ -640,10 +657,10 @@ export function CommanderShell({
     setNavigationList({
       kind: 'history',
       panelId,
-      title: `${panelId.toUpperCase()} History`,
+      title: navigationText.historyTitle(panelIdLabel(panelId, settings.language)),
       items: history.map((path, index) => ({
         id: `history-${index}-${path}`,
-        label: index === panel.historyBack.length ? `현재 · ${shortenPath(path)}` : shortenPath(path),
+        label: index === panel.historyBack.length ? navigationText.currentPathLabel(shortenPath(path)) : shortenPath(path),
         path,
         group: index < panel.historyBack.length ? 'back' : index === panel.historyBack.length ? 'current' : 'forward',
       })),
@@ -655,7 +672,7 @@ export function CommanderShell({
     setNavigationList({
       kind: 'tabs',
       panelId,
-      title: `${panelId.toUpperCase()} Tabs`,
+      title: navigationText.tabsTitle(panelIdLabel(panelId, settings.language)),
       items: panelTabs[panelId].map((path, index) => ({
         id: `tab-${index}-${path}`,
         label: `${index + 1}. ${shortenPath(path)}`,
@@ -668,19 +685,19 @@ export function CommanderShell({
 
   const openLocationsList = async (panelId: PanelId) => {
     const requestId = ++locationsRequestRef.current;
-    setStatusMessage('위치 목록을 불러오는 중…');
+    setStatusMessage(statusText.locationsLoading);
     const result = await dataSource.listLocations();
     if (requestId !== locationsRequestRef.current) {
       return;
     }
     if (!result.ok) {
-      setStatusMessage(`위치 목록 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
+      setStatusMessage(statusText.locationsFailed(formatUserErrorMessage(settings.language, result.error)));
       return;
     }
     setNavigationList({
       kind: 'locations',
       panelId,
-      title: 'Locations',
+      title: navigationText.locationsTitle,
       items: navigationItemsFromLocations(result.data, settings),
     });
     setStatusMessage(null);
@@ -689,7 +706,7 @@ export function CommanderShell({
   const chooseNavigationItem = (state: NavigationListState, item: NavigationListItem) => {
     setNavigationList(null);
     if (state.kind === 'archive') {
-      setStatusMessage(`Archive entry · ${item.path}`);
+      setStatusMessage(statusText.archiveEntry(item.path));
       shellRef.current?.focus({ preventScroll: true });
       return;
     }
@@ -732,7 +749,7 @@ export function CommanderShell({
     }
     const sizeFormat = sizeByAction[actionId];
     if (sizeFormat) {
-      void saveSettingsPatch({ sizeFormat }, `Size format · ${sizeFormat === 'binary' ? 'auto' : 'bytes'}`);
+      void saveSettingsPatch({ sizeFormat }, statusText.sizeFormat(sizeFormat === 'binary' ? 'auto' : 'bytes'));
       return true;
     }
     const editorId = editorByAction[actionId];
@@ -742,7 +759,7 @@ export function CommanderShell({
     }
     if (actionId === 'settings.toggleIcons') {
       const showIcons = !settings.view.showIcons;
-      void saveSettingsPatch({ view: { ...settings.view, showIcons } }, `Icons · ${showIcons ? 'on' : 'off'}`);
+      void saveSettingsPatch({ view: { ...settings.view, showIcons } }, statusText.icons(showIcons));
       return true;
     }
     return false;
@@ -757,13 +774,13 @@ export function CommanderShell({
         .filter((entry): entry is FileEntry => Boolean(entry));
       if (externalEntries.length !== files.length) {
         setDragSource(null);
-        setStatusMessage('External drop은 OS 파일 경로가 확인될 때만 import 대상으로 허용합니다.');
+        setStatusMessage(statusText.externalDropPathRequired);
         return;
       }
       const action = ACTIONS.find((candidate) => candidate.id === 'file.copy');
       if (action) {
         handleAction(action, targetPanel, externalEntries, panelState[targetPanel].path);
-        setStatusMessage(`External import · ${externalEntries.length}개 → ${targetPanel.toUpperCase()}`);
+        setStatusMessage(statusText.externalImport(externalEntries.length, panelIdLabel(targetPanel, settings.language)));
       }
       setDragSource(null);
       return;
@@ -775,7 +792,7 @@ export function CommanderShell({
     const action = ACTIONS.find((candidate) => candidate.id === (event.shiftKey ? 'file.move' : 'file.copy'));
     if (action) {
       handleAction(action, dragSource.panelId, [dragSource.entry]);
-      setStatusMessage(`Drag ${event.shiftKey ? 'move' : 'copy'} · ${dragSource.entry.name} → ${targetPanel.toUpperCase()}`);
+      setStatusMessage(statusText.dragOperation(event.shiftKey ? 'move' : 'copy', dragSource.entry.name, panelIdLabel(targetPanel, settings.language)));
     }
     setDragSource(null);
   };
@@ -840,27 +857,27 @@ export function CommanderShell({
 
   const openDefaultEntry = async (entry: FileEntry) => {
     if (!mutationClient.openDefault || !runtimeBackendAvailable) {
-      setStatusMessage(`기본 앱 열기 실패: 데스크톱 앱에서 다시 시도하세요. · ${entry.name}`);
+      setStatusMessage(statusText.openDefaultUnavailable(entry.name));
       return;
     }
-    setStatusMessage(`Open Default App · ${entry.name}`);
+    setStatusMessage(statusText.openDefaultStart(entry.name));
     const result = await mutationClient.openDefault({ path: entry.path });
     if (!result.ok) {
-      setStatusMessage(`기본 앱 열기 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
+      setStatusMessage(statusText.openDefaultFailed(formatUserErrorMessage(settings.language, result.error)));
       return;
     }
-    setStatusMessage(`기본 앱 열기 완료: ${entry.name}`);
+    setStatusMessage(statusText.openDefaultDone(entry.name));
   };
 
   const openArchiveListing = async (panelId: PanelId, entry: FileEntry) => {
     if (!mutationClient.archiveList || !runtimeBackendAvailable) {
-      setStatusMessage(`압축 파일 보기 실패: 데스크톱 앱에서 다시 시도하세요. · ${entry.name}`);
+      setStatusMessage(statusText.archivePreviewUnavailable(entry.name));
       return;
     }
-    setStatusMessage(`압축 파일 보기: ${entry.name}`);
+    setStatusMessage(statusText.archivePreviewStart(entry.name));
     const result = await mutationClient.archiveList({ archivePath: entry.path });
     if (!result.ok) {
-      setStatusMessage(`압축 파일 보기 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
+      setStatusMessage(statusText.archivePreviewFailed(formatUserErrorMessage(settings.language, result.error)));
       return;
     }
     setNavigationList({
@@ -884,7 +901,7 @@ export function CommanderShell({
     }
     const nextRootIndex = clampNumber(rootIndex, 0, rootCount - 1);
     setTopMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null });
-    setStatusMessage(`Menu · ${menuRootLabelFromRegistry(menuRootsFromRegistry()[nextRootIndex])}`);
+    setStatusMessage(statusText.menu(menuRootLabelFromRegistry(menuRootsFromRegistry()[nextRootIndex], settings.language)));
   };
 
   const closeTopMenu = () => {
@@ -915,16 +932,16 @@ export function CommanderShell({
 
     if (actionId === 'app.quit') {
       if (operationBusy) {
-        setStatusMessage('Quit 차단: 파일 작업이 진행 중입니다. 먼저 작업을 완료하거나 취소하세요.');
+        setStatusMessage(statusText.quitBusy);
         return;
       }
       if (!runtimeBackendAvailable) {
-        setStatusMessage('브라우저 미리보기에서는 앱 종료를 실행할 수 없습니다.');
+        setStatusMessage(statusText.quitPreviewUnavailable);
         return;
       }
       void appController.quit()
-        .then(() => setStatusMessage('Quit requested'))
-        .catch((error) => setStatusMessage(`Quit 실패: ${String(error)}`));
+        .then(() => setStatusMessage(statusText.quitRequested))
+        .catch((error) => setStatusMessage(statusText.quitFailed(String(error))));
       return;
     }
 
@@ -990,19 +1007,19 @@ export function CommanderShell({
 
     if (actionId === 'selection.all') {
       selectAllEntries(panelOverride);
-      setStatusMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelOverride.toUpperCase()}`);
       return;
     }
 
     if (actionId === 'selection.clear') {
       clearSelection(panelOverride);
-      setStatusMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelOverride.toUpperCase()}`);
       return;
     }
 
     if (actionId === 'selection.invert') {
       invertSelection(panelOverride);
-      setStatusMessage(`${labelForAction(action)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelOverride.toUpperCase()}`);
       return;
     }
 
@@ -1056,7 +1073,7 @@ export function CommanderShell({
         ...current,
         [panelOverride]: [...current[panelOverride], panel.path],
       }));
-      setStatusMessage(`Tab 추가: ${panelOverride.toUpperCase()} · ${shortenPath(panel.path)}`);
+      setStatusMessage(statusText.tabAdded(panelIdLabel(panelOverride, settings.language), shortenPath(panel.path)));
       return;
     }
 
@@ -1067,7 +1084,7 @@ export function CommanderShell({
           ? current[panelOverride].slice(0, -1)
           : current[panelOverride],
       }));
-      setStatusMessage(`Tab 닫기: ${panelOverride.toUpperCase()}`);
+      setStatusMessage(statusText.tabClosed(panelIdLabel(panelOverride, settings.language)));
       return;
     }
 
@@ -1145,7 +1162,7 @@ export function CommanderShell({
 
     if (dialogKindForAction(actionId)) {
       if (actionNeedsConcreteSources(actionId) && sources.length === 0) {
-        setStatusMessage(`${labelForAction(action)} · 가상 항목은 파일 작업 대상이 될 수 없습니다.`);
+        setStatusMessage(statusText.virtualOperationTargetUnavailable(labelForAction(action, settings.language)));
         return;
       }
 
@@ -1157,7 +1174,7 @@ export function CommanderShell({
         !isExternalCopyIntoPanel &&
         !sourcesBelongToListing(sources, panelListing)
       ) {
-        refreshPanelAfterSourceInvalid(panelOverride, `${labelForAction(action)} 대상이 현재 목록과 달라 새로고침했습니다.`);
+        refreshPanelAfterSourceInvalid(panelOverride, statusText.operationTargetChanged(labelForAction(action, settings.language)));
         return;
       }
 
@@ -1181,10 +1198,10 @@ export function CommanderShell({
               preserveSelection: false,
               focusPath: entry.path,
             });
-            setStatusMessage(`${labelForAction(action)} 완료: ${entry.name}`);
+            setStatusMessage(statusText.operationDoneWithEntry(labelForAction(action, settings.language), entry.name));
             return;
           }
-          setStatusMessage(`${labelForAction(action)} 완료`);
+          setStatusMessage(statusText.operationDone(labelForAction(action, settings.language)));
         },
         onOperationSummary: (summary: OperationSummary, dialog: OperationDialogDraft) => {
           if (shouldClearSourceSelectionAfterOperation(summary, dialog.dialogKind)) {
@@ -1199,11 +1216,11 @@ export function CommanderShell({
           }
           refreshPanel(dialog.panelId);
           refreshPanel(oppositePanelOf(dialog.panelId));
-          setStatusMessage(`${labelForAction(action)} ${operationSummaryStatusLabel(summary, settings.language)}`);
+          setStatusMessage(`${labelForAction(action, settings.language)} ${operationSummaryStatusLabel(summary, settings.language)}`);
         },
         onOperationStartError: (error: AppError) => {
           if (actionNeedsConcreteSources(actionId) && error.code === 'not_found') {
-            refreshPanelAfterSourceInvalid(panelOverride, `${labelForAction(action)} 대상이 이미 없습니다. 목록을 새로고침했습니다.`);
+            refreshPanelAfterSourceInvalid(panelOverride, statusText.operationTargetMissing(labelForAction(action, settings.language)));
             return 'dismiss' as const;
           }
           return 'keep' as const;
@@ -1212,7 +1229,7 @@ export function CommanderShell({
 
       if (actionId === 'file.copy') {
         void startLongRunningOperation(operationRequest);
-        setStatusMessage(`${labelForAction(action)} 시작: ${sources.length}개 항목 → ${operationRequest.targetDir}`);
+        setStatusMessage(statusText.operationStarted(labelForAction(action, settings.language), sources.length, operationRequest.targetDir));
         return;
       }
 
@@ -1220,7 +1237,7 @@ export function CommanderShell({
       return;
     }
 
-    setStatusMessage(`${labelForAction(action)} 준비됨`);
+    setStatusMessage(statusText.actionReady(labelForAction(action, settings.language)));
   };
 
   const applyFilter = (panelId: PanelId, filterValue: string) => {
@@ -1298,6 +1315,7 @@ export function CommanderShell({
   };
   topMenuKeyboardRuntimeRef.current = {
     context,
+    language: settings.language,
     getState: () => topMenuStateRef.current,
     open: openTopMenu,
     close: closeTopMenu,
@@ -1324,7 +1342,7 @@ export function CommanderShell({
           right: current.right.length ? current.right : [loaded.session.rightPath ?? panelState.right.path],
         }));
       } else {
-        setStatusMessage(`설정 읽기 실패: ${formatUserErrorMessage(settings.language, result.error)}`);
+        setStatusMessage(statusText.settingsLoadFailed(formatUserErrorMessage(settings.language, result.error)));
       }
       setSettingsLoaded(true);
     });
@@ -1412,7 +1430,7 @@ export function CommanderShell({
       }
 
       if (!isActionAvailable(shortcutAction, runtime.context)) {
-        setStatusMessage(`${labelForAction(shortcutAction)} · 현재 컨텍스트에서는 사용할 수 없습니다.`);
+        setStatusMessage(statusText.unavailableInContext(labelForAction(shortcutAction, settings.language)));
         shellRef.current?.focus({ preventScroll: true });
         return;
       }
@@ -1534,6 +1552,7 @@ export function CommanderShell({
       aria-keyshortcuts={`${ariaKeyShortcuts} ArrowUp ArrowDown PageUp PageDown Home End`}
     >
       <TopMenuBar
+        language={settings.language}
         context={context}
         state={topMenuState}
         onOpenRoot={openTopMenu}
@@ -1546,7 +1565,7 @@ export function CommanderShell({
       />
       {!runtimeBackendAvailable ? (
         <div className="runtime-warning" role="status">
-          미리보기 모드입니다. 실제 복사/삭제/이동 같은 파일 작업은 데스크톱 앱에서만 동작합니다.
+          {statusText.previewMode}
         </div>
       ) : null}
       <section
@@ -1609,6 +1628,7 @@ export function CommanderShell({
         />
       </section>
       <BottomStatusStrip
+        language={settings.language}
         listing={activeListing}
         activePanel={activePanel}
         selectedCount={context.selectedCount}
@@ -1616,9 +1636,10 @@ export function CommanderShell({
         message={statusMessage}
         filter={activePanelState.filter}
       />
-      <HotkeyStrip scale={viewMetrics.scale} />
+      <HotkeyStrip scale={viewMetrics.scale} language={settings.language} />
       {filterPromptPanel ? (
         <FilterPrompt
+          language={settings.language}
           panel={panelState[filterPromptPanel]}
           onApply={(filterValue) => applyFilter(filterPromptPanel, filterValue)}
           onCancel={cancelFilter}
@@ -1626,6 +1647,7 @@ export function CommanderShell({
       ) : null}
       {pathPromptPanel ? (
         <PathPrompt
+          language={settings.language}
           panel={panelState[pathPromptPanel]}
           onApply={(pathValue) => applyGotoPath(pathPromptPanel, pathValue)}
           onCancel={closeOverlay}
@@ -1633,20 +1655,22 @@ export function CommanderShell({
       ) : null}
       {navigationList ? (
         <NavigationListDialog
+          language={settings.language}
           state={navigationList}
           onChoose={(item) => chooseNavigationItem(navigationList, item)}
           onClose={closeOverlay}
         />
       ) : null}
       <OperationDialogHost language={settings.language} />
-      {helpDialogOpen ? <ShortcutHelpDialog onClose={() => setHelpDialogOpen(false)} /> : null}
-      {helpSearchOpen ? <HelpSearchDialog onClose={closeOverlay} /> : null}
-      {aboutDialogOpen ? <AboutDialog onClose={closeOverlay} /> : null}
+      {helpDialogOpen ? <ShortcutHelpDialog language={settings.language} onClose={() => setHelpDialogOpen(false)} /> : null}
+      {helpSearchOpen ? <HelpSearchDialog language={settings.language} onClose={closeOverlay} /> : null}
+      {aboutDialogOpen ? <AboutDialog language={settings.language} onClose={closeOverlay} /> : null}
     </main>
   );
 }
 
 interface TopMenuBarProps {
+  language: Settings['language'];
   context: Parameters<AppAction['isEnabled']>[0];
   state: TopMenuState | null;
   onOpenRoot(rootIndex?: number): void;
@@ -1655,12 +1679,13 @@ interface TopMenuBarProps {
   onOpenAction(action: AppAction): void;
 }
 
-const menuNodesForRoot = (root: string, context: ActionContext): MenuNode[] => {
+const menuNodesForRoot = (root: string, context: ActionContext, language: Settings['language']): MenuNode[] => {
   const nodes: MenuNode[] = [];
   const submenuByLabel = new Map<string, MenuSubmenuNode>();
 
   for (const action of actionsForMenu(root)) {
-    const segments = action.menuPath?.slice(1) ?? [];
+    const segments = menuPathSegmentsForAction(action, language)?.slice(1) ?? [];
+    const acceleratorSegments = action.menuPath?.slice(1) ?? [];
     if (segments.length > 1) {
       const submenuLabel = segments[0];
       let submenu = submenuByLabel.get(submenuLabel);
@@ -1669,6 +1694,7 @@ const menuNodesForRoot = (root: string, context: ActionContext): MenuNode[] => {
           kind: 'submenu',
           id: `${root}/${submenuLabel}`,
           label: submenuLabel,
+          accelerator: menuLabelAccelerator(acceleratorSegments[0] ?? submenuLabel),
           children: [],
         };
         submenuByLabel.set(submenuLabel, submenu);
@@ -1677,7 +1703,8 @@ const menuNodesForRoot = (root: string, context: ActionContext): MenuNode[] => {
       submenu.children.push({
         kind: 'action',
         id: action.id,
-        label: segments.at(-1) ?? labelForAction(action),
+        label: segments.at(-1) ?? labelForAction(action, language),
+        accelerator: menuLabelAccelerator(acceleratorSegments.at(-1) ?? action.displayLabel),
         action,
         enabled: isActionAvailable(action, context),
       });
@@ -1687,7 +1714,8 @@ const menuNodesForRoot = (root: string, context: ActionContext): MenuNode[] => {
     nodes.push({
       kind: 'action',
       id: action.id,
-      label: segments[0] ?? labelForAction(action),
+      label: segments[0] ?? labelForAction(action, language),
+      accelerator: menuLabelAccelerator(acceleratorSegments[0] ?? action.displayLabel),
       action,
       enabled: isActionAvailable(action, context),
     });
@@ -1732,7 +1760,7 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
     const nextRootIndex = (state!.rootIndex + delta + roots.length) % roots.length;
     applyMenuState({ rootIndex: nextRootIndex, itemIndex: 0, submenuIndex: null });
   };
-  const nodes = menuNodesForRoot(roots[state.rootIndex], runtime.context);
+  const nodes = menuNodesForRoot(roots[state.rootIndex], runtime.context, runtime.language);
   const selectedNode = nodes[state.itemIndex];
   if (nodes.length === 0) {
     return true;
@@ -1745,7 +1773,7 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
     }
 
     if (state.submenuIndex !== null && selectedNode?.kind === 'submenu') {
-      const childIndex = selectedNode.children.findIndex((child) => menuNodeAccelerator(child.label) === accelerator);
+      const childIndex = selectedNode.children.findIndex((child) => child.accelerator === accelerator);
       const child = childIndex >= 0 ? selectedNode.children[childIndex] : null;
       if (child) {
         applyMenuState({ ...state, submenuIndex: childIndex });
@@ -1756,7 +1784,7 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
       }
     }
 
-    const nodeIndex = nodes.findIndex((node) => menuNodeAccelerator(node.label) === accelerator);
+    const nodeIndex = nodes.findIndex((node) => node.accelerator === accelerator);
     const node = nodeIndex >= 0 ? nodes[nodeIndex] : null;
     if (node) {
       if (node.kind === 'submenu') {
@@ -1845,26 +1873,26 @@ const menuAcceleratorFromKeyboardEvent = (event: KeyboardEvent) => {
   if (event.code.startsWith('Key')) {
     return event.code.slice(3).toUpperCase();
   }
-  return Array.from(event.key).length === 1 ? menuNodeAccelerator(event.key) : null;
+  return Array.from(event.key).length === 1 ? menuLabelAccelerator(event.key) : null;
 };
 
 const rootIndexForAccelerator = (roots: readonly string[], accelerator: string) =>
   roots.findIndex((root) => menuRootAcceleratorFromRegistry(root) === accelerator);
 
-const menuNodeAccelerator = (label: string) => {
+const menuLabelAccelerator = (label: string) => {
   const first = Array.from(label.trim()).find((character) => /[A-Za-z0-9]/.test(character));
   return first ? first.toUpperCase() : null;
 };
 
-function TopMenuBar({ context, state, onOpenRoot, onClose, onStateChange, onOpenAction }: TopMenuBarProps) {
+function TopMenuBar({ language, context, state, onOpenRoot, onClose, onStateChange, onOpenAction }: TopMenuBarProps) {
   const now = useLocalClock();
   const roots = menuRootsFromRegistry();
   const activeRoot = state ? roots[state.rootIndex] : null;
-  const activeNodes = activeRoot ? menuNodesForRoot(activeRoot, context) : [];
+  const activeNodes = activeRoot ? menuNodesForRoot(activeRoot, context, language) : [];
 
   return (
     <header className="top-menu" aria-label="application menu">
-      <div className="brand" aria-label="application name">[복슬Dir]</div>
+      <div className="brand" aria-label="application name">{COMMANDER_UI_TEXT[language].brand}</div>
       <nav className="menu-list" aria-label="primary actions">
         {roots.map((root, rootIndex) => {
           const isOpen = state?.rootIndex === rootIndex;
@@ -1883,7 +1911,7 @@ function TopMenuBar({ context, state, onOpenRoot, onClose, onStateChange, onOpen
                 }
               }}
             >
-              {menuRootLabelFromRegistry(root)}
+              {menuRootLabelFromRegistry(root, language)}
             </button>
           );
         })}
@@ -1891,6 +1919,7 @@ function TopMenuBar({ context, state, onOpenRoot, onClose, onStateChange, onOpen
       <time className="clock" dateTime={now.toISOString()}>{formatLocalClock(now)}</time>
       {state && activeRoot ? (
         <MenuPopoverContent
+          language={language}
           root={activeRoot}
           rootIndex={state.rootIndex}
           nodes={activeNodes}
@@ -1903,7 +1932,8 @@ function TopMenuBar({ context, state, onOpenRoot, onClose, onStateChange, onOpen
   );
 }
 
-function MenuPopoverContent({ root, rootIndex, nodes, state, onStateChange, onOpenAction }: {
+function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateChange, onOpenAction }: {
+  language: Settings['language'];
   root: string;
   rootIndex: number;
   nodes: readonly MenuNode[];
@@ -1918,11 +1948,11 @@ function MenuPopoverContent({ root, rootIndex, nodes, state, onStateChange, onOp
     <div
       className="menu-popover"
       role="menu"
-      aria-label={`${root} menu`}
+      aria-label={`${menuRootLabelFromRegistry(root, language)} menu`}
       style={{ '--menu-root-index': rootIndex } as CSSProperties}
       {...keyboardBoundaryProps}
     >
-      <div className="menu-popover-title">{root}</div>
+      <div className="menu-popover-title">{menuRootLabelFromRegistry(root, language)}</div>
       {nodes.map((node, itemIndex) => {
         const focused = state.itemIndex === itemIndex;
         if (node.kind === 'submenu') {
@@ -2261,11 +2291,12 @@ function FilePanel({
   const fileTableStyle = {
     '--file-grid-template': columnLayout.gridTemplateColumns,
   } as CSSProperties;
+  const labels = COMMANDER_UI_TEXT[language];
   const tableColumns = useMemo<ColumnDef<FileEntry>[]>(() => {
     const columns: ColumnDef<FileEntry>[] = [
       {
         id: 'name',
-        header: `Name ${panel.sort.field === 'name' ? sortMarker(panel.sort.direction) : ''}`,
+        header: `${labels.name} ${panel.sort.field === 'name' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => (
             <span className="entry-name">
               {showIcons ? <span className="entry-icon" aria-hidden="true">{entryIcon(row.original.kind)}</span> : null}
@@ -2278,7 +2309,7 @@ function FilePanel({
     if (columnLayout.showSize) {
       columns.push({
         id: 'size',
-        header: `Size ${panel.sort.field === 'size' ? sortMarker(panel.sort.direction) : ''}`,
+        header: `${labels.size} ${panel.sort.field === 'size' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => formatSize(row.original, sizeFormat),
       });
     }
@@ -2286,7 +2317,7 @@ function FilePanel({
     if (columnLayout.showModified) {
       columns.push({
         id: 'modified',
-        header: `Modified ${panel.sort.field === 'modifiedAt' ? sortMarker(panel.sort.direction) : ''}`,
+        header: `${labels.modified} ${panel.sort.field === 'modifiedAt' ? sortMarker(panel.sort.direction) : ''}`,
         cell: ({ row }) => formatDate(row.original.modifiedAt, columnLayout.dateFormat),
       });
     }
@@ -2294,7 +2325,7 @@ function FilePanel({
     if (columnLayout.showCreated) {
       columns.push({
         id: 'created',
-        header: 'Created',
+        header: labels.created,
         cell: ({ row }) => formatDate(row.original.createdAt, columnLayout.dateFormat),
       });
     }
@@ -2302,7 +2333,7 @@ function FilePanel({
     if (columnLayout.showPermissions) {
       columns.push({
         id: 'permissions',
-        header: 'Permissions',
+        header: labels.permissions,
         cell: ({ row }) => row.original.permissions ?? '-',
       });
     }
@@ -2310,13 +2341,13 @@ function FilePanel({
     if (columnLayout.showOwner) {
       columns.push({
         id: 'owner',
-        header: 'Owner',
+        header: labels.owner,
         cell: ({ row }) => formatOwnerGroup(row.original),
       });
     }
 
     return columns;
-  }, [columnLayout, listing.filter, panel.sort.direction, panel.sort.field, showIcons, sizeFormat]);
+  }, [columnLayout, labels, listing.filter, panel.sort.direction, panel.sort.field, showIcons, sizeFormat]);
 
   const table = useReactTable({
     data: listing.entries,
@@ -2362,9 +2393,10 @@ function FilePanel({
       onDragOver={(event) => event.preventDefault()}
       onDrop={onPanelDrop}
     >
-      <PanelHeader panel={panel} active={active} tabCount={tabCount} onClearFilter={onClearFilter} />
+      <PanelHeader panel={panel} active={active} tabCount={tabCount} language={language} onClearFilter={onClearFilter} />
       <PathControls
         panel={panel}
+        language={language}
         onNavigateBack={onNavigateBack}
         onNavigateForward={onNavigateForward}
         onNavigateUp={onNavigateUp}
@@ -2396,8 +2428,8 @@ function FilePanel({
                 const entry = row.original;
                 const focused = virtualRow.index === panel.focusedIndex;
                 const selected = panel.selectedPaths.includes(entry.path);
-                const tooltip = fileEntryTooltip(entry);
-                const accessibleName = fileEntryAccessibleLabel(entry);
+                const tooltip = fileEntryTooltip(entry, language);
+                const accessibleName = fileEntryAccessibleLabel(entry, language);
                 return (
                   <ContextMenu.Root key={row.id}>
                     <ContextMenu.Trigger asChild>
@@ -2432,6 +2464,7 @@ function FilePanel({
                     </ContextMenu.Trigger>
                     <ContextMenu.Portal>
                       <EntryContextMenuContent
+                        language={language}
                         entry={entry}
                         listing={listing}
                         selectedPaths={panel.selectedPaths}
@@ -2449,6 +2482,7 @@ function FilePanel({
           </ContextMenu.Trigger>
           <ContextMenu.Portal>
             <BlankContextMenuContent
+              language={language}
               listing={listing}
               operationBusy={operationBusy}
               backendAvailable={backendAvailable}
@@ -2458,21 +2492,22 @@ function FilePanel({
         </ContextMenu.Root>
       </div>
       <footer className="panel-status">
-        <span>{summary.files} files, {summary.dirs} dirs</span>
-        <span>{panel.selectedPaths.length} selected</span>
-        {panel.filter ? <span className="panel-filter-status">Filter: {panel.filter}</span> : null}
-        <span>{active ? 'ACTIVE' : 'TARGET'}</span>
+        <span>{summary.files} {labels.files}, {summary.dirs} {labels.dirs}</span>
+        <span>{panel.selectedPaths.length} {labels.selected}</span>
+        {panel.filter ? <span className="panel-filter-status">{labels.filter}: {panel.filter}</span> : null}
+        <span>{active ? labels.active : labels.target}</span>
       </footer>
     </section>
   );
 }
 
 function PanelMessageRow({ panel, language }: { panel: PanelNavigationState; language: Settings['language'] }) {
-  let message = 'Empty directory';
+  const labels = COMMANDER_UI_TEXT[language];
+  let message: string = labels.emptyDirectory;
   if (panel.loading) {
-    message = 'Loading directory...';
+    message = labels.loadingDirectory;
   } else if (panel.error) {
-    message = `Error: ${formatUserErrorMessage(language, panel.error)}`;
+    message = `${labels.errorPrefix}: ${formatUserErrorMessage(language, panel.error)}`;
   }
   return (
     <div className="file-table-message" role="row" aria-live="polite">
@@ -2482,7 +2517,8 @@ function PanelMessageRow({ panel, language }: { panel: PanelNavigationState; lan
 }
 
 
-function BlankContextMenuContent({ listing, operationBusy, backendAvailable, onOpenAction }: {
+function BlankContextMenuContent({ language, listing, operationBusy, backendAvailable, onOpenAction }: {
+  language: Settings['language'];
   listing: DirectoryListing;
   operationBusy: boolean;
   backendAvailable: boolean;
@@ -2511,7 +2547,7 @@ function BlankContextMenuContent({ listing, operationBusy, backendAvailable, onO
           className="context-item"
           onSelect={() => onOpenAction(action, [])}
         >
-          <span>{labelForAction(action)}</span>
+          <span>{labelForAction(action, language)}</span>
           {action.shortcutLabel ? <kbd>{action.shortcutLabel}</kbd> : null}
         </ContextMenu.Item>
       ))}
@@ -2519,7 +2555,8 @@ function BlankContextMenuContent({ listing, operationBusy, backendAvailable, onO
   );
 }
 
-function EntryContextMenuContent({ entry, listing, selectedPaths, operationBusy, backendAvailable, onOpenAction }: {
+function EntryContextMenuContent({ language, entry, listing, selectedPaths, operationBusy, backendAvailable, onOpenAction }: {
+  language: Settings['language'];
   entry: FileEntry;
   listing: DirectoryListing;
   selectedPaths: readonly string[];
@@ -2550,7 +2587,7 @@ function EntryContextMenuContent({ entry, listing, selectedPaths, operationBusy,
           className="context-item"
           onSelect={() => onOpenAction(action, contextSources)}
         >
-          <span>{labelForAction(action)}</span>
+          <span>{labelForAction(action, language)}</span>
           <kbd>{shortcutLabelForAction(action)}</kbd>
         </ContextMenu.Item>
       ))}
@@ -2597,30 +2634,34 @@ function PanelHeader({
   panel,
   active,
   tabCount,
+  language,
   onClearFilter,
 }: {
   panel: PanelNavigationState;
   active: boolean;
   tabCount: number;
+  language: Settings['language'];
   onClearFilter(): void;
 }) {
+  const labels = COMMANDER_UI_TEXT[language];
   return (
     <header className="panel-header">
       <span className="panel-path" title={panel.path}>· {shortenPath(panel.path)}</span>
       {panel.filter ? (
-        <button type="button" className="filter-chip" aria-label={`Clear filter ${panel.filter}`} onClick={onClearFilter}>
-          FILTER {panel.filter} ×
+        <button type="button" className="filter-chip" aria-label={`${labels.filter} ${panel.filter} ${labels.target}`} onClick={onClearFilter}>
+          {labels.filter.toUpperCase()} {panel.filter} ×
         </button>
       ) : null}
-      <span className="panel-tabs">tabs {tabCount}</span>
-      <span className={`panel-marker ${active ? 'active' : ''}`}>{active ? 'ACTIVE' : 'PASSIVE'}</span>
-      {panel.loading ? <span className="panel-loading">LOADING</span> : null}
+      <span className="panel-tabs">{labels.tabs} {tabCount}</span>
+      <span className={`panel-marker ${active ? 'active' : ''}`}>{active ? labels.active : labels.passive}</span>
+      {panel.loading ? <span className="panel-loading">{labels.loading}</span> : null}
     </header>
   );
 }
 
 function PathControls({
   panel,
+  language,
   onNavigateBack,
   onNavigateForward,
   onNavigateUp,
@@ -2629,6 +2670,7 @@ function PathControls({
   onRestoreFocus,
 }: {
   panel: PanelNavigationState;
+  language: Settings['language'];
   onNavigateBack(): void;
   onNavigateForward(): void;
   onNavigateUp(): void;
@@ -2636,24 +2678,30 @@ function PathControls({
   onGotoPath(): void;
   onRestoreFocus(): void;
 }) {
+  const labels = COMMANDER_UI_TEXT[language];
   const runNavigation = (callback: () => void) => {
     callback();
     window.requestAnimationFrame(() => onRestoreFocus());
   };
 
   return (
-    <div className="path-controls" aria-label={`${panel.listing.panelId} navigation controls`}>
-      <button type="button" aria-label="Back" disabled={!panelCanGoBack(panel)} onClick={() => runNavigation(onNavigateBack)}>◀</button>
-      <button type="button" aria-label="Forward" disabled={!panelCanGoForward(panel)} onClick={() => runNavigation(onNavigateForward)}>▶</button>
-      <button type="button" aria-label="Up" onClick={() => runNavigation(onNavigateUp)}>↑</button>
-      <button type="button" aria-label="Refresh" onClick={() => runNavigation(onRefresh)}>⟳</button>
+    <div className="path-controls" aria-label={`${panelIdLabel(panel.listing.panelId, language)} ${labels.navigationControls}`}>
+      <button type="button" aria-label={labels.back} disabled={!panelCanGoBack(panel)} onClick={() => runNavigation(onNavigateBack)}>◀</button>
+      <button type="button" aria-label={labels.forward} disabled={!panelCanGoForward(panel)} onClick={() => runNavigation(onNavigateForward)}>▶</button>
+      <button type="button" aria-label={labels.up} onClick={() => runNavigation(onNavigateUp)}>↑</button>
+      <button type="button" aria-label={labels.refresh} onClick={() => runNavigation(onRefresh)}>⟳</button>
       <span className="path-input" title={panel.path}>{panel.path}</span>
-      <button type="button" aria-label="Go to path" onClick={onGotoPath}>⌘</button>
+      <button type="button" aria-label={labels.gotoPath} onClick={onGotoPath}>⌘</button>
     </div>
   );
 }
 
+const panelIdLabel = (panelId: PanelId, language: Settings['language']) => {
+  return PANEL_ID_LABELS[language][panelId];
+};
+
 function BottomStatusStrip({
+  language,
   listing,
   activePanel,
   selectedCount,
@@ -2661,6 +2709,7 @@ function BottomStatusStrip({
   message,
   filter,
 }: {
+  language: Settings['language'];
   listing: DirectoryListing;
   activePanel: PanelId;
   selectedCount: number;
@@ -2669,12 +2718,13 @@ function BottomStatusStrip({
   filter: string | null;
 }) {
   const summary = summarizeEntries(listing.entries);
+  const labels = COMMANDER_UI_TEXT[language];
   return (
-    <footer className="bottom-status" aria-label="active panel status">
-      <span>{summary.files} files, {summary.dirs} dirs</span>
-      <span>{selectedCount} selected{selectedBytes ? ` · ${formatBytes(selectedBytes)}` : ''}</span>
-      {filter ? <span className="status-filter">Filter: {filter}</span> : null}
-      <span>{activePanel.toUpperCase()}</span>
+    <footer className="bottom-status" aria-label={labels.activePanelStatus}>
+      <span>{summary.files} {labels.files}, {summary.dirs} {labels.dirs}</span>
+      <span>{selectedCount} {labels.selected}{selectedBytes ? ` · ${formatBytes(selectedBytes)}` : ''}</span>
+      {filter ? <span className="status-filter">{labels.filter}: {filter}</span> : null}
+      <span>{panelIdLabel(activePanel, language)}</span>
       {message ? <span className="status-message" aria-live="polite">{message}</span> : null}
     </footer>
   );
@@ -2727,11 +2777,12 @@ export const hotkeyStripActionsForWidth = (
   widthPx: number,
   scale = 1,
   actions: readonly AppAction[] = hotkeyStripActionsFromRegistry(),
+  language: Settings['language'] = 'en',
 ) => {
   const availableWidth = Math.max(0, widthPx - HOTKEY_STRIP_HORIZONTAL_PADDING_PX * scale);
   const estimateActionWidth = (action: AppAction) => {
     const shortcut = shortcutLabelForAction(action);
-    const label = action.hotkeyLabel;
+    const label = hotkeyLabelForAction(action, language);
     return Math.ceil((shortcut.length + label.length + 2) * HOTKEY_STRIP_CHAR_WIDTH_PX * scale)
       + HOTKEY_STRIP_ITEM_PADDING_PX * scale;
   };
@@ -2748,12 +2799,12 @@ export const hotkeyStripActionsForWidth = (
   return visible;
 };
 
-function HotkeyStrip({ scale }: { scale: number }) {
+function HotkeyStrip({ scale, language }: { scale: number; language: Settings['language'] }) {
   const stripRef = useRef<HTMLElement>(null);
   const stripWidth = useElementWidth(stripRef, 960);
   const visibleActions = useMemo(
-    () => hotkeyStripActionsForWidth(stripWidth, scale),
-    [scale, stripWidth],
+    () => hotkeyStripActionsForWidth(stripWidth, scale, undefined, language),
+    [language, scale, stripWidth],
   );
   const hiddenCount = hotkeyStripActionsFromRegistry().length - visibleActions.length;
   return (
@@ -2761,17 +2812,17 @@ function HotkeyStrip({ scale }: { scale: number }) {
       ref={stripRef}
       className="hotkey-strip"
       aria-label="hotkey hints"
-      title={hiddenCount > 0 ? `${hiddenCount} more shortcuts available in Help` : 'All priority shortcuts visible'}
+      title={hiddenCount > 0 ? HOTKEY_STRIP_TEXT[language].hiddenShortcuts(hiddenCount) : HOTKEY_STRIP_TEXT[language].allVisible}
     >
       {visibleActions.map((action) => {
         const shortcut = shortcutLabelForAction(action);
         return (
           <span className="hotkey" key={action.id}>
-            <kbd>{shortcut}</kbd>:<span>{action.hotkeyLabel}</span>
+            <kbd>{shortcut}</kbd>:<span>{hotkeyLabelForAction(action, language)}</span>
           </span>
         );
       })}
-      {hiddenCount > 0 ? <span className="hotkey hotkey-more" aria-label={`${hiddenCount} hidden shortcuts`}>+{hiddenCount}</span> : null}
+      {hiddenCount > 0 ? <span className="hotkey hotkey-more" aria-label={HOTKEY_STRIP_TEXT[language].hiddenShortcutLabel(hiddenCount)}>+{hiddenCount}</span> : null}
     </footer>
   );
 }
@@ -2940,20 +2991,22 @@ const uniqueNavigationItems = (items: readonly NavigationListItem[]) => {
   });
 };
 
-const navigationItemsFromLocations = (locations: LocationList, settings: Settings): NavigationListItem[] =>
+const navigationItemsFromLocations = (locations: LocationList, settings: Settings): NavigationListItem[] => {
+  const navigationText = COMMANDER_NAVIGATION_TEXT[settings.language];
+  return (
   // The palette dedupes by path because navigation target identity matters more
   // than source provenance here; labels from earlier, higher-signal groups win.
   uniqueNavigationItems([
-    { id: 'home', label: 'Home', path: locations.home, group: 'location' },
+    { id: 'home', label: navigationText.locationHome, path: locations.home, group: 'location' },
     ...locations.roots.map((path, index) => ({
       id: `root-${index}-${path}`,
-      label: `Root · ${shortenPath(path)}`,
+      label: navigationText.locationRoot(shortenPath(path)),
       path,
       group: 'root',
     })),
     ...locations.recent.map((path, index) => ({
       id: `recent-${index}-${path}`,
-      label: `Recent · ${shortenPath(path)}`,
+      label: navigationText.locationRecent(shortenPath(path)),
       path,
       group: 'recent',
     })),
@@ -2969,7 +3022,9 @@ const navigationItemsFromLocations = (locations: LocationList, settings: Setting
       path: bookmark.path,
       group: 'bookmark',
     })),
-  ]);
+  ])
+  );
+};
 
 const sumEntryBytes = (entries: readonly FileEntry[]) =>
   entries.reduce((total, entry) => total + (entry.kind === 'directory' ? 0 : entry.sizeBytes ?? 0), 0);
@@ -3227,26 +3282,28 @@ const pathLooksAbsolute = (path: string) =>
 const basenameFromPath = (path: string) =>
   path.replace(/\\/g, '/').split('/').filter(Boolean).at(-1) ?? path;
 
-const fileEntryAccessibleLabel = (entry: FileEntry) => {
+const fileEntryAccessibleLabel = (entry: FileEntry, language: Settings['language']) => {
+  const text = FILE_ENTRY_TEXT[language];
   if (entry.isVirtual) {
-    return `${entry.name}, 상위 디렉터리`;
+    return `${entry.name}, ${text.parentDirectory}`;
   }
-  return `${entry.name}, ${entry.kind}, ${formatSize(entry) || '크기 없음'}`;
+  return `${entry.name}, ${METADATA_KIND_LABELS[language][entry.kind] ?? entry.kind}, ${formatSize(entry) || text.noSize}`;
 };
 
-const fileEntryTooltip = (entry: FileEntry) => {
+const fileEntryTooltip = (entry: FileEntry, language: Settings['language']) => {
+  const text = FILE_ENTRY_TEXT[language];
   if (entry.isVirtual) {
-    return `${entry.name}\n상위 디렉터리로 이동\n경로: ${entry.path}`;
+    return `${entry.name}\n${text.moveToParentDirectory}\n${text.path}: ${entry.path}`;
   }
   return [
-    `이름: ${entry.name}`,
-    `경로: ${entry.path}`,
-    `종류: ${entry.kind}`,
-    `크기: ${formatSize(entry) || '-'}`,
-    `수정: ${formatDate(entry.modifiedAt, 'long') || '-'}`,
-    `생성: ${formatDate(entry.createdAt, 'long') || '-'}`,
-    `권한: ${entry.permissions ?? '-'}`,
-    `소유자: ${formatOwnerGroup(entry)}`,
+    `${text.name}: ${entry.name}`,
+    `${text.path}: ${entry.path}`,
+    `${text.kind}: ${METADATA_KIND_LABELS[language][entry.kind] ?? entry.kind}`,
+    `${text.size}: ${formatSize(entry) || '-'}`,
+    `${text.modified}: ${formatDate(entry.modifiedAt, 'long') || '-'}`,
+    `${text.created}: ${formatDate(entry.createdAt, 'long') || '-'}`,
+    `${text.permissions}: ${entry.permissions ?? '-'}`,
+    `${text.owner}: ${formatOwnerGroup(entry)}`,
   ].join('\n');
 };
 

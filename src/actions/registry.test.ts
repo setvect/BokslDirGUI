@@ -114,7 +114,7 @@ describe('action registry', () => {
 
   it('derives menu roots and display labels from the registry', () => {
     expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Settings', 'Help']);
-    expect(menuRootsFromRegistry().map(menuRootLabelFromRegistry)).toEqual([
+    expect(menuRootsFromRegistry().map((root) => menuRootLabelFromRegistry(root))).toEqual([
       'File(F)',
       'Edit(E)',
       'View(V)',
@@ -123,12 +123,22 @@ describe('action registry', () => {
       'Settings(S)',
       'Help(H)',
     ]);
+    expect(menuRootsFromRegistry().map((root) => menuRootLabelFromRegistry(root, 'ko'))).toEqual([
+      '파일(F)',
+      '편집(E)',
+      '보기(V)',
+      '이동(G)',
+      '압축(A)',
+      '설정(S)',
+      '도움말(H)',
+    ]);
     expect(menuRootsFromRegistry().map(menuRootAcceleratorFromRegistry)).toEqual(['F', 'E', 'V', 'G', 'A', 'S', 'H']);
     const copy = ACTION_BY_ID.get('file.copy');
     if (!copy) {
       throw new Error('file.copy action is required');
     }
     expect(labelForAction(copy)).toBe('Copy');
+    expect(labelForAction(copy, 'ko')).toBe('복사');
     expect(copy.hotkeyLabel).toBe('Copy');
   });
 

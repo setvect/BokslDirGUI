@@ -1,7 +1,8 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ACTIONS, labelForAction, shortcutLabelForAction } from '../actions/registry';
+import { ACTIONS, labelForAction, menuPathSegmentsForAction, shortcutLabelForAction } from '../actions/registry';
 import type { PanelId } from '../domain/types';
+import { ACTION_CATEGORY_LABELS, OVERLAY_TEXT, type SupportedLanguage } from '../i18n-resources';
 import type { PanelNavigationState } from './panelState';
 import { useCommanderKeyboardBoundaryProps, type CommanderKeyboardOwner } from './keyboardOwnership';
 
@@ -19,28 +20,30 @@ export interface NavigationListState {
   items: NavigationListItem[];
 }
 
-export function ShortcutHelpDialog({ onClose }: { onClose(): void }) {
+export function ShortcutHelpDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
+  const text = OVERLAY_TEXT[language];
   return (
-    <CommanderOverlayDialog owner="shortcut-help" title="Keyboard Shortcuts" ariaLabel="keyboard shortcuts" onClose={onClose}>
+    <CommanderOverlayDialog owner="shortcut-help" title={text.keyboardShortcuts} ariaLabel={text.keyboardShortcuts} onClose={onClose}>
       <div className="filter-form">
         <div className="shortcut-help-list" role="list">
           {ACTIONS.filter((action) => action.shortcutLabel || action.keyboardBindings?.length).map((action) => (
             <div className="shortcut-help-row" role="listitem" key={action.id}>
               <kbd>{shortcutLabelForAction(action)}</kbd>
-              <span>{labelForAction(action)}</span>
-              <small>{categoryLabelForAction(action)}</small>
+              <span>{labelForAction(action, language)}</span>
+              <small>{categoryLabelForAction(action, language)}</small>
             </div>
           ))}
         </div>
         <div className="filter-actions">
-          <button type="button" onClick={onClose}>닫기</button>
+          <button type="button" onClick={onClose}>{text.close}</button>
         </div>
       </div>
     </CommanderOverlayDialog>
   );
 }
 
-export function HelpSearchDialog({ onClose }: { onClose(): void }) {
+export function HelpSearchDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
+  const text = OVERLAY_TEXT[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
@@ -49,10 +52,10 @@ export function HelpSearchDialog({ onClose }: { onClose(): void }) {
       return true;
     }
     return [
-      labelForAction(action),
-      categoryLabelForAction(action),
+      labelForAction(action, language),
+      categoryLabelForAction(action, language),
       action.shortcutLabel ?? '',
-      ...(action.menuPath ?? []),
+      ...(menuPathSegmentsForAction(action, language) ?? []),
     ].some((value) => value.toLowerCase().includes(normalizedQuery));
   });
 
@@ -61,13 +64,13 @@ export function HelpSearchDialog({ onClose }: { onClose(): void }) {
   }, []);
 
   return (
-    <CommanderOverlayDialog owner="help-search" title="기능 검색" ariaLabel="help search" onClose={onClose}>
+    <CommanderOverlayDialog owner="help-search" title={text.helpSearch} ariaLabel={text.helpSearch} onClose={onClose}>
       <div className="filter-form">
         <label>
-          <span>기능 이름, 메뉴, 단축키로 검색</span>
+          <span>{text.helpSearchPlaceholder}</span>
           <input
             ref={inputRef}
-            aria-label="Help search query"
+            aria-label={text.helpSearchQuery}
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -82,55 +85,47 @@ export function HelpSearchDialog({ onClose }: { onClose(): void }) {
           {results.map((action) => (
             <div className="shortcut-help-row" role="listitem" key={action.id}>
               <kbd>{shortcutLabelForAction(action)}</kbd>
-              <span>{labelForAction(action)}</span>
-              <small>{categoryLabelForAction(action)}</small>
+              <span>{labelForAction(action, language)}</span>
+              <small>{categoryLabelForAction(action, language)}</small>
             </div>
           ))}
-          {results.length === 0 ? <p className="dialog-empty">검색 결과가 없습니다.</p> : null}
+          {results.length === 0 ? <p className="dialog-empty">{text.noSearchResults}</p> : null}
         </div>
         <div className="filter-actions">
-          <button type="button" onClick={onClose}>닫기</button>
+          <button type="button" onClick={onClose}>{text.close}</button>
         </div>
       </div>
     </CommanderOverlayDialog>
   );
 }
-
-const CATEGORY_LABELS: Record<AppActionCategory, string> = {
-  navigation: '이동',
-  panel: '패널',
-  selection: '선택',
-  file: '파일',
-  view: '보기',
-  archive: '압축',
-  settings: '설정',
-  help: '도움말',
-};
 
 type AppActionCategory = (typeof ACTIONS)[number]['category'];
 
-const categoryLabelForAction = (action: (typeof ACTIONS)[number]) =>
-  CATEGORY_LABELS[action.category] ?? action.category;
+const categoryLabelForAction = (action: (typeof ACTIONS)[number], language: SupportedLanguage) =>
+  ACTION_CATEGORY_LABELS[language][action.category] ?? action.category;
 
-export function AboutDialog({ onClose }: { onClose(): void }) {
+export function AboutDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
+  const text = OVERLAY_TEXT[language];
   return (
     <CommanderOverlayDialog owner="about-dialog" title="BokslDirGUI" ariaLabel="about BokslDirGUI" onClose={onClose} className="about-dialog">
       <div className="filter-form">
-        <p>키보드 중심 듀얼 패널 파일 커맨더입니다.</p>
-        <p>목표: 기존 터미널 BokslDir의 조작감과 기능을 GUI 환경에서도 자연스럽게 유지합니다.</p>
+        <p>{text.aboutLine1}</p>
+        <p>{text.aboutLine2}</p>
         <div className="filter-actions">
-          <button type="button" onClick={onClose}>닫기</button>
+          <button type="button" onClick={onClose}>{text.close}</button>
         </div>
       </div>
     </CommanderOverlayDialog>
   );
 }
 
-export function NavigationListDialog({ state, onChoose, onClose }: {
+export function NavigationListDialog({ language, state, onChoose, onClose }: {
+  language: SupportedLanguage;
   state: NavigationListState;
   onChoose(item: NavigationListItem): void;
   onClose(): void;
 }) {
+  const text = OVERLAY_TEXT[language];
   return (
     <CommanderOverlayDialog owner={`navigation-list-${state.kind}`} title={state.title} ariaLabel={state.title} onClose={onClose} className="navigation-list-dialog">
       <div className="filter-form">
@@ -147,21 +142,23 @@ export function NavigationListDialog({ state, onChoose, onClose }: {
               <small>{item.group}</small>
             </button>
           ))}
-          {state.items.length === 0 ? <p className="dialog-empty">표시할 항목이 없습니다.</p> : null}
+          {state.items.length === 0 ? <p className="dialog-empty">{text.emptyList}</p> : null}
         </div>
         <div className="filter-actions">
-          <button type="button" onClick={onClose}>닫기</button>
+          <button type="button" onClick={onClose}>{text.close}</button>
         </div>
       </div>
     </CommanderOverlayDialog>
   );
 }
 
-export function PathPrompt({ panel, onApply, onCancel }: {
+export function PathPrompt({ language, panel, onApply, onCancel }: {
+  language: SupportedLanguage;
   panel: PanelNavigationState;
   onApply(pathValue: string): void;
   onCancel(): void;
 }) {
+  const text = OVERLAY_TEXT[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(panel.path);
 
@@ -176,13 +173,13 @@ export function PathPrompt({ panel, onApply, onCancel }: {
   };
 
   return (
-    <CommanderOverlayDialog owner="path-prompt" title="경로 이동" ariaLabel="go to path" onClose={onCancel}>
+    <CommanderOverlayDialog owner="path-prompt" title={text.goToPath} ariaLabel={text.goToPath} onClose={onCancel}>
       <form className="filter-form" onSubmit={handleSubmit}>
         <label>
-          <span>경로 이동 · {panel.listing.panelId.toUpperCase()}</span>
+          <span>{text.goToPath} · {panel.listing.panelId.toUpperCase()}</span>
           <input
             ref={inputRef}
-            aria-label="Path"
+            aria-label={text.path}
             value={value}
             onChange={(event) => setValue(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -194,19 +191,21 @@ export function PathPrompt({ panel, onApply, onCancel }: {
           />
         </label>
         <div className="filter-actions">
-          <button type="button" onClick={onCancel}>취소</button>
-          <button type="submit" className="primary">이동</button>
+          <button type="button" onClick={onCancel}>{text.cancel}</button>
+          <button type="submit" className="primary">{text.move}</button>
         </div>
       </form>
     </CommanderOverlayDialog>
   );
 }
 
-export function FilterPrompt({ panel, onApply, onCancel }: {
+export function FilterPrompt({ language, panel, onApply, onCancel }: {
+  language: SupportedLanguage;
   panel: PanelNavigationState;
   onApply(filterValue: string): void;
   onCancel(): void;
 }) {
+  const text = OVERLAY_TEXT[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(panel.filter ?? '');
 
@@ -220,13 +219,13 @@ export function FilterPrompt({ panel, onApply, onCancel }: {
   };
 
   return (
-    <CommanderOverlayDialog owner="filter-prompt" title="필터" ariaLabel="filter entries" onClose={onCancel}>
+    <CommanderOverlayDialog owner="filter-prompt" title={text.filter} ariaLabel={text.filter} onClose={onCancel}>
       <form className="filter-form" onSubmit={handleSubmit}>
         <label>
-          <span>필터 · {panel.path}</span>
+          <span>{text.filter} · {panel.path}</span>
           <input
             ref={inputRef}
-            aria-label="Filter pattern"
+            aria-label={text.filterPattern}
             value={value}
             onChange={(event) => setValue(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -238,9 +237,9 @@ export function FilterPrompt({ panel, onApply, onCancel }: {
           />
         </label>
         <div className="filter-actions">
-          <button type="button" onClick={onCancel}>취소</button>
-          {panel.filter ? <button type="button" onClick={() => onApply('')}>필터 해제</button> : null}
-          <button type="submit" className="primary">필터 적용</button>
+          <button type="button" onClick={onCancel}>{text.cancel}</button>
+          {panel.filter ? <button type="button" onClick={() => onApply('')}>{text.clearFilter}</button> : null}
+          <button type="submit" className="primary">{text.applyFilter}</button>
         </div>
       </form>
     </CommanderOverlayDialog>

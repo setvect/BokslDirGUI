@@ -62,14 +62,14 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByRole('dialog', { name: '이동' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Move' })).toBeTruthy();
     expect(screen.getByText('source.txt')).toBeTruthy();
     expect(screen.getByText(/This screen is a preview before running the action/)).toBeTruthy();
     expect(screen.queryByText('start_move')).toBeNull();
     expect(screen.queryByText('file.move')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '이동' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Move' })).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' })));
   });
 
@@ -88,7 +88,7 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByRole('dialog', { name: '복사' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Copy' })).toBeTruthy();
     expect(screen.getByText(/This screen is a preview before running the action/)).toBeTruthy();
     expect(screen.queryByText(/operations.backendExecution.stubbedUntilCommandWiring/)).toBeNull();
   });
@@ -108,7 +108,7 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByRole('dialog', { name: '휴지통으로 이동' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Move to Trash' })).toBeTruthy();
     expect(screen.getAllByText(sampleEntry.path).length).toBeGreaterThan(0);
     expect(screen.queryByText('start_delete trash')).toBeNull();
     expect(screen.queryByText('skip')).toBeNull();
@@ -176,15 +176,15 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    expect(screen.getByText('새 폴더')).toBeTruthy();
+    expect(screen.getByText('New Folder')).toBeTruthy();
     expect(screen.queryByText(/실제 파일 변경은 아직 연결하지 않았습니다/)).toBeNull();
-    const input = screen.getByLabelText('새 폴더 이름');
+    const input = screen.getByLabelText('New folder name');
     await waitFor(() => expect(document.activeElement).toBe(input));
     expect(screen.getByText('The name is invalid.')).toBeTruthy();
     await user.type(input, 'New Folder');
 
     expect(screen.queryByText('The name is invalid.')).toBeNull();
-    await user.click(screen.getByRole('button', { name: '새 폴더 만들기' }));
+    await user.click(screen.getByRole('button', { name: 'Create Folder' }));
 
     expect(atomicExecutor).toHaveBeenCalledOnce();
   });
@@ -207,8 +207,8 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    await user.type(screen.getByLabelText('새 폴더 이름'), 'New Folder');
-    await user.click(screen.getByRole('button', { name: '새 폴더 만들기' }));
+    await user.type(screen.getByLabelText('New folder name'), 'New Folder');
+    await user.click(screen.getByRole('button', { name: 'Create Folder' }));
 
     const pendingButton = await screen.findByRole('button', { name: 'Running…' });
     expect(pendingButton).toHaveProperty('disabled', true);
@@ -497,12 +497,12 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost />);
 
-    await user.click(screen.getByRole('button', { name: '정보 보기' }));
+    await user.click(screen.getByRole('button', { name: 'Show Info' }));
 
     expect(await screen.findByText('File information')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Dismiss' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '정보 보기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show Info' })).toBeNull();
   });
 
   it('centers conflict attention when no operation dialog is open', () => {

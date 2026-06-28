@@ -14,7 +14,21 @@ import type {
   ShellCommandPreview,
   ShellCommandResult,
 } from '../domain/types';
-import { formatUserErrorMessage, translateUserMessageKey, type SupportedLanguage } from '../i18n-resources';
+import {
+  OPERATION_DIALOG_DESCRIPTIONS,
+  OPERATION_DIALOG_INPUT_LABELS,
+  OPERATION_DIALOG_PRIMARY_LABELS,
+  OPERATION_DIALOG_TEXT,
+  OPERATION_DIALOG_TITLES,
+  OPERATION_CONFIRMATION_TEXT,
+  OPERATION_OVERVIEW_TEXT,
+  METADATA_KIND_LABELS,
+  formatItemCount,
+  formatUserErrorMessage,
+  translateUserMessageKey,
+  type OperationDialogText,
+  type SupportedLanguage,
+} from '../i18n-resources';
 import { conflictDecisionLabel, operationKindLabel, operationStateLabel } from './operationLabels';
 
 export function OperationDialogHost({ language = 'en' }: { language?: SupportedLanguage } = {}) {
@@ -99,14 +113,15 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
     return () => window.clearTimeout(timeout);
   }, [clearSummary, summary]);
 
-  const dialogTitle = dialog ? operationDialogTitle(dialog.dialogKind) : '';
-  const dialogDescription = dialog ? operationDialogDescription(dialog) : '';
-  const dialogInputLabel = dialog ? operationDialogInputLabel(dialog.dialogKind) : null;
+  const dialogTitle = dialog ? operationDialogTitle(dialog.dialogKind, language) : '';
+  const dialogDescription = dialog ? operationDialogDescription(dialog, language) : '';
+  const dialogInputLabel = dialog ? operationDialogInputLabel(dialog.dialogKind, language) : null;
   const dialogActions = dialog && !conflictPrompt
     ? operationDialogActions({
         dialog,
         atomicResult,
         inputLabel: dialogInputLabel,
+        language,
         text,
         confirmDialog,
         cancelOperation,
@@ -425,227 +440,28 @@ const dialogButtonNavigationDirection = (key: string) => {
 const OPERATION_PROGRESS_SURFACE_DELAY_MS = 450;
 const OPERATION_SUCCESS_AUTO_DISMISS_MS = 1200;
 const OPERATION_PROGRESS_PATH_MAX_CHARS = 96;
-const OPERATION_DIALOG_TEXT: Record<SupportedLanguage, {
-  currentFolderTarget: string;
-  destination: string;
-  currentLocation: string;
-  irreversibleHint: string;
-  shellCommand: string;
-  shellCommandReady: string;
-  result: string;
-  resultComplete: string;
-  fileInfo: string;
-  archiveEntries: string;
-  commandOutput: string;
-  type: string;
-  size: string;
-  modified: string;
-  permissions: string;
-  exitCode: string;
-  stdout: string;
-  stderr: string;
-  noOutput: string;
-  encrypted: string;
-  yes: string;
-  no: string;
-  sources: string;
-  progress: string;
-  conflictResolution: string;
-  conflictPrompt: string;
-  summary: string;
-  completed: string;
-  failed: string;
-  running: string;
-  operationProgress: string;
-  operationSummary: string;
-  operationError: string;
-  files: string;
-  unknown: string;
-  eta: string;
-  cancel: string;
-  dismiss: string;
-}> = {
-  ko: {
-    currentFolderTarget: '현재 폴더 자체를 대상으로 하는 작업입니다.',
-    destination: '대상 위치',
-    currentLocation: '현재 위치',
-    irreversibleHint: '영구 삭제 후에는 되돌릴 수 없습니다.',
-    shellCommand: '쉘 명령',
-    shellCommandReady: '실행 전 확인이 완료되었습니다. 확인 후 실행할 수 있습니다.',
-    result: '결과',
-    resultComplete: '작업이 완료되었습니다.',
-    fileInfo: '파일 정보',
-    archiveEntries: '압축 파일 항목',
-    commandOutput: '명령 출력',
-    type: '종류',
-    size: '크기',
-    modified: '수정일',
-    permissions: '권한',
-    exitCode: '종료 코드',
-    stdout: '표준 출력',
-    stderr: '오류 출력',
-    noOutput: '출력 없음',
-    encrypted: '암호화',
-    yes: '예',
-    no: '아니오',
-    sources: '대상 항목',
-    progress: '진행',
-    conflictResolution: '충돌 처리',
-    conflictPrompt: '같은 이름의 항목이 이미 있습니다. 처리 방법을 선택하세요.',
-    summary: '요약',
-    completed: '완료',
-    failed: '실패',
-    running: '실행 중…',
-    operationProgress: '작업 진행',
-    operationSummary: '작업 요약',
-    operationError: '작업 오류',
-    files: '개 파일',
-    unknown: '알 수 없음',
-    eta: '예상',
-    cancel: '취소',
-    dismiss: '닫기',
-  },
-  en: {
-    currentFolderTarget: 'This action targets the current folder.',
-    destination: 'Destination',
-    currentLocation: 'Current location',
-    irreversibleHint: 'Permanent deletion cannot be undone.',
-    shellCommand: 'Shell command',
-    shellCommandReady: 'The command is ready to run after confirmation.',
-    result: 'Result',
-    resultComplete: 'The operation completed.',
-    fileInfo: 'File information',
-    archiveEntries: 'Archive entries',
-    commandOutput: 'Command output',
-    type: 'Type',
-    size: 'Size',
-    modified: 'Modified',
-    permissions: 'Permissions',
-    exitCode: 'Exit code',
-    stdout: 'Standard output',
-    stderr: 'Error output',
-    noOutput: 'No output',
-    encrypted: 'Encrypted',
-    yes: 'Yes',
-    no: 'No',
-    sources: 'Sources',
-    progress: 'Progress',
-    conflictResolution: 'Conflict resolution',
-    conflictPrompt: 'An item with the same name already exists. Choose how to continue.',
-    summary: 'Summary',
-    completed: 'completed',
-    failed: 'failed',
-    running: 'Running…',
-    operationProgress: 'Operation progress',
-    operationSummary: 'Operation summary',
-    operationError: 'Operation error',
-    files: 'files',
-    unknown: 'unknown',
-    eta: 'ETA',
-    cancel: 'Cancel',
-    dismiss: 'Dismiss',
-  },
-};
-
-type OperationDialogText = (typeof OPERATION_DIALOG_TEXT)[SupportedLanguage];
-
 type OperationDialogKind = OperationDialogDraft['dialogKind'];
 
 // Keep user-facing dialog copy in the presentation layer. The store carries semantic
 // operation state; this helper family derives the visible modal contract from it.
-const operationDialogTitle = (dialogKind: OperationDialogKind) => {
-  const titles: Record<OperationDialogKind, string> = {
-    copy: '복사',
-    move: '이동',
-    trash: '휴지통으로 이동',
-    deletePermanent: '영구 삭제',
-    rename: '이름 변경',
-    createDir: '새 폴더',
-    properties: '파일 정보',
-    archivePreview: '압축 파일 보기',
-    archiveCreate: '압축 생성',
-    archiveExtract: '압축 해제',
-    externalOpenDefault: '기본 앱으로 열기',
-    externalReveal: '파일 위치 열기',
-    externalEditor: '터미널 편집기로 열기',
-    shellCommand: '쉘 명령 실행',
-  };
-  return titles[dialogKind];
+const operationDialogTitle = (dialogKind: OperationDialogKind, language: SupportedLanguage) => {
+  return OPERATION_DIALOG_TITLES[language][dialogKind];
 };
 
-const operationDialogDescription = (dialog: OperationDialogDraft) => {
+const operationDialogDescription = (dialog: OperationDialogDraft, language: SupportedLanguage) => {
   const count = dialog.sources.length;
-  switch (dialog.dialogKind) {
-    case 'copy':
-      return `${count}개 항목을 반대 패널로 복사합니다.`;
-    case 'move':
-      return `${count}개 항목을 반대 패널로 이동합니다.`;
-    case 'trash':
-      return `${count}개 항목을 휴지통으로 보내기 전에 확인합니다. 자동 영구 삭제 전환은 금지됩니다.`;
-    case 'deletePermanent':
-      return `${count}개 항목을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.`;
-    case 'rename':
-      return '선택한 항목의 새 이름을 입력합니다.';
-    case 'createDir':
-      return '현재 폴더에 만들 새 폴더 이름을 입력합니다.';
-    case 'archivePreview':
-      return '압축 파일 안의 항목을 미리 확인합니다.';
-    case 'archiveCreate':
-      return `${count}개 항목을 압축 파일로 만듭니다.`;
-    case 'archiveExtract':
-      return '압축 파일을 대상 폴더에 풉니다.';
-    case 'externalOpenDefault':
-    case 'externalReveal':
-    case 'externalEditor':
-      return '선택한 항목을 외부 앱으로 엽니다.';
-    case 'shellCommand':
-      return '현재 폴더에서 실행할 명령을 확인합니다. 설정에서 허용된 경우에만 실행됩니다.';
-    case 'properties':
-      return '선택한 항목의 정보를 확인합니다.';
-  }
+  return OPERATION_DIALOG_DESCRIPTIONS[language][dialog.dialogKind](formatItemCount(language, count));
 };
 
-const operationDialogPrimaryLabel = (dialog: OperationDialogDraft, atomicResult: unknown) => {
+const operationDialogPrimaryLabel = (dialog: OperationDialogDraft, atomicResult: unknown, language: SupportedLanguage) => {
   if (hasRunnableShellPreview(dialog, atomicResult)) {
-    return '확인 후 실행';
+    return OPERATION_DIALOG_PRIMARY_LABELS[language].runShellAfterConfirm;
   }
-  const labels: Record<OperationDialogKind, string> = {
-    copy: '복사',
-    move: '이동',
-    trash: '휴지통으로 이동',
-    deletePermanent: '영구 삭제',
-    rename: '이름 변경',
-    createDir: '새 폴더 만들기',
-    properties: '정보 보기',
-    archivePreview: '압축 내용 보기',
-    archiveCreate: '압축 생성',
-    archiveExtract: '압축 해제',
-    externalOpenDefault: '기본 앱으로 열기',
-    externalReveal: '파일 위치 열기',
-    externalEditor: '편집기로 열기',
-    shellCommand: '실행 확인',
-  };
-  return labels[dialog.dialogKind];
+  return OPERATION_DIALOG_PRIMARY_LABELS[language][dialog.dialogKind];
 };
 
-const operationDialogInputLabel = (dialogKind: OperationDialogKind) => {
-  if (dialogKind === 'createDir') {
-    return '새 폴더 이름';
-  }
-  if (dialogKind === 'rename') {
-    return '새 이름';
-  }
-  if (dialogKind === 'deletePermanent') {
-    return '영구 삭제 확인 문구';
-  }
-  if (dialogKind === 'archiveCreate') {
-    return '압축 파일 이름(.zip 또는 .7z)';
-  }
-  if (dialogKind === 'shellCommand') {
-    return '실행할 명령';
-  }
-  return null;
-};
+const operationDialogInputLabel = (dialogKind: OperationDialogKind, language: SupportedLanguage) =>
+  OPERATION_DIALOG_INPUT_LABELS[language][dialogKind] ?? null;
 
 interface OperationDialogAction {
   key: string;
@@ -661,6 +477,7 @@ const operationDialogActions = ({
   dialog,
   atomicResult,
   inputLabel,
+  language,
   text,
   confirmDialog,
   cancelOperation,
@@ -669,6 +486,7 @@ const operationDialogActions = ({
   dialog: OperationDialogDraft;
   atomicResult: unknown;
   inputLabel: string | null;
+  language: SupportedLanguage;
   text: OperationDialogText;
   confirmDialog(): Promise<void>;
   cancelOperation(): void;
@@ -699,7 +517,7 @@ const operationDialogActions = ({
     },
     {
       key: 'confirm',
-      label: dialog.atomicPending || dialog.operationPending ? text.running : operationDialogPrimaryLabel(dialog, atomicResult),
+      label: dialog.atomicPending || dialog.operationPending ? text.running : operationDialogPrimaryLabel(dialog, atomicResult, language),
       className: `dialog-button primary${isDangerousDialog(dialog) ? ' danger' : ''}`,
       disabled: primaryDisabled,
       autoFocus: primaryShouldOwnFocus,
@@ -806,41 +624,7 @@ const operationOverviewText = (
   count: number,
   language: SupportedLanguage,
 ) => {
-  const item = language === 'ko' ? `${count}개 항목` : `${count} item${count === 1 ? '' : 's'}`;
-  const texts: Record<OperationDialogDraft['dialogKind'], string> = language === 'ko'
-    ? {
-      copy: `${item}을 대상 위치로 복사합니다.`,
-      move: `${item}을 대상 위치로 이동합니다.`,
-      trash: `${item}을 휴지통으로 보냅니다.`,
-      deletePermanent: `${item}을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.`,
-      rename: '선택한 항목의 이름을 변경합니다.',
-      createDir: '현재 위치에 새 폴더를 만듭니다.',
-      properties: '선택한 항목의 정보를 표시합니다.',
-      archivePreview: '압축 파일의 내용을 표시합니다.',
-      archiveCreate: `${item}을 압축 파일로 만듭니다.`,
-      archiveExtract: '압축 파일을 대상 위치에 풉니다.',
-      externalOpenDefault: '선택한 파일을 기본 앱으로 엽니다.',
-      externalReveal: '선택한 항목의 위치를 파일 관리자에서 엽니다.',
-      externalEditor: '선택한 파일을 터미널 편집기로 엽니다.',
-      shellCommand: '현재 위치에서 명령을 실행하기 전에 확인합니다.',
-    }
-    : {
-      copy: `Copy ${item} to the destination.`,
-      move: `Move ${item} to the destination.`,
-      trash: `Move ${item} to the trash.`,
-      deletePermanent: `Permanently delete ${item}. This cannot be undone.`,
-      rename: 'Rename the selected item.',
-      createDir: 'Create a folder in the current location.',
-      properties: 'Show information for the selected item.',
-      archivePreview: 'Show the contents of the archive.',
-      archiveCreate: `Create an archive from ${item}.`,
-      archiveExtract: 'Extract the archive to the destination.',
-      externalOpenDefault: 'Open the selected file with the default app.',
-      externalReveal: 'Reveal the selected item in the file manager.',
-      externalEditor: 'Open the selected file in the terminal editor.',
-      shellCommand: 'Review a command before running it in the current location.',
-    };
-  return texts[dialogKind];
+  return OPERATION_OVERVIEW_TEXT[language][dialogKind](formatItemCount(language, count));
 };
 
 const overviewPathLabel = (
@@ -886,9 +670,7 @@ function OperationOverview({
 }
 
 const confirmationPhraseInstruction = (language: SupportedLanguage, phrase: string) =>
-  language === 'ko'
-    ? `계속하려면 “${phrase}”를 입력하세요.`
-    : `Type “${phrase}” to continue.`;
+  OPERATION_CONFIRMATION_TEXT[language].phraseInstruction(phrase);
 
 function ProgressPath({ path }: { path: string | null }) {
   const display = splitOperationProgressPath(path);
@@ -1044,11 +826,7 @@ function CommandOutput({ title, output, emptyLabel }: { title: string; output: s
 }
 
 const metadataKindLabel = (language: SupportedLanguage, kind: string) => {
-  const labels: Record<SupportedLanguage, Record<string, string>> = {
-    ko: { file: '파일', directory: '폴더', symlink: '링크', archive: '압축 파일', other: '기타' },
-    en: { file: 'File', directory: 'Folder', symlink: 'Link', archive: 'Archive', other: 'Other' },
-  };
-  return labels[language][kind] ?? kind;
+  return METADATA_KIND_LABELS[language][kind] ?? kind;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

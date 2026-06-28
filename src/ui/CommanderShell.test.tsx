@@ -65,9 +65,9 @@ describe('CommanderShell', () => {
     expect(container.querySelector('.persistent-sidebar')).toBeNull();
     expect(container.querySelector('.persistent-inspector')).toBeNull();
     expect(container.querySelector('.large-toolbar')).toBeNull();
-    expect(screen.getByLabelText('hotkey hints').textContent).toContain('Copy');
-    expect(screen.getByLabelText('hotkey hints').textContent).toContain('Panel');
-    expect(screen.getByLabelText('hotkey hints').textContent).toContain('Filter');
+    expect(screen.getByLabelText('hotkey hints').textContent).toContain('복사');
+    expect(screen.getByLabelText('hotkey hints').textContent).toContain('패널');
+    expect(screen.getByLabelText('hotkey hints').textContent).toContain('필터');
     expect(container.querySelector<HTMLElement>('.file-table')?.style.getPropertyValue('--file-grid-template')).toContain('minmax(0, 1fr)');
   });
 
@@ -184,7 +184,7 @@ describe('CommanderShell', () => {
     expect(row?.getAttribute('title')).toContain('이름: very-long-project-configuration-file.generated.json');
     expect(row?.getAttribute('title')).toContain(`경로: ${longEntry.path}`);
     expect(row?.getAttribute('title')).toContain('수정: 2026-02-18 11:42');
-    expect(row?.getAttribute('aria-label')).toBe('very-long-project-configuration-file.generated.json, file, 1 B');
+    expect(row?.getAttribute('aria-label')).toBe('very-long-project-configuration-file.generated.json, 파일, 1 B');
     expect(row?.getAttribute('aria-description')).toContain('권한: -rw-r--r--');
     expect(row?.querySelector('.middle-ellipsis-start')).toBeTruthy();
     expect(row?.querySelector('.middle-ellipsis-end')?.textContent).toMatch(/\.json$/);
@@ -413,13 +413,13 @@ describe('CommanderShell', () => {
     renderCommander(dataSource);
 
     await user.keyboard('/');
-    const input = await screen.findByLabelText('Filter pattern');
+    const input = await screen.findByLabelText('필터 패턴');
     await user.type(input, 'generic');
     await user.click(screen.getByRole('button', { name: '필터 적용' }));
 
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({ filter: 'generic' })));
-    expect(screen.getAllByText('Filter: generic').length).toBeGreaterThanOrEqual(1);
-    expect(document.querySelector('.filter-chip')?.textContent).toContain('FILTER generic');
+    expect(screen.getAllByText('필터: generic').length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelector('.filter-chip')?.textContent).toContain('필터 generic');
     expect(document.querySelector('.filter-match')?.textContent?.toLowerCase()).toBe('generic');
 
     fireEvent.keyDown(document, { key: 'r', ctrlKey: true });
@@ -428,7 +428,7 @@ describe('CommanderShell', () => {
     await user.keyboard('/');
     await user.click(await screen.findByRole('button', { name: '필터 해제' }));
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({ filter: null })));
-    expect(screen.queryByText('Filter: generic')).toBeNull();
+    expect(screen.queryByText('필터: generic')).toBeNull();
   });
 
   it('keeps filter indicators in sync from panel state while listDir is pending', async () => {
@@ -444,12 +444,12 @@ describe('CommanderShell', () => {
     renderCommander(dataSource);
 
     await user.keyboard('/');
-    await user.type(await screen.findByLabelText('Filter pattern'), 'generic');
+    await user.type(await screen.findByLabelText('필터 패턴'), 'generic');
     await user.click(screen.getByRole('button', { name: '필터 적용' }));
 
     await waitFor(() => expect(pending).toHaveLength(1));
-    expect(screen.getAllByText('Filter: generic').length).toBeGreaterThanOrEqual(1);
-    expect(document.querySelector('.filter-chip')?.textContent).toContain('FILTER generic');
+    expect(screen.getAllByText('필터: generic').length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelector('.filter-chip')?.textContent).toContain('필터 generic');
 
     act(() => pending[0].resolve({
       ok: true,
@@ -894,7 +894,7 @@ describe('CommanderShell', () => {
       panelId: 'right',
       path: SAMPLE_LISTINGS.right.path,
     })));
-    expect(await screen.findByText(/Delete 대상이 이미 없습니다/)).toBeTruthy();
+    expect(await screen.findByText(/삭제 대상이 이미 없습니다/)).toBeTruthy();
   });
 
   it('blocks delete on the virtual parent row before it reaches the operation client', async () => {
@@ -1102,7 +1102,7 @@ describe('CommanderShell', () => {
       throw new Error('archive row is required');
     }
     fireEvent.contextMenu(archiveRow);
-    await user.click(await screen.findByText('Preview'));
+    await user.click(await screen.findByRole('menuitem', { name: /^압축 미리보기/ }));
     await user.click(await screen.findByRole('button', { name: '압축 내용 보기' }));
 
     await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath: archiveEntry.path }));
@@ -1329,27 +1329,27 @@ describe('CommanderShell', () => {
       }),
     }));
 
-    await user.click(screen.getByRole('button', { name: 'View(V)' }));
-    await user.click(await screen.findByText('Toggle Layout'));
+    await user.click(screen.getByRole('button', { name: '보기(V)' }));
+    await user.click(await screen.findByText('레이아웃 전환'));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
       patch: expect.objectContaining({ layout: expect.objectContaining({ singlePanel: true }) }),
     }));
 
-    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
-    await user.click(await screen.findByText('Toggle Icons'));
+    await user.click(screen.getByRole('button', { name: '설정(S)' }));
+    await user.click(await screen.findByText('아이콘 전환'));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
       patch: expect.objectContaining({ view: expect.objectContaining({ showIcons: false }) }),
     }));
     expect(document.querySelector('.entry-icon')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Help(H)' }));
-    await user.click(await screen.findByText('Keyboard Help'));
-    const shortcutTitle = await screen.findByText('Keyboard Shortcuts');
+    await user.click(screen.getByRole('button', { name: '도움말(H)' }));
+    await user.click(await screen.findByText('단축키 도움말'));
+    const shortcutTitle = await screen.findByText('키보드 단축키');
     const shortcutDialog = shortcutTitle.closest<HTMLElement>('[role="dialog"]');
     if (!shortcutDialog) {
       throw new Error('shortcut dialog is required');
     }
-    expect(within(shortcutDialog).getByText('Copy')).toBeTruthy();
+    expect(within(shortcutDialog).getByText('복사')).toBeTruthy();
     expect(within(shortcutDialog).queryByText('file.copy')).toBeNull();
   });
 
@@ -1483,7 +1483,7 @@ describe('CommanderShell', () => {
 
     await user.keyboard('gp');
 
-    expect(await screen.findByLabelText('Path')).toBeTruthy();
+    expect(await screen.findByLabelText('경로')).toBeTruthy();
   });
 
   it('supports TUI vim-style movement and range selection shortcuts', async () => {
@@ -1579,47 +1579,47 @@ describe('CommanderShell', () => {
     renderCommander();
 
     await user.keyboard('gp');
-    const pathInput = await screen.findByLabelText('Path');
+    const pathInput = await screen.findByLabelText('경로');
     await user.clear(pathInput);
     await user.type(pathInput, '/tmp/navigation-target');
     await user.click(screen.getByRole('button', { name: '이동' }));
     expect(await screen.findByText('README.md')).toBeTruthy();
 
     await user.keyboard('gm');
-    expect(await screen.findByRole('dialog', { name: 'Locations' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: '위치 목록' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('tn');
     await user.keyboard('tt');
-    const tabDialog = await screen.findByRole('dialog', { name: 'RIGHT Tabs' });
+    const tabDialog = await screen.findByRole('dialog', { name: '오른쪽 탭' });
     expect(within(tabDialog).getByText(SAMPLE_LISTINGS.right.path)).toBeTruthy();
     expect(within(tabDialog).getByText('/tmp/navigation-target')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('tx');
     await user.keyboard('tt');
-    const closedTabDialog = await screen.findByRole('dialog', { name: 'RIGHT Tabs' });
+    const closedTabDialog = await screen.findByRole('dialog', { name: '오른쪽 탭' });
     expect(within(closedTabDialog).getByText(SAMPLE_LISTINGS.right.path)).toBeTruthy();
     expect(within(closedTabDialog).queryByText('/tmp/navigation-target')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('th');
-    expect(await screen.findByRole('dialog', { name: 'RIGHT History' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: '오른쪽 히스토리' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('tba');
     await user.keyboard('tb');
-    expect(await screen.findByRole('dialog', { name: 'Bookmarks' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: '북마크' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
-    await user.click(screen.getByRole('button', { name: 'Help(H)' }));
-    await user.click(await screen.findByText('Search'));
-    expect(await screen.findByLabelText('Help search query')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '도움말(H)' }));
+    await user.click(await screen.findByText('검색'));
+    expect(await screen.findByLabelText('도움말 검색어')).toBeTruthy();
     expect(screen.queryByText('action registry')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
-    await user.click(screen.getByRole('button', { name: 'Help(H)' }));
-    await user.click(await screen.findByText('About'));
+    await user.click(screen.getByRole('button', { name: '도움말(H)' }));
+    await user.click(await screen.findByRole('menuitem', { name: /^정보/ }));
     expect(await screen.findByRole('dialog', { name: 'BokslDirGUI' })).toBeTruthy();
   });
 
@@ -1642,14 +1642,14 @@ describe('CommanderShell', () => {
       ok: true,
       data: { home: '/stale', roots: ['/stale-root'], recent: ['/stale-recent'], bookmarks: [] },
     }));
-    expect(screen.queryByRole('dialog', { name: 'Locations' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '위치 목록' })).toBeNull();
 
     act(() => pending[1]({
       ok: true,
       data: { home: '/fresh', roots: ['/fresh-root'], recent: ['/fresh-recent'], bookmarks: [] },
     }));
 
-    const locationsDialog = await screen.findByRole('dialog', { name: 'Locations' });
+    const locationsDialog = await screen.findByRole('dialog', { name: '위치 목록' });
     expect(within(locationsDialog).getByText('/fresh')).toBeTruthy();
     expect(within(locationsDialog).queryByText('/stale')).toBeNull();
   });
@@ -1733,7 +1733,7 @@ describe('CommanderShell', () => {
     useOperationStore.getState().closeDialog();
     await waitFor(() => expect(commanderKeyboardOwners()).not.toContain('operation-dialog'));
 
-    await user.click(screen.getByRole('button', { name: 'File(F)' }));
+    await user.click(screen.getByRole('button', { name: '파일(F)' }));
     await waitFor(() => expect(commanderKeyboardOwners()).toContain('menu-popover'));
   });
 
@@ -1743,16 +1743,16 @@ describe('CommanderShell', () => {
 
     await user.keyboard('{F9}');
 
-    const fileMenu = await screen.findByRole('menu', { name: 'File menu' });
-    expect(within(fileMenu).getAllByRole('menuitem')[0].textContent).toContain('Open');
+    const fileMenu = await screen.findByRole('menu', { name: '파일(F) menu' });
+    expect(within(fileMenu).getAllByRole('menuitem')[0].textContent).toContain('열기');
     expect(within(fileMenu).getAllByRole('menuitem')[0].className).toContain('is-focused');
     expect(commanderKeyboardOwners()).toContain('menu-popover');
 
     await user.keyboard('{ArrowRight}');
-    expect(await screen.findByRole('menu', { name: 'Edit menu' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: '편집(E) menu' })).toBeTruthy();
 
     await user.keyboard('{F9}');
-    expect(screen.queryByRole('menu', { name: 'Edit menu' })).toBeNull();
+    expect(screen.queryByRole('menu', { name: '편집(E) menu' })).toBeNull();
   });
 
   it('moves to the next top menu with ArrowRight instead of jumping to the first submenu', async () => {
@@ -1760,12 +1760,12 @@ describe('CommanderShell', () => {
     renderCommander();
 
     await user.keyboard('{F9}v');
-    expect(await screen.findByRole('menu', { name: 'View menu' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: '보기(V) menu' })).toBeTruthy();
 
     await user.keyboard('{ArrowRight}');
 
-    expect(await screen.findByRole('menu', { name: 'Go menu' })).toBeTruthy();
-    expect(screen.queryByRole('menu', { name: 'Sort submenu' })).toBeNull();
+    expect(await screen.findByRole('menu', { name: '이동(G) menu' })).toBeTruthy();
+    expect(screen.queryByRole('menu', { name: '정렬 submenu' })).toBeNull();
   });
 
   it('supports top-menu accelerator letters after F9', async () => {
@@ -1781,17 +1781,17 @@ describe('CommanderShell', () => {
     );
 
     await user.keyboard('{F9}v');
-    expect(await screen.findByRole('menu', { name: 'View menu' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: '보기(V) menu' })).toBeTruthy();
 
     await user.keyboard('s');
-    expect(await screen.findByRole('menu', { name: 'Settings menu' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: '설정(S) menu' })).toBeTruthy();
 
     await user.keyboard('f');
-    expect(await screen.findByRole('menu', { name: 'File menu' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: '파일(F) menu' })).toBeTruthy();
 
     await user.keyboard('q');
     await waitFor(() => expect(appController.quit).toHaveBeenCalledOnce());
-    expect(screen.queryByRole('menu', { name: 'File menu' })).toBeNull();
+    expect(screen.queryByRole('menu', { name: '파일(F) menu' })).toBeNull();
   });
 
   it('supports submenu keyboard navigation from the F9 menu', async () => {
@@ -1802,21 +1802,21 @@ describe('CommanderShell', () => {
 
     await user.keyboard('{F9}');
     await user.keyboard('{ArrowRight}');
-    expect(await screen.findByRole('menu', { name: 'Edit menu' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: '편집(E) menu' })).toBeTruthy();
     await user.keyboard('{ArrowRight}');
-    expect(await screen.findByRole('menu', { name: 'View menu' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: '보기(V) menu' })).toBeTruthy();
 
     for (let index = 0; index < 8; index += 1) {
       await user.keyboard('{ArrowDown}');
     }
     await user.keyboard('{ArrowRight}');
-    expect(await screen.findByRole('menu', { name: 'Sort submenu' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: '정렬 submenu' })).toBeTruthy();
 
     await user.keyboard('{Enter}');
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
       sort: expect.objectContaining({ field: 'name', direction: 'asc' }),
     })));
-    expect(screen.queryByRole('menu', { name: 'View menu' })).toBeNull();
+    expect(screen.queryByRole('menu', { name: '보기(V) menu' })).toBeNull();
   });
 
   it('keeps same-type keyboard owners registered until all mounts unmount', async () => {
@@ -1840,7 +1840,7 @@ describe('CommanderShell', () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
 
-    await user.click(screen.getByRole('button', { name: 'File(F)' }));
+    await user.click(screen.getByRole('button', { name: '파일(F)' }));
     expect(document.querySelector('.menu-popover')).not.toBeNull();
 
     await user.keyboard('{Tab}');
@@ -1851,7 +1851,7 @@ describe('CommanderShell', () => {
   it('does not capture Space from focused native buttons inside the shell', async () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
-    const refreshButton = screen.getByLabelText('right navigation controls').querySelectorAll('button')[3];
+    const refreshButton = screen.getByLabelText('오른쪽 탐색 컨트롤').querySelectorAll('button')[3];
 
     if (!refreshButton) {
       throw new Error('refresh button is required');
@@ -1865,7 +1865,7 @@ describe('CommanderShell', () => {
   it('returns keyboard ownership to the commander after non-modal path button clicks', async () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
-    const refreshButton = screen.getByLabelText('right navigation controls').querySelectorAll('button')[3];
+    const refreshButton = screen.getByLabelText('오른쪽 탐색 컨트롤').querySelectorAll('button')[3];
 
     if (!refreshButton) {
       throw new Error('refresh button is required');
@@ -1921,7 +1921,7 @@ describe('CommanderShell', () => {
       throw new Error('context-menu target row is required');
     }
     fireEvent.contextMenu(contextTarget);
-    await user.click(await screen.findByRole('menuitem', { name: /Open/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /^열기/ }));
 
     expect(await screen.findByText('README.md')).toBeTruthy();
     expect(activePanelLabel(document.body)).toContain('getrandom-24ce5e891f8ae242');
@@ -1933,7 +1933,7 @@ describe('CommanderShell', () => {
     renderCommander();
 
     fireEvent.keyDown(document, { key: 'F10', shiftKey: true });
-    await user.click(await screen.findByRole('menuitem', { name: /Open/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /^열기/ }));
 
     expect(await screen.findByText('README.md')).toBeTruthy();
     expect(activePanelLabel(document.body)).toContain('generic-array-6de08afde610f112');
@@ -1952,9 +1952,9 @@ describe('CommanderShell', () => {
       throw new Error('blank panel area is required');
     }
     fireEvent.contextMenu(blankArea);
-    expect(await screen.findByRole('menuitem', { name: /New Folder/ })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Refresh/ })).toBeTruthy();
-    await user.click(screen.getByRole('menuitem', { name: /New Folder/ }));
+    expect(await screen.findByRole('menuitem', { name: /새 폴더/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /새로고침/ })).toBeTruthy();
+    await user.click(screen.getByRole('menuitem', { name: /새 폴더/ }));
 
     expect(await screen.findByText('새 폴더')).toBeTruthy();
     expect(screen.getByLabelText('새 폴더 이름')).toBeTruthy();
@@ -1963,32 +1963,33 @@ describe('CommanderShell', () => {
 
   it('applies direct Settings menu actions visibly and persists them', async () => {
     const user = userEvent.setup();
-    const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
-      ok: true as const,
-      data: {
-        schemaVersion: 1,
-        theme: patch.theme ?? 'dark' as const,
-        language: patch.language ?? 'ko' as const,
-        sizeFormat: patch.sizeFormat ?? 'binary' as const,
-        external: patch.external ?? { editorId: null, shellCommand: { enabled: false } },
-        bookmarks: [],
-        layout: { singlePanel: false, ratio: '50:50' as const },
-        session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
-        view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-      },
-    }));
+    let savedSettings: import('../domain/types').Settings = {
+      schemaVersion: 1,
+      theme: 'dark' as const,
+      language: 'ko' as const,
+      sizeFormat: 'binary' as const,
+      external: { editorId: null, shellCommand: { enabled: false } },
+      bookmarks: [],
+      layout: { singlePanel: false, ratio: '50:50' as const },
+      session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+      view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+    };
+    const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => {
+      savedSettings = { ...savedSettings, ...patch };
+      return { ok: true as const, data: savedSettings };
+    });
     renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
     const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
 
-    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
-    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Theme/ }));
-    await user.click(await screen.findByRole('menuitem', { name: /Light/ }));
+    await user.click(screen.getByRole('button', { name: '설정(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /라이트/ }));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { theme: 'light' } }));
     expect(shell.getAttribute('data-theme')).toBe('light');
 
-    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
-    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Language/ }));
-    await user.click(await screen.findByRole('menuitem', { name: /English/ }));
+    await user.click(screen.getByRole('button', { name: '설정(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /언어/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /영어/ }));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { language: 'en' } }));
     expect(shell.getAttribute('data-language')).toBe('en');
 
@@ -2066,9 +2067,9 @@ describe('CommanderShell', () => {
     }));
     renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
 
-    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
-    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Theme/ }));
-    await user.click(await screen.findByRole('menuitem', { name: /Light/ }));
+    await user.click(screen.getByRole('button', { name: '설정(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /라이트/ }));
 
     expect(await screen.findByText('설정 저장 실패: 설정 저장에 실패했습니다.')).toBeTruthy();
   });
@@ -2142,7 +2143,7 @@ describe('CommanderShell', () => {
     render(<CommanderShell dataSource={dataSource} />);
 
     expect(await screen.findByText('left-ok.txt')).toBeTruthy();
-    expect(screen.getByText('Error: 권한이 거부되었습니다. · /blocked-right')).toBeTruthy();
+    expect(screen.getByText('오류: 권한이 거부되었습니다. · /blocked-right')).toBeTruthy();
   });
 
   it('renders mocked listDir error and empty states inside the panel', async () => {
@@ -2158,7 +2159,7 @@ describe('CommanderShell', () => {
       },
     });
     const { unmount } = render(<CommanderShell dataSource={errorSource} />);
-    expect((await screen.findAllByText('Error: 권한이 거부되었습니다. · /blocked')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('오류: 권한이 거부되었습니다. · /blocked')).length).toBeGreaterThan(0);
     unmount();
 
     const emptySource = mockedPanelDataSource({
@@ -2167,7 +2168,7 @@ describe('CommanderShell', () => {
       loadResult: emptyListings('/empty-left', '/empty-right'),
     });
     render(<CommanderShell dataSource={emptySource} />);
-    expect((await screen.findAllByText('Empty directory')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('빈 디렉터리')).length).toBeGreaterThan(0);
   });
 
 });
