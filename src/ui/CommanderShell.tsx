@@ -1350,6 +1350,19 @@ export function CommanderShell({
   }, [mutationClient, runtimeBackendAvailable]);
 
   useEffect(() => {
+    const previousTheme = document.body.dataset.theme;
+    document.body.dataset.theme = settings.theme;
+
+    return () => {
+      if (previousTheme) {
+        document.body.dataset.theme = previousTheme;
+      } else {
+        delete document.body.dataset.theme;
+      }
+    };
+  }, [settings.theme]);
+
+  useEffect(() => {
     if (!dataSource.loadInitialOnMount || !settingsLoaded || initialPanelLoadStartedRef.current) {
       return undefined;
     }

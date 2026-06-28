@@ -1989,6 +1989,14 @@ describe('CommanderShell', () => {
     await user.click(await screen.findByRole('menuitem', { name: /라이트/ }));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { theme: 'light' } }));
     expect(shell.getAttribute('data-theme')).toBe('light');
+    expect(document.body.dataset.theme).toBe('light');
+
+    await user.click(screen.getByRole('button', { name: '설정(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /고대비/ }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { theme: 'highContrast' } }));
+    expect(shell.getAttribute('data-theme')).toBe('highContrast');
+    expect(document.body.dataset.theme).toBe('highContrast');
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
     const languageSubmenu = await screen.findByRole('menuitem', { name: /언어/ });
