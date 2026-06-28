@@ -258,8 +258,43 @@ describe('OperationDialogHost', () => {
     expect(screen.getByText('Operation progress').closest('.operation-progress-layout')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Cancel' }).closest('.operation-progress-actions')).toBeTruthy();
     expect(screen.getByText(/2\.0 KB \/ 4\.0 KB/)).toBeTruthy();
+    expect(screen.getByText(/50%/)).toBeTruthy();
     expect(screen.getByText(/1\.0 KB\/s/)).toBeTruthy();
     expect(screen.getByText(/ETA 1m 15s/)).toBeTruthy();
+  });
+
+  it('uses byte progress for the progress bar and percent label when byte totals are known', () => {
+    vi.useFakeTimers();
+    useOperationStore.setState({
+      dialog: null,
+      progress: {
+        operationId: 'op-progress-byte-percent',
+        kind: 'copy',
+        state: 'running',
+        totalFiles: 100,
+        completedFiles: 50,
+        totalBytes: 1000,
+        completedBytes: 100,
+        currentPath: sampleEntry.path,
+        bytesPerSecond: 50,
+        etaSeconds: 18,
+        recentErrorCount: 0,
+      },
+      conflictPrompt: null,
+      summary: null,
+      lastError: null,
+    });
+
+    render(<OperationDialogHost />);
+
+    act(() => {
+      vi.advanceTimersByTime(451);
+    });
+
+    const progressBar = screen.getByLabelText('operation progress');
+    expect((progressBar.querySelector('span') as HTMLSpanElement | null)?.style.width).toBe('10%');
+    expect(screen.getByText(/100 B \/ 1000 B · 10%/)).toBeTruthy();
+    expect(screen.queryByText(/100 B \/ 1000 B · 50%/)).toBeNull();
   });
 
   it('keeps the progress modal visible across non-terminal state transitions for the same operation', () => {
@@ -328,6 +363,7 @@ describe('OperationDialogHost', () => {
 
     expect(screen.getByLabelText('Operation status')).toBeTruthy();
     expect(screen.getByText(/10138\/20622/)).toBeTruthy();
+    expect(screen.getByText(/165 MB \/ 252 MB · 65%/)).toBeTruthy();
   });
 
   it('does not keep a popup for successful completed operations and auto-clears the terminal summary', () => {

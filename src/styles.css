@@ -960,6 +960,14 @@ button {
   display: block;
   height: 100%;
   background: var(--blue);
+  transition: width 160ms linear;
+  will-change: width;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar span {
+    transition: none;
+  }
 }
 
 

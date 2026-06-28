@@ -1,5 +1,5 @@
 use super::*;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Condvar};
 use std::thread;
@@ -11,6 +11,8 @@ static CONFLICTS: OnceLock<(Mutex<BTreeMap<String, ConflictState>>, Condvar)> = 
 static EXTERNAL_PROCESSES: OnceLock<Mutex<BTreeMap<String, Arc<Mutex<Child>>>>> = OnceLock::new();
 const PERMANENT_DELETE_CONFIRM_TOKEN: &str = "PERMANENT_DELETE";
 const CONFLICT_WAIT_POLL_MS: u64 = 200;
+const COPY_PROGRESS_CHUNK_BYTES: usize = 1024 * 1024;
+const COPY_PROGRESS_EMIT_INTERVAL_MS: u64 = 120;
 
 #[derive(Debug, Clone, Default)]
 struct ConflictState {
@@ -1546,6 +1548,7 @@ fn copy_tree_to_destination(
         &mut work,
         &mut ignored_total_bytes,
     )?;
+    let mut progress_ticker = ProgressTicker::new();
     for entry in work {
         if is_cancelled(operation_id) || should_cancel_for_test(operation_id, stats) {
             return Err(AppError::new(
@@ -1570,23 +1573,56 @@ fn copy_tree_to_destination(
             if let Some(parent) = destination.parent() {
                 fs::create_dir_all(parent).map_err(|error| map_io_error(error, Some(parent)))?;
             }
-            copy_file_no_replace(&entry.source, &destination)?;
-            stats.completed_bytes += entry.metadata.len();
+            copy_file_no_replace(&entry.source, &destination, |copied_bytes| {
+                stats.completed_bytes = stats.completed_bytes.saturating_add(copied_bytes);
+                if is_cancelled(operation_id) {
+                    return Err(AppError::new(
+                        "operation_cancelled",
+                        "errors.operationCancelled",
+                        Some(&entry.source),
+                        true,
+                    ));
+                }
+                if progress_ticker.should_emit() {
+                    emit_progress(
+                        app,
+                        operation_id,
+                        kind,
+                        OperationState::Running,
+                        stats,
+                        Some(&entry.source),
+                    );
+                }
+                Ok(())
+            })?;
         }
         stats.completed_files += 1;
-        emit_progress(
-            app,
-            operation_id,
-            kind,
-            OperationState::Running,
-            stats,
-            Some(&entry.source),
-        );
+        if progress_ticker.should_emit() {
+            emit_progress(
+                app,
+                operation_id,
+                kind,
+                OperationState::Running,
+                stats,
+                Some(&entry.source),
+            );
+        }
     }
+    emit_progress(
+        app,
+        operation_id,
+        kind,
+        OperationState::Running,
+        stats,
+        Some(source_root),
+    );
     Ok(())
 }
 
-fn copy_file_no_replace(source: &Path, destination: &Path) -> CommandResult<()> {
+fn copy_file_no_replace<F>(source: &Path, destination: &Path, mut on_chunk: F) -> CommandResult<()>
+where
+    F: FnMut(u64) -> CommandResult<()>,
+{
     let mut source_file =
         fs::File::open(source).map_err(|error| map_io_error(error, Some(source)))?;
     let mut destination_file = fs::OpenOptions::new()
@@ -1594,9 +1630,43 @@ fn copy_file_no_replace(source: &Path, destination: &Path) -> CommandResult<()> 
         .create_new(true)
         .open(destination)
         .map_err(|error| map_io_error(error, Some(destination)))?;
-    io::copy(&mut source_file, &mut destination_file)
-        .map_err(|error| map_io_error(error, Some(destination)))?;
+    let mut buffer = vec![0_u8; COPY_PROGRESS_CHUNK_BYTES];
+    loop {
+        let read = source_file
+            .read(&mut buffer)
+            .map_err(|error| map_io_error(error, Some(source)))?;
+        if read == 0 {
+            break;
+        }
+        destination_file
+            .write_all(&buffer[..read])
+            .map_err(|error| map_io_error(error, Some(destination)))?;
+        on_chunk(read as u64)?;
+    }
     Ok(())
+}
+
+#[derive(Debug)]
+struct ProgressTicker {
+    last_emit: Instant,
+    interval: Duration,
+}
+
+impl ProgressTicker {
+    fn new() -> Self {
+        Self {
+            last_emit: Instant::now(),
+            interval: Duration::from_millis(COPY_PROGRESS_EMIT_INTERVAL_MS),
+        }
+    }
+
+    fn should_emit(&mut self) -> bool {
+        if self.last_emit.elapsed() < self.interval {
+            return false;
+        }
+        self.last_emit = Instant::now();
+        true
+    }
 }
 
 fn scan_work(

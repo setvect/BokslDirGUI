@@ -8,6 +8,7 @@ import type {
   ConflictDecision,
   ConflictPrompt,
   FileMetadata,
+  OperationProgress,
   OperationState,
   OperationSummary,
   ShellCommandPreview,
@@ -228,7 +229,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 <div className="operation-section">
                   <h3>{text.progress}</h3>
                   <div className="progress-bar" aria-label="operation progress">
-                    <span style={{ width: `${progressPercent(dialogProgress.completedFiles, dialogProgress.totalFiles)}%` }} />
+                    <span style={{ width: progressWidth(dialogProgress) }} />
                   </div>
                   <p>{operationStateLabel(language, dialogProgress.state)} · {dialogProgress.completedFiles}/{dialogProgress.totalFiles ?? text.unknown} {text.files}</p>
                   <ProgressPath path={dialogProgress.currentPath} />
@@ -307,7 +308,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
               <div className="operation-section operation-progress-layout">
                 <Dialog.Title className="operation-section-title">{text.operationProgress}</Dialog.Title>
                 <div className="progress-bar" aria-label="operation progress">
-                  <span style={{ width: `${progressPercent(visibleProgress.completedFiles, visibleProgress.totalFiles)}%` }} />
+                  <span style={{ width: progressWidth(visibleProgress) }} />
                 </div>
                 <Dialog.Description className="operation-progress-description">
                   <span>
@@ -316,7 +317,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                   <ProgressPath path={visibleProgress.currentPath} />
                 </Dialog.Description>
                 <p className="operation-progress-detail">
-                  {formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes, text.unknown)} · {progressPercent(visibleProgress.completedFiles, visibleProgress.totalFiles)}% · {formatThroughput(visibleProgress.bytesPerSecond, text.unknown)} · {text.eta} {formatEta(visibleProgress.etaSeconds, text.unknown)}
+                  {formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes, text.unknown)} · {progressPercentLabel(visibleProgress)}% · {formatThroughput(visibleProgress.bytesPerSecond, text.unknown)} · {text.eta} {formatEta(visibleProgress.etaSeconds, text.unknown)}
                 </p>
                 <div className="operation-progress-actions">
                   <button type="button" className="dialog-button secondary" onClick={cancelOperation}>{text.cancel}</button>
@@ -751,11 +752,22 @@ const summaryRequiresAttention = (summary: OperationSummary) =>
   summary.errors.length > 0;
 
 const progressPercent = (completed: number, total: number | null) => {
-  if (!total) {
+  if (!total || total <= 0) {
     return 0;
   }
-  return Math.min(100, Math.round((completed / total) * 100));
+  return Math.min(100, Math.max(0, (completed / total) * 100));
 };
+
+const operationProgressPercent = (progress: OperationProgress) => {
+  if (progress.totalBytes !== null && progress.totalBytes > 0) {
+    return progressPercent(progress.completedBytes, progress.totalBytes);
+  }
+  return progressPercent(progress.completedFiles, progress.totalFiles);
+};
+
+const progressWidth = (progress: OperationProgress) => `${operationProgressPercent(progress).toFixed(2)}%`;
+
+const progressPercentLabel = (progress: OperationProgress) => Math.round(operationProgressPercent(progress));
 
 const operationOverviewText = (
   dialogKind: OperationDialogDraft['dialogKind'],
