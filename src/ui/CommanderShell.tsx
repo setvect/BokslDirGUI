@@ -1766,13 +1766,6 @@ const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRunt
       applyMenuState({ ...state, submenuIndex: 0 });
       return true;
     }
-    if (selectedNode?.kind !== 'submenu') {
-      const firstSubmenuIndex = nodes.findIndex((node) => node.kind === 'submenu');
-      if (firstSubmenuIndex >= 0) {
-        applyMenuState({ ...state, itemIndex: firstSubmenuIndex, submenuIndex: 0 });
-        return true;
-      }
-    }
     moveRoot(1);
     return true;
   }

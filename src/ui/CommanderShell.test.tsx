@@ -1643,6 +1643,19 @@ describe('CommanderShell', () => {
     expect(screen.queryByRole('menu', { name: 'Edit menu' })).toBeNull();
   });
 
+  it('moves to the next top menu with ArrowRight instead of jumping to the first submenu', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+
+    await user.keyboard('{F9}v');
+    expect(await screen.findByRole('menu', { name: 'View menu' })).toBeTruthy();
+
+    await user.keyboard('{ArrowRight}');
+
+    expect(await screen.findByRole('menu', { name: 'Go menu' })).toBeTruthy();
+    expect(screen.queryByRole('menu', { name: 'Sort submenu' })).toBeNull();
+  });
+
   it('supports top-menu accelerator letters after F9', async () => {
     const user = userEvent.setup();
     const appController = { quit: vi.fn(async () => undefined) };
@@ -1681,8 +1694,9 @@ describe('CommanderShell', () => {
     await user.keyboard('{ArrowRight}');
     expect(await screen.findByRole('menu', { name: 'View menu' })).toBeTruthy();
 
-    await user.keyboard('{ArrowDown}');
-    await user.keyboard('{ArrowDown}');
+    for (let index = 0; index < 8; index += 1) {
+      await user.keyboard('{ArrowDown}');
+    }
     await user.keyboard('{ArrowRight}');
     expect(await screen.findByRole('menu', { name: 'Sort submenu' })).toBeTruthy();
 
