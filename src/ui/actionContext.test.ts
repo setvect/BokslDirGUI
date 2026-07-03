@@ -81,8 +81,8 @@ describe('action context helpers', () => {
   it('keeps archive actions scoped to archive entries through the registry selector', () => {
     const regularFile = SAMPLE_LISTINGS.left.entries.find((candidate) => candidate.name === 'Architecture.md');
     const archiveEntry = SAMPLE_LISTINGS.left.entries.find((candidate) => candidate.name === 'release-bundle.zip');
-    const archivePreview = ACTION_BY_ID.get('archive.preview');
-    if (!regularFile || !archiveEntry || !archivePreview) {
+    const archiveOpen = ACTION_BY_ID.get('archive.list');
+    if (!regularFile || !archiveEntry || !archiveOpen) {
       throw new Error('fixture archive and registry action are required');
     }
 
@@ -103,10 +103,10 @@ describe('action context helpers', () => {
       operationBusy: false,
     });
 
-    expect(isActionAvailable(archivePreview, fileContext)).toBe(false);
-    expect(isActionAvailable(archivePreview, archiveContext)).toBe(true);
+    expect(isActionAvailable(archiveOpen, fileContext)).toBe(false);
+    expect(isActionAvailable(archiveOpen, archiveContext)).toBe(true);
     expect(contextMenuActions(archiveEntry, archiveContext).map((action) => action.id)).toEqual(
-      expect.arrayContaining(['archive.preview', 'archive.list', 'archive.extract', 'archive.extractAuto']),
+      expect.arrayContaining(['archive.list', 'archive.extract', 'archive.extractAuto']),
     );
   });
 

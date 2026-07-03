@@ -545,8 +545,18 @@ fn archive_extract(
     target_dir: String,
     password: Option<String>,
     policy: ConflictDecision,
+    entries: Option<Vec<String>>,
+    strip_prefix: Option<String>,
 ) -> CommandResult<OperationStarted> {
-    operation::start_archive_extract(Some(&app), archive_path, target_dir, password, policy)
+    operation::start_archive_extract(
+        Some(&app),
+        archive_path,
+        target_dir,
+        password,
+        policy,
+        entries,
+        strip_prefix,
+    )
 }
 
 #[tauri::command]
@@ -1075,6 +1085,16 @@ mod external {
 mod archive {
     use super::*;
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ArchiveEntryInfo {
+        path: String,
+        kind: EntryKind,
+        size_bytes: Option<u64>,
+        modified_at: Option<String>,
+        created_at: Option<String>,
+        permissions: Option<String>,
+    }
+
     pub(super) fn archive_list(
         archive_path: &str,
         password: Option<String>,
@@ -1088,10 +1108,9 @@ mod archive {
             ));
         }
         let archive = navigation::canonical_existing_path(archive_path)?;
-        let names = list_archive_entry_names(&archive)?;
-        let entries = names
+        let entries = list_archive_entries(&archive)?
             .iter()
-            .map(|name| archive_entry_for_name(&archive, name))
+            .map(|entry| archive_entry_for_info(&archive, entry))
             .collect();
         Ok(ArchiveListing {
             archive_path: display_path(&archive),
@@ -1100,15 +1119,15 @@ mod archive {
         })
     }
 
-    pub(super) fn list_archive_entry_names(archive: &Path) -> CommandResult<Vec<String>> {
+    fn list_archive_entries(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
         match archive
             .extension()
             .and_then(|value| value.to_str())
             .map(str::to_ascii_lowercase)
             .as_deref()
         {
-            Some("zip") => list_zip_entries(archive),
-            Some("7z") => list_7z_entries(archive),
+            Some("zip") => list_zip_entries_with_metadata(archive),
+            Some("7z") => list_7z_entries_with_metadata(archive),
             _ => Err(AppError::new(
                 "unsupported",
                 "errors.archiveFormatUnsupported",
@@ -1118,16 +1137,22 @@ mod archive {
         }
     }
 
-    fn list_zip_entries(archive: &Path) -> CommandResult<Vec<String>> {
+    fn list_zip_entries_with_metadata(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
         let output = Command::new("unzip")
             .arg("-Z1")
             .arg(archive)
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
-        parse_list_output(output, archive)
+        let names = parse_zip_name_output(output, archive)?;
+        let detail_output = Command::new("unzip")
+            .args(["-Z", "-T", "-l"])
+            .arg(archive)
+            .output()
+            .map_err(|error| map_io_error(error, Some(archive)))?;
+        parse_zipinfo_long_output(detail_output, archive, &names)
     }
 
-    fn list_7z_entries(archive: &Path) -> CommandResult<Vec<String>> {
+    fn list_7z_entries_with_metadata(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
         let binary = find_binary("7zz")
             .or_else(|| find_binary("7z"))
             .ok_or_else(|| {
@@ -1160,10 +1185,10 @@ mod archive {
                     .collect::<String>(),
             ));
         }
-        Ok(parse_7z_slt_paths(&output.stdout))
+        Ok(parse_7z_slt_entries(&output.stdout))
     }
 
-    fn parse_list_output(
+    fn parse_zip_name_output(
         output: std::process::Output,
         archive: &Path,
     ) -> CommandResult<Vec<String>> {
@@ -1190,26 +1215,117 @@ mod archive {
             .collect())
     }
 
+    fn parse_zipinfo_long_output(
+        output: std::process::Output,
+        archive: &Path,
+        names: &[String],
+    ) -> CommandResult<Vec<ArchiveEntryInfo>> {
+        if !output.status.success() {
+            return Err(AppError::new(
+                "external_command_failed",
+                "errors.externalCommandFailed",
+                Some(archive),
+                true,
+            )
+            .with_detail(
+                "stderr",
+                String::from_utf8_lossy(&output.stderr)
+                    .chars()
+                    .take(512)
+                    .collect::<String>(),
+            ));
+        }
+
+        let metadata: Vec<ZipInfoMetadata> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(parse_zipinfo_long_line)
+            .collect();
+        Ok(names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| {
+                let metadata = metadata.get(index);
+                let permissions = metadata.map(|item| item.permissions.clone());
+                let kind = entry_kind_for_archive_member(
+                    name,
+                    name.ends_with('/'),
+                    permissions.as_deref(),
+                    None,
+                );
+                ArchiveEntryInfo {
+                    path: name.clone(),
+                    kind,
+                    size_bytes: metadata
+                        .and_then(|item| item.size_bytes)
+                        .filter(|_| !name.ends_with('/')),
+                    modified_at: metadata.and_then(|item| item.modified_at.clone()),
+                    created_at: None,
+                    permissions,
+                }
+            })
+            .collect())
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ZipInfoMetadata {
+        permissions: String,
+        size_bytes: Option<u64>,
+        modified_at: Option<String>,
+    }
+
+    fn parse_zipinfo_long_line(line: &str) -> Option<ZipInfoMetadata> {
+        let columns: Vec<&str> = line.split_whitespace().collect();
+        let permissions = columns.first()?;
+        if permissions.len() != 10 || !matches!(permissions.as_bytes()[0], b'-' | b'd' | b'l') {
+            return None;
+        }
+        Some(ZipInfoMetadata {
+            permissions: (*permissions).to_string(),
+            size_bytes: columns.get(3).and_then(|value| value.parse::<u64>().ok()),
+            modified_at: columns
+                .get(7)
+                .and_then(|value| zipinfo_timestamp_to_iso(value)),
+        })
+    }
+
     pub(super) fn parse_7z_slt_paths(stdout: &[u8]) -> Vec<String> {
+        parse_7z_slt_entries(stdout)
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect()
+    }
+
+    fn parse_7z_slt_entries(stdout: &[u8]) -> Vec<ArchiveEntryInfo> {
         let text = String::from_utf8_lossy(stdout);
         let mut in_entries = false;
-        text.lines()
-            .filter_map(|line| {
-                let trimmed = line.trim();
-                if trimmed.starts_with("----------") {
-                    in_entries = true;
-                    return None;
+        let mut current = SevenZipEntryFields::default();
+        let mut entries = Vec::new();
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("----------") {
+                in_entries = true;
+                continue;
+            }
+            if !in_entries || trimmed.is_empty() {
+                continue;
+            }
+            let Some((key, value)) = trimmed.split_once(" = ") else {
+                continue;
+            };
+            if key == "Path" {
+                if let Some(entry) = current.finish() {
+                    entries.push(entry);
                 }
-                if !in_entries {
-                    return None;
-                }
-                trimmed
-                    .strip_prefix("Path = ")
-                    .map(str::trim)
-                    .filter(|path| !path.is_empty())
-                    .map(str::to_string)
-            })
-            .collect()
+                current = SevenZipEntryFields::default();
+                current.path = Some(value.trim().to_string());
+                continue;
+            }
+            current.apply(key, value);
+        }
+        if let Some(entry) = current.finish() {
+            entries.push(entry);
+        }
+        entries
     }
 
     #[cfg(test)]
@@ -1217,33 +1333,170 @@ mod archive {
         parse_7z_slt_paths(stdout)
     }
 
-    fn archive_entry_for_name(archive: &Path, name: &str) -> FileEntry {
-        let is_dir = name.ends_with('/');
+    #[cfg(test)]
+    pub(super) fn parse_7z_slt_entries_for_test(stdout: &[u8]) -> Vec<FileEntry> {
+        parse_7z_slt_entries(stdout)
+            .iter()
+            .map(|entry| archive_entry_for_info(Path::new("/tmp/archive.7z"), entry))
+            .collect()
+    }
+
+    #[cfg(test)]
+    pub(super) fn parse_zipinfo_long_output_for_test(
+        stdout: &[u8],
+        names: &[String],
+    ) -> Vec<FileEntry> {
+        let output = std::process::Output {
+            status: success_status_for_test(),
+            stdout: stdout.to_vec(),
+            stderr: Vec::new(),
+        };
+        parse_zipinfo_long_output(output, Path::new("/tmp/archive.zip"), names)
+            .expect("zipinfo fixture should parse")
+            .iter()
+            .map(|entry| archive_entry_for_info(Path::new("/tmp/archive.zip"), entry))
+            .collect()
+    }
+
+    #[cfg(all(test, unix))]
+    fn success_status_for_test() -> std::process::ExitStatus {
+        use std::os::unix::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(0)
+    }
+
+    #[derive(Default)]
+    struct SevenZipEntryFields {
+        path: Option<String>,
+        size_bytes: Option<u64>,
+        modified_at: Option<String>,
+        created_at: Option<String>,
+        attributes: Option<String>,
+        folder: Option<bool>,
+    }
+
+    impl SevenZipEntryFields {
+        fn apply(&mut self, key: &str, value: &str) {
+            let value = value.trim();
+            match key {
+                "Size" => self.size_bytes = value.parse::<u64>().ok(),
+                "Modified" => self.modified_at = seven_zip_timestamp_to_iso(value),
+                "Created" => self.created_at = seven_zip_timestamp_to_iso(value),
+                "Attributes" => self.attributes = Some(value.to_string()),
+                "Folder" => self.folder = Some(value == "+"),
+                _ => {}
+            }
+        }
+
+        fn finish(self) -> Option<ArchiveEntryInfo> {
+            let path = self.path?.trim().to_string();
+            if path.is_empty() {
+                return None;
+            }
+            let permissions = permission_text_from_7z_attributes(self.attributes.as_deref());
+            let kind = entry_kind_for_archive_member(
+                &path,
+                path.ends_with('/') || self.folder.unwrap_or(false),
+                permissions.as_deref(),
+                self.attributes.as_deref(),
+            );
+            Some(ArchiveEntryInfo {
+                path,
+                size_bytes: if kind == EntryKind::Directory {
+                    None
+                } else {
+                    self.size_bytes
+                },
+                modified_at: self.modified_at,
+                created_at: self.created_at,
+                permissions,
+                kind,
+            })
+        }
+    }
+
+    fn archive_entry_for_info(archive: &Path, entry: &ArchiveEntryInfo) -> FileEntry {
         FileEntry {
-            path: format!("{}!{}", display_path(archive), name),
-            name: name
+            path: format!("{}!{}", display_path(archive), entry.path),
+            name: entry
+                .path
                 .trim_end_matches('/')
                 .rsplit('/')
                 .next()
-                .unwrap_or(name)
+                .unwrap_or(&entry.path)
                 .to_string(),
-            kind: if is_dir {
-                EntryKind::Directory
-            } else {
-                EntryKind::File
-            },
-            size_bytes: None,
-            modified_at: None,
-            created_at: None,
-            permissions: None,
+            kind: entry.kind.clone(),
+            size_bytes: entry.size_bytes,
+            modified_at: entry.modified_at.clone(),
+            created_at: entry.created_at.clone(),
+            permissions: entry.permissions.clone(),
             owner: None,
             group: None,
-            is_hidden: name
+            is_hidden: entry
+                .path
                 .rsplit('/')
                 .next()
                 .is_some_and(|value| value.starts_with('.')),
             is_virtual: false,
         }
+    }
+
+    fn entry_kind_for_archive_member(
+        name: &str,
+        is_dir: bool,
+        permissions: Option<&str>,
+        attributes: Option<&str>,
+    ) -> EntryKind {
+        if is_dir || permissions.is_some_and(|value| value.starts_with('d')) {
+            return EntryKind::Directory;
+        }
+        if permissions.is_some_and(|value| value.starts_with('l')) {
+            return EntryKind::Symlink;
+        }
+        if attributes.is_some_and(|value| value.contains('D')) {
+            return EntryKind::Directory;
+        }
+        if is_archive_path(Path::new(name)) {
+            return EntryKind::Archive;
+        }
+        EntryKind::File
+    }
+
+    fn zipinfo_timestamp_to_iso(value: &str) -> Option<String> {
+        if value.len() < 15 {
+            return None;
+        }
+        let (date, time) = value.split_once('.')?;
+        if date.len() != 8 || time.len() < 6 {
+            return None;
+        }
+        Some(format!(
+            "{}-{}-{}T{}:{}:{}",
+            &date[0..4],
+            &date[4..6],
+            &date[6..8],
+            &time[0..2],
+            &time[2..4],
+            &time[4..6]
+        ))
+    }
+
+    fn seven_zip_timestamp_to_iso(value: &str) -> Option<String> {
+        let normalized = value.trim();
+        if normalized.len() < 19 {
+            return None;
+        }
+        let timestamp = &normalized[0..19];
+        if timestamp.as_bytes().get(10) != Some(&b' ') {
+            return None;
+        }
+        Some(format!("{}T{}", &timestamp[0..10], &timestamp[11..19]))
+    }
+
+    fn permission_text_from_7z_attributes(attributes: Option<&str>) -> Option<String> {
+        attributes?
+            .split_whitespace()
+            .find(|part| part.len() == 10 && matches!(part.as_bytes()[0], b'-' | b'd' | b'l'))
+            .map(str::to_string)
     }
 
     fn find_binary(name: &str) -> Option<String> {
@@ -2671,17 +2924,24 @@ mod tests {
             return;
         }
         let fixture = TempFixture::new();
+        fs::write(fixture.root.join("folder").join("beta.txt"), b"nested")
+            .expect("nested archive fixture should be written");
         let archive_path = fixture.root.join("round-trip.zip");
         let extract_dir = fixture.root.join("extract");
+        let partial_extract_dir = fixture.root.join("partial-extract");
         fs::create_dir_all(&extract_dir).expect("extract directory should be created");
+        fs::create_dir_all(&partial_extract_dir).expect("partial extract directory should exist");
 
         let created = operation::start_archive_create(
             None,
-            vec![fixture
-                .root
-                .join("alpha.txt")
-                .to_string_lossy()
-                .into_owned()],
+            vec![
+                fixture
+                    .root
+                    .join("alpha.txt")
+                    .to_string_lossy()
+                    .into_owned(),
+                fixture.root.join("folder").to_string_lossy().into_owned(),
+            ],
             archive_path.to_string_lossy().into_owned(),
             "zip".to_string(),
             None,
@@ -2707,12 +2967,39 @@ mod tests {
             extract_dir.to_string_lossy().into_owned(),
             None,
             ConflictDecision::Overwrite,
+            None,
+            None,
         )
         .expect("archive extract should start");
         assert_eq!(extracted.kind, OperationKind::ArchiveExtract);
         assert_eq!(
             fs::read(extract_dir.join("alpha.txt")).expect("extracted file should exist"),
             b"hello"
+        );
+        assert_eq!(
+            fs::read(extract_dir.join("folder").join("beta.txt"))
+                .expect("nested extracted file should exist"),
+            b"nested"
+        );
+
+        operation::start_archive_extract(
+            None,
+            archive_path.to_string_lossy().into_owned(),
+            partial_extract_dir.to_string_lossy().into_owned(),
+            None,
+            ConflictDecision::Overwrite,
+            Some(vec!["folder/beta.txt".to_string()]),
+            Some("folder".to_string()),
+        )
+        .expect("partial archive extract should start");
+        assert_eq!(
+            fs::read(partial_extract_dir.join("beta.txt"))
+                .expect("partial extract should strip current archive folder prefix"),
+            b"nested"
+        );
+        assert!(
+            !partial_extract_dir.join("folder").exists(),
+            "copying from inside archive folder should not recreate the current folder prefix"
         );
     }
 
@@ -2818,6 +3105,52 @@ mod tests {
         );
         assert!(!operation::archive_entry_is_unsafe_for_test(&paths[0]));
         assert!(operation::archive_entry_is_unsafe_for_test(&paths[1]));
+    }
+
+    #[test]
+    fn archive_listing_parsers_keep_file_metadata_when_available() {
+        let names = vec![
+            "alpha.txt".to_string(),
+            "dir/".to_string(),
+            "dir/beta space.txt".to_string(),
+        ];
+        let zip_entries = archive::parse_zipinfo_long_output_for_test(
+            b"Archive: fixture.zip\n-rw-r--r--  3.0 unx        5 tx        5 stor 20260702.233028 alpha.txt\ndrwxr-xr-x  3.0 unx        0 bx        0 stor 20260702.233029 dir/\n-rw-r--r--  3.0 unx       10 tx       10 stor 20260702.233030 dir/beta space.txt\n",
+            &names,
+        );
+        assert_eq!(zip_entries[0].name, "alpha.txt");
+        assert_eq!(zip_entries[0].size_bytes, Some(5));
+        assert_eq!(
+            zip_entries[0].modified_at.as_deref(),
+            Some("2026-07-02T23:30:28")
+        );
+        assert_eq!(zip_entries[0].permissions.as_deref(), Some("-rw-r--r--"));
+        assert_eq!(zip_entries[1].kind, EntryKind::Directory);
+        assert_eq!(zip_entries[2].path, "/tmp/archive.zip!dir/beta space.txt");
+        assert_eq!(zip_entries[2].size_bytes, Some(10));
+
+        let seven_zip_entries = archive::parse_7z_slt_entries_for_test(
+            b"Path = fixture.7z\nType = 7z\n----------\nPath = dir/my file.txt\nSize = 5\nModified = 2026-07-02 23:30:28\nCreated = 2026-07-02 23:00:01\nAttributes = A -rw-r--r--\nFolder = -\nPath = dir\nModified = 2026-07-02 23:30:29\nAttributes = D drwxr-xr-x\nFolder = +\n",
+        );
+        assert_eq!(seven_zip_entries[0].name, "my file.txt");
+        assert_eq!(seven_zip_entries[0].size_bytes, Some(5));
+        assert_eq!(
+            seven_zip_entries[0].modified_at.as_deref(),
+            Some("2026-07-02T23:30:28")
+        );
+        assert_eq!(
+            seven_zip_entries[0].created_at.as_deref(),
+            Some("2026-07-02T23:00:01")
+        );
+        assert_eq!(
+            seven_zip_entries[0].permissions.as_deref(),
+            Some("-rw-r--r--")
+        );
+        assert_eq!(seven_zip_entries[1].kind, EntryKind::Directory);
+        assert_eq!(
+            seven_zip_entries[1].permissions.as_deref(),
+            Some("drwxr-xr-x")
+        );
     }
 
     #[test]

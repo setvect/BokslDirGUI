@@ -106,10 +106,6 @@
       "reason": "GUI 전환 필수 기능: 시스템 파일 관리자에서 위치 표시"
     },
     {
-      "guiActionId": "archive.list",
-      "reason": "GUI 명칭 확장: archive.preview와 같은 archive_list command를 메뉴에서 명시"
-    },
-    {
       "guiActionId": "layout.ratio50",
       "reason": "GUI dual-panel 비율 직접 조정 확장"
     },
@@ -1029,30 +1025,32 @@
       "commandBar": null,
       "tuiMenuPaths": [
         [
-          "File",
-          "Archive Preview"
+          "Archive",
+          "Open Archive"
         ]
       ],
       "guiActionIds": [
-        "archive.preview"
+        "archive.list"
       ],
       "guiShortcutLabels": [
         "Enter on archive"
       ],
       "guiMenuPaths": [
         [
-          "File",
-          "Archive Preview"
+          "Archive",
+          "Open Archive"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: archive.preview maps File > Archive Preview",
-        "src/ui/CommanderShell.test.tsx: archive preview/list dialog calls archiveList and displays entries",
+        "src/actions/registry.ts: archive.list maps Archive > Open Archive without opening a preview dialog",
+        "src/ui/CommanderShell.tsx: Enter on archive calls archiveList and replaces the panel with an archive virtual directory listing",
+        "src/ui/CommanderShell.test.tsx: opens properties and enters archives as virtual directories",
+        "src/ui/archiveVirtual.test.ts: archive.zip:/ paths project flat archive entries into nested directory listings",
         "src-tauri/src/lib.rs: archive_list and archive_7z_provider_lists_real_fixture_when_available"
       ],
-      "notes": "Archive Preview는 archive entry context와 File > Archive Preview 메뉴에 맞췄고, archive.list는 같은 command를 여는 GUI 확장으로 유지한다.",
+      "notes": "압축 파일은 별도 미리보기 팝업이 아니라 archive.zip:/ 형태의 가상 디렉터리로 패널에 진입한다. Archive > Open Archive와 Enter on archive는 같은 패널 진입 동작을 사용한다.",
       "tuiId": "archive_preview",
-      "tuiLabel": "Preview archive",
+      "tuiLabel": "Open archive as directory",
       "tuiCategory": "FileOperation",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],

@@ -57,7 +57,7 @@ const requiredActionIds: ActionId[] = [
   'settings.toggleIcons',
   'settings.sizeAuto',
   'settings.sizeBytes',
-  'archive.preview',
+  'archive.list',
   'app.quit',
   'external.openDefault',
   'external.openEditor',
@@ -150,9 +150,9 @@ describe('action registry', () => {
   });
 
   it('applies contextScopes before action-specific enablement', () => {
-    const archivePreview = ACTION_BY_ID.get('archive.preview');
-    if (!archivePreview) {
-      throw new Error('archive.preview action is required');
+    const archiveOpen = ACTION_BY_ID.get('archive.list');
+    if (!archiveOpen) {
+      throw new Error('archive.open action is required');
     }
     const baseContext: ActionContext = {
       activePanel: 'left',
@@ -166,8 +166,8 @@ describe('action registry', () => {
       backendAvailable: true,
     };
 
-    expect(isActionAvailable(archivePreview, baseContext)).toBe(false);
-    expect(isActionAvailable(archivePreview, { ...baseContext, focusedEntryKind: 'archive' })).toBe(true);
+    expect(isActionAvailable(archiveOpen, baseContext)).toBe(false);
+    expect(isActionAvailable(archiveOpen, { ...baseContext, focusedEntryKind: 'archive' })).toBe(true);
   });
 
   it('derives keyboard shortcut dispatch from explicit keyboardBindings metadata', () => {
@@ -189,8 +189,8 @@ describe('action registry', () => {
     expect(actionForKeyboardShortcut(key('q', { ctrlKey: true }))).toBeNull();
     expect(actionForKeyboardShortcut(key('q', { metaKey: true }))?.id).toBe('app.quit');
     expect(actionForKeyboardShortcut(key('q'))).toBeNull();
-    expect(ACTION_BY_ID.get('archive.preview')?.shortcutLabel).toBe('Enter on archive');
-    expect(ACTION_BY_ID.get('archive.preview')?.keyboardBindings).toBeUndefined();
+    expect(ACTION_BY_ID.get('archive.list')?.shortcutLabel).toBe('Enter on archive');
+    expect(ACTION_BY_ID.get('archive.list')?.keyboardBindings).toBeUndefined();
   });
 
   it('supports sequence shortcuts without parsing display-only shortcut labels', () => {
@@ -230,7 +230,7 @@ describe('action registry', () => {
   it('keeps hotkey strip shortcut formatting behind a registry helper', () => {
     expect(shortcutLabelForAction(ACTION_BY_ID.get('file.copy')!)).toBe('y');
     expect(shortcutLabelForAction(ACTION_BY_ID.get('filter.start')!)).toBe('/');
-    expect(shortcutLabelForAction(ACTION_BY_ID.get('archive.preview')!)).toBe('Enter on archive');
+    expect(shortcutLabelForAction(ACTION_BY_ID.get('archive.list')!)).toBe('Enter on archive');
   });
 });
 

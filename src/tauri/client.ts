@@ -206,7 +206,7 @@ export const tauriClient = {
     invokeCommand<ArchiveListing>(COMMANDS.archiveList, input),
   archiveCreate: (input: { sources: string[]; targetArchive: string; format: string; password?: string }) =>
     invokeCommand<OperationStarted>(COMMANDS.archiveCreate, input),
-  archiveExtract: (input: { archivePath: string; targetDir: string; password?: string; policy: ConflictDecision }) =>
+  archiveExtract: (input: { archivePath: string; targetDir: string; password?: string; policy: ConflictDecision; entries?: string[]; stripPrefix?: string }) =>
     invokeCommand<OperationStarted>(COMMANDS.archiveExtract, input),
   openDefault: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openDefault, input),
   revealInManager: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.revealInManager, input),

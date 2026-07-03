@@ -48,7 +48,7 @@
 다음 action은 TUI에 1:1 원천이 없는 GUI 확장이다. 검증 스크립트는 이 목록에 없는 GUI action이 matrix 밖에 남으면 실패해야 한다.
 
 - `external.reveal`: GUI 전환 필수 기능: 시스템 파일 관리자에서 위치 표시
-- `archive.list`: GUI 명칭 확장: archive.preview와 같은 archive_list command를 메뉴에서 명시
+- `archive.list`: 압축 파일을 별도 preview 팝업이 아니라 `archive.zip:/` 가상 디렉터리로 패널에 진입시키는 기본 archive_list 액션
 - `layout.ratio50`: GUI dual-panel 비율 직접 조정 확장
 - `layout.ratio70Left`: GUI dual-panel 비율 직접 조정 확장
 - `layout.ratio70Right`: GUI dual-panel 비율 직접 조정 확장
@@ -86,7 +86,7 @@
 | `archive_compress` | zc | File > Archive Compress | `archive.create` | implemented | P1 | TUI File > Archive Compress/zc와 맞췄고, 선택/포커스 effective sources를 opposite panel target archive로 전달한다. Rust는 상대 entry명과 provider unavailable/error summary를 검증한다. |
 | `archive_extract` | zx | File > Archive Extract | `archive.extract` | implemented | P1 | Archive Extract는 archive entry에서만 활성화되고 Rust archive_extract로 skip 기본 충돌 정책을 넘긴다. zip-slip/absolute path 차단은 Rust operation tests가 보장한다. |
 | `archive_extract_auto` | za | File > Archive Extract Auto | `archive.extractAuto` | implemented | P1 | TUI za 자동 해제 parity를 추가했다. GUI는 archive basename(예: release-bundle.zip → release-bundle)으로 opposite panel 아래 target folder를 계산하고 같은 Rust archive_extract 경계를 사용한다. |
-| `archive_preview` | - | File > Archive Preview | `archive.preview` | implemented | P1 | Archive Preview는 archive entry context와 File > Archive Preview 메뉴에 맞췄고, archive.list는 같은 command를 여는 GUI 확장으로 유지한다. |
+| `archive_preview` | - | Archive > Open Archive | `archive.list` | implemented | P1 | 압축 파일은 별도 미리보기 팝업이 아니라 `archive.zip:/` 가상 디렉터리로 패널에 진입한다. Enter on archive와 Archive > Open Archive는 같은 archive_list 기반 패널 진입 동작을 사용한다. |
 | `toggle_sel` | Space | Edit > Select | `selection.toggle` | implemented | P0 | Space가 포커스된 concrete row 선택을 토글하고 TUI처럼 다음 row로 이동한다. 가상 parent row와 native control keyboard owner 경계도 검증했다. |
 | `invert_selection` | v | Edit > Invert Selection | `selection.invert` | implemented | P1 | v가 활성 패널 concrete row 선택을 반전하며 가상 parent row는 선택하지 않는다. |
 | `select_all` | ^A | Edit > Select All | `selection.all` | implemented | P1 | Ctrl+A가 활성 패널 concrete row 전체를 선택하고 브라우저 select-all 기본 동작을 억제한다. |

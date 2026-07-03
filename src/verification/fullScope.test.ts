@@ -47,7 +47,7 @@ describe('full-scope verification harness', () => {
       'layout.ratio70Left',
       'layout.ratio70Right',
       'app.quit',
-      'archive.preview',
+      'archive.list',
       'archive.extractAuto',
       'external.openDefault',
       'external.openEditor',
@@ -154,9 +154,9 @@ describe('full-scope verification harness', () => {
     expect(contextMenuActions(virtualParent, context).map((action) => action.id)).toEqual(['nav.enter']);
 
     const archiveEntry = SAMPLE_LISTINGS.left.entries.find((entry) => entry.name === 'release-bundle.zip');
-    const archivePreview = ACTION_BY_ID.get('archive.preview');
-    if (!archiveEntry || !archivePreview) {
-      throw new Error('archive fixture and preview action are required');
+    const archiveOpen = ACTION_BY_ID.get('archive.list');
+    if (!archiveEntry || !archiveOpen) {
+      throw new Error('archive fixture and open action are required');
     }
     const archiveContext = createActionContext({
       activePanel: 'left',
@@ -166,10 +166,10 @@ describe('full-scope verification harness', () => {
       shellCommandEnabled: false,
       operationBusy: false,
     });
-    expect(isActionAvailable(archivePreview, context)).toBe(false);
-    expect(isActionAvailable(archivePreview, archiveContext)).toBe(true);
+    expect(isActionAvailable(archiveOpen, context)).toBe(false);
+    expect(isActionAvailable(archiveOpen, archiveContext)).toBe(true);
     expect(contextMenuActions(archiveEntry, archiveContext).map((action) => action.id)).toEqual(
-      expect.arrayContaining(['archive.preview', 'archive.list', 'archive.extract', 'archive.extractAuto']),
+      expect.arrayContaining(['archive.list', 'archive.extract', 'archive.extractAuto']),
     );
   });
 });

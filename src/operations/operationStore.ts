@@ -22,7 +22,6 @@ export type DialogKind =
   | 'rename'
   | 'createDir'
   | 'properties'
-  | 'archivePreview'
   | 'archiveCreate'
   | 'archiveExtract'
   | 'externalOpenDefault'
@@ -343,7 +342,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         }));
         return;
       }
-      if (dialog.dialogKind === 'properties' || dialog.dialogKind === 'archivePreview' || dialog.dialogKind === 'shellCommand') {
+      if (dialog.dialogKind === 'properties' || dialog.dialogKind === 'shellCommand') {
         set((current) => ({
           dialog: current.dialog
             ? { ...current.dialog, atomicPending: false, atomicResult: result.data }
@@ -712,8 +711,6 @@ export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
     'file.rename': 'rename',
     'file.mkdir': 'createDir',
     'file.properties': 'properties',
-    'archive.preview': 'archivePreview',
-    'archive.list': 'archivePreview',
     'archive.extract': 'archiveExtract',
     'archive.extractAuto': 'archiveExtract',
     'archive.create': 'archiveCreate',
@@ -782,7 +779,6 @@ type AtomicCommandDialogKind =
   | 'rename'
   | 'createDir'
   | 'properties'
-  | 'archivePreview'
   | 'externalOpenDefault'
   | 'externalReveal'
   | 'externalEditor'
@@ -801,7 +797,6 @@ const ATOMIC_COMMAND_DIALOGS: readonly AtomicCommandDialogKind[] = [
   'rename',
   'createDir',
   'properties',
-  'archivePreview',
   'externalOpenDefault',
   'externalReveal',
   'externalEditor',

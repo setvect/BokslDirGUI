@@ -61,7 +61,6 @@ describe('operation store', () => {
       'file.rename',
       'file.mkdir',
       'file.properties',
-      'archive.preview',
       'archive.create',
       'archive.extract',
       'archive.extractAuto',

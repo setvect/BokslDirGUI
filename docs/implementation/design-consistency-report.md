@@ -50,7 +50,7 @@
 | 선택 | `selection.toggle`, `selection.all`, `selection.invert`, `selection.clear` | UI state | `FileTable` | 선택 시나리오 | 일치 |
 | 정렬/필터/숨김 | `view.sortName`, `view.sortSize`, `view.sortDate`, `view.sortExt`, `view.reverseSort`, `filter.start`, `filter.clear`, `view.toggleHidden` | `list_dir` + UI state | `FileTable` | action coverage 검사 | 일치 |
 | 파일 작업 | `file.copy`, `file.move`, `file.trash`, `file.deletePermanent`, `file.mkdir`, `file.rename` | `start_*`, `create_dir`, `rename_entry` | `OperationDialog` | 파일 작업 fixture | 일치 |
-| 압축 | `archive.preview`, `archive.list`, `archive.extract`, `archive.create` | `archive_*` | `ArchiveDialog` | archive fixture | 일치 |
+| 압축 | `archive.list`, `archive.extract`, `archive.create` | `archive_*` | 패널 가상 디렉터리 + 작업 다이얼로그 | archive fixture | 일치 |
 | 북마크/히스토리 | `nav.back`, `nav.forward`, `history.list`, `bookmark.add`, `bookmark.list`, `bookmark.rename`, `bookmark.delete` | UI/settings store | `HistoryPopover`, `BookmarkDialog` | 탭/히스토리/북마크 | 일치 |
 | 외부 연동 | `external.openDefault`, `external.reveal`, `external.openEditor`, `external.runShellCommand` | `open_default`, `reveal_in_manager`, `open_external_editor`, `prepare_shell_command` → `run_shell_command` | `ContextMenuLayer`, `ExternalOpenDialog`, `ShellCommandDialog` | 외부 연동 시나리오 | 일치 |
 | 설정/도움말 | `settings.theme`, `settings.language`, `settings.sizeFormat`, `help.shortcuts`, `help.search`, `help.about` | settings/UI state | `SettingsDialog`, `HelpDialog` | action coverage 검사 | 일치 |

@@ -242,18 +242,23 @@ addCheck(
   'external open/editor/shell rows require File menu parity, persisted editor preset, shell preview/confirm/run, and tests',
 );
 addCheck(
-  'TUI parity matrix records archive rows as implemented only with auto-extract and backend evidence',
+  'TUI parity matrix records archive rows as implemented only with virtual-directory and backend evidence',
   ['archive_compress', 'archive_extract', 'archive_extract_auto', 'archive_preview'].every((id) => {
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
       && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'))
       && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
   })
+    && parityRowsById.get('archive_preview')?.guiActionIds?.includes('archive.list')
     && registry.includes("id: 'archive.extractAuto'")
+    && registry.includes("id: 'archive.list'")
     && read('src/ui/CommanderShell.tsx').includes('archiveAutoExtractFolderName')
+    && read('src/ui/CommanderShell.tsx').includes('archiveVirtualRootPath')
     && read('src/ui/CommanderShell.test.tsx').includes('uses auto-extract to derive a target folder')
+    && read('src/ui/CommanderShell.test.tsx').includes('enters archives as virtual directories')
+    && read('src/ui/archiveVirtual.test.ts').includes('archive.zip:/ paths')
     && read('src-tauri/src/operation.rs').includes('archive_entry_is_unsafe'),
-  'archive rows require create/extract/auto/preview action mappings, target derivation, UI tests, and Rust unsafe-path defense',
+  'archive rows require create/extract/auto/open-as-directory action mappings, target derivation, virtual-directory UI tests, and Rust unsafe-path defense',
 );
 addCheck(
   'TUI parity matrix records remaining navigation/view/help rows as implemented only with user-scenario evidence',
@@ -309,7 +314,7 @@ const requiredActionIds = [
   'file.rename',
   'file.properties',
   'app.quit',
-  'archive.preview',
+  'archive.list',
   'archive.create',
   'archive.extract',
   'archive.extractAuto',
@@ -550,7 +555,7 @@ for (const token of ['createActionContext', 'filterEnabledActions', 'blocksVirtu
 }
 
 const fullScopeTest = read('src/verification/fullScope.test.ts');
-for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.prepareShellCommand', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.preview']) {
+for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.prepareShellCommand', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.list']) {
   addCheck(`full-scope test covers ${token}`, fullScopeTest.includes(token), 'Semantic verification beyond static smoke');
 }
 

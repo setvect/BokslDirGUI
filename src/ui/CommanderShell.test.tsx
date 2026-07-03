@@ -761,6 +761,52 @@ describe('CommanderShell', () => {
     await waitFor(() => expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(3));
   });
 
+  it('copies selected entries from an archive virtual directory by extracting only those entries', async () => {
+    const user = userEvent.setup();
+    const archivePath = '/tmp/archive.zip';
+    const archiveFile = `${archivePath}:/BokslAsset/eslint.config.js`;
+    const leftPath = '/tmp/target';
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', leftPath, []),
+        right: createDirectoryListing('right', `${archivePath}:/BokslAsset`, [{
+          ...testEntry(`${archivePath}:/BokslAsset`, 'eslint.config.js'),
+          path: archiveFile,
+          sizeBytes: 737,
+          modifiedAt: '2026-06-28T12:33:00',
+        }]),
+      },
+    });
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveExtract: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-copy', kind: 'archiveExtract' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={dataSource}
+        operationClient={operationClient}
+        initialFocusIndex={{ right: 0 }}
+        initialSelectedPaths={{ right: [archiveFile] }}
+      />,
+    );
+
+    await user.keyboard('y');
+
+    await waitFor(() => expect(operationClient.archiveExtract).toHaveBeenCalledWith({
+      archivePath,
+      targetDir: leftPath,
+      policy: 'skip',
+      entries: ['BokslAsset/eslint.config.js'],
+      stripPrefix: 'BokslAsset',
+    }));
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+  });
+
   it('refreshes both panels when a partially completed copy is cancelled', async () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();
@@ -1058,7 +1104,7 @@ describe('CommanderShell', () => {
     expect(focusedRowText(container)).toContain('renamed-entry');
   });
 
-  it('opens properties and archive previews through mocked Tauri atomic clients', async () => {
+  it('opens properties and enters archives as virtual directories', async () => {
     const user = userEvent.setup();
     const archiveEntry = SAMPLE_LISTINGS.left.entries.find((entry) => entry.name === 'release-bundle.zip');
     if (!archiveEntry) {
@@ -1082,7 +1128,12 @@ describe('CommanderShell', () => {
         data: {
           archivePath: archiveEntry.path,
           encrypted: false,
-          entries: [testEntry(archiveEntry.path, 'inside.txt')],
+          entries: [{
+            ...testEntry(archiveEntry.path, 'inside.txt'),
+            path: `${archiveEntry.path}!inside.txt`,
+            sizeBytes: 2048,
+            modifiedAt: '2026-07-02T23:30:28',
+          }],
         },
       })),
     };
@@ -1101,12 +1152,13 @@ describe('CommanderShell', () => {
     if (!archiveRow) {
       throw new Error('archive row is required');
     }
-    fireEvent.contextMenu(archiveRow);
-    await user.click(await screen.findByRole('menuitem', { name: /^압축 미리보기/ }));
-    await user.click(await screen.findByRole('button', { name: '압축 내용 보기' }));
+    fireEvent.doubleClick(archiveRow);
 
     await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath: archiveEntry.path }));
-    expect(screen.getByText(/inside.txt/)).toBeTruthy();
+    await waitFor(() => expect(rowByText(container, 'inside.txt')).not.toBeNull());
+    expect(rowByText(container, 'inside.txt')?.textContent).toContain('2.0 KB');
+    expect(rowByText(container, 'inside.txt')?.textContent).toContain('07-02 23:30');
+    expect(screen.queryByRole('dialog', { name: /압축/ })).toBeNull();
   });
 
   it('opens files through default app and configured external editor command paths', async () => {

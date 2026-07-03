@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Condvar};
@@ -307,6 +308,8 @@ pub(super) fn start_archive_extract(
     target_dir: String,
     password: Option<String>,
     policy: ConflictDecision,
+    entries: Option<Vec<String>>,
+    strip_prefix: Option<String>,
 ) -> CommandResult<OperationStarted> {
     let operation_id = next_operation_id(OperationKind::ArchiveExtract);
     register_operation(&operation_id);
@@ -337,6 +340,8 @@ pub(super) fn start_archive_extract(
                     target_dir,
                     password,
                     policy,
+                    entries,
+                    strip_prefix,
                 );
                 emit_summary(Some(&app), &summary);
                 finish_operation(&operation_id);
@@ -360,6 +365,8 @@ pub(super) fn start_archive_extract(
             target_dir,
             password,
             policy,
+            entries,
+            strip_prefix,
         );
         emit_summary(app, &summary);
         finish_operation(&operation_id);
@@ -965,6 +972,8 @@ fn run_archive_extract(
     target_dir: String,
     password: Option<String>,
     policy: ConflictDecision,
+    selected_entries: Option<Vec<String>>,
+    strip_prefix: Option<String>,
 ) -> OperationSummary {
     let kind = OperationKind::ArchiveExtract;
     if password.as_deref().is_some_and(|value| !value.is_empty()) {
@@ -1018,14 +1027,17 @@ fn run_archive_extract(
         return cancel_summary(operation_id, kind, &stats);
     }
 
-    let entries = match list_archive_entry_names_for_operation(operation_id, &archive) {
+    let all_entries = match list_archive_entry_names_for_operation(operation_id, &archive) {
         Ok(entries) => entries,
         Err(error) if is_operation_cancelled_error(&error) => {
             return cancel_summary(operation_id, kind, &stats)
         }
         Err(error) => return error_summary(operation_id, kind, error),
     };
-    if let Some(unsafe_entry) = entries.iter().find(|entry| archive_entry_is_unsafe(entry)) {
+    if let Some(unsafe_entry) = all_entries
+        .iter()
+        .find(|entry| archive_entry_is_unsafe(entry))
+    {
         return error_summary(
             operation_id,
             kind,
@@ -1038,6 +1050,10 @@ fn run_archive_extract(
             .with_detail("entry", unsafe_entry),
         );
     }
+    let entries = match archive_entries_for_extract(&all_entries, selected_entries.as_deref()) {
+        Ok(entries) => entries,
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
     stats.total_files = entries.len() as u64;
     emit_progress(
         app,
@@ -1051,10 +1067,25 @@ fn run_archive_extract(
         return cancel_summary(operation_id, kind, &stats);
     }
 
-    let command_result = if archive.extension().and_then(|value| value.to_str()) == Some("zip") {
-        run_zip_extract(operation_id, &archive, &target, policy)
+    let command_result = if selected_entries
+        .as_ref()
+        .is_some_and(|entries| !entries.is_empty())
+    {
+        run_archive_extract_selected(
+            app,
+            operation_id,
+            &archive,
+            &target,
+            policy,
+            &entries,
+            strip_prefix.as_deref().unwrap_or(""),
+            &mut stats,
+            kind,
+        )
+    } else if archive.extension().and_then(|value| value.to_str()) == Some("zip") {
+        run_zip_extract(operation_id, &archive, &target, policy, None)
     } else if archive.extension().and_then(|value| value.to_str()) == Some("7z") {
-        run_7z_extract(operation_id, &archive, &target, policy)
+        run_7z_extract(operation_id, &archive, &target, policy, None)
     } else {
         Err(AppError::new(
             "unsupported",
@@ -1066,7 +1097,9 @@ fn run_archive_extract(
 
     match command_result {
         Ok(()) => {
-            stats.completed_files = entries.len() as u64;
+            if stats.completed_files < entries.len() as u64 {
+                stats.completed_files = entries.len() as u64;
+            }
             emit_progress(
                 app,
                 operation_id,
@@ -1157,6 +1190,7 @@ fn run_zip_extract(
     archive: &Path,
     target: &Path,
     policy: ConflictDecision,
+    entries: Option<&[String]>,
 ) -> CommandResult<()> {
     let unzip = external_binary("unzip").ok_or_else(|| {
         AppError::new(
@@ -1184,7 +1218,11 @@ fn run_zip_extract(
             ));
         }
     }
-    command.arg("-q").arg(archive).arg("-d").arg(target);
+    command.arg("-q").arg(archive);
+    for entry in entries.unwrap_or(&[]) {
+        command.arg(entry);
+    }
+    command.arg("-d").arg(target);
     run_external_command(operation_id, command, Some(archive))
 }
 
@@ -1193,6 +1231,7 @@ fn run_7z_extract(
     archive: &Path,
     target: &Path,
     policy: ConflictDecision,
+    entries: Option<&[String]>,
 ) -> CommandResult<()> {
     let seven_zip = external_binary("7zz")
         .or_else(|| external_binary("7z"))
@@ -1226,7 +1265,238 @@ fn run_7z_extract(
     command
         .arg(format!("-o{}", target.to_string_lossy()))
         .arg(archive);
+    for entry in entries.unwrap_or(&[]) {
+        command.arg(entry);
+    }
     run_external_command(operation_id, command, Some(archive))
+}
+
+fn run_archive_extract_selected(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    archive: &Path,
+    target: &Path,
+    policy: ConflictDecision,
+    entries: &[String],
+    strip_prefix: &str,
+    stats: &mut OperationStats,
+    kind: OperationKind,
+) -> CommandResult<()> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let staging = unique_archive_extract_staging_dir(operation_id)?;
+    let extract_result = if archive.extension().and_then(|value| value.to_str()) == Some("zip") {
+        run_zip_extract(
+            operation_id,
+            archive,
+            &staging,
+            ConflictDecision::Overwrite,
+            Some(entries),
+        )
+    } else if archive.extension().and_then(|value| value.to_str()) == Some("7z") {
+        run_7z_extract(
+            operation_id,
+            archive,
+            &staging,
+            ConflictDecision::Overwrite,
+            Some(entries),
+        )
+    } else {
+        Err(AppError::new(
+            "unsupported",
+            "errors.archiveFormatUnsupported",
+            Some(archive),
+            true,
+        ))
+    };
+    if let Err(error) = extract_result {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+
+    let selected_roots = selected_staged_roots(entries, strip_prefix);
+    let mut copied = HashSet::new();
+    for relative in selected_roots {
+        if is_cancelled(operation_id) {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(AppError::new(
+                "operation_cancelled",
+                "errors.operationCancelled",
+                Some(archive),
+                true,
+            ));
+        }
+        let source = staging.join(&relative);
+        if !copied.insert(source.clone()) {
+            continue;
+        }
+        if !source.exists() {
+            stats.failed_files += 1;
+            stats.errors.push(AppError::new(
+                "not_found",
+                "errors.notFound",
+                Some(&source),
+                true,
+            ));
+            continue;
+        }
+        let destination = target.join(source.file_name().ok_or_else(|| {
+            AppError::new("invalid_path", "errors.invalidPath", Some(&source), true)
+        })?);
+        let decision = handle_conflict(
+            app,
+            operation_id,
+            &source,
+            &destination,
+            policy,
+            stats,
+            kind,
+        );
+        match decision {
+            ConflictDecision::Skip | ConflictDecision::AllSkip => {
+                stats.skipped_files += 1;
+                continue;
+            }
+            ConflictDecision::Cancel => {
+                let _ = fs::remove_dir_all(&staging);
+                return Err(AppError::new(
+                    "operation_cancelled",
+                    "errors.operationCancelled",
+                    Some(&source),
+                    true,
+                ));
+            }
+            ConflictDecision::Overwrite | ConflictDecision::AllOverwrite
+                if path_is_occupied(&destination) =>
+            {
+                copy_tree_replacing(
+                    app,
+                    operation_id,
+                    &source,
+                    target,
+                    &destination,
+                    stats,
+                    kind,
+                )?;
+            }
+            ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {
+                copy_tree(app, operation_id, &source, target, stats, kind)?;
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(&staging);
+    Ok(())
+}
+
+fn archive_entries_for_extract(
+    all_entries: &[String],
+    selected_entries: Option<&[String]>,
+) -> CommandResult<Vec<String>> {
+    let Some(selected_entries) = selected_entries else {
+        return Ok(all_entries.to_vec());
+    };
+    if selected_entries.is_empty() {
+        return Ok(all_entries.to_vec());
+    }
+    let mut expanded = Vec::new();
+    let mut seen = HashSet::new();
+    for selected in selected_entries {
+        let selected = normalize_archive_entry(selected);
+        if selected.is_empty() || archive_entry_is_unsafe(&selected) {
+            return Err(AppError::new(
+                "unsafe_archive_entry",
+                "errors.archiveUnsafePath",
+                None,
+                true,
+            )
+            .with_detail("entry", selected));
+        }
+        let directory_prefix = format!("{}/", selected.trim_end_matches('/'));
+        let matches: Vec<String> = all_entries
+            .iter()
+            .filter(|entry| {
+                let normalized = normalize_archive_entry(entry);
+                normalized == selected || normalized.starts_with(&directory_prefix)
+            })
+            .cloned()
+            .collect();
+        if matches.is_empty() {
+            return Err(AppError::new("not_found", "errors.notFound", None, true)
+                .with_detail("entry", selected));
+        }
+        for entry in matches {
+            if seen.insert(entry.clone()) {
+                expanded.push(entry);
+            }
+        }
+    }
+    Ok(expanded)
+}
+
+fn selected_staged_roots(entries: &[String], strip_prefix: &str) -> Vec<PathBuf> {
+    let strip_prefix = normalize_archive_entry(strip_prefix)
+        .trim_end_matches('/')
+        .to_string();
+    let mut roots = Vec::new();
+    let mut seen = HashSet::new();
+    for entry in entries {
+        let normalized = normalize_archive_entry(entry);
+        let stripped = strip_archive_prefix(&normalized, &strip_prefix);
+        let Some(root_name) = stripped.split('/').find(|segment| !segment.is_empty()) else {
+            continue;
+        };
+        let root = if strip_prefix.is_empty() {
+            PathBuf::from(root_name)
+        } else if normalized == strip_prefix {
+            PathBuf::from(&strip_prefix)
+        } else {
+            PathBuf::from(&strip_prefix).join(root_name)
+        };
+        if !root.as_os_str().is_empty() && seen.insert(root.clone()) {
+            roots.push(root);
+        }
+    }
+    roots
+}
+
+fn strip_archive_prefix<'a>(entry: &'a str, strip_prefix: &str) -> &'a str {
+    if strip_prefix.is_empty() {
+        return entry;
+    }
+    if entry == strip_prefix {
+        return entry.rsplit('/').next().unwrap_or(entry);
+    }
+    entry
+        .strip_prefix(&format!("{}/", strip_prefix))
+        .unwrap_or(entry)
+}
+
+fn normalize_archive_entry(entry: &str) -> String {
+    entry
+        .replace('\\', "/")
+        .trim_matches('/')
+        .split('/')
+        .filter(|segment| !segment.is_empty() && *segment != ".")
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn unique_archive_extract_staging_dir(operation_id: &str) -> CommandResult<PathBuf> {
+    let base = env::temp_dir().join(format!(
+        "boksldir-gui-archive-extract-{}-{}",
+        operation_id,
+        unix_millis()
+    ));
+    fs::create_dir_all(&base).map_err(|error| map_io_error(error, Some(&base)))?;
+    Ok(base)
+}
+
+fn unix_millis() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default()
 }
 
 fn list_archive_entry_names_for_operation(

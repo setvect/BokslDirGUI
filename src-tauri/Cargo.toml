@@ -6,6 +6,10 @@ authors = ["setvect <setvect@naver.com>"]
 edition = "2021"
 rust-version = "1.77"
 
+[[bin]]
+name = "BokslDirGUI"
+path = "src/main.rs"
+
 [lib]
 name = "boksldir_gui_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

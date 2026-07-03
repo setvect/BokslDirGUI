@@ -14,7 +14,7 @@ export interface NavigationListItem {
 }
 
 export interface NavigationListState {
-  kind: 'locations' | 'history' | 'bookmarks' | 'tabs' | 'archive';
+  kind: 'locations' | 'history' | 'bookmarks' | 'tabs';
   panelId: PanelId;
   title: string;
   items: NavigationListItem[];

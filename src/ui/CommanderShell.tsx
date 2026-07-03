@@ -44,6 +44,15 @@ import {
   formatUserErrorMessage,
 } from '../i18n-resources';
 import { actionNeedsConcreteSources, createActionContext, filterEnabledActions, resolveActionTargets } from './actionContext';
+import {
+  archiveExitFocusPath,
+  archiveListingToDirectoryListing,
+  archiveParentFocusPath,
+  archiveParentPath,
+  archiveVirtualRootPath,
+  isArchiveVirtualPath,
+  parseArchiveVirtualPath,
+} from './archiveVirtual';
 import { createTauriPanelDataSource, type PanelDataSource, type PanelInitialLoadResult } from './panelDataSource';
 import {
   clampFocusedIndex,
@@ -164,7 +173,7 @@ interface LongRunningOperationClient {
   startMove(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startMove>;
   startDelete(input: { targets: string[]; mode: 'trash' | 'permanent'; confirmToken?: string }): ReturnType<typeof tauriClient.startDelete>;
   archiveCreate?(input: { sources: string[]; targetArchive: string; format: string; password?: string }): ReturnType<typeof tauriClient.archiveCreate>;
-  archiveExtract?(input: { archivePath: string; targetDir: string; password?: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.archiveExtract>;
+  archiveExtract?(input: { archivePath: string; targetDir: string; password?: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel'; entries?: string[]; stripPrefix?: string }): ReturnType<typeof tauriClient.archiveExtract>;
   cancelOperation(input: { operationId: string }): ReturnType<typeof tauriClient.cancelOperation>;
   resolveConflict(input: { operationId: string; decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.resolveConflict>;
 }
@@ -384,7 +393,9 @@ export function CommanderShell({
       },
     }));
 
-    const result = await dataSource.listDir({ panelId, path, showHidden, sort, filter });
+    const result = isArchiveVirtualPath(path)
+      ? await listArchiveVirtualPanel(panelId, path, showHidden, sort, filter)
+      : await dataSource.listDir({ panelId, path, showHidden, sort, filter });
     if (!isCurrentPanelRequest(panelId, requestId)) {
       return;
     }
@@ -414,7 +425,7 @@ export function CommanderShell({
       },
     }));
     setStatusMessage(options.statusAfterSuccess ?? null);
-    if (options.persistSession !== false) {
+    if (options.persistSession !== false && !isArchiveVirtualPath(result.data.path)) {
       persistSessionPaths(panelId, result.data.path);
     }
     shellRef.current?.focus({ preventScroll: true });
@@ -447,6 +458,43 @@ export function CommanderShell({
     shellRef.current?.focus({ preventScroll: true });
   };
 
+  const listArchiveVirtualPanel = async (
+    panelId: PanelId,
+    virtualPath: string,
+    showHidden: boolean,
+    sort: SortSpec,
+    filter: string | null,
+  ) => {
+    const parsed = parseArchiveVirtualPath(virtualPath);
+    if (!parsed || !mutationClient.archiveList || !runtimeBackendAvailable) {
+      return {
+        ok: false as const,
+        error: {
+          code: 'unsupported',
+          messageKey: 'errors.archiveProviderUnavailable',
+          path: parsed?.archivePath ?? virtualPath,
+          details: { command: 'archive_list' },
+          recoverable: true,
+        },
+      };
+    }
+    const result = await mutationClient.archiveList({ archivePath: parsed.archivePath });
+    if (!result.ok) {
+      return result;
+    }
+    return {
+      ok: true as const,
+      data: archiveListingToDirectoryListing({
+        panelId,
+        virtualPath,
+        archiveListing: result.data,
+        showHidden,
+        sort,
+        filter,
+      }),
+    };
+  };
+
   const refreshPanel = (panelId: PanelId) => {
     const panel = panelState[panelId];
     void listPanel(panelId, panel.path, {
@@ -470,6 +518,14 @@ export function CommanderShell({
 
   const navigateUp = (panelId: PanelId) => {
     const panel = panelState[panelId];
+    if (isArchiveVirtualPath(panel.path)) {
+      const targetPath = archiveParentPath(panel.path);
+      void listPanel(panelId, targetPath, {
+        pushHistory: targetPath !== panel.path,
+        focusPath: archiveParentFocusPath(panel.path),
+      });
+      return;
+    }
     const parentEntry = parentNavigationEntryOf(panel);
     const targetPath = parentEntry?.path ?? parentPathOf(panel.path);
     void listPanel(panelId, targetPath, {
@@ -707,11 +763,6 @@ export function CommanderShell({
 
   const chooseNavigationItem = (state: NavigationListState, item: NavigationListItem) => {
     setNavigationList(null);
-    if (state.kind === 'archive') {
-      setStatusMessage(statusText.archiveEntry(item.path));
-      shellRef.current?.focus({ preventScroll: true });
-      return;
-    }
     void gotoPanelPath(state.panelId, item.path);
   };
 
@@ -838,19 +889,28 @@ export function CommanderShell({
 
   const openEntry = (panelId: PanelId, entry: FileEntry) => {
     setActivePanel(panelId);
+    if (entry.isVirtual) {
+      navigateUp(panelId);
+      return;
+    }
     if (entry.kind === 'directory') {
       const panel = panelState[panelId];
       void listPanel(panelId, entry.path, {
         pushHistory: entry.path !== panel.path,
         preserveSelection: false,
-        focusPath: entry.isVirtual ? panel.path : null,
-        focusFallback: entry.isVirtual ? undefined : 'first-concrete',
+        focusPath: null,
+        focusFallback: 'first-concrete',
       });
       return;
     }
 
     if (entry.kind === 'archive') {
-      void openArchiveListing(panelId, entry);
+      void openArchiveAsDirectory(panelId, entry);
+      return;
+    }
+
+    if (isArchiveVirtualPath(entry.path)) {
+      setStatusMessage(statusText.archiveEntry(entry.path));
       return;
     }
 
@@ -871,29 +931,18 @@ export function CommanderShell({
     setStatusMessage(statusText.openDefaultDone(entry.name));
   };
 
-  const openArchiveListing = async (panelId: PanelId, entry: FileEntry) => {
+  const openArchiveAsDirectory = async (panelId: PanelId, entry: FileEntry) => {
     if (!mutationClient.archiveList || !runtimeBackendAvailable) {
-      setStatusMessage(statusText.archivePreviewUnavailable(entry.name));
+      setStatusMessage(statusText.archiveOpenUnavailable(entry.name));
       return;
     }
-    setStatusMessage(statusText.archivePreviewStart(entry.name));
-    const result = await mutationClient.archiveList({ archivePath: entry.path });
-    if (!result.ok) {
-      setStatusMessage(statusText.archivePreviewFailed(formatUserErrorMessage(settings.language, result.error)));
-      return;
-    }
-    setNavigationList({
-      kind: 'archive',
-      panelId,
-      title: `Archive · ${entry.name}`,
-      items: result.data.entries.map((archiveEntry, index) => ({
-        id: `archive-${index}-${archiveEntry.path}`,
-        label: archiveEntry.name,
-        path: archiveEntry.path,
-        group: archiveEntry.kind,
-      })),
+    setStatusMessage(statusText.archiveOpenStart(entry.name));
+    void listPanel(panelId, archiveVirtualRootPath(entry.path), {
+      pushHistory: true,
+      preserveSelection: false,
+      focusFallback: 'first-concrete',
+      statusAfterSuccess: null,
     });
-    setStatusMessage(null);
   };
 
   const openTopMenu = (rootIndex = 0, menuOpen = true) => {
@@ -958,6 +1007,11 @@ export function CommanderShell({
     const actionTargetEntry = sourceOverride?.[0] ?? focusedEntry;
     if (actionId === 'nav.enter' && actionTargetEntry) {
       openEntry(panelOverride, actionTargetEntry);
+      return;
+    }
+
+    if (actionId === 'archive.list' && actionTargetEntry?.kind === 'archive') {
+      openArchiveAsDirectory(panelOverride, actionTargetEntry);
       return;
     }
 
@@ -1183,6 +1237,13 @@ export function CommanderShell({
       const operationTargetDir = actionId === 'archive.extractAuto' && sources[0]
         ? joinPath(panelState[oppositePanel].path, archiveAutoExtractFolderName(sources[0].name))
         : targetDirOverride ?? panelState[oppositePanel].path;
+      const archiveCopyPlan = actionId === 'file.copy'
+        ? archiveCopyPlanForSources(sources, panelListing.path, operationTargetDir)
+        : null;
+      if (actionId === 'file.copy' && sources.some((source) => isArchiveVirtualPath(source.path)) && !archiveCopyPlan) {
+        setStatusMessage(statusText.virtualOperationTargetUnavailable(labelForAction(action, settings.language)));
+        return;
+      }
       const operationRequest = {
         action,
         panelId: panelOverride,
@@ -1190,7 +1251,9 @@ export function CommanderShell({
         targetDir: operationTargetDir,
         workingDir: panelListing.path,
         atomicExecutor: atomicExecutorForAction(actionId, mutationClient, settings),
-        longRunningExecutor: longRunningExecutorForAction(actionId, operationClient),
+        longRunningExecutor: archiveCopyPlan
+          ? archiveCopyExecutorForPlan(archiveCopyPlan, operationClient)
+          : longRunningExecutorForAction(actionId, operationClient),
         cancelExecutor: (operationId: string) => operationClient.cancelOperation({ operationId }),
         conflictResolver: (operationId: string, decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel') => operationClient.resolveConflict({ operationId, decision }),
         onAtomicSuccess: (result: unknown) => {
@@ -2738,6 +2801,35 @@ const sourcesBelongToListing = (sources: readonly FileEntry[], listing: Director
   return sources.every((source) => listingPaths.has(source.path));
 };
 
+interface ArchiveCopyPlan {
+  archivePath: string;
+  entries: string[];
+  stripPrefix: string;
+}
+
+const archiveCopyPlanForSources = (
+  sources: readonly FileEntry[],
+  workingDir: string,
+  targetDir: string,
+): ArchiveCopyPlan | null => {
+  if (sources.length === 0 || isArchiveVirtualPath(targetDir)) {
+    return null;
+  }
+  const workingArchive = parseArchiveVirtualPath(workingDir);
+  if (!workingArchive) {
+    return null;
+  }
+  const parsedSources = sources.map((source) => parseArchiveVirtualPath(source.path));
+  if (parsedSources.some((source) => !source || !source.innerPath || source.archivePath !== workingArchive.archivePath)) {
+    return null;
+  }
+  return {
+    archivePath: workingArchive.archivePath,
+    entries: [...new Set(parsedSources.map((source) => source?.innerPath).filter(Boolean) as string[])],
+    stripPrefix: workingArchive.innerPath,
+  };
+};
+
 function PanelHeader({
   panel,
   active,
@@ -3214,11 +3306,6 @@ const atomicExecutorForAction = (
       ? mutationClient.getMetadata({ path: dialog.sources[0]?.path ?? dialog.targetDir ?? '' })
       : unsupportedClientResult('get_metadata', dialog.targetDir);
   }
-  if (actionId === 'archive.preview' || actionId === 'archive.list') {
-    return (dialog) => mutationClient.archiveList
-      ? mutationClient.archiveList({ archivePath: dialog.sources[0]?.path ?? '' })
-      : unsupportedClientResult('archive_list', dialog.targetDir);
-  }
   if (actionId === 'external.openDefault') {
     return (dialog) => mutationClient.openDefault
       ? mutationClient.openDefault({ path: dialog.sources[0]?.path ?? '' })
@@ -3326,6 +3413,17 @@ const longRunningExecutorForAction = (
   }
   return undefined;
 };
+
+const archiveCopyExecutorForPlan = (
+  plan: ArchiveCopyPlan,
+  operationClient: LongRunningOperationClient,
+): LongRunningOperationExecutor => (dialog) => operationClient.archiveExtract ? operationClient.archiveExtract({
+  archivePath: plan.archivePath,
+  targetDir: dialog.targetDir ?? '',
+  policy: dialog.defaultDecision,
+  entries: plan.entries,
+  stripPrefix: plan.stripPrefix,
+}) : unsupportedClientResult('archive_extract', dialog.targetDir);
 
 const unsupportedClientResult = async (command: string, path: string | null) => ({
   ok: false as const,

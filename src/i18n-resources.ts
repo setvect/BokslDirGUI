@@ -119,7 +119,6 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Rename: '이름 변경',
     Quit: '종료',
     'File Info': '파일 정보',
-    'Archive Preview': '압축 미리보기',
     'Open Archive': '압축 열기',
     'Archive Extract': '압축 해제',
     'Archive Extract Auto': '자동 압축 해제',
@@ -194,7 +193,6 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Rename: 'Rename',
     Quit: 'Quit',
     'File Info': 'File Info',
-    'Archive Preview': 'Archive Preview',
     'Open Archive': 'Open Archive',
     'Archive Extract': 'Archive Extract',
     'Archive Extract Auto': 'Archive Extract Auto',
@@ -268,7 +266,6 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'file.rename': '이름 변경',
     'file.properties': '파일 정보',
     'app.quit': '종료',
-    'archive.preview': '압축 미리보기',
     'archive.list': '압축 열기',
     'archive.extract': '압축 해제',
     'archive.extractAuto': '자동 압축 해제',
@@ -315,7 +312,6 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'file.rename': 'Rename',
     'file.properties': 'File Info',
     'app.quit': 'Quit',
-    'archive.preview': 'Preview',
     'archive.list': 'Open Archive',
     'archive.extract': 'Archive Extract',
     'archive.extractAuto': 'Archive Extract Auto',
@@ -504,9 +500,9 @@ export interface CommanderStatusText {
   openDefaultStart(name: string): string;
   openDefaultFailed(error: string): string;
   openDefaultDone(name: string): string;
-  archivePreviewUnavailable(name: string): string;
-  archivePreviewStart(name: string): string;
-  archivePreviewFailed(error: string): string;
+  archiveOpenUnavailable(name: string): string;
+  archiveOpenStart(name: string): string;
+  archiveOpenFailed(error: string): string;
   menu(rootLabel: string): string;
   quitBusy: string;
   quitPreviewUnavailable: string;
@@ -550,9 +546,9 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     openDefaultStart: (name) => `Open Default App · ${name}`,
     openDefaultFailed: (error) => `기본 앱 열기 실패: ${error}`,
     openDefaultDone: (name) => `기본 앱 열기 완료: ${name}`,
-    archivePreviewUnavailable: (name) => `압축 파일 보기 실패: 데스크톱 앱에서 다시 시도하세요. · ${name}`,
-    archivePreviewStart: (name) => `압축 파일 보기: ${name}`,
-    archivePreviewFailed: (error) => `압축 파일 보기 실패: ${error}`,
+    archiveOpenUnavailable: (name) => `압축 파일 열기 실패: 데스크톱 앱에서 다시 시도하세요. · ${name}`,
+    archiveOpenStart: (name) => `압축 파일 열기: ${name}`,
+    archiveOpenFailed: (error) => `압축 파일 열기 실패: ${error}`,
     menu: (rootLabel) => `Menu · ${rootLabel}`,
     quitBusy: 'Quit 차단: 파일 작업이 진행 중입니다. 먼저 작업을 완료하거나 취소하세요.',
     quitPreviewUnavailable: '브라우저 미리보기에서는 앱 종료를 실행할 수 없습니다.',
@@ -594,9 +590,9 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     openDefaultStart: (name) => `Open default app · ${name}`,
     openDefaultFailed: (error) => `Open default app failed: ${error}`,
     openDefaultDone: (name) => `Opened default app: ${name}`,
-    archivePreviewUnavailable: (name) => `Archive preview failed: try again in the desktop app. · ${name}`,
-    archivePreviewStart: (name) => `Archive preview: ${name}`,
-    archivePreviewFailed: (error) => `Archive preview failed: ${error}`,
+    archiveOpenUnavailable: (name) => `Open archive failed: try again in the desktop app. · ${name}`,
+    archiveOpenStart: (name) => `Open archive: ${name}`,
+    archiveOpenFailed: (error) => `Open archive failed: ${error}`,
     menu: (rootLabel) => `Menu · ${rootLabel}`,
     quitBusy: 'Quit blocked: a file operation is still running. Finish or cancel it first.',
     quitPreviewUnavailable: 'App quit is not available in browser preview.',
@@ -764,7 +760,6 @@ export type OperationDialogKind =
   | 'rename'
   | 'createDir'
   | 'properties'
-  | 'archivePreview'
   | 'archiveCreate'
   | 'archiveExtract'
   | 'externalOpenDefault'
@@ -866,7 +861,6 @@ export const OPERATION_DIALOG_TITLES = {
     rename: '이름 변경',
     createDir: '새 폴더',
     properties: '파일 정보',
-    archivePreview: '압축 파일 보기',
     archiveCreate: '압축 생성',
     archiveExtract: '압축 해제',
     externalOpenDefault: '기본 앱으로 열기',
@@ -882,7 +876,6 @@ export const OPERATION_DIALOG_TITLES = {
     rename: 'Rename',
     createDir: 'New Folder',
     properties: 'File Information',
-    archivePreview: 'Archive Preview',
     archiveCreate: 'Create Archive',
     archiveExtract: 'Extract Archive',
     externalOpenDefault: 'Open with Default App',
@@ -900,7 +893,6 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     deletePermanent: (item) => `${item}을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.`,
     rename: () => '선택한 항목의 새 이름을 입력합니다.',
     createDir: () => '현재 폴더에 만들 새 폴더 이름을 입력합니다.',
-    archivePreview: () => '압축 파일 안의 항목을 미리 확인합니다.',
     archiveCreate: (item) => `${item}을 압축 파일로 만듭니다.`,
     archiveExtract: () => '압축 파일을 대상 폴더에 풉니다.',
     externalOpenDefault: () => '선택한 항목을 기본 앱으로 엽니다.',
@@ -916,7 +908,6 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     deletePermanent: (item) => `Permanently delete ${item}. This cannot be undone.`,
     rename: () => 'Enter a new name for the selected item.',
     createDir: () => 'Enter the name of the new folder to create here.',
-    archivePreview: () => 'Preview the contents of the archive.',
     archiveCreate: (item) => `Create an archive from ${item}.`,
     archiveExtract: () => 'Extract the archive into the target folder.',
     externalOpenDefault: () => 'Open the selected item with the default app.',
@@ -936,7 +927,6 @@ export const OPERATION_DIALOG_PRIMARY_LABELS = {
     rename: '이름 변경',
     createDir: '새 폴더 만들기',
     properties: '정보 보기',
-    archivePreview: '압축 내용 보기',
     archiveCreate: '압축 생성',
     archiveExtract: '압축 해제',
     externalOpenDefault: '기본 앱으로 열기',
@@ -953,7 +943,6 @@ export const OPERATION_DIALOG_PRIMARY_LABELS = {
     rename: 'Rename',
     createDir: 'Create Folder',
     properties: 'Show Info',
-    archivePreview: 'Show Archive Contents',
     archiveCreate: 'Create Archive',
     archiveExtract: 'Extract Archive',
     externalOpenDefault: 'Open',
@@ -990,7 +979,6 @@ export const OPERATION_OVERVIEW_TEXT: Record<SupportedLanguage, Record<Operation
     rename: () => '선택한 항목의 이름을 변경합니다.',
     createDir: () => '현재 위치에 새 폴더를 만듭니다.',
     properties: () => '선택한 항목의 정보를 표시합니다.',
-    archivePreview: () => '압축 파일의 내용을 표시합니다.',
     archiveCreate: (item) => `${item}을 압축 파일로 만듭니다.`,
     archiveExtract: () => '압축 파일을 대상 위치에 풉니다.',
     externalOpenDefault: () => '선택한 파일을 기본 앱으로 엽니다.',
@@ -1006,7 +994,6 @@ export const OPERATION_OVERVIEW_TEXT: Record<SupportedLanguage, Record<Operation
     rename: () => 'Rename the selected item.',
     createDir: () => 'Create a folder in the current location.',
     properties: () => 'Show information for the selected item.',
-    archivePreview: () => 'Show the contents of the archive.',
     archiveCreate: (item) => `Create an archive from ${item}.`,
     archiveExtract: () => 'Extract the archive to the destination.',
     externalOpenDefault: () => 'Open the selected file with the default app.',
