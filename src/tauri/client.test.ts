@@ -30,6 +30,7 @@ describe('Tauri command names', () => {
     expect(BACKEND_IMPLEMENTED_COMMANDS).toEqual([
       'list_dir',
       'get_metadata',
+      'preview_file',
       'watch_path',
       'goto_path',
       'list_locations',

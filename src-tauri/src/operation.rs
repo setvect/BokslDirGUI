@@ -1439,7 +1439,7 @@ fn run_zip_create(
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
         })?);
     }
-    run_external_command(operation_id, command, Some(target))
+    run_external_command_with_secret(operation_id, command, Some(target), password)
 }
 
 fn run_7z_create(
@@ -1472,7 +1472,7 @@ fn run_7z_create(
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
         })?);
     }
-    run_external_command(operation_id, command, Some(target))
+    run_external_command_with_secret(operation_id, command, Some(target), password)
 }
 
 fn run_tar_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
@@ -1560,7 +1560,7 @@ fn run_zip_extract(
         command.arg(entry);
     }
     command.arg("-d").arg(target);
-    run_external_command(operation_id, command, Some(archive))
+    run_external_command_with_secret(operation_id, command, Some(archive), password)
 }
 
 fn run_7z_extract(
@@ -1609,7 +1609,7 @@ fn run_7z_extract(
     for entry in entries.unwrap_or(&[]) {
         command.arg(entry);
     }
-    run_external_command(operation_id, command, Some(archive))
+    run_external_command_with_secret(operation_id, command, Some(archive), password)
 }
 
 fn run_tar_extract(
@@ -2057,7 +2057,7 @@ fn list_archive_entry_names_for_operation(
 fn list_zip_entries_for_operation(
     operation_id: &str,
     archive: &Path,
-    _password: Option<&str>,
+    password: Option<&str>,
 ) -> CommandResult<Vec<String>> {
     let unzip = external_binary("unzip").ok_or_else(|| {
         AppError::new(
@@ -2071,7 +2071,12 @@ fn list_zip_entries_for_operation(
     let mut command = Command::new(unzip);
     command.arg("-Z1");
     command.arg(archive);
-    let stdout = run_external_command_capture(operation_id, command, Some(archive))?;
+    let stdout = run_external_command_capture_with_secret(
+        operation_id,
+        command,
+        Some(archive),
+        password,
+    )?;
     Ok(String::from_utf8_lossy(&stdout)
         .lines()
         .map(str::trim)
@@ -2102,7 +2107,12 @@ fn list_7z_entries_for_operation(
         command.arg(format!("-p{password}"));
     }
     command.arg(archive);
-    let stdout = run_external_command_capture(operation_id, command, Some(archive))?;
+    let stdout = run_external_command_capture_with_secret(
+        operation_id,
+        command,
+        Some(archive),
+        password,
+    )?;
     Ok(super::archive::parse_7z_slt_paths(&stdout))
 }
 
@@ -2136,6 +2146,38 @@ fn run_external_command(
     path: Option<&Path>,
 ) -> CommandResult<()> {
     run_external_command_capture(operation_id, command, path).map(|_| ())
+}
+
+fn run_external_command_with_secret(
+    operation_id: &str,
+    command: Command,
+    path: Option<&Path>,
+    secret: Option<&str>,
+) -> CommandResult<()> {
+    run_external_command(operation_id, command, path)
+        .map_err(|error| redact_error_secret(error, secret))
+}
+
+fn run_external_command_capture_with_secret(
+    operation_id: &str,
+    command: Command,
+    path: Option<&Path>,
+    secret: Option<&str>,
+) -> CommandResult<Vec<u8>> {
+    run_external_command_capture(operation_id, command, path)
+        .map_err(|error| redact_error_secret(error, secret))
+}
+
+fn redact_error_secret(mut error: AppError, secret: Option<&str>) -> AppError {
+    let Some(secret) = secret.filter(|value| !value.is_empty()) else {
+        return error;
+    };
+    if let Some(details) = error.details.as_mut() {
+        for value in details.values_mut() {
+            *value = value.replace(secret, "[redacted]");
+        }
+    }
+    error
 }
 
 fn run_external_command_capture(

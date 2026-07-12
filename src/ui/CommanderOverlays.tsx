@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ACTIONS, labelForAction, menuPathSegmentsForAction, shortcutLabelForAction } from '../actions/registry';
-import type { PanelId } from '../domain/types';
+import type { FilePreview, PanelId } from '../domain/types';
 import { ACTION_CATEGORY_LABELS, OVERLAY_TEXT, type SupportedLanguage } from '../i18n-resources';
 import type { PanelNavigationState } from './panelState';
 import { useCommanderKeyboardBoundaryProps, type CommanderKeyboardOwner } from './keyboardOwnership';
@@ -18,6 +18,45 @@ export interface NavigationListState {
   panelId: PanelId;
   title: string;
   items: NavigationListItem[];
+}
+
+export function QuickPreviewDialog({ language, preview, loading, onClose }: {
+  language: SupportedLanguage;
+  preview: FilePreview | null;
+  loading: boolean;
+  onClose(): void;
+}) {
+  const text = OVERLAY_TEXT[language];
+  return (
+    <CommanderOverlayDialog owner="quick-preview" title={text.quickView} ariaLabel={text.quickView} onClose={onClose} className="quick-preview-dialog">
+      <div className="quick-preview-content">
+        {loading ? <p>{text.previewLoading}</p> : null}
+        {!loading && preview ? (
+          <>
+            <div className="quick-preview-meta">
+              <strong title={preview.path}>{preview.name}</strong>
+              <span>{preview.sizeBytes.toLocaleString()} {text.bytes}</span>
+              {preview.mimeType ? <span>{preview.mimeType}</span> : null}
+            </div>
+            {preview.kind === 'image' && preview.dataUrl ? (
+              <img src={preview.dataUrl} alt={preview.name} className="quick-preview-image" />
+            ) : null}
+            {preview.kind === 'text' ? (
+              <>
+                {preview.truncated ? <p className="operation-warning">{text.previewTruncated}</p> : null}
+                <pre className="quick-preview-text">{preview.text}</pre>
+              </>
+            ) : null}
+            {preview.kind === 'unsupported' ? <p>{text.previewUnsupported}</p> : null}
+            {preview.kind === 'tooLarge' ? <p>{text.previewTooLarge}</p> : null}
+          </>
+        ) : null}
+        <div className="filter-actions">
+          <button type="button" onClick={onClose}>{text.close}</button>
+        </div>
+      </div>
+    </CommanderOverlayDialog>
+  );
 }
 
 export function ShortcutHelpDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {

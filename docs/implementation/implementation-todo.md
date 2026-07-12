@@ -222,17 +222,19 @@
 
 ## 5. Archive / 7z TODO
 
-상태: 2026-06-14 구현 반영. archive provider는 새 dependency 없이 검증된 OS 외부 도구(`zip`/`unzip`, `7zz` 또는 `7z`)를 호출하는 adapter로 시작한다. 암호 압축은 안전한 로그/토큰 정책이 확정될 때까지 recoverable unsupported로 처리한다.
+상태: 2026-07-12 구현 반영. archive provider는 새 dependency 없이 검증된 OS 외부 도구(`zip`/`unzip`, `tar`, `7zz` 또는 `7z`)를 호출한다. 필수 형식, zip/7z 암호, 대형 목록 제한, 읽기 전용 가상 패널 정책을 검증한다.
 
-- [x] archive provider 전략 확정: provider trait 도입 전 단계로 external adapter(`zip`/`unzip`/`7z`)를 사용한다.
-- [x] `archive_list`는 atomic preview command로 분리하고, create/extract만 long-running operation service에 연결한다.
+- [x] archive provider 전략 확정: external adapter(`zip`/`unzip`/`tar`/`7z`)를 사용한다.
+- [x] `archive_list`는 읽기 전용 atomic command로 분리하고, create/extract/add만 long-running operation service에 연결한다.
 - [x] `archive_list` 구현: password 필요/unsupported format/provider unavailable 오류를 typed error로 반환한다.
 - [x] `archive_extract` 구현: zip-slip 차단, target canonicalization, conflict decision 적용.
 - [x] `archive_create` 구현: format/password 정책, progress/cancel, 같은 parent 내 상대 entry name 생성.
-- [x] zip fixture gate 구축: list/extract/create round-trip, password unsupported, malicious path guard.
-- [x] Tests: Rust provider unit/integration, UI preview/extract/create flow.
+- [x] 필수 형식 fixture gate 구축: zip/jar/war/tar/tar.gz/tgz/tar.zst/tzst/7z list/extract/create round-trip과 malicious path guard.
+- [x] Tests: Rust provider unit/integration, UI 가상 디렉터리 탐색/extract/create/add flow.
 - [x] 조건부 7z binary fixture gate 추가: `7zz/7z` provider가 있는 환경에서는 실제 `.7z` 생성 후 listing을 검증하고, provider가 없으면 안전하게 skip한다.
-- [x] password archive 정책 검증: 현재 암호 압축/목록은 지원하지 않으며 recoverable unsupported 오류와 unsafe entry guard를 테스트로 고정한다.
+- [x] password archive 정책 검증: zip/7z 생성·목록·해제를 지원하고 masked input과 summary/history/error 비노출을 테스트로 고정한다. jar/war/tar 계열 암호는 typed unsupported로 처리한다.
+- [x] 대형 archive listing은 기본 50,000개/최대 200,000개로 제한하고 `totalEntries`/`truncated`와 패널 안내를 제공한다.
+- [x] 압축 가상 디렉터리는 읽기 전용으로 고정하고 copy-in/copy-out 외 move/delete/rename/create-dir을 비활성화한다.
 
 ## 6. Bookmarks / history / tabs / layout TODO
 

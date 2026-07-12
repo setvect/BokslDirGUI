@@ -70,6 +70,18 @@ export interface FileMetadata extends FileEntry {
   readonly: boolean;
 }
 
+export interface FilePreview {
+  path: string;
+  name: string;
+  kind: 'text' | 'image' | 'unsupported' | 'tooLarge';
+  mimeType: string | null;
+  sizeBytes: number;
+  text: string | null;
+  dataUrl: string | null;
+  truncated: boolean;
+  limitBytes: number;
+}
+
 export interface WatchAck {
   panelId: PanelId;
   path: string;

@@ -49,11 +49,14 @@
 
 ### 3.4 압축
 
-- zip/jar/war list/create/extract.
-- tar/tar.gz/tar.zst list/create/extract.
-- 7z list/create/extract/password fixture.
+- zip/jar/war list/create/extract fixture.
+- tar/tar.gz/tgz/tar.zst/tzst list/create/extract fixture.
+- zip/7z list/create/extract/password fixture. provider가 있는 환경에서 7z 대형 목록과 암호 round-trip을 조건부 검증한다.
 - zip-slip/path traversal fixture 차단.
-- 암호는 화면 masking, 로그 미기록.
+- 암호는 화면 masking, operation summary/history/error 직렬화 미기록.
+- 압축 가상 디렉터리에서 copy-out은 허용하고 move/delete/permanent-delete/rename/create-dir은 비활성화한다.
+- 대형 목록은 limit를 적용하고 `totalEntries`/`truncated` 및 패널의 “일부만 표시됨” 상태를 검증한다.
+- 사용자 시나리오는 일반→일반, 일반→압축, 압축→일반 복사와 Enter 하위 진입/Backspace 상위 이동, Space 다중 선택을 포함한다.
 
 ### 3.5 외부 연동
 
@@ -90,6 +93,6 @@
 ## 5. 완료 게이트
 
 - 모든 기준 기능 테스트가 통과해야 기능 동등성 완료.
-- 7z 게이트 실패 시 archive 기능은 부분 완료로 표시하고 release note에 제한을 명시한다.
+- 7z provider가 없는 환경에서는 조건부 fixture를 건너뛰되, provider가 있는 CI/개발 환경에서 list/create/extract/password/대형 목록 게이트를 통과해야 배포 검증이 완료된다.
 - 플랫폼별 미검증 항목은 완료가 아니라 “지원 예정/검증 필요”로 남긴다.
 - destructive operation 테스트는 실제 사용자 파일이 아닌 temp fixture에서만 수행한다.

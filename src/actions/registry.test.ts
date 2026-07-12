@@ -171,6 +171,26 @@ describe('action registry', () => {
     expect(isActionAvailable(archiveOpen, { ...baseContext, focusedEntryKind: 'archive' })).toBe(true);
   });
 
+  it('keeps archive virtual directories read-only while allowing copy-out', () => {
+    const archiveContext: ActionContext = {
+      activePanel: 'left',
+      focusedEntryKind: 'file',
+      selectedCount: 1,
+      hasConcreteFocus: true,
+      effectiveTargetCount: 1,
+      hasOppositePanel: true,
+      shellCommandEnabled: false,
+      operationBusy: false,
+      backendAvailable: true,
+      activePathIsArchive: true,
+    };
+
+    expect(isActionAvailable(ACTION_BY_ID.get('file.copy')!, archiveContext)).toBe(true);
+    for (const actionId of ['file.move', 'file.trash', 'file.deletePermanent', 'file.rename', 'file.mkdir'] as const) {
+      expect(isActionAvailable(ACTION_BY_ID.get(actionId)!, archiveContext)).toBe(false);
+    }
+  });
+
   it('derives keyboard shortcut dispatch from explicit keyboardBindings metadata', () => {
     expect(actionForKeyboardShortcut(key('Tab'))?.id).toBe('panel.switchActive');
     expect(actionForKeyboardShortcut(key('F9'))?.id).toBe('menu.open');

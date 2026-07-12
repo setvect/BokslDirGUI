@@ -83,10 +83,10 @@
 | `new_dir` | a | File > New Directory | `file.mkdir` | implemented | P1 | Rust child-name 검증과 atomic command 경로가 있다. |
 | `rename` | r | File > Rename | `file.rename` | implemented | P1 | no-replace Rust 경로를 유지해야 한다. |
 | `file_info` | i | View > File Info | `file.properties` | implemented | P1 | TUI View > File Info 위치와 i shortcut에 맞췄고, GUI dialog title은 Properties로 metadata DTO를 표시한다. |
-| `archive_compress` | zc | File > Archive Compress | `archive.create` | implemented | P1 | TUI File > Archive Compress/zc와 맞췄고, 선택/포커스 effective sources를 opposite panel target archive로 전달한다. Rust는 상대 entry명과 provider unavailable/error summary를 검증한다. |
-| `archive_extract` | zx | File > Archive Extract | `archive.extract` | implemented | P1 | Archive Extract는 archive entry에서만 활성화되고 Rust archive_extract로 skip 기본 충돌 정책을 넘긴다. zip-slip/absolute path 차단은 Rust operation tests가 보장한다. |
+| `archive_compress` | zc | File > Archive Compress | `archive.create` | implemented | P1 | zip/jar/war/tar/tar.gz/tgz/tar.zst/tzst/7z 생성을 지원한다. zip/7z 암호는 masked input으로 전달하고 summary/history/error에 기록하지 않는다. |
+| `archive_extract` | zx | File > Archive Extract | `archive.extract` | implemented | P1 | 필수 압축 형식의 전체/선택 항목 해제를 지원하고 zip/7z 암호 및 공통 충돌 정책을 적용한다. zip-slip/absolute path 차단은 Rust operation tests가 보장한다. |
 | `archive_extract_auto` | za | File > Archive Extract Auto | `archive.extractAuto` | implemented | P1 | TUI za 자동 해제 parity를 추가했다. GUI는 archive basename(예: release-bundle.zip → release-bundle)으로 opposite panel 아래 target folder를 계산하고 같은 Rust archive_extract 경계를 사용한다. |
-| `archive_preview` | - | Archive > Open Archive | `archive.list` | implemented | P1 | 압축 파일은 별도 미리보기 팝업이 아니라 `archive.zip:/` 가상 디렉터리로 패널에 진입한다. Enter on archive와 Archive > Open Archive는 같은 archive_list 기반 패널 진입 동작을 사용한다. |
+| `archive_preview` | - | Archive > Open Archive | `archive.list` | implemented | P1 | 필수 형식을 `archive.zip:/` 가상 디렉터리로 열고 Enter/Backspace 탐색을 제공한다. 가상 패널은 읽기 전용이며 copy-in/out만 허용한다. 목록은 50,000개 제한과 “일부만 표시됨” 상태를 제공한다. |
 | `toggle_sel` | Space | Edit > Select | `selection.toggle` | implemented | P0 | Space가 포커스된 concrete row 선택을 토글하고 TUI처럼 다음 row로 이동한다. 가상 parent row와 native control keyboard owner 경계도 검증했다. |
 | `invert_selection` | v | Edit > Invert Selection | `selection.invert` | implemented | P1 | v가 활성 패널 concrete row 선택을 반전하며 가상 parent row는 선택하지 않는다. |
 | `select_all` | ^A | Edit > Select All | `selection.all` | implemented | P1 | Ctrl+A가 활성 패널 concrete row 전체를 선택하고 브라우저 select-all 기본 동작을 억제한다. |

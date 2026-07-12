@@ -1451,6 +1451,205 @@ describe('CommanderShell', () => {
     expect(screen.queryByRole('dialog', { name: /압축/ })).toBeNull();
   });
 
+  it('shows archive virtual directories as read-only and reports truncated listings', () => {
+    const archiveListing = {
+      ...createDirectoryListing('left', '/tmp/large.zip:/', []),
+      totalEntries: 80_000,
+      truncated: true,
+    };
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: archiveListing,
+        right: createDirectoryListing('right', '/tmp/target', []),
+      },
+    });
+
+    render(<CommanderShell dataSource={dataSource} />);
+
+    expect(screen.getByText('압축 내부 읽기 전용')).toBeTruthy();
+    const partial = screen.getByText('일부만 표시됨');
+    expect(partial.getAttribute('title')).toBe('0/80000');
+  });
+
+  it('requests a masked password and retries encrypted archive listing without exposing the secret', async () => {
+    const user = userEvent.setup();
+    const archiveEntry = {
+      ...testEntry('/tmp', 'encrypted.7z'),
+      path: '/tmp/encrypted.7z',
+      kind: 'archive' as const,
+    };
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', '/tmp', [archiveEntry]),
+        right: createDirectoryListing('right', '/tmp/target', []),
+      },
+    });
+    const archiveList = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false as const,
+        error: {
+          code: 'password_required',
+          messageKey: 'errors.archivePasswordRequired',
+          path: archiveEntry.path,
+          details: {},
+          recoverable: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true as const,
+        data: {
+          archivePath: archiveEntry.path,
+          encrypted: true,
+          totalEntries: 1,
+          truncated: false,
+          entries: [{
+            ...testEntry(archiveEntry.path, 'secret.txt'),
+            path: `${archiveEntry.path}!secret.txt`,
+          }],
+        },
+      });
+    const { container } = render(
+      <CommanderShell
+        dataSource={dataSource}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList }}
+        initialFocusIndex={{ left: 0 }}
+      />,
+    );
+
+    await user.keyboard('{Tab}');
+    await waitFor(() => expect(rowByText(container, 'encrypted.7z')).not.toBeNull());
+    fireEvent.doubleClick(rowByText(container, 'encrypted.7z')!);
+
+    const passwordInput = await screen.findByLabelText('암호');
+    expect(passwordInput.getAttribute('type')).toBe('password');
+    await user.type(passwordInput, 'top-secret');
+    expect(screen.queryByText('top-secret')).toBeNull();
+    await user.click(screen.getByRole('button', { name: '열기' }));
+
+    await waitFor(() => expect(archiveList).toHaveBeenLastCalledWith({
+      archivePath: archiveEntry.path,
+      password: 'top-secret',
+      limit: 50_000,
+    }));
+    await waitFor(() => expect(rowByText(container, 'secret.txt')).not.toBeNull());
+    expect(screen.queryByRole('dialog', { name: '압축 파일 암호' })).toBeNull();
+  });
+
+  it('navigates archive folders with Enter and returns to the archive root with Backspace', async () => {
+    const user = userEvent.setup();
+    const archivePath = '/tmp/navigation.zip';
+    const archiveEntry = {
+      ...testEntry('/tmp', 'navigation.zip'),
+      path: archivePath,
+      kind: 'archive' as const,
+    };
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', '/tmp', [archiveEntry]),
+        right: createDirectoryListing('right', '/tmp/target', []),
+      },
+    });
+    const archiveList = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        archivePath,
+        encrypted: false,
+        totalEntries: 2,
+        truncated: false,
+        entries: [
+          { ...testEntry(archivePath, 'folder'), path: `${archivePath}!folder/`, kind: 'directory' as const },
+          { ...testEntry(archivePath, 'nested.txt'), path: `${archivePath}!folder/nested.txt` },
+        ],
+      },
+    }));
+    const { container } = render(
+      <CommanderShell
+        dataSource={dataSource}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList }}
+        initialFocusIndex={{ left: 0 }}
+      />,
+    );
+
+    await user.keyboard('{Tab}{Enter}');
+    await waitFor(() => expect(activePanelLabel(container)).toContain(`${archivePath}:/`));
+    await waitFor(() => expect(focusedRowText(container)).toContain('folder'));
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(activePanelLabel(container)).toContain(`${archivePath}:/folder`));
+    expect(rowByText(container, 'nested.txt')).not.toBeNull();
+
+    await user.keyboard('{Backspace}');
+    await waitFor(() => expect(activePanelLabel(container)).toContain(`${archivePath}:/`));
+    expect(activePanelLabel(container)).not.toContain(`${archivePath}:/folder`);
+  });
+
+  it('selects multiple archive entries with Space and copies them to the normal panel', async () => {
+    const user = userEvent.setup();
+    const archivePath = '/tmp/multi.zip';
+    const archiveEntry = {
+      ...testEntry('/tmp', 'multi.zip'),
+      path: archivePath,
+      kind: 'archive' as const,
+    };
+    const targetPath = '/tmp/target';
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', '/tmp', [archiveEntry]),
+        right: createDirectoryListing('right', targetPath, []),
+      },
+    });
+    const archiveList = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        archivePath,
+        encrypted: false,
+        totalEntries: 2,
+        truncated: false,
+        entries: [
+          { ...testEntry(archivePath, 'one.txt'), path: `${archivePath}!one.txt` },
+          { ...testEntry(archivePath, 'two.txt'), path: `${archivePath}!two.txt` },
+        ],
+      },
+    }));
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveExtract: vi.fn(async () => ({
+        ok: true as const,
+        data: { operationId: 'archive-space-copy', kind: 'archiveExtract' as const, state: 'queued' as const },
+      })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={dataSource}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList }}
+        operationClient={operationClient}
+        initialFocusIndex={{ left: 0 }}
+      />,
+    );
+
+    await user.keyboard('{Tab}{Enter}');
+    await waitFor(() => expect(rowByText(container, 'one.txt')).not.toBeNull());
+    await user.keyboard('{Space}{Space}y');
+
+    await waitFor(() => expect(operationClient.archiveExtract).toHaveBeenCalledWith({
+      archivePath,
+      targetDir: targetPath,
+      policy: 'skip',
+      entries: ['one.txt', 'two.txt'],
+      stripPrefix: '',
+      password: undefined,
+    }));
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+  });
+
   it('opens files through default app and configured external editor command paths', async () => {
     const user = userEvent.setup();
     const mutationClient = {
@@ -1498,6 +1697,96 @@ describe('CommanderShell', () => {
       path: expect.stringContaining('Architecture.md'),
       editorId: 'vim',
     }));
+  });
+
+  it('opens a bounded text quick view with F3 without invoking the file', async () => {
+    const user = userEvent.setup();
+    const file = testEntry('/tmp/source', 'README.md');
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', '/tmp/target', []),
+        right: createDirectoryListing('right', '/tmp/source', [file]),
+      },
+    });
+    const previewFile = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        path: file.path,
+        name: file.name,
+        kind: 'text' as const,
+        mimeType: 'text/markdown',
+        sizeBytes: 1024,
+        text: '# BokslDirGUI\npreview text',
+        dataUrl: null,
+        truncated: true,
+        limitBytes: 256 * 1024,
+      },
+    }));
+    render(
+      <CommanderShell
+        dataSource={dataSource}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), previewFile }}
+        initialFocusIndex={{ right: 0 }}
+      />,
+    );
+
+    await user.keyboard('{F3}');
+
+    expect(await screen.findByRole('dialog', { name: '빠른 보기' })).toBeTruthy();
+    expect(screen.getByText((_, element) =>
+      element?.tagName === 'PRE' && element.textContent === '# BokslDirGUI\npreview text')).toBeTruthy();
+    expect(screen.getByText('파일 앞부분만 표시합니다.')).toBeTruthy();
+    expect(previewFile).toHaveBeenCalledWith({ path: file.path });
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+    expect(screen.queryByRole('dialog', { name: '빠른 보기' })).toBeNull();
+  });
+
+  it('swaps complete left and right panel navigation states with ts', async () => {
+    const user = userEvent.setup();
+    renderCommander(createFixturePanelDataSource());
+    const leftPath = SAMPLE_LISTINGS.left.path;
+    const rightPath = SAMPLE_LISTINGS.right.path;
+
+    await user.keyboard('ts');
+
+    expect(screen.getByRole('region', { name: `left panel ${rightPath}` })).toBeTruthy();
+    expect(screen.getByRole('region', { name: `right panel ${leftPath}` })).toBeTruthy();
+  });
+
+  it('opens the active panel path in the opposite panel with tp', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const listDirSpy = vi.spyOn(dataSource, 'listDir');
+    renderCommander(dataSource);
+
+    await user.keyboard('tp');
+
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'left',
+      path: SAMPLE_LISTINGS.right.path,
+    })));
+  });
+
+  it('compares both visible directories and marks same, different, and one-sided entries with tc', async () => {
+    const user = userEvent.setup();
+    const commonLeft = testEntry('/left', 'common.txt');
+    const commonRight = { ...commonLeft, path: '/right/common.txt' };
+    const changedLeft = { ...testEntry('/left', 'changed.txt'), sizeBytes: 10 };
+    const changedRight = { ...changedLeft, path: '/right/changed.txt', sizeBytes: 20 };
+    const dataSource = createFixturePanelDataSource({
+      left: createDirectoryListing('left', '/left', [commonLeft, changedLeft, testEntry('/left', 'only-left.txt')]),
+      right: createDirectoryListing('right', '/right', [commonRight, changedRight, testEntry('/right', 'only-right.txt')]),
+    });
+    renderCommander(dataSource);
+
+    await user.keyboard('tc');
+
+    expect(screen.getByText('폴더 비교 · 동일 1 · 다름 1 · 왼쪽만 1 · 오른쪽만 1')).toBeTruthy();
+    expect(document.querySelectorAll('[data-compare-state="same"]')).toHaveLength(2);
+    expect(document.querySelectorAll('[data-compare-state="different"]')).toHaveLength(2);
+    expect(document.querySelectorAll('[data-compare-state="left-only"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-compare-state="right-only"]')).toHaveLength(1);
   });
 
   it('previews and then runs shell commands only after an enabled policy returns a confirm token', async () => {
@@ -2230,9 +2519,11 @@ describe('CommanderShell', () => {
     expect(screen.getByRole('button', { name: '보기(V)' }).getAttribute('data-state')).toBe('focused');
     expect(screen.queryByRole('menu', { name: '보기(V) menu' })).toBeNull();
     await user.keyboard('{ArrowDown}');
-    expect(await screen.findByRole('menu', { name: '보기(V) menu' })).toBeTruthy();
-
-    for (let index = 0; index < 8; index += 1) {
+    const viewMenu = await screen.findByRole('menu', { name: '보기(V) menu' });
+    const sortIndex = within(viewMenu).getAllByRole('menuitem')
+      .findIndex((item) => item.textContent?.includes('정렬'));
+    expect(sortIndex).toBeGreaterThanOrEqual(0);
+    for (let index = 0; index < sortIndex; index += 1) {
       await user.keyboard('{ArrowDown}');
     }
     await user.keyboard('{ArrowRight}');

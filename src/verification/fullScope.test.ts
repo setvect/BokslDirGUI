@@ -5,6 +5,7 @@ import { canTransitionOperation } from '../operations/operationStore';
 import { useOperationStore } from '../operations/operationStore';
 import { contextMenuActions } from '../ui/CommanderShell';
 import { createActionContext } from '../ui/actionContext';
+import { isArchiveVirtualPath } from '../ui/archiveVirtual';
 import { SAMPLE_LISTINGS } from '../ui/commanderFixture';
 import { I18N_RESOURCES } from '../i18n-resources';
 import parityMatrix from '../../docs/implementation/tui-parity-matrix.json';
@@ -137,7 +138,19 @@ describe('full-scope verification harness', () => {
 
     expect(useOperationStore.getState().operationHistory[0]?.operationId).toBe('scope-history');
     expect(I18N_RESOURCES.ko['errors.archiveFormatUnsupported']).toBeTruthy();
+    expect(I18N_RESOURCES.ko['errors.archivePasswordRequired']).toBeTruthy();
+    expect(I18N_RESOURCES.en['errors.archivePasswordInvalid']).toBeTruthy();
+    expect(I18N_RESOURCES.en['errors.archivePasswordFormatUnsupported']).toBeTruthy();
     expect(I18N_RESOURCES.en['errors.shellCommandDisabled']).toBeTruthy();
+  });
+
+  it('recognizes every required archive format as a virtual directory', () => {
+    for (const name of [
+      'fixture.zip', 'fixture.tar', 'fixture.tar.gz', 'fixture.tgz',
+      'fixture.tar.zst', 'fixture.tzst', 'fixture.7z', 'fixture.jar', 'fixture.war',
+    ]) {
+      expect(isArchiveVirtualPath(`/tmp/${name}:/`), name).toBe(true);
+    }
   });
 
   it('uses action-registry enablement for context menu actions and blocks virtual targets', () => {
@@ -172,5 +185,19 @@ describe('full-scope verification harness', () => {
     expect(contextMenuActions(archiveEntry, archiveContext).map((action) => action.id)).toEqual(
       expect.arrayContaining(['archive.list', 'archive.extract', 'archive.extractAuto']),
     );
+
+    const archiveVirtualContext = createActionContext({
+      activePanel: 'left',
+      focusedEntry: { ...archiveEntry, kind: 'file' },
+      selectedCount: 1,
+      hasOppositePanel: true,
+      shellCommandEnabled: false,
+      operationBusy: false,
+      activePathIsArchive: true,
+    });
+    expect(isActionAvailable(ACTION_BY_ID.get('file.copy')!, archiveVirtualContext)).toBe(true);
+    for (const id of ['file.move', 'file.trash', 'file.deletePermanent', 'file.rename'] as const) {
+      expect(isActionAvailable(ACTION_BY_ID.get(id)!, archiveVirtualContext)).toBe(false);
+    }
   });
 });

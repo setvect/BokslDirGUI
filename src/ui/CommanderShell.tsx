@@ -28,7 +28,7 @@ import {
   type ActionId,
   type AppAction,
 } from '../actions/registry';
-import type { AppError, DirectoryListing, FileEntry, LocationList, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
+import type { AppError, DirectoryListing, FileEntry, FilePreview, LocationList, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { operationSummaryStatusLabel } from '../operations/operationLabels';
 import { dialogKindForAction, isOperationInFlight, useOperationStore, type AtomicCommandExecutor, type DialogKind, type LongRunningOperationExecutor, type OperationDialogDraft } from '../operations/operationStore';
@@ -80,6 +80,7 @@ import {
   HelpSearchDialog,
   NavigationListDialog,
   PathPrompt,
+  QuickPreviewDialog,
   ShortcutHelpDialog,
   type NavigationListItem,
   type NavigationListState,
@@ -137,6 +138,14 @@ const ZOOM_PRESETS_BY_STEP: Record<number, number> = {
 type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selectedPaths'>>;
 type SelectionMode = 'replace' | 'additive' | 'range';
 type ExternalDropFile = File & { path?: unknown };
+type DirectoryComparisonState = 'same' | 'different' | 'left-only' | 'right-only';
+interface DirectoryComparison {
+  byPanel: Record<PanelId, Record<string, DirectoryComparisonState>>;
+  same: number;
+  different: number;
+  leftOnly: number;
+  rightOnly: number;
+}
 
 interface CommanderShellProps {
   dataSource?: PanelDataSource;
@@ -160,6 +169,7 @@ interface SafeMutationClient {
   createDir(input: { parent: string; name: string }): ReturnType<typeof tauriClient.createDir>;
   renameEntry(input: { path: string; newName: string }): ReturnType<typeof tauriClient.renameEntry>;
   getMetadata?(input: { path: string }): ReturnType<typeof tauriClient.getMetadata>;
+  previewFile?(input: { path: string; maxBytes?: number }): ReturnType<typeof tauriClient.previewFile>;
   archiveList?(input: { archivePath: string; password?: string; limit?: number }): ReturnType<typeof tauriClient.archiveList>;
   openDefault?(input: { path: string }): ReturnType<typeof tauriClient.openDefault>;
   revealInManager?(input: { path: string }): ReturnType<typeof tauriClient.revealInManager>;
@@ -266,6 +276,7 @@ export function CommanderShell({
   const topMenuStateRef = useRef<TopMenuState | null>(null);
   const navigationRequestRef = useRef<Record<PanelId, number>>({ left: 0, right: 0 });
   const locationsRequestRef = useRef(0);
+  const previewRequestRef = useRef(0);
   const selectionAnchorRef = useRef<Record<PanelId, number | null>>({ left: null, right: null });
   const [activePanel, setActivePanel] = useState<PanelId>('right');
   const [panelState, setPanelState] = useState<PanelStateById>(() => createPanelStates(dataSource.initialListings, {
@@ -290,6 +301,8 @@ export function CommanderShell({
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpSearchOpen, setHelpSearchOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [quickPreview, setQuickPreview] = useState<{ loading: boolean; preview: FilePreview | null } | null>(null);
+  const [directoryComparison, setDirectoryComparison] = useState<DirectoryComparison | null>(null);
   const [topMenuState, setTopMenuStateValue] = useState<TopMenuState | null>(null);
   topMenuStateRef.current = topMenuState;
   const setTopMenuState = (next: TopMenuState | null) => {
@@ -381,6 +394,7 @@ export function CommanderShell({
     navigationRequestRef.current[panelId] === requestId;
 
   const listPanel = async (panelId: PanelId, path: string, options: ListPanelOptions = {}) => {
+    setDirectoryComparison(null);
     const requestId = beginPanelRequest(panelId);
     const requestPanel = panelState[panelId];
     const sort = options.sort ?? requestPanel.sort;
@@ -1019,6 +1033,47 @@ export function CommanderShell({
       ?? actionTargets.effectiveSources;
 
     const actionTargetEntry = sourceOverride?.[0] ?? focusedEntry;
+
+    if (actionId === 'panel.swapPaths') {
+      setDirectoryComparison(null);
+      setPanelState((current) => ({
+        left: reassignPanelState(current.right, 'left'),
+        right: reassignPanelState(current.left, 'right'),
+      }));
+      setPanelTabs((current) => ({ left: current.right, right: current.left }));
+      void saveSettingsPatch({
+        session: {
+          ...settings.session,
+          leftPath: panelState.right.path,
+          rightPath: panelState.left.path,
+          activePanel,
+        },
+      }, null, { silent: true });
+      setStatusMessage(settings.language === 'ko' ? '좌우 패널 경로를 맞바꿨습니다.' : 'Swapped panel paths.');
+      return;
+    }
+
+    if (actionId === 'panel.copyPathToOther') {
+      if (isArchiveVirtualPath(panel.path)) {
+        setStatusMessage(statusText.unavailableInContext(labelForAction(action, settings.language)));
+        return;
+      }
+      void listPanel(oppositePanel, panel.path, { pushHistory: true }).then(() => setActivePanel(panelOverride));
+      return;
+    }
+
+    if (actionId === 'panel.compareDirectories') {
+      if (isArchiveVirtualPath(panelState.left.path) || isArchiveVirtualPath(panelState.right.path)) {
+        setStatusMessage(statusText.unavailableInContext(labelForAction(action, settings.language)));
+        return;
+      }
+      const comparison = compareDirectoryListings(panelState.left.listing, panelState.right.listing);
+      setDirectoryComparison(comparison);
+      setStatusMessage(settings.language === 'ko'
+        ? `폴더 비교 · 동일 ${comparison.same} · 다름 ${comparison.different} · 왼쪽만 ${comparison.leftOnly} · 오른쪽만 ${comparison.rightOnly}`
+        : `Directory compare · same ${comparison.same} · different ${comparison.different} · left only ${comparison.leftOnly} · right only ${comparison.rightOnly}`);
+      return;
+    }
     if (actionId === 'nav.enter' && actionTargetEntry) {
       openEntry(panelOverride, actionTargetEntry);
       return;
@@ -1026,6 +1081,28 @@ export function CommanderShell({
 
     if (actionId === 'archive.list' && actionTargetEntry?.kind === 'archive') {
       openArchiveAsDirectory(panelOverride, actionTargetEntry);
+      return;
+    }
+
+    if (actionId === 'file.quickView' && actionTargetEntry) {
+      if (!mutationClient.previewFile || !runtimeBackendAvailable) {
+        setStatusMessage(statusText.unavailableInContext(labelForAction(action, settings.language)));
+        return;
+      }
+      const requestId = ++previewRequestRef.current;
+      setQuickPreview({ loading: true, preview: null });
+      setStatusMessage(null);
+      void mutationClient.previewFile({ path: actionTargetEntry.path }).then((result) => {
+        if (requestId !== previewRequestRef.current) {
+          return;
+        }
+        if (!result.ok) {
+          setQuickPreview(null);
+          setStatusMessage(formatUserErrorMessage(settings.language, result.error));
+          return;
+        }
+        setQuickPreview({ loading: false, preview: result.data });
+      });
       return;
     }
 
@@ -1364,10 +1441,13 @@ export function CommanderShell({
 
   const closeOverlay = () => {
     locationsRequestRef.current += 1;
+    previewRequestRef.current += 1;
     setPathPromptPanel(null);
+    setArchivePasswordRequest(null);
     setNavigationList(null);
     setHelpSearchOpen(false);
     setAboutDialogOpen(false);
+    setQuickPreview(null);
     shellRef.current?.focus({ preventScroll: true });
   };
 
@@ -1701,6 +1781,7 @@ export function CommanderShell({
       >
         <FilePanel
           panel={panelState.left}
+          comparisonByPath={directoryComparison?.byPanel.left ?? null}
           active={activePanel === 'left'}
           hiddenByLayout={settings.layout.singlePanel && activePanel !== 'left'}
           tabCount={panelTabs.left.length}
@@ -1728,6 +1809,7 @@ export function CommanderShell({
         />
         <FilePanel
           panel={panelState.right}
+          comparisonByPath={directoryComparison?.byPanel.right ?? null}
           active={activePanel === 'right'}
           hiddenByLayout={settings.layout.singlePanel && activePanel !== 'right'}
           tabCount={panelTabs.right.length}
@@ -1791,6 +1873,14 @@ export function CommanderShell({
             void listPanel(request.panelId, request.virtualPath, { preserveSelection: true });
           }}
           onCancel={closeOverlay}
+        />
+      ) : null}
+      {quickPreview ? (
+        <QuickPreviewDialog
+          language={settings.language}
+          preview={quickPreview.preview}
+          loading={quickPreview.loading}
+          onClose={closeOverlay}
         />
       ) : null}
       {navigationList ? (
@@ -2440,6 +2530,7 @@ const useElementWidth = <T extends HTMLElement>(ref: RefObject<T | null>, fallba
 
 interface FilePanelProps {
   panel: PanelNavigationState;
+  comparisonByPath: Record<string, DirectoryComparisonState> | null;
   active: boolean;
   hiddenByLayout: boolean;
   tabCount: number;
@@ -2468,6 +2559,7 @@ interface FilePanelProps {
 
 function FilePanel({
   panel,
+  comparisonByPath,
   active,
   hiddenByLayout,
   tabCount,
@@ -2644,7 +2736,11 @@ function FilePanel({
                 const entry = row.original;
                 const focused = virtualRow.index === panel.focusedIndex;
                 const selected = panel.selectedPaths.includes(entry.path);
-                const tooltip = fileEntryTooltip(entry, language);
+                const comparisonState = comparisonByPath?.[entry.path] ?? null;
+                const comparisonLabel = comparisonState ? directoryComparisonLabel(comparisonState, language) : null;
+                const tooltip = comparisonLabel
+                  ? `${fileEntryTooltip(entry, language)}\n${comparisonLabel}`
+                  : fileEntryTooltip(entry, language);
                 const accessibleName = fileEntryAccessibleLabel(entry, language);
                 return (
                   <ContextMenu.Root key={row.id}>
@@ -2656,7 +2752,8 @@ function FilePanel({
                         aria-rowindex={virtualRow.index + 1}
                         aria-selected={selected}
                         aria-current={focused ? 'true' : undefined}
-                        className={`file-table-row file-row ${columnLayout.cssClass} entry-row-kind-${entry.kind} ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''}`}
+                        className={`file-table-row file-row ${columnLayout.cssClass} entry-row-kind-${entry.kind} ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''} ${comparisonState ? `is-compare-${comparisonState}` : ''}`}
+                        data-compare-state={comparisonState ?? undefined}
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
                         title={tooltip}
                         aria-label={accessibleName}
@@ -2710,6 +2807,9 @@ function FilePanel({
       <footer className="panel-status">
         <span>{summary.files} {labels.files}, {summary.dirs} {labels.dirs}</span>
         <span>{panel.selectedPaths.length} {labels.selected}</span>
+        {isArchiveVirtualPath(listing.path) ? (
+          <span className="panel-archive-readonly">{labels.archiveReadOnly}</span>
+        ) : null}
         {listing.truncated ? (
           <span className="panel-archive-truncated" title={`${listing.entries.length}/${listing.totalEntries ?? listing.entries.length}`}>
             {labels.partialArchive}
@@ -3225,6 +3325,58 @@ const shortenPath = (path: string) => {
 };
 
 const oppositePanelOf = (panelId: PanelId): PanelId => (panelId === 'left' ? 'right' : 'left');
+
+const reassignPanelState = (panel: PanelNavigationState, panelId: PanelId): PanelNavigationState => ({
+  ...panel,
+  listing: { ...panel.listing, panelId },
+});
+
+const compareDirectoryListings = (left: DirectoryListing, right: DirectoryListing): DirectoryComparison => {
+  const leftEntries = new Map(left.entries.filter((entry) => !entry.isVirtual).map((entry) => [entry.name, entry]));
+  const rightEntries = new Map(right.entries.filter((entry) => !entry.isVirtual).map((entry) => [entry.name, entry]));
+  const byPanel: DirectoryComparison['byPanel'] = { left: {}, right: {} };
+  let same = 0;
+  let different = 0;
+  let leftOnly = 0;
+  let rightOnly = 0;
+
+  for (const [name, leftEntry] of leftEntries) {
+    const rightEntry = rightEntries.get(name);
+    if (!rightEntry) {
+      byPanel.left[leftEntry.path] = 'left-only';
+      leftOnly += 1;
+      continue;
+    }
+    const state: DirectoryComparisonState = entriesMatchForComparison(leftEntry, rightEntry) ? 'same' : 'different';
+    byPanel.left[leftEntry.path] = state;
+    byPanel.right[rightEntry.path] = state;
+    if (state === 'same') same += 1;
+    else different += 1;
+  }
+
+  for (const [name, rightEntry] of rightEntries) {
+    if (!leftEntries.has(name)) {
+      byPanel.right[rightEntry.path] = 'right-only';
+      rightOnly += 1;
+    }
+  }
+
+  return { byPanel, same, different, leftOnly, rightOnly };
+};
+
+const entriesMatchForComparison = (left: FileEntry, right: FileEntry) => {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'directory') return true;
+  return left.sizeBytes === right.sizeBytes && left.modifiedAt === right.modifiedAt;
+};
+
+const directoryComparisonLabel = (state: DirectoryComparisonState, language: Settings['language']) => {
+  const labels: Record<Settings['language'], Record<DirectoryComparisonState, string>> = {
+    ko: { same: '폴더 비교: 동일', different: '폴더 비교: 내용 다름', 'left-only': '폴더 비교: 왼쪽에만 있음', 'right-only': '폴더 비교: 오른쪽에만 있음' },
+    en: { same: 'Directory compare: same', different: 'Directory compare: different', 'left-only': 'Directory compare: left only', 'right-only': 'Directory compare: right only' },
+  };
+  return labels[language][state];
+};
 
 const rowDomId = (panelId: PanelId, index: number) => `commander-row-${panelId}-${index}`;
 

@@ -132,6 +132,22 @@
     {
       "guiActionId": "view.reverseSort",
       "reason": "GUI convenience toggle retained alongside TUI direct ascending/descending sort actions."
+    },
+    {
+      "guiActionId": "file.quickView",
+      "reason": "GUI 확장 기능: 실행 없이 제한된 크기의 텍스트·이미지를 오버레이에서 안전하게 빠른 확인"
+    },
+    {
+      "guiActionId": "panel.swapPaths",
+      "reason": "GUI 듀얼 패널 편의 기능: 좌우 탐색 상태를 안전하게 맞바꾸기"
+    },
+    {
+      "guiActionId": "panel.copyPathToOther",
+      "reason": "GUI 듀얼 패널 편의 기능: 활성 경로를 반대 패널에서 열기"
+    },
+    {
+      "guiActionId": "panel.compareDirectories",
+      "reason": "GUI 듀얼 패널 편의 기능: 현재 좌우 목록의 이름·종류·크기·수정일 차이를 시각화"
     }
   ],
   "tuiActions": [
@@ -544,7 +560,8 @@
         "src/ui/CommanderShell.test.tsx: copy shortcut/focused fallback starts client without preflight dialog",
         "src/ui/CommanderShell.test.tsx: archive virtual copy routes archive-to-normal through archive_extract and normal-to-archive through archive_add",
         "src/operations/operationStore.test.ts: direct copy without dialog and conflict resolver wiring",
-        "src-tauri/src/lib.rs tests: start_copy_recursively_copies_files_and_directories plus zip/7z archive_add round trips, conflict policies, cancel safety"
+        "src-tauri/src/lib.rs tests: start_copy_recursively_copies_files_and_directories plus zip/7z archive_add round trips, conflict policies, cancel safety",
+        "src/ui/CommanderShell.test.tsx: normal-to-normal, normal-to-archive, archive-to-normal, and Space multi-selection copy scenarios"
       ],
       "notes": "선택이 없으면 포커스 항목을 대상으로 확인 다이얼로그 없이 즉시 시작한다. 일반→일반은 start_copy, 압축 내부→일반은 선택 entry 기반 archive_extract, 일반→압축 내부는 archive_add로 라우팅하며 공통 충돌/취소/패널 refresh 정책을 적용한다.",
       "tuiId": "copy",
@@ -588,7 +605,7 @@
         "src/operations/operationStore.ts: active operation controller preserves progress/conflict/summary callbacks",
         "src-tauri/src/lib.rs tests: start_move_renames_to_target_directory and same-directory overwrite no-op safety"
       ],
-      "notes": "TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation을 시작한다. 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리한다.",
+      "notes": "TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation을 시작한다. 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리한다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다.",
       "tuiId": "move",
       "tuiLabel": "Move",
       "tuiCategory": "FileOperation",
@@ -739,7 +756,7 @@
         "src-tauri/src/operation.rs: start_delete DeleteMode::Trash without permanent fallback",
         "src-tauri/src/lib.rs: start_delete_trash_moves_without_permanent_fallback and failure keeps source tests"
       ],
-      "notes": "TUI Delete는 GUI에서 File > Delete/d로 노출하고 Rust trash mode로 실행한다. 선택이 없으면 포커스 concrete row를 대상으로 하며, 가상 parent는 제외하고 trash 실패 시 영구 삭제로 fallback하지 않는다.",
+      "notes": "TUI Delete는 GUI에서 File > Delete/d로 노출하고 Rust trash mode로 실행한다. 선택이 없으면 포커스 concrete row를 대상으로 하며, 가상 parent는 제외하고 trash 실패 시 영구 삭제로 fallback하지 않는다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다.",
       "tuiId": "delete",
       "tuiLabel": "Delete",
       "tuiCategory": "FileOperation",
@@ -780,7 +797,7 @@
         "src/operations/operationStore.test.ts: permanent delete defaults to cancellation until confirmation text is typed",
         "src-tauri/src/lib.rs: start_delete_requires_confirm_token_for_permanent_delete and start_delete_permanently_removes_confirmed_targets"
       ],
-      "notes": "영구 삭제는 별도 File > Permanent Delete/D action이며 PERMANENT_DELETE 명시 입력 없이는 operation client/Rust confirm token으로 전달되지 않는다.",
+      "notes": "영구 삭제는 별도 File > Permanent Delete/D action이며 PERMANENT_DELETE 명시 입력 없이는 operation client/Rust confirm token으로 전달되지 않는다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다.",
       "tuiId": "perm_delete",
       "tuiLabel": "Permanent delete",
       "tuiCategory": "FileOperation",
@@ -860,7 +877,7 @@
         "src-tauri/src/lib.rs: rename_entry",
         "src/operations/operationStore.test.ts"
       ],
-      "notes": "no-replace Rust 경로를 유지해야 한다.",
+      "notes": "no-replace Rust 경로를 유지해야 한다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다.",
       "tuiId": "rename",
       "tuiLabel": "Rename",
       "tuiCategory": "FileOperation",
@@ -935,9 +952,11 @@
         "src/actions/registry.ts: archive.create maps zc/File > Archive Compress",
         "src/ui/CommanderShell.test.tsx: archive creation calls archiveCreate with selected sources and opposite-panel target archive",
         "src-tauri/src/lib.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names",
-        "src-tauri/src/operation.rs: archive create uses common_source_parent and unsafe absolute source defense"
+        "src-tauri/src/operation.rs: archive create uses common_source_parent and unsafe absolute source defense",
+        "src-tauri/src/lib.rs: archive_required_formats_create_list_and_extract_round_trip and zip/7z password round-trip tests",
+        "src/operations/OperationDialogHost.test.tsx: archive password input is masked and absent from history"
       ],
-      "notes": "TUI File > Archive Compress/zc와 맞췄고, 선택/포커스 effective sources를 opposite panel target archive로 전달한다. Rust는 상대 entry명과 provider unavailable/error summary를 검증한다.",
+      "notes": "zip/jar/war/tar/tar.gz/tgz/tar.zst/tzst/7z 생성을 지원한다. zip/7z 암호는 masked input으로 전달하고 operation summary/history/error에 남기지 않는다.",
       "tuiId": "archive_compress",
       "tuiLabel": "Compress archive",
       "tuiCategory": "FileOperation",
@@ -972,9 +991,11 @@
         "src/actions/registry.ts: archive.extract maps zx/File > Archive Extract",
         "src/ui/CommanderShell.tsx: archive.extract calls archiveExtract with targetDir and skip conflict policy",
         "src/ui/CommanderShell.test.tsx: auto-extract path exercises archiveExtract client and panel refresh on summary",
-        "src-tauri/src/lib.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names and archive_operations_reject_passwords_and_unsafe_entries"
+        "src-tauri/src/lib.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names and archive_operations_reject_passwords_and_unsafe_entries",
+        "src-tauri/src/lib.rs: required-format, zip/7z password, unsafe-path, and conflict-policy tests",
+        "src/ui/CommanderShell.test.tsx: archive-to-normal selected file/directory/multi-selection copy scenarios"
       ],
-      "notes": "Archive Extract는 archive entry에서만 활성화되고 Rust archive_extract로 skip 기본 충돌 정책을 넘긴다. zip-slip/absolute path 차단은 Rust operation tests가 보장한다.",
+      "notes": "필수 압축 형식의 전체/선택 항목 해제를 지원한다. zip/7z 암호, overwrite/skip/allOverwrite/allSkip/cancel, zip-slip/absolute path 차단을 Rust fixture로 검증한다.",
       "tuiId": "archive_extract",
       "tuiLabel": "Extract archive",
       "tuiCategory": "FileOperation",
@@ -1047,9 +1068,11 @@
         "src/ui/CommanderShell.tsx: Enter on archive calls archiveList and replaces the panel with an archive virtual directory listing",
         "src/ui/CommanderShell.test.tsx: opens properties and enters archives as virtual directories",
         "src/ui/archiveVirtual.test.ts: archive.zip:/ paths project flat archive entries into nested directory listings",
-        "src-tauri/src/lib.rs: archive_list and archive_7z_provider_lists_real_fixture_when_available"
+        "src-tauri/src/lib.rs: archive_list and archive_7z_provider_lists_real_fixture_when_available",
+        "src/ui/CommanderShell.test.tsx: Enter archive, nested-folder Enter, Backspace parent, read-only marker, masked password prompt, and truncated listing scenarios",
+        "src-tauri/src/lib.rs: zip/7z large-listing limit and required-format listing tests"
       ],
-      "notes": "압축 파일은 별도 미리보기 팝업이 아니라 archive.zip:/ 형태의 가상 디렉터리로 패널에 진입한다. Archive > Open Archive와 Enter on archive는 같은 패널 진입 동작을 사용한다.",
+      "notes": "필수 압축 형식을 archive.ext:/ 가상 디렉터리로 연다. 내부 패널은 copy-in/out만 허용하는 읽기 전용이며 move/delete/rename/create-dir을 비활성화한다. 기본 50,000개 목록 제한과 totalEntries/truncated 상태를 제공한다.",
       "tuiId": "archive_preview",
       "tuiLabel": "Open archive as directory",
       "tuiCategory": "FileOperation",

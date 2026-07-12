@@ -11,6 +11,7 @@ import type {
   DirectoryListing,
   FileEntry,
   FileMetadata,
+  FilePreview,
   LocationList,
   OperationProgress,
   OperationStarted,
@@ -25,6 +26,7 @@ import type {
 export const COMMANDS = {
   listDir: 'list_dir',
   getMetadata: 'get_metadata',
+  previewFile: 'preview_file',
   watchPath: 'watch_path',
   gotoPath: 'goto_path',
   listLocations: 'list_locations',
@@ -94,6 +96,7 @@ export const isTauriRuntime = () => {
 export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.listDir,
   COMMANDS.getMetadata,
+  COMMANDS.previewFile,
   COMMANDS.watchPath,
   COMMANDS.gotoPath,
   COMMANDS.listLocations,
@@ -192,6 +195,7 @@ const invokeCommand = async <T>(command: TauriCommandName, args?: object): Promi
 export const tauriClient = {
   listDir: (input: ListDirInput) => invokeCommand<DirectoryListing>(COMMANDS.listDir, input),
   getMetadata: (input: { path: string }) => invokeCommand<FileMetadata>(COMMANDS.getMetadata, input),
+  previewFile: (input: { path: string; maxBytes?: number }) => invokeCommand<FilePreview>(COMMANDS.previewFile, input),
   watchPath: (input: { panelId: 'left' | 'right'; path: string }) => invokeCommand<WatchAck>(COMMANDS.watchPath, input),
   gotoPath: (input: { panelId: 'left' | 'right'; path: string }) => invokeCommand<DirectoryListing>(COMMANDS.gotoPath, input),
   listLocations: () => invokeCommand<LocationList>(COMMANDS.listLocations),

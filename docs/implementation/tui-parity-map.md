@@ -28,7 +28,7 @@
 | 삭제/휴지통/영구 삭제 | 휴지통/영구 삭제 구분, 강한 확인 | `DeleteDialog` | `start_delete` | trash/permanent policy, undo 후보 |
 | 새 폴더/이름 변경 | dialog + inline rename 후보 | `CreateDirDialog`, `RenameInline` | `create_dir`, `rename_entry` | 빈 이름/중복/권한 오류 |
 | 속성 보기 | modal dialog | `PropertiesDialog` | `get_metadata` | 파일/디렉토리/링크 metadata 표시 |
-| 압축/해제/미리보기 | archive list/extract/create dialog | `ArchiveDialog` | `archive_list`, `archive_extract`, `archive_create` | zip/tar/zstd/7z fixture, zip-slip 방지 |
+| 압축/해제/가상 탐색 | archive list/extract/create dialog와 읽기 전용 가상 패널 | `ArchiveDialog`, `FilePanel` | `archive_list`, `archive_extract`, `archive_create`, `archive_add` | zip/jar/war/tar/tgz/tzst/7z fixture, zip/7z 암호, 목록 제한, zip-slip 방지 |
 | 북마크/히스토리 | compact 위치 overlay, panel history | `BookmarkDialog`, `HistoryPopover` | `load_settings`, `save_settings` | 재시작 후 복원, 중복 방지 |
 | 기본 앱/외부 편집기 | open/reveal/editor action | `ContextMenuLayer`, `ExternalOpenDialog` | `open_default`, `reveal_in_manager`, `open_external_editor` | OS별 실패 메시지 |
 | 외부 shell command | 현재 경로에서 명시 확인 후 command 실행 | `ShellCommandDialog` | `prepare_shell_command` → `run_shell_command` | 기본 비활성/확인/종료 코드/오류 표시 |

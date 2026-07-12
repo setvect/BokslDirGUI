@@ -189,6 +189,33 @@ describe('OperationDialogHost', () => {
     expect(atomicExecutor).toHaveBeenCalledOnce();
   });
 
+  it('masks archive passwords and keeps them out of operation history', async () => {
+    const user = userEvent.setup();
+    const action = ACTION_BY_ID.get('archive.create');
+    if (!action) {
+      throw new Error('archive.create action is required');
+    }
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'right',
+      sources: [sampleEntry],
+      targetDir: '/tmp',
+      workingDir: '/tmp',
+      longRunningExecutor: vi.fn(async () => ({
+        ok: true as const,
+        data: { operationId: 'archive-password-test', kind: 'archiveCreate' as const, state: 'queued' as const },
+      })),
+    });
+
+    render(<OperationDialogHost />);
+
+    const passwordInput = screen.getByLabelText('Password (optional)');
+    expect(passwordInput.getAttribute('type')).toBe('password');
+    await user.type(passwordInput, 'private-password');
+    expect(screen.queryByText('private-password')).toBeNull();
+    expect(JSON.stringify(useOperationStore.getState().operationHistory)).not.toContain('private-password');
+  });
+
   it('disables the primary button while an atomic command is pending', async () => {
     const user = userEvent.setup();
     const action = ACTION_BY_ID.get('file.mkdir');

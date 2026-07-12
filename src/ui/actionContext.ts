@@ -123,6 +123,7 @@ const SOURCE_REQUIRED_ACTIONS = new Set<ActionId>([
   'file.deletePermanent',
   'file.rename',
   'file.properties',
+  'file.quickView',
   'archive.list',
   'archive.extract',
   'archive.extractAuto',

@@ -66,10 +66,10 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `start_delete` | `{ targets, mode, confirmToken? }` | `OperationStarted` | `trash`/`permanent`; permanent는 `PERMANENT_DELETE` token 필요 |
 | `cancel_operation` | `{ operationId }` | `CancelAck` | cooperative cancel |
 | `resolve_conflict` | `{ operationId, decision }` | `ConflictAck` | overwrite/skip/allOverwrite/allSkip/cancel |
-| `archive_list` | `{ archivePath, password? }` | `ArchiveListing` | 대량 목록 제한 |
-| `archive_create` | `{ sources, targetArchive, format, password? }` | `OperationStarted` | 7z는 게이트 |
-| `archive_extract` | `{ archivePath, targetDir, password?, policy }` | `OperationStarted` | zip-slip 차단 |
-| `archive_add` | `{ sources, archivePath, targetInnerDir, policy }` | `OperationStarted` | 일반 파일/폴더를 zip/7z 내부 경로에 추가; unsafe 내부 경로 차단 |
+| `archive_list` | `{ archivePath, password?, limit? }` | `ArchiveListing { totalEntries, truncated, ... }` | 기본 50,000개, 최대 200,000개 응답 제한 |
+| `archive_create` | `{ sources, targetArchive, format, password? }` | `OperationStarted` | zip/7z 암호 지원; jar/war/tar 계열 암호 미지원 |
+| `archive_extract` | `{ archivePath, targetDir, password?, policy, entries?, stripPrefix? }` | `OperationStarted` | zip-slip 차단, 선택 항목 추출 지원 |
+| `archive_add` | `{ sources, archivePath, targetInnerDir, policy }` | `OperationStarted` | 일반 파일/폴더를 zip/jar/war/7z 내부 경로에 추가; unsafe 내부 경로 차단 |
 | `open_default` | `{ path }` | `ActionResult` | OS 기본 앱 |
 | `reveal_in_manager` | `{ path }` | `ActionResult` | Finder/Explorer 등 |
 | `open_external_editor` | `{ path, editorId? }` | `ActionResult` | 명시 확인/설정 기반 |
@@ -97,8 +97,12 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - copy/move는 자기 자신 내부 대상, 중복 대상, 권한 오류를 선검증한다.
 - archive extract는 target directory 밖 쓰기를 차단한다.
 - archive add는 `targetInnerDir`와 생성할 entry를 정규화하고 절대 경로, `..`, NUL을 차단한다. 같은 이름은 공통 conflict decision으로만 덮어쓴다.
+- 압축 가상 경로는 읽기 전용이다. delete/rename/move/create-dir command에 압축 내부 경로를 전달하지 않으며 action registry에서도 선차단한다.
+- 지원 형식은 zip, tar, tar.gz/tgz, tar.zst/tzst, 7z, jar, war다. jar/war는 zip provider, tar 계열은 tar provider를 사용한다.
+- `archive_list.limit`는 1~200,000 범위로 제한하며 생략 시 50,000을 사용한다. 잘린 응답은 `truncated=true`와 원본 `totalEntries`를 반환한다.
 - password는 event/log/details에 남기지 않는다.
 - `run_shell_command`는 설정 키 `external.shellCommand.enabled === true`일 때만 활성화하고, shell interpolation을 피하기 위해 command/args를 분리하며, workingDir은 활성 패널 경로로 검증한다.
+- `preview_file(path, maxBytes?)`는 일반 파일만 읽고 텍스트는 최대 1 MiB, 이미지는 8 MiB로 제한한다. 미지원 형식과 제한 초과 이미지는 command 오류가 아니라 `unsupported`/`tooLarge` 결과로 반환하며 파일을 실행하지 않는다.
 - `confirmToken`은 Rust backend가 `prepare_shell_command`에서 발급하는 짧은 TTL/one-shot token으로 정의하며, `run_shell_command` 실행 시 backend가 token, workingDir, command fingerprint를 재검증한다. renderer가 임의 문자열로 확인을 우회할 수 없어야 한다.
 - renderer 권한은 command invocation에 필요한 범위로 제한한다.
 

@@ -480,7 +480,9 @@ addCheck(
 const rustLib = read('src-tauri/src/lib.rs');
 const rustOperation = read('src-tauri/src/operation.rs');
 const rustBackend = `${rustLib}\n${rustOperation}`;
-for (const command of ['list_dir', 'get_metadata', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'reveal_in_manager', 'open_external_editor', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
+const commanderShellTest = read('src/ui/CommanderShell.test.tsx');
+const archiveVirtual = read('src/ui/archiveVirtual.ts');
+for (const command of ['list_dir', 'get_metadata', 'preview_file', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'reveal_in_manager', 'open_external_editor', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
   addCheck(`rust handler includes ${command}`, rustBackend.includes(command), 'read-only command bridge');
 }
 addCheck('rust list_dir normalizes filter once', rustBackend.includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
@@ -491,6 +493,40 @@ addCheck('rust operation service emits progress and summary events', rustBackend
 addCheck('rust operation service implements copy move delete trash policies', rustBackend.includes('start_copy') && rustBackend.includes('start_move') && rustBackend.includes('DeleteMode::Trash') && rustBackend.includes('PERMANENT_DELETE'), 'copy/move/delete/trash must be real backend commands with safety policies');
 addCheck('rust trash does not fall back to permanent delete', rustBackend.includes('errors.trashUnsupported') && rustBackend.includes('trash_directory'), 'trash failure must be recoverable and must not silently remove files permanently');
 addCheck('rust archive commands use safe external provider boundary', rustBackend.includes('archive_entry_is_unsafe') && rustBackend.includes('common_source_parent') && rustBackend.includes('start_archive_add') && rustBackend.includes('errors.archiveProviderUnavailable'), 'archive create/extract/add/list must avoid unsafe paths and absolute source entries');
+addCheck(
+  'archive virtual directories enforce read-only mutations while preserving copy-out',
+  registry.includes('activePathIsArchive')
+    && registry.includes('canMutateFilesystem')
+    && commanderShell.includes('archiveReadOnly')
+    && commanderShellTest.includes('shows archive virtual directories as read-only'),
+  'archive delete/rename/move/new-folder must be unavailable and the panel must explain the read-only policy',
+);
+addCheck(
+  'archive providers cover every required format',
+  ['tar\\.gz', 'tar\\.zst', 'tgz', 'tzst', 'zip', 'jar', 'war', 'tar', '7z'].every((token) => archiveVirtual.includes(token))
+    && rustBackend.includes('archive_required_formats_create_list_and_extract_round_trip'),
+  'zip/tar/tar.gz/tgz/tar.zst/tzst/7z/jar/war require create/list/extract evidence',
+);
+addCheck(
+  'archive password UI and backend keep secrets out of summaries',
+  commanderShell.includes('ArchivePasswordPrompt')
+    && read('src/operations/OperationDialogHost.tsx').includes('type="password"')
+    && rustBackend.includes('archive_password_round_trip_and_unsafe_entry_guards')
+    && rustBackend.includes('archive_7z_password_and_large_listing_when_provider_is_available')
+    && i18nResources.includes('errors.archivePasswordRequired')
+    && i18nResources.includes('errors.archivePasswordInvalid'),
+  'zip/7z password input must be masked and password values must not appear in operation summaries',
+);
+addCheck(
+  'archive listing is bounded and reports truncation',
+  rustBackend.includes('DEFAULT_ARCHIVE_LIST_LIMIT')
+    && rustBackend.includes('MAX_ARCHIVE_LIST_LIMIT')
+    && rustBackend.includes('archive_listing_limit_reports_truncation')
+    && commanderShell.includes('ARCHIVE_LIST_LIMIT')
+    && commanderShell.includes('partialArchive')
+    && commanderShellTest.includes('reports truncated listings'),
+  'large zip/7z listings must use a bounded response and expose partial-list state',
+);
 addCheck('rust shell command is gated by settings and one-shot token', rustBackend.includes('ShellCommandPolicy') && rustBackend.includes('consume_token') && rustBackend.includes('used = true'), 'shell command must stay disabled by default and require a confirm token');
 addCheck('rust settings persist bookmarks and layout', rustBackend.includes('BOKSLDIRGUI_SETTINGS_PATH') && rustBackend.includes('validate_settings') && rustBackend.includes('layout.ratio'), 'settings must persist bookmark/layout GUI state safely');
 
@@ -559,7 +595,7 @@ for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.archiveAdd', 'COMMANDS.
   addCheck(`full-scope test covers ${token}`, fullScopeTest.includes(token), 'Semantic verification beyond static smoke');
 }
 
-for (const token of ['I18N_RESOURCES', "'ko'", "'en'", 'errors.archiveFormatUnsupported', 'errors.shellCommandDisabled']) {
+for (const token of ['I18N_RESOURCES', "'ko'", "'en'", 'errors.archiveFormatUnsupported', 'errors.archivePasswordRequired', 'errors.archivePasswordInvalid', 'errors.shellCommandDisabled']) {
   addCheck(`i18n resources include ${token}`, i18nResources.includes(token), 'message keys must have Korean and English resources');
 }
 

@@ -53,6 +53,9 @@ describe('archive virtual directory helpers', () => {
       archivePath,
       innerPath: 'dist/config',
     });
+    for (const name of ['a.tar', 'a.tar.gz', 'a.tgz', 'a.tar.zst', 'a.tzst', 'a.7z', 'a.jar', 'a.war']) {
+      expect(parseArchiveVirtualPath(`/tmp/${name}:/`)?.archivePath).toBe(`/tmp/${name}`);
+    }
   });
 
   it('projects flat archive entries as directory listings', () => {
@@ -66,6 +69,8 @@ describe('archive virtual directory helpers', () => {
     });
 
     expect(root.path).toBe('/tmp/archive.zip:/');
+    expect(root.totalEntries).toBe(4);
+    expect(root.truncated).toBe(false);
     expect(root.entries.map((entry) => entry.name)).toEqual(['..', 'dist', 'README.md']);
     expect(root.entries.find((entry) => entry.name === 'dist')).toMatchObject({
       kind: 'directory',
@@ -77,6 +82,20 @@ describe('archive virtual directory helpers', () => {
       sizeBytes: 2048,
       modifiedAt: '2026-07-02T23:31:00',
     });
+  });
+
+  it('preserves backend truncation metadata for the panel status', () => {
+    const partial = archiveListingToDirectoryListing({
+      panelId: 'left',
+      virtualPath: archiveVirtualRootPath(archivePath),
+      archiveListing: { ...listing, totalEntries: 80_000, truncated: true },
+      showHidden: false,
+      sort: DEFAULT_SORT,
+      filter: null,
+    });
+
+    expect(partial.totalEntries).toBe(80_000);
+    expect(partial.truncated).toBe(true);
   });
 
   it('supports nested archive folders and parent focus targets', () => {

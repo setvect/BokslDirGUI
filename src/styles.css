@@ -492,6 +492,24 @@ button {
   color: var(--row-focused-text);
 }
 
+.file-row.is-compare-different:not(.is-focused),
+.file-row.is-compare-left-only:not(.is-focused),
+.file-row.is-compare-right-only:not(.is-focused) {
+  box-shadow: inset 4px 0 0 #f0a020;
+}
+
+.file-row.is-compare-left-only:not(.is-focused) {
+  box-shadow: inset 4px 0 0 #45a8ff;
+}
+
+.file-row.is-compare-right-only:not(.is-focused) {
+  box-shadow: inset -4px 0 0 #b98cff;
+}
+
+.file-row.is-compare-same:not(.is-focused) {
+  box-shadow: inset 2px 0 0 #4caf78;
+}
+
 .entry-name {
   display: inline-flex;
   align-items: center;
@@ -951,6 +969,52 @@ button {
   gap: 4px;
   max-height: 54vh;
   overflow: auto;
+}
+
+.quick-preview-dialog {
+  top: 7vh;
+  width: min(900px, 82vw);
+  max-height: 84vh;
+}
+
+.quick-preview-content {
+  display: grid;
+  gap: 10px;
+  min-height: 180px;
+}
+
+.quick-preview-meta {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.quick-preview-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-preview-image {
+  max-width: 100%;
+  max-height: 62vh;
+  justify-self: center;
+  object-fit: contain;
+}
+
+.quick-preview-text {
+  max-height: 62vh;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--dialog-section-border);
+  background: var(--pre-bg);
+  padding: 10px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .shortcut-help-row {

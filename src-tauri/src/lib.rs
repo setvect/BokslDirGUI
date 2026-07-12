@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
@@ -141,6 +141,20 @@ struct ArchiveListing {
 struct ActionResult {
     ok: bool,
     message_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct FilePreview {
+    path: String,
+    name: String,
+    kind: String,
+    mime_type: Option<String>,
+    size_bytes: u64,
+    text: Option<String>,
+    data_url: Option<String>,
+    truncated: bool,
+    limit_bytes: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -447,6 +461,157 @@ fn goto_path(panel_id: PanelId, path: String) -> CommandResult<DirectoryListing>
 #[tauri::command]
 fn get_metadata(path: String) -> CommandResult<FileMetadata> {
     navigation::get_metadata(&path)
+}
+
+const DEFAULT_TEXT_PREVIEW_LIMIT: u64 = 256 * 1024;
+const MAX_TEXT_PREVIEW_LIMIT: u64 = 1024 * 1024;
+const IMAGE_PREVIEW_LIMIT: u64 = 8 * 1024 * 1024;
+
+#[tauri::command]
+fn preview_file(path: String, max_bytes: Option<u64>) -> CommandResult<FilePreview> {
+    let path = navigation::canonical_existing_path(&path)?;
+    let metadata = fs::metadata(&path).map_err(|error| map_io_error(error, Some(&path)))?;
+    if !metadata.is_file() {
+        return Err(AppError::new(
+            "not_file",
+            "errors.previewNotFile",
+            Some(&path),
+            true,
+        ));
+    }
+    let name = path
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| display_path(&path));
+    let size_bytes = metadata.len();
+    let extension = path
+        .extension()
+        .map(|value| value.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    let mime_type = preview_mime_type(&extension).map(str::to_string);
+
+    if preview_image_mime_type(&extension).is_some() {
+        if size_bytes > IMAGE_PREVIEW_LIMIT {
+            return Ok(FilePreview {
+                path: display_path(&path),
+                name,
+                kind: "tooLarge".to_string(),
+                mime_type,
+                size_bytes,
+                text: None,
+                data_url: None,
+                truncated: false,
+                limit_bytes: IMAGE_PREVIEW_LIMIT,
+            });
+        }
+        let bytes = fs::read(&path).map_err(|error| map_io_error(error, Some(&path)))?;
+        let mime = preview_image_mime_type(&extension).unwrap_or("application/octet-stream");
+        return Ok(FilePreview {
+            path: display_path(&path),
+            name,
+            kind: "image".to_string(),
+            mime_type: Some(mime.to_string()),
+            size_bytes,
+            text: None,
+            data_url: Some(format!("data:{mime};base64,{}", encode_base64(&bytes))),
+            truncated: false,
+            limit_bytes: IMAGE_PREVIEW_LIMIT,
+        });
+    }
+
+    if preview_text_mime_type(&extension).is_some() {
+        let limit = max_bytes
+            .unwrap_or(DEFAULT_TEXT_PREVIEW_LIMIT)
+            .clamp(1, MAX_TEXT_PREVIEW_LIMIT);
+        let mut bytes = Vec::with_capacity((limit.min(size_bytes) + 1) as usize);
+        fs::File::open(&path)
+            .map_err(|error| map_io_error(error, Some(&path)))?
+            .take(limit + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| map_io_error(error, Some(&path)))?;
+        let truncated = bytes.len() as u64 > limit;
+        bytes.truncate(limit as usize);
+        if bytes.iter().take(8 * 1024).any(|byte| *byte == 0) {
+            return Ok(FilePreview {
+                path: display_path(&path),
+                name,
+                kind: "unsupported".to_string(),
+                mime_type,
+                size_bytes,
+                text: None,
+                data_url: None,
+                truncated: false,
+                limit_bytes: limit,
+            });
+        }
+        return Ok(FilePreview {
+            path: display_path(&path),
+            name,
+            kind: "text".to_string(),
+            mime_type,
+            size_bytes,
+            text: Some(String::from_utf8_lossy(&bytes).into_owned()),
+            data_url: None,
+            truncated,
+            limit_bytes: limit,
+        });
+    }
+
+    Ok(FilePreview {
+        path: display_path(&path),
+        name,
+        kind: "unsupported".to_string(),
+        mime_type,
+        size_bytes,
+        text: None,
+        data_url: None,
+        truncated: false,
+        limit_bytes: max_bytes.unwrap_or(DEFAULT_TEXT_PREVIEW_LIMIT),
+    })
+}
+
+fn preview_image_mime_type(extension: &str) -> Option<&'static str> {
+    match extension {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "bmp" => Some("image/bmp"),
+        _ => None,
+    }
+}
+
+fn preview_text_mime_type(extension: &str) -> Option<&'static str> {
+    match extension {
+        "txt" | "log" => Some("text/plain"),
+        "md" | "markdown" => Some("text/markdown"),
+        "json" => Some("application/json"),
+        "yaml" | "yml" => Some("application/yaml"),
+        "toml" => Some("application/toml"),
+        "xml" => Some("application/xml"),
+        "csv" => Some("text/csv"),
+        "rs" | "ts" | "tsx" | "js" | "jsx" | "css" | "html" | "htm" | "sh" | "zsh" | "bash" | "py" | "java" | "kt" | "c" | "h" | "cpp" | "hpp" | "sql" => Some("text/plain"),
+        _ => None,
+    }
+}
+
+fn preview_mime_type(extension: &str) -> Option<&'static str> {
+    preview_image_mime_type(extension).or_else(|| preview_text_mime_type(extension))
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0];
+        let second = *chunk.get(1).unwrap_or(&0);
+        let third = *chunk.get(2).unwrap_or(&0);
+        encoded.push(TABLE[(first >> 2) as usize] as char);
+        encoded.push(TABLE[(((first & 0x03) << 4) | (second >> 4)) as usize] as char);
+        encoded.push(if chunk.len() > 1 { TABLE[(((second & 0x0f) << 2) | (third >> 6)) as usize] as char } else { '=' });
+        encoded.push(if chunk.len() > 2 { TABLE[(third & 0x3f) as usize] as char } else { '=' });
+    }
+    encoded
 }
 
 #[tauri::command]
@@ -1172,7 +1337,7 @@ mod archive {
             .arg(archive)
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
-        let names = parse_zip_name_output(output, archive, false)?;
+        let names = parse_zip_name_output(output, archive, None)?;
         let detail_output = Command::new("unzip")
             .args(["-Z", "-T", "-l"])
             .arg(archive)
@@ -1218,11 +1383,7 @@ mod archive {
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
         if !output.status.success() {
-            return Err(archive_provider_output_error(
-                &output,
-                archive,
-                password.is_some(),
-            ));
+            return Err(archive_provider_output_error(&output, archive, password));
         }
         let encrypted = String::from_utf8_lossy(&output.stdout).contains("Encrypted = +");
         Ok((parse_7z_slt_entries(&output.stdout), encrypted))
@@ -1235,7 +1396,7 @@ mod archive {
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
         if !output.status.success() {
-            return Err(archive_provider_output_error(&output, archive, false));
+            return Err(archive_provider_output_error(&output, archive, None));
         }
         Ok(String::from_utf8_lossy(&output.stdout)
             .lines()
@@ -1255,18 +1416,22 @@ mod archive {
     fn archive_provider_output_error(
         output: &std::process::Output,
         archive: &Path,
-        password_supplied: bool,
+        password: Option<&str>,
     ) -> AppError {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let lowered = stderr.to_ascii_lowercase();
         let password_error = lowered.contains("password") || lowered.contains("encrypted");
-        let (code, message_key) = if password_error && password_supplied {
+        let (code, message_key) = if password_error && password.is_some() {
             ("invalid_password", "errors.archivePasswordInvalid")
         } else if password_error {
             ("password_required", "errors.archivePasswordRequired")
         } else {
             ("external_command_failed", "errors.externalCommandFailed")
         };
+        let stderr = stderr.into_owned();
+        let stderr = password
+            .filter(|secret| !secret.is_empty())
+            .map_or(stderr.clone(), |secret| stderr.replace(secret, "[redacted]"));
         AppError::new(code, message_key, Some(archive), true)
             .with_detail("stderr", stderr.chars().take(512).collect::<String>())
     }
@@ -1294,13 +1459,13 @@ mod archive {
     fn parse_zip_name_output(
         output: std::process::Output,
         archive: &Path,
-        password_supplied: bool,
+        password: Option<&str>,
     ) -> CommandResult<Vec<String>> {
         if !output.status.success() {
             return Err(archive_provider_output_error(
                 &output,
                 archive,
-                password_supplied,
+                password,
             ));
         }
         Ok(String::from_utf8_lossy(&output.stdout)
@@ -2213,6 +2378,7 @@ pub fn run() {
             health_check,
             list_dir,
             get_metadata,
+            preview_file,
             watch_path,
             goto_path,
             list_locations,
@@ -2354,6 +2520,38 @@ mod tests {
         assert_eq!(metadata.entry.size_bytes, Some(5));
         assert_eq!(metadata.extension, Some("txt".to_string()));
         assert_eq!(metadata.mime_type, Some("text/plain".to_string()));
+    }
+
+    #[test]
+    fn preview_file_limits_text_and_never_executes_unsupported_content() {
+        let fixture = TempFixture::new();
+        let text_path = fixture.root.join("preview.md");
+        fs::write(&text_path, "가나다라마바사 abcdefghijklmnopqrstuvwxyz")
+            .expect("preview text should be written");
+        let text = preview_file(text_path.to_string_lossy().into_owned(), Some(12))
+            .expect("text preview should succeed");
+        assert_eq!(text.kind, "text");
+        assert!(text.truncated);
+        assert!(text.text.is_some());
+        assert!(text.data_url.is_none());
+        assert_eq!(text.limit_bytes, 12);
+
+        let executable = fixture.root.join("program.bin");
+        fs::write(&executable, b"#!/bin/sh\necho should-not-run\n")
+            .expect("unsupported preview fixture should be written");
+        let unsupported = preview_file(executable.to_string_lossy().into_owned(), None)
+            .expect("unsupported preview should be a successful state");
+        assert_eq!(unsupported.kind, "unsupported");
+        assert!(unsupported.text.is_none());
+        assert!(unsupported.data_url.is_none());
+
+        let image_path = fixture.root.join("pixel.png");
+        fs::write(&image_path, [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a])
+            .expect("image preview fixture should be written");
+        let image = preview_file(image_path.to_string_lossy().into_owned(), None)
+            .expect("small image preview should succeed");
+        assert_eq!(image.kind, "image");
+        assert!(image.data_url.as_deref().is_some_and(|url| url.starts_with("data:image/png;base64,")));
     }
 
     #[test]
@@ -3593,6 +3791,87 @@ mod tests {
         assert_eq!(
             fs::read(extract_dir.join("added-7z.txt")).expect("overwritten 7z entry should exist"),
             b"second"
+        );
+    }
+
+    #[test]
+    fn archive_7z_password_and_large_listing_when_provider_is_available() {
+        let Some(_binary) = archive::seven_zip_binary_for_test() else {
+            return;
+        };
+        let fixture = TempFixture::new();
+        let large_source = fixture.root.join("large-7z-listing");
+        fs::create_dir_all(&large_source).expect("large 7z source should exist");
+        for index in 0..120 {
+            fs::write(large_source.join(format!("entry-{index:03}.txt")), b"x")
+                .expect("large 7z entry should be written");
+        }
+        let large_archive = fixture.root.join("large-listing.7z");
+        let large_summary = operation::archive_create_summary_for_test(
+            vec![large_source.to_string_lossy().into_owned()],
+            large_archive.to_string_lossy().into_owned(),
+            "7z".to_string(),
+            None,
+        );
+        assert_eq!(large_summary.state, OperationState::Completed);
+        let limited = archive_list(
+            large_archive.to_string_lossy().into_owned(),
+            None,
+            Some(25),
+        )
+        .expect("limited 7z listing should succeed");
+        assert_eq!(limited.entries.len(), 25);
+        assert!(limited.total_entries >= 120);
+        assert!(limited.truncated);
+
+        let encrypted_archive = fixture.root.join("encrypted.7z");
+        let encrypted_summary = operation::archive_create_summary_for_test(
+            vec![fixture
+                .root
+                .join("alpha.txt")
+                .to_string_lossy()
+                .into_owned()],
+            encrypted_archive.to_string_lossy().into_owned(),
+            "7z".to_string(),
+            Some("seven-secret".to_string()),
+        );
+        assert_eq!(encrypted_summary.state, OperationState::Completed);
+        assert!(!serde_json::to_string(&encrypted_summary)
+            .expect("encrypted summary should serialize")
+            .contains("seven-secret"));
+
+        let wrong = archive_list(
+            encrypted_archive.to_string_lossy().into_owned(),
+            Some("wrong-seven-secret".to_string()),
+            Some(100),
+        )
+        .expect_err("wrong 7z password should fail");
+        assert_eq!(wrong.code, "invalid_password");
+        assert!(!serde_json::to_string(&wrong)
+            .expect("password error should serialize")
+            .contains("wrong-seven-secret"));
+
+        let listing = archive_list(
+            encrypted_archive.to_string_lossy().into_owned(),
+            Some("seven-secret".to_string()),
+            Some(100),
+        )
+        .expect("encrypted 7z listing should succeed with the password");
+        assert!(listing.encrypted);
+        assert!(listing.entries.iter().any(|entry| entry.name == "alpha.txt"));
+
+        let extract_dir = fixture.root.join("encrypted-7z-extract");
+        fs::create_dir_all(&extract_dir).expect("encrypted 7z target should exist");
+        let extracted = operation::archive_extract_summary_for_test(
+            encrypted_archive.to_string_lossy().into_owned(),
+            extract_dir.to_string_lossy().into_owned(),
+            Some("seven-secret".to_string()),
+            ConflictDecision::Overwrite,
+        );
+        assert_eq!(extracted.state, OperationState::Completed);
+        assert_eq!(
+            fs::read(extract_dir.join("alpha.txt")).expect("encrypted 7z file should extract"),
+            b"hello"
         );
     }
 

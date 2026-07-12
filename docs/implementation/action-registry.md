@@ -28,6 +28,9 @@ interface AppAction {
 | ID | 범주 | 기본 단축키 | 메뉴 | 위험도 | 실행 경로 |
 | --- | --- | --- | --- | --- | --- |
 | `panel.switchActive` | panel | Tab | View | none | UI state |
+| `panel.swapPaths` | panel | ts | View/Swap Panel Paths | none | UI state |
+| `panel.copyPathToOther` | panel | tp | View/Copy Path to Other Panel | safe | UI state + list_dir |
+| `panel.compareDirectories` | panel | tc | View/Compare Directories | none | UI state |
 | `nav.enter` | navigation | Enter/l | File/Open | safe | list_dir/open_default |
 | `nav.up` | navigation | Backspace/h | Go/Up | safe | list_dir |
 | `nav.back` | navigation | Alt+Left | Go/Back | safe | list_dir |
@@ -47,6 +50,7 @@ interface AppAction {
 | `file.rename` | file | r/F2 | File/Rename | destructive | rename_entry |
 | `app.quit` | file | Cmd+Q | File/Quit | none | getCurrentWindow().close safety policy |
 | `file.properties` | file | i | View/File Info | safe | get_metadata |
+| `file.quickView` | file | F3 | View/Quick View | safe | preview_file |
 | `archive.list` | archive | Enter on archive | Archive/Open Archive | safe | archive_list |
 | `archive.extract` | archive | zx | File/Archive Extract | destructive | archive_extract |
 | `archive.extractAuto` | archive | za | File/Archive Extract Auto | destructive | archive_extract auto target |
@@ -99,6 +103,8 @@ interface AppAction {
 - action enablement는 메뉴/컨텍스트 메뉴/hotkey strip/help에서 같은 selector를 사용한다.
 - hotkey strip은 action registry의 우선순위 목록을 사용하되 화면 폭과 확대 배율에 따라 표시 개수를 동적으로 조정한다. 좁은 화면에서는 핵심 조작만 남기고, 넓은 화면에서는 추가 action hint를 더 노출한다.
 - destructive/irreversible action은 command 실행 전 dialog 정책을 반드시 거친다.
+- 압축 가상 디렉터리는 **읽기 전용 패널**이다. `file.copy`는 압축 내부→일반 디렉터리 추출 및 일반 디렉터리→압축 내부 추가로 허용하지만, `file.move`, `file.trash`, `file.deletePermanent`, `file.rename`, `file.mkdir`는 action registry에서 비활성화한다. 패널 상태줄은 `압축 내부 읽기 전용`을 표시해 비활성화 이유를 설명한다.
+- 압축 내부 직접 삭제/이름 변경/이동은 provider별 재작성 방식과 원자성 차이로 인해 지원하지 않는다. 사용자는 복사/추출 후 일반 파일 시스템에서 변경하고 필요하면 새 압축 파일을 생성한다.
 - `external.runShellCommand`는 `ShellCommandDialog`의 preview/confirm 단계를 거쳐 backend `prepare_shell_command` → `run_shell_command` 순서로 실행한다. 기본 비활성 또는 명시 확인 정책을 거치며, 작업 디렉토리/명령/종료 코드/표준 오류를 사용자에게 표시한다.
 
 ## 5. Shortcut rules
