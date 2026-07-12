@@ -1025,6 +1025,7 @@ export const OPERATION_KIND_LABELS = {
     createDir: '새 폴더',
     archiveCreate: '압축 생성',
     archiveExtract: '압축 해제',
+    archiveAdd: '압축 파일에 복사',
   },
   en: {
     copy: 'Copy',
@@ -1035,6 +1036,7 @@ export const OPERATION_KIND_LABELS = {
     createDir: 'New Folder',
     archiveCreate: 'Create Archive',
     archiveExtract: 'Extract Archive',
+    archiveAdd: 'Copy into Archive',
   },
 } as const;
 

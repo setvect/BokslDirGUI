@@ -39,7 +39,7 @@ interface AppAction {
 | `tab.close` | panel | tx | View/Close Tab | none | UI state |
 | `selection.toggle` | selection | Space | Edit/Select | none | UI state |
 | `selection.all` | selection | Ctrl+A | Edit/Select All | none | UI state |
-| `file.copy` | file | y/F5 | Edit/Copy | safe | start_copy |
+| `file.copy` | file | y/F5 | Edit/Copy | safe | 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add` |
 | `file.move` | file | x/F6 | Edit/Move | destructive | start_move |
 | `file.trash` | file | d | File/Delete | destructive | start_delete trash |
 | `file.deletePermanent` | file | D/Shift+Delete | File/Permanent Delete | irreversible | start_delete permanent |

@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-복사, 이동, 삭제, 휴지통, 압축 생성/해제 같은 데이터 변경 작업을 안전하고 테스트 가능하게 만든다.
+복사, 이동, 삭제, 휴지통, 압축 생성/해제/내부 추가 같은 데이터 변경 작업을 안전하고 테스트 가능하게 만든다.
 
 ## 2. 공통 상태
 
@@ -63,12 +63,16 @@ idle
 - 영구 삭제는 기본 버튼을 cancel로 둔다.
 - 휴지통 실패 시 영구 삭제로 자동 전환하지 않는다.
 
-### 4.4 Archive Create/Extract
+### 4.4 Archive Create/Extract/Add
 
 - zip/tar/gz/zstd/7z 형식별 provider를 분리한다.
 - extract는 모든 entry path를 target directory 아래로 normalize한 후 쓰기 시작한다.
 - password는 masked UI로 입력받고 log/event에 남기지 않는다.
 - 7z는 `archive-7z` fixture gate를 통과해야 완료로 본다.
+- 일반 패널에서 압축 가상 디렉터리로 복사하면 `file.copy` UX를 유지하되 backend 실행은 `archive_add`로 라우팅한다.
+- archive add는 source를 안전한 staging 경로에 구성한 뒤 provider에 상대 경로만 넘긴다.
+- 같은 archive entry가 있으면 `overwrite`, `skip`, `allOverwrite`, `allSkip`, `cancel`을 적용하고 overwrite는 기존 entry subtree를 제거한 뒤 추가한다.
+- 성공, 실패, 취소 요약 후 source/target panel을 모두 refresh하여 부분 결과도 즉시 반영한다.
 
 ## 5. ConflictPrompt
 

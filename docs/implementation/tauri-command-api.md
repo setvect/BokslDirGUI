@@ -9,7 +9,7 @@ React/TypeScript UI와 Rust/Tauri backend 사이의 command, event, DTO 계약�
 ```ts
 type PanelId = 'left' | 'right';
 type EntryKind = 'file' | 'directory' | 'symlink' | 'executable' | 'archive' | 'unknown';
-type OperationKind = 'copy' | 'move' | 'delete' | 'trash' | 'rename' | 'createDir' | 'archiveCreate' | 'archiveExtract';
+type OperationKind = 'copy' | 'move' | 'delete' | 'trash' | 'rename' | 'createDir' | 'archiveCreate' | 'archiveExtract' | 'archiveAdd';
 type OperationState = 'idle' | 'validating' | 'scanning' | 'queued' | 'waitingForConflict' | 'running' | 'cancelling' | 'completed' | 'completedWithErrors' | 'failed' | 'cancelled';
 type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel';
 ```
@@ -69,6 +69,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `archive_list` | `{ archivePath, password? }` | `ArchiveListing` | 대량 목록 제한 |
 | `archive_create` | `{ sources, targetArchive, format, password? }` | `OperationStarted` | 7z는 게이트 |
 | `archive_extract` | `{ archivePath, targetDir, password?, policy }` | `OperationStarted` | zip-slip 차단 |
+| `archive_add` | `{ sources, archivePath, targetInnerDir, policy }` | `OperationStarted` | 일반 파일/폴더를 zip/7z 내부 경로에 추가; unsafe 내부 경로 차단 |
 | `open_default` | `{ path }` | `ActionResult` | OS 기본 앱 |
 | `reveal_in_manager` | `{ path }` | `ActionResult` | Finder/Explorer 등 |
 | `open_external_editor` | `{ path, editorId? }` | `ActionResult` | 명시 확인/설정 기반 |
@@ -95,6 +96,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - `..` virtual entry는 파일 작업 대상이 될 수 없다.
 - copy/move는 자기 자신 내부 대상, 중복 대상, 권한 오류를 선검증한다.
 - archive extract는 target directory 밖 쓰기를 차단한다.
+- archive add는 `targetInnerDir`와 생성할 entry를 정규화하고 절대 경로, `..`, NUL을 차단한다. 같은 이름은 공통 conflict decision으로만 덮어쓴다.
 - password는 event/log/details에 남기지 않는다.
 - `run_shell_command`는 설정 키 `external.shellCommand.enabled === true`일 때만 활성화하고, shell interpolation을 피하기 위해 command/args를 분리하며, workingDir은 활성 패널 경로로 검증한다.
 - `confirmToken`은 Rust backend가 `prepare_shell_command`에서 발급하는 짧은 TTL/one-shot token으로 정의하며, `run_shell_command` 실행 시 backend가 token, workingDir, command fingerprint를 재검증한다. renderer가 임의 문자열로 확인을 우회할 수 없어야 한다.

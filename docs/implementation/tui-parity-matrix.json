@@ -542,10 +542,11 @@
         "src/ui/CommanderShell.tsx: direct startLongRunningOperation for file.copy",
         "src/operations/operationStore.ts: startLongRunningOperation with non-modal progress/conflict controller",
         "src/ui/CommanderShell.test.tsx: copy shortcut/focused fallback starts client without preflight dialog",
+        "src/ui/CommanderShell.test.tsx: archive virtual copy routes archive-to-normal through archive_extract and normal-to-archive through archive_add",
         "src/operations/operationStore.test.ts: direct copy without dialog and conflict resolver wiring",
-        "src-tauri/src/lib.rs tests: start_copy_recursively_copies_files_and_directories, conflict policies, cancel safety"
+        "src-tauri/src/lib.rs tests: start_copy_recursively_copies_files_and_directories plus zip/7z archive_add round trips, conflict policies, cancel safety"
       ],
-      "notes": "TUI Edit > Copy 메뉴와 y 단축키를 맞췄고, 선택이 없으면 포커스 항목을 대상으로 no-conflict copy를 확인 다이얼로그 없이 즉시 시작한다. 충돌은 독립 non-modal 상태/해결 UI로 처리하며 Rust start_copy no-silent-overwrite 안전성을 유지한다.",
+      "notes": "선택이 없으면 포커스 항목을 대상으로 확인 다이얼로그 없이 즉시 시작한다. 일반→일반은 start_copy, 압축 내부→일반은 선택 entry 기반 archive_extract, 일반→압축 내부는 archive_add로 라우팅하며 공통 충돌/취소/패널 refresh 정책을 적용한다.",
       "tuiId": "copy",
       "tuiLabel": "Copy",
       "tuiCategory": "FileOperation",

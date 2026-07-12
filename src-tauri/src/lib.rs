@@ -325,6 +325,7 @@ enum OperationKind {
     CreateDir,
     ArchiveCreate,
     ArchiveExtract,
+    ArchiveAdd,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -557,6 +558,17 @@ fn archive_extract(
         entries,
         strip_prefix,
     )
+}
+
+#[tauri::command]
+fn archive_add(
+    app: tauri::AppHandle,
+    sources: Vec<String>,
+    archive_path: String,
+    target_inner_dir: String,
+    policy: ConflictDecision,
+) -> CommandResult<OperationStarted> {
+    operation::start_archive_add(Some(&app), sources, archive_path, target_inner_dir, policy)
 }
 
 #[tauri::command]
@@ -2130,6 +2142,7 @@ pub fn run() {
             archive_list,
             archive_create,
             archive_extract,
+            archive_add,
             open_default,
             reveal_in_manager,
             open_external_editor,
@@ -2961,6 +2974,53 @@ mod tests {
             .iter()
             .any(|entry| entry.name.contains("boksldir-gui-navigation")));
 
+        let added_file = fixture.root.join("added.txt");
+        fs::write(&added_file, b"first").expect("archive add fixture should be written");
+        let added_dir = fixture.root.join("added-dir");
+        fs::create_dir_all(&added_dir).expect("archive add directory should be created");
+        fs::write(added_dir.join("nested.txt"), b"added nested")
+            .expect("nested archive add fixture should be written");
+        let added = operation::start_archive_add(
+            None,
+            vec![
+                added_file.to_string_lossy().into_owned(),
+                added_dir.to_string_lossy().into_owned(),
+            ],
+            archive_path.to_string_lossy().into_owned(),
+            "folder".to_string(),
+            ConflictDecision::Overwrite,
+        )
+        .expect("archive add should start");
+        assert_eq!(added.kind, OperationKind::ArchiveAdd);
+        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None)
+            .expect("updated zip listing should succeed");
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.path.ends_with("!folder/added.txt")));
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.path.ends_with("!folder/added-dir/nested.txt")));
+
+        fs::write(&added_file, b"second").expect("archive conflict fixture should be updated");
+        operation::start_archive_add(
+            None,
+            vec![added_file.to_string_lossy().into_owned()],
+            archive_path.to_string_lossy().into_owned(),
+            "folder".to_string(),
+            ConflictDecision::Skip,
+        )
+        .expect("archive add skip should start");
+        operation::start_archive_add(
+            None,
+            vec![added_file.to_string_lossy().into_owned()],
+            archive_path.to_string_lossy().into_owned(),
+            "folder".to_string(),
+            ConflictDecision::AllSkip,
+        )
+        .expect("archive add all-skip should start");
+
         let extracted = operation::start_archive_extract(
             None,
             archive_path.to_string_lossy().into_owned(),
@@ -2980,6 +3040,76 @@ mod tests {
             fs::read(extract_dir.join("folder").join("beta.txt"))
                 .expect("nested extracted file should exist"),
             b"nested"
+        );
+        assert_eq!(
+            fs::read(extract_dir.join("folder").join("added.txt"))
+                .expect("archive-added file should be extracted"),
+            b"first",
+            "skip must preserve the existing archive entry"
+        );
+        assert_eq!(
+            fs::read(
+                extract_dir
+                    .join("folder")
+                    .join("added-dir")
+                    .join("nested.txt")
+            )
+            .expect("archive-added directory should be extracted"),
+            b"added nested"
+        );
+
+        operation::start_archive_add(
+            None,
+            vec![added_file.to_string_lossy().into_owned()],
+            archive_path.to_string_lossy().into_owned(),
+            "folder".to_string(),
+            ConflictDecision::AllOverwrite,
+        )
+        .expect("archive add all-overwrite should start");
+        let overwrite_extract_dir = fixture.root.join("overwrite-extract");
+        fs::create_dir_all(&overwrite_extract_dir)
+            .expect("overwrite extract directory should exist");
+        operation::start_archive_extract(
+            None,
+            archive_path.to_string_lossy().into_owned(),
+            overwrite_extract_dir.to_string_lossy().into_owned(),
+            None,
+            ConflictDecision::Overwrite,
+            Some(vec!["folder/added.txt".to_string()]),
+            Some("folder".to_string()),
+        )
+        .expect("overwritten archive entry should extract");
+        assert_eq!(
+            fs::read(overwrite_extract_dir.join("added.txt"))
+                .expect("overwritten archive entry should exist"),
+            b"second"
+        );
+
+        fs::write(&added_file, b"cancelled").expect("archive cancel fixture should be updated");
+        operation::start_archive_add(
+            None,
+            vec![added_file.to_string_lossy().into_owned()],
+            archive_path.to_string_lossy().into_owned(),
+            "folder".to_string(),
+            ConflictDecision::Cancel,
+        )
+        .expect("archive add cancel should start");
+        let cancel_extract_dir = fixture.root.join("cancel-extract");
+        fs::create_dir_all(&cancel_extract_dir).expect("cancel extract directory should exist");
+        operation::start_archive_extract(
+            None,
+            archive_path.to_string_lossy().into_owned(),
+            cancel_extract_dir.to_string_lossy().into_owned(),
+            None,
+            ConflictDecision::Overwrite,
+            Some(vec!["folder/added.txt".to_string()]),
+            Some("folder".to_string()),
+        )
+        .expect("entry should still extract after cancelled overwrite");
+        assert_eq!(
+            fs::read(cancel_extract_dir.join("added.txt"))
+                .expect("cancelled overwrite must preserve existing entry"),
+            b"second"
         );
 
         operation::start_archive_extract(
@@ -3029,9 +3159,34 @@ mod tests {
 
         assert!(operation::archive_entry_is_unsafe_for_test("../escape.txt"));
         assert!(operation::archive_entry_is_unsafe_for_test("/absolute.txt"));
+        assert!(operation::archive_entry_is_unsafe_for_test(
+            "C:\\absolute.txt"
+        ));
+        assert!(operation::archive_entry_is_unsafe_for_test(
+            "\\absolute.txt"
+        ));
+        assert!(operation::archive_entry_is_unsafe_for_test(
+            "safe\0hidden.txt"
+        ));
         assert!(!operation::archive_entry_is_unsafe_for_test(
             "safe/entry.txt"
         ));
+
+        let archive = fixture.root.join("unsafe-target.zip");
+        File::create(&archive).expect("unsafe target archive fixture should exist");
+        let unsafe_add = operation::archive_add_summary_for_test(
+            vec![fixture
+                .root
+                .join("alpha.txt")
+                .to_string_lossy()
+                .into_owned()],
+            archive.to_string_lossy().into_owned(),
+            "../escape".to_string(),
+            ConflictDecision::Overwrite,
+        );
+        assert_eq!(unsafe_add.kind, OperationKind::ArchiveAdd);
+        assert_eq!(unsafe_add.state, OperationState::Failed);
+        assert_eq!(unsafe_add.errors[0].message_key, "errors.archiveUnsafePath");
     }
 
     #[test]
@@ -3189,6 +3344,49 @@ mod tests {
             .entries
             .iter()
             .any(|entry| entry.name == "space name.txt"));
+
+        let added = fixture.root.join("added-7z.txt");
+        fs::write(&added, b"first").expect("7z add fixture should be written");
+        operation::start_archive_add(
+            None,
+            vec![added.to_string_lossy().into_owned()],
+            archive_path.to_string_lossy().into_owned(),
+            "nested".to_string(),
+            ConflictDecision::Overwrite,
+        )
+        .expect("7z archive add should start");
+        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None)
+            .expect("updated 7z listing should succeed");
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.path.ends_with("!nested/added-7z.txt")));
+
+        fs::write(&added, b"second").expect("7z conflict fixture should be updated");
+        operation::start_archive_add(
+            None,
+            vec![added.to_string_lossy().into_owned()],
+            archive_path.to_string_lossy().into_owned(),
+            "nested".to_string(),
+            ConflictDecision::Overwrite,
+        )
+        .expect("7z archive overwrite should start");
+        let extract_dir = fixture.root.join("7z-add-extract");
+        fs::create_dir_all(&extract_dir).expect("7z extract directory should exist");
+        operation::start_archive_extract(
+            None,
+            archive_path.to_string_lossy().into_owned(),
+            extract_dir.to_string_lossy().into_owned(),
+            None,
+            ConflictDecision::Overwrite,
+            Some(vec!["nested/added-7z.txt".to_string()]),
+            Some("nested".to_string()),
+        )
+        .expect("7z archive-added entry should extract");
+        assert_eq!(
+            fs::read(extract_dir.join("added-7z.txt")).expect("overwritten 7z entry should exist"),
+            b"second"
+        );
     }
 
     fn command_available(command: &str) -> bool {

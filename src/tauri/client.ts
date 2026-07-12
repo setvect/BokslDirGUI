@@ -38,6 +38,7 @@ export const COMMANDS = {
   archiveList: 'archive_list',
   archiveCreate: 'archive_create',
   archiveExtract: 'archive_extract',
+  archiveAdd: 'archive_add',
   openDefault: 'open_default',
   revealInManager: 'reveal_in_manager',
   openExternalEditor: 'open_external_editor',
@@ -106,6 +107,7 @@ export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.archiveList,
   COMMANDS.archiveCreate,
   COMMANDS.archiveExtract,
+  COMMANDS.archiveAdd,
   COMMANDS.openDefault,
   COMMANDS.revealInManager,
   COMMANDS.openExternalEditor,
@@ -208,6 +210,8 @@ export const tauriClient = {
     invokeCommand<OperationStarted>(COMMANDS.archiveCreate, input),
   archiveExtract: (input: { archivePath: string; targetDir: string; password?: string; policy: ConflictDecision; entries?: string[]; stripPrefix?: string }) =>
     invokeCommand<OperationStarted>(COMMANDS.archiveExtract, input),
+  archiveAdd: (input: { sources: string[]; archivePath: string; targetInnerDir: string; policy: ConflictDecision }) =>
+    invokeCommand<OperationStarted>(COMMANDS.archiveAdd, input),
   openDefault: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openDefault, input),
   revealInManager: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.revealInManager, input),
   openExternalEditor: (input: { path: string; editorId?: string }) =>

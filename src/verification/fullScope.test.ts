@@ -26,6 +26,7 @@ describe('full-scope verification harness', () => {
     expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.archiveAdd)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.prepareShellCommand)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.runShellCommand)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.openDefault)).toBe(true);

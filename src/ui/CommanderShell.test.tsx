@@ -778,6 +778,15 @@ describe('CommanderShell', () => {
         }]),
       },
     });
+    const listDirSpy = vi.spyOn(dataSource, 'listDir');
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      archiveList: vi.fn(async () => ({
+        ok: true as const,
+        data: { archivePath, encrypted: false, entries: [] },
+      })),
+    };
     const operationClient = {
       startCopy: vi.fn(),
       startMove: vi.fn(),
@@ -786,9 +795,10 @@ describe('CommanderShell', () => {
       cancelOperation: vi.fn(),
       resolveConflict: vi.fn(),
     };
-    render(
+    const { container } = render(
       <CommanderShell
         dataSource={dataSource}
+        mutationClient={mutationClient}
         operationClient={operationClient}
         initialFocusIndex={{ right: 0 }}
         initialSelectedPaths={{ right: [archiveFile] }}
@@ -805,6 +815,268 @@ describe('CommanderShell', () => {
       stripPrefix: 'BokslAsset',
     }));
     expect(operationClient.startCopy).not.toHaveBeenCalled();
+
+    act(() => useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-archive-copy',
+      kind: 'archiveExtract',
+      state: 'completed',
+      completedFiles: 1,
+      failedFiles: 0,
+      skippedFiles: 0,
+      errors: [],
+    }));
+
+    await waitFor(() => expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(0));
+    await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
+      panelId: 'left',
+      path: leftPath,
+    })));
+    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath }));
+
+  });
+
+  it('copies a selected archive directory to the opposite normal panel', async () => {
+    const user = userEvent.setup();
+    const archivePath = '/tmp/archive.zip';
+    const archiveDirectory = `${archivePath}:/BokslAsset/docs`;
+    const leftPath = '/tmp/target';
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', leftPath, []),
+        right: createDirectoryListing('right', `${archivePath}:/BokslAsset`, [{
+          ...testEntry(`${archivePath}:/BokslAsset`, 'docs'),
+          path: archiveDirectory,
+          kind: 'directory',
+          sizeBytes: null,
+        }]),
+      },
+    });
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveExtract: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-directory-copy', kind: 'archiveExtract' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={dataSource}
+        operationClient={operationClient}
+        initialFocusIndex={{ right: 0 }}
+        initialSelectedPaths={{ right: [archiveDirectory] }}
+      />,
+    );
+
+    await user.keyboard('y');
+
+    await waitFor(() => expect(operationClient.archiveExtract).toHaveBeenCalledWith({
+      archivePath,
+      targetDir: leftPath,
+      policy: 'skip',
+      entries: ['BokslAsset/docs'],
+      stripPrefix: 'BokslAsset',
+    }));
+  });
+
+  it('copies multiple selected archive entries in one extract operation', async () => {
+    const user = userEvent.setup();
+    const archivePath = '/tmp/archive.zip';
+    const currentArchivePath = `${archivePath}:/BokslAsset`;
+    const archiveDirectory = `${currentArchivePath}/docs`;
+    const archiveFile = `${currentArchivePath}/README.md`;
+    const leftPath = '/tmp/target';
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', leftPath, []),
+        right: createDirectoryListing('right', currentArchivePath, [
+          {
+            ...testEntry(currentArchivePath, 'docs'),
+            path: archiveDirectory,
+            kind: 'directory',
+            sizeBytes: null,
+          },
+          {
+            ...testEntry(currentArchivePath, 'README.md'),
+            path: archiveFile,
+          },
+        ]),
+      },
+    });
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveExtract: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-multi-copy', kind: 'archiveExtract' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    render(
+      <CommanderShell
+        dataSource={dataSource}
+        operationClient={operationClient}
+        initialFocusIndex={{ right: 0 }}
+        initialSelectedPaths={{ right: [archiveDirectory, archiveFile] }}
+      />,
+    );
+
+    await user.keyboard('y');
+
+    await waitFor(() => expect(operationClient.archiveExtract).toHaveBeenCalledWith({
+      archivePath,
+      targetDir: leftPath,
+      policy: 'skip',
+      entries: ['BokslAsset/docs', 'BokslAsset/README.md'],
+      stripPrefix: 'BokslAsset',
+    }));
+  });
+
+  it('copies normal entries into an archive virtual directory through archive_add', async () => {
+    const user = userEvent.setup();
+    const archivePath = '/tmp/archive.zip';
+    const archiveTarget = `${archivePath}:/BokslAsset`;
+    const sourcePath = '/tmp/source';
+    const sourceFile = `${sourcePath}/README.md`;
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', archiveTarget, []),
+        right: createDirectoryListing('right', sourcePath, [{
+          ...testEntry(sourcePath, 'README.md'),
+          path: sourceFile,
+          sizeBytes: 2048,
+        }]),
+      },
+    });
+    vi.mocked(dataSource.listDir).mockImplementation(async (input) => ({
+      ok: true as const,
+      data: createDirectoryListing(input.panelId, input.path, input.path === sourcePath ? [{
+        ...testEntry(sourcePath, 'README.md'),
+        path: sourceFile,
+      }] : [], input.sort, input.filter, 4),
+    }));
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      archiveList: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          archivePath,
+          encrypted: false,
+          entries: [],
+        },
+      })),
+    };
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveAdd: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-add', kind: 'archiveAdd' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={dataSource}
+        mutationClient={mutationClient}
+        operationClient={operationClient}
+        initialFocusIndex={{ right: 0 }}
+        initialSelectedPaths={{ right: [sourceFile] }}
+      />,
+    );
+
+    await user.keyboard('y');
+
+    await waitFor(() => expect(operationClient.archiveAdd).toHaveBeenCalledWith({
+      sources: [sourceFile],
+      archivePath,
+      targetInnerDir: 'BokslAsset',
+      policy: 'skip',
+    }));
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+
+    act(() => useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-archive-add',
+      kind: 'archiveAdd',
+      state: 'completed',
+      completedFiles: 1,
+      failedFiles: 0,
+      skippedFiles: 0,
+      errors: [],
+    }));
+
+    await waitFor(() => expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(0));
+    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({
+      archivePath,
+    }));
+  });
+
+  it('refreshes the archive target and keeps selection after a cancelled archive_add', async () => {
+    const user = userEvent.setup();
+    const archivePath = '/tmp/archive.zip';
+    const archiveTarget = `${archivePath}:/BokslAsset`;
+    const sourcePath = '/tmp/source';
+    const sourceFile = `${sourcePath}/README.md`;
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', archiveTarget, []),
+        right: createDirectoryListing('right', sourcePath, [{
+          ...testEntry(sourcePath, 'README.md'),
+          path: sourceFile,
+        }]),
+      },
+    });
+    vi.mocked(dataSource.listDir).mockImplementation(async (input) => ({
+      ok: true as const,
+      data: createDirectoryListing(input.panelId, input.path, input.path === sourcePath ? [{
+        ...testEntry(sourcePath, 'README.md'),
+        path: sourceFile,
+      }] : [], input.sort, input.filter, 4),
+    }));
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      archiveList: vi.fn(async () => ({
+        ok: true as const,
+        data: { archivePath, encrypted: false, entries: [] },
+      })),
+    };
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveAdd: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-add-cancelled', kind: 'archiveAdd' as const, state: 'queued' as const } })),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={dataSource}
+        mutationClient={mutationClient}
+        operationClient={operationClient}
+        initialFocusIndex={{ right: 0 }}
+        initialSelectedPaths={{ right: [sourceFile] }}
+      />,
+    );
+
+    await user.keyboard('y');
+    await waitFor(() => expect(operationClient.archiveAdd).toHaveBeenCalled());
+
+    act(() => useOperationStore.getState().applyOperationSummary({
+      operationId: 'op-archive-add-cancelled',
+      kind: 'archiveAdd',
+      state: 'cancelled',
+      completedFiles: 1,
+      failedFiles: 0,
+      skippedFiles: 0,
+      errors: [],
+    }));
+
+    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath }));
+    expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(1);
   });
 
   it('refreshes both panels when a partially completed copy is cancelled', async () => {

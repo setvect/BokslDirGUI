@@ -43,6 +43,7 @@ describe('Tauri command names', () => {
       'archive_list',
       'archive_create',
       'archive_extract',
+      'archive_add',
       'open_default',
       'reveal_in_manager',
       'open_external_editor',
@@ -57,6 +58,7 @@ describe('Tauri command names', () => {
     expect(isBackendImplementedCommand(COMMANDS.startCopy)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(true);
+    expect(isBackendImplementedCommand(COMMANDS.archiveAdd)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.openDefault)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.saveSettings)).toBe(true);
   });

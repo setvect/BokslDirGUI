@@ -480,7 +480,7 @@ addCheck(
 const rustLib = read('src-tauri/src/lib.rs');
 const rustOperation = read('src-tauri/src/operation.rs');
 const rustBackend = `${rustLib}\n${rustOperation}`;
-for (const command of ['list_dir', 'get_metadata', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'open_default', 'reveal_in_manager', 'open_external_editor', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
+for (const command of ['list_dir', 'get_metadata', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'reveal_in_manager', 'open_external_editor', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
   addCheck(`rust handler includes ${command}`, rustBackend.includes(command), 'read-only command bridge');
 }
 addCheck('rust list_dir normalizes filter once', rustBackend.includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
@@ -490,7 +490,7 @@ addCheck('rust rename uses no-replace abstraction', rustBackend.includes('rename
 addCheck('rust operation service emits progress and summary events', rustBackend.includes('operation_progress') && rustBackend.includes('operation_summary') && rustBackend.includes('operation_conflict'), 'long-running operation state must be observable by the GUI');
 addCheck('rust operation service implements copy move delete trash policies', rustBackend.includes('start_copy') && rustBackend.includes('start_move') && rustBackend.includes('DeleteMode::Trash') && rustBackend.includes('PERMANENT_DELETE'), 'copy/move/delete/trash must be real backend commands with safety policies');
 addCheck('rust trash does not fall back to permanent delete', rustBackend.includes('errors.trashUnsupported') && rustBackend.includes('trash_directory'), 'trash failure must be recoverable and must not silently remove files permanently');
-addCheck('rust archive commands use safe external provider boundary', rustBackend.includes('archive_entry_is_unsafe') && rustBackend.includes('common_source_parent') && rustBackend.includes('errors.archiveProviderUnavailable'), 'archive create/extract/list must avoid unsafe paths and absolute source entries');
+addCheck('rust archive commands use safe external provider boundary', rustBackend.includes('archive_entry_is_unsafe') && rustBackend.includes('common_source_parent') && rustBackend.includes('start_archive_add') && rustBackend.includes('errors.archiveProviderUnavailable'), 'archive create/extract/add/list must avoid unsafe paths and absolute source entries');
 addCheck('rust shell command is gated by settings and one-shot token', rustBackend.includes('ShellCommandPolicy') && rustBackend.includes('consume_token') && rustBackend.includes('used = true'), 'shell command must stay disabled by default and require a confirm token');
 addCheck('rust settings persist bookmarks and layout', rustBackend.includes('BOKSLDIRGUI_SETTINGS_PATH') && rustBackend.includes('validate_settings') && rustBackend.includes('layout.ratio'), 'settings must persist bookmark/layout GUI state safely');
 
@@ -533,7 +533,7 @@ for (const token of ['TauriResult', 'BACKEND_IMPLEMENTED_COMMANDS', 'unsupported
 }
 addCheck('tauri client marks safe mutation handlers implemented', tauriClient.includes('COMMANDS.createDir') && tauriClient.includes('COMMANDS.renameEntry'), 'create_dir/rename_entry frontend capability must match Rust handler registration');
 addCheck('tauri client marks long-running operation handlers implemented', tauriClient.includes('COMMANDS.startCopy') && tauriClient.includes('COMMANDS.startMove') && tauriClient.includes('COMMANDS.startDelete') && tauriClient.includes('listenOperationEvents'), 'copy/move/delete/trash frontend capability must match Rust handler registration and event stream');
-addCheck('tauri client marks archive/external/shell/settings implemented', tauriClient.includes('COMMANDS.archiveCreate') && tauriClient.includes('COMMANDS.openDefault') && tauriClient.includes('COMMANDS.prepareShellCommand') && tauriClient.includes('COMMANDS.saveSettings'), 'remaining command wrappers must match Rust handler registration');
+addCheck('tauri client marks archive/external/shell/settings implemented', tauriClient.includes('COMMANDS.archiveCreate') && tauriClient.includes('COMMANDS.archiveAdd') && tauriClient.includes('COMMANDS.openDefault') && tauriClient.includes('COMMANDS.prepareShellCommand') && tauriClient.includes('COMMANDS.saveSettings'), 'remaining command wrappers must match Rust handler registration');
 
 const panelState = read('src/ui/panelState.ts');
 const panelDataSource = read('src/ui/panelDataSource.ts');
@@ -555,7 +555,7 @@ for (const token of ['createActionContext', 'filterEnabledActions', 'blocksVirtu
 }
 
 const fullScopeTest = read('src/verification/fullScope.test.ts');
-for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.prepareShellCommand', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.list']) {
+for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.archiveAdd', 'COMMANDS.prepareShellCommand', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.list']) {
   addCheck(`full-scope test covers ${token}`, fullScopeTest.includes(token), 'Semantic verification beyond static smoke');
 }
 

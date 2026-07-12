@@ -8,7 +8,8 @@ export type OperationKind =
   | 'rename'
   | 'createDir'
   | 'archiveCreate'
-  | 'archiveExtract';
+  | 'archiveExtract'
+  | 'archiveAdd';
 export type OperationState =
   | 'idle'
   | 'validating'

@@ -174,6 +174,7 @@ interface LongRunningOperationClient {
   startDelete(input: { targets: string[]; mode: 'trash' | 'permanent'; confirmToken?: string }): ReturnType<typeof tauriClient.startDelete>;
   archiveCreate?(input: { sources: string[]; targetArchive: string; format: string; password?: string }): ReturnType<typeof tauriClient.archiveCreate>;
   archiveExtract?(input: { archivePath: string; targetDir: string; password?: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel'; entries?: string[]; stripPrefix?: string }): ReturnType<typeof tauriClient.archiveExtract>;
+  archiveAdd?(input: { sources: string[]; archivePath: string; targetInnerDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.archiveAdd>;
   cancelOperation(input: { operationId: string }): ReturnType<typeof tauriClient.cancelOperation>;
   resolveConflict(input: { operationId: string; decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.resolveConflict>;
 }
@@ -1240,7 +1241,14 @@ export function CommanderShell({
       const archiveCopyPlan = actionId === 'file.copy'
         ? archiveCopyPlanForSources(sources, panelListing.path, operationTargetDir)
         : null;
+      const archiveAddPlan = actionId === 'file.copy'
+        ? archiveAddPlanForTarget(sources, operationTargetDir)
+        : null;
       if (actionId === 'file.copy' && sources.some((source) => isArchiveVirtualPath(source.path)) && !archiveCopyPlan) {
+        setStatusMessage(statusText.virtualOperationTargetUnavailable(labelForAction(action, settings.language)));
+        return;
+      }
+      if (actionId === 'file.copy' && isArchiveVirtualPath(operationTargetDir) && !archiveAddPlan) {
         setStatusMessage(statusText.virtualOperationTargetUnavailable(labelForAction(action, settings.language)));
         return;
       }
@@ -1253,6 +1261,8 @@ export function CommanderShell({
         atomicExecutor: atomicExecutorForAction(actionId, mutationClient, settings),
         longRunningExecutor: archiveCopyPlan
           ? archiveCopyExecutorForPlan(archiveCopyPlan, operationClient)
+          : archiveAddPlan
+            ? archiveAddExecutorForPlan(archiveAddPlan, operationClient)
           : longRunningExecutorForAction(actionId, operationClient),
         cancelExecutor: (operationId: string) => operationClient.cancelOperation({ operationId }),
         conflictResolver: (operationId: string, decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel') => operationClient.resolveConflict({ operationId, decision }),
@@ -2807,6 +2817,11 @@ interface ArchiveCopyPlan {
   stripPrefix: string;
 }
 
+interface ArchiveAddPlan {
+  archivePath: string;
+  targetInnerDir: string;
+}
+
 const archiveCopyPlanForSources = (
   sources: readonly FileEntry[],
   workingDir: string,
@@ -2827,6 +2842,20 @@ const archiveCopyPlanForSources = (
     archivePath: workingArchive.archivePath,
     entries: [...new Set(parsedSources.map((source) => source?.innerPath).filter(Boolean) as string[])],
     stripPrefix: workingArchive.innerPath,
+  };
+};
+
+const archiveAddPlanForTarget = (
+  sources: readonly FileEntry[],
+  targetDir: string,
+): ArchiveAddPlan | null => {
+  const target = parseArchiveVirtualPath(targetDir);
+  if (!target || sources.length === 0 || sources.some((source) => source.isVirtual || isArchiveVirtualPath(source.path))) {
+    return null;
+  }
+  return {
+    archivePath: target.archivePath,
+    targetInnerDir: target.innerPath,
   };
 };
 
@@ -3424,6 +3453,16 @@ const archiveCopyExecutorForPlan = (
   entries: plan.entries,
   stripPrefix: plan.stripPrefix,
 }) : unsupportedClientResult('archive_extract', dialog.targetDir);
+
+const archiveAddExecutorForPlan = (
+  plan: ArchiveAddPlan,
+  operationClient: LongRunningOperationClient,
+): LongRunningOperationExecutor => (dialog) => operationClient.archiveAdd ? operationClient.archiveAdd({
+  sources: dialog.sources.map((source) => source.path),
+  archivePath: plan.archivePath,
+  targetInnerDir: plan.targetInnerDir,
+  policy: dialog.defaultDecision,
+}) : unsupportedClientResult('archive_add', dialog.targetDir);
 
 const unsupportedClientResult = async (command: string, path: string | null) => ({
   ok: false as const,

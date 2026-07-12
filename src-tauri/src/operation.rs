@@ -374,6 +374,72 @@ pub(super) fn start_archive_extract(
     Ok(started)
 }
 
+pub(super) fn start_archive_add(
+    app: Option<&tauri::AppHandle>,
+    sources: Vec<String>,
+    archive_path: String,
+    target_inner_dir: String,
+    policy: ConflictDecision,
+) -> CommandResult<OperationStarted> {
+    let operation_id = next_operation_id(OperationKind::ArchiveAdd);
+    register_operation(&operation_id);
+    let started = OperationStarted {
+        operation_id: operation_id.clone(),
+        kind: OperationKind::ArchiveAdd,
+        state: OperationState::Queued,
+    };
+    if let Some(app) = app {
+        let app = app.clone();
+        thread::spawn({
+            let operation_id = operation_id.clone();
+            move || {
+                emit_state(
+                    Some(&app),
+                    &operation_id,
+                    OperationKind::ArchiveAdd,
+                    OperationState::Validating,
+                    None,
+                    0,
+                    0,
+                    None,
+                );
+                let summary = run_archive_add(
+                    Some(&app),
+                    &operation_id,
+                    sources,
+                    archive_path,
+                    target_inner_dir,
+                    policy,
+                );
+                emit_summary(Some(&app), &summary);
+                finish_operation(&operation_id);
+            }
+        });
+    } else {
+        emit_state(
+            app,
+            &operation_id,
+            OperationKind::ArchiveAdd,
+            OperationState::Validating,
+            None,
+            0,
+            0,
+            None,
+        );
+        let summary = run_archive_add(
+            app,
+            &operation_id,
+            sources,
+            archive_path,
+            target_inner_dir,
+            policy,
+        );
+        emit_summary(app, &summary);
+        finish_operation(&operation_id);
+    }
+    Ok(started)
+}
+
 pub(super) fn cancel_operation(operation_id: String) -> CommandResult<CancelAck> {
     let registered = {
         let mut guard = cancelled_registry()
@@ -1117,6 +1183,263 @@ fn run_archive_extract(
     }
 }
 
+fn run_archive_add(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    source_paths: Vec<String>,
+    archive_path: String,
+    target_inner_dir: String,
+    policy: ConflictDecision,
+) -> OperationSummary {
+    let kind = OperationKind::ArchiveAdd;
+    if archive_entry_is_unsafe(&target_inner_dir) {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new(
+                "unsafe_archive_entry",
+                "errors.archiveUnsafePath",
+                Some(Path::new(&archive_path)),
+                true,
+            )
+            .with_detail("entry", target_inner_dir),
+        );
+    }
+    let target_inner_dir = normalize_archive_entry(&target_inner_dir);
+    let archive = match navigation::canonical_existing_path(&archive_path) {
+        Ok(path) => path,
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
+    let extension = archive
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase);
+    if !matches!(extension.as_deref(), Some("zip" | "7z")) {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new(
+                "unsupported",
+                "errors.archiveFormatUnsupported",
+                Some(&archive),
+                true,
+            ),
+        );
+    }
+    let sources = match collect_source_paths(&source_paths) {
+        Ok(paths) => paths,
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
+
+    let mut source_work_counts = Vec::with_capacity(sources.len());
+    let mut total_files = 0_u64;
+    let mut total_bytes = 0_u64;
+    for source in &sources {
+        let mut work = Vec::new();
+        let mut source_bytes = 0_u64;
+        if let Err(error) = scan_work(source, Path::new(""), &mut work, &mut source_bytes) {
+            return error_summary(operation_id, kind, error);
+        }
+        let count = work.len() as u64;
+        source_work_counts.push(count);
+        total_files = total_files.saturating_add(count);
+        total_bytes = total_bytes.saturating_add(source_bytes);
+    }
+    let mut stats = OperationStats::new(total_files, total_bytes);
+    emit_progress(
+        app,
+        operation_id,
+        kind,
+        OperationState::Scanning,
+        &stats,
+        Some(&archive),
+    );
+    if is_cancelled(operation_id) {
+        return cancel_summary(operation_id, kind, &stats);
+    }
+
+    let mut archive_entries = match list_archive_entry_names_for_operation(operation_id, &archive) {
+        Ok(entries) => entries,
+        Err(error) if is_operation_cancelled_error(&error) => {
+            return cancel_summary(operation_id, kind, &stats)
+        }
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
+    if let Some(unsafe_entry) = archive_entries
+        .iter()
+        .find(|entry| archive_entry_is_unsafe(entry))
+    {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new(
+                "unsafe_archive_entry",
+                "errors.archiveUnsafePath",
+                Some(&archive),
+                true,
+            )
+            .with_detail("entry", unsafe_entry),
+        );
+    }
+
+    let staging = match unique_archive_add_staging_dir(operation_id) {
+        Ok(path) => path,
+        Err(error) => return error_summary(operation_id, kind, error),
+    };
+    let mut roots_to_add = Vec::new();
+    let mut entries_to_delete = Vec::new();
+    for (source, source_work_count) in sources.iter().zip(source_work_counts.iter().copied()) {
+        if is_cancelled(operation_id) {
+            let _ = fs::remove_dir_all(&staging);
+            return cancel_summary(operation_id, kind, &stats);
+        }
+        let Some(source_name) = source.file_name().and_then(|value| value.to_str()) else {
+            let _ = fs::remove_dir_all(&staging);
+            return error_summary(
+                operation_id,
+                kind,
+                AppError::new("invalid_path", "errors.invalidPath", Some(source), true),
+            );
+        };
+        let destination_entry = if target_inner_dir.is_empty() {
+            source_name.to_string()
+        } else {
+            format!("{target_inner_dir}/{source_name}")
+        };
+        if archive_entry_is_unsafe(&destination_entry) {
+            let _ = fs::remove_dir_all(&staging);
+            return error_summary(
+                operation_id,
+                kind,
+                AppError::new(
+                    "unsafe_archive_entry",
+                    "errors.archiveUnsafePath",
+                    Some(&archive),
+                    true,
+                )
+                .with_detail("entry", destination_entry),
+            );
+        }
+
+        let conflicting_entries = archive_conflicting_entries(&archive_entries, &destination_entry);
+        if !conflicting_entries.is_empty() {
+            let decision = handle_archive_conflict(
+                app,
+                operation_id,
+                source,
+                &archive,
+                &destination_entry,
+                policy,
+                &stats,
+                kind,
+            );
+            match decision {
+                ConflictDecision::Skip | ConflictDecision::AllSkip => {
+                    stats.skipped_files = stats.skipped_files.saturating_add(source_work_count);
+                    continue;
+                }
+                ConflictDecision::Cancel => {
+                    let _ = fs::remove_dir_all(&staging);
+                    return cancel_summary(operation_id, kind, &stats);
+                }
+                ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {
+                    let removed: HashSet<String> = conflicting_entries
+                        .iter()
+                        .map(|entry| normalize_archive_entry(entry))
+                        .collect();
+                    entries_to_delete.extend(conflicting_entries);
+                    archive_entries
+                        .retain(|entry| !removed.contains(&normalize_archive_entry(entry)));
+                }
+            }
+        }
+
+        let staged_destination = staging.join(Path::new(&destination_entry));
+        if let Err(error) = copy_tree_to_destination(
+            app,
+            operation_id,
+            source,
+            &staged_destination,
+            &mut stats,
+            kind,
+        ) {
+            let _ = fs::remove_dir_all(&staging);
+            return if is_operation_cancelled_error(&error) {
+                cancel_summary(operation_id, kind, &stats)
+            } else {
+                error_summary(operation_id, kind, error)
+            };
+        }
+        roots_to_add.push(destination_entry);
+    }
+
+    if roots_to_add.is_empty() {
+        let _ = fs::remove_dir_all(&staging);
+        emit_progress(
+            app,
+            operation_id,
+            kind,
+            OperationState::Completed,
+            &stats,
+            Some(&archive),
+        );
+        return summary_from_stats(operation_id, kind, &stats);
+    }
+
+    entries_to_delete.sort();
+    entries_to_delete.dedup();
+    let backup = if entries_to_delete.is_empty() {
+        None
+    } else {
+        let backup = staging.join(".archive-backup");
+        if let Err(error) = fs::copy(&archive, &backup) {
+            let _ = fs::remove_dir_all(&staging);
+            return error_summary(operation_id, kind, map_io_error(error, Some(&archive)));
+        }
+        Some(backup)
+    };
+    if let Err(error) = run_archive_delete_entries(operation_id, &archive, &entries_to_delete) {
+        let _ = restore_archive_backup(backup.as_deref(), &archive);
+        let _ = fs::remove_dir_all(&staging);
+        return if is_operation_cancelled_error(&error) {
+            cancel_summary(operation_id, kind, &stats)
+        } else {
+            error_summary(operation_id, kind, error)
+        };
+    }
+    let add_result = run_archive_add_entries(operation_id, &archive, &staging, &roots_to_add);
+    if add_result.is_err() {
+        let _ = restore_archive_backup(backup.as_deref(), &archive);
+    }
+    let _ = fs::remove_dir_all(&staging);
+    match add_result {
+        Ok(()) => {
+            emit_progress(
+                app,
+                operation_id,
+                kind,
+                OperationState::Completed,
+                &stats,
+                Some(&archive),
+            );
+            summary_from_stats(operation_id, kind, &stats)
+        }
+        Err(error) if is_operation_cancelled_error(&error) => {
+            cancel_summary(operation_id, kind, &stats)
+        }
+        Err(error) => error_summary(operation_id, kind, error),
+    }
+}
+
+fn restore_archive_backup(backup: Option<&Path>, archive: &Path) -> CommandResult<()> {
+    let Some(backup) = backup else {
+        return Ok(());
+    };
+    fs::copy(backup, archive)
+        .map(|_| ())
+        .map_err(|error| map_io_error(error, Some(archive)))
+}
+
 fn run_zip_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
     let zip = external_binary("zip").ok_or_else(|| {
         AppError::new(
@@ -1492,6 +1815,149 @@ fn unique_archive_extract_staging_dir(operation_id: &str) -> CommandResult<PathB
     Ok(base)
 }
 
+fn unique_archive_add_staging_dir(operation_id: &str) -> CommandResult<PathBuf> {
+    let base = env::temp_dir().join(format!(
+        "boksldir-gui-archive-add-{}-{}",
+        operation_id,
+        unix_millis()
+    ));
+    fs::create_dir_all(&base).map_err(|error| map_io_error(error, Some(&base)))?;
+    Ok(base)
+}
+
+fn archive_conflicting_entries(entries: &[String], destination: &str) -> Vec<String> {
+    let destination = normalize_archive_entry(destination);
+    let prefix = format!("{destination}/");
+    entries
+        .iter()
+        .filter(|entry| {
+            let normalized = normalize_archive_entry(entry);
+            normalized == destination || normalized.starts_with(&prefix)
+        })
+        .cloned()
+        .collect()
+}
+
+fn run_archive_delete_entries(
+    operation_id: &str,
+    archive: &Path,
+    entries: &[String],
+) -> CommandResult<()> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    match archive
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("zip") => {
+            let zip = external_binary("zip").ok_or_else(|| {
+                AppError::new(
+                    "unsupported",
+                    "errors.archiveProviderUnavailable",
+                    Some(archive),
+                    true,
+                )
+                .with_detail("provider", "zip")
+            })?;
+            let mut command = Command::new(zip);
+            command.arg("-d").arg("-q").arg(archive);
+            for entry in entries {
+                command.arg(entry);
+            }
+            run_external_command(operation_id, command, Some(archive))
+        }
+        Some("7z") => {
+            let seven_zip = external_binary("7zz")
+                .or_else(|| external_binary("7z"))
+                .ok_or_else(|| {
+                    AppError::new(
+                        "unsupported",
+                        "errors.archiveProviderUnavailable",
+                        Some(archive),
+                        true,
+                    )
+                    .with_detail("provider", "7z")
+                })?;
+            let mut command = Command::new(seven_zip);
+            command.arg("d").arg("-y").arg(archive);
+            for entry in entries {
+                command.arg(entry);
+            }
+            run_external_command(operation_id, command, Some(archive))
+        }
+        _ => Err(AppError::new(
+            "unsupported",
+            "errors.archiveFormatUnsupported",
+            Some(archive),
+            true,
+        )),
+    }
+}
+
+fn run_archive_add_entries(
+    operation_id: &str,
+    archive: &Path,
+    staging: &Path,
+    entries: &[String],
+) -> CommandResult<()> {
+    match archive
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("zip") => {
+            let zip = external_binary("zip").ok_or_else(|| {
+                AppError::new(
+                    "unsupported",
+                    "errors.archiveProviderUnavailable",
+                    Some(archive),
+                    true,
+                )
+                .with_detail("provider", "zip")
+            })?;
+            let mut command = Command::new(zip);
+            command
+                .current_dir(staging)
+                .arg("-r")
+                .arg("-q")
+                .arg(archive);
+            for entry in entries {
+                command.arg(entry);
+            }
+            run_external_command(operation_id, command, Some(archive))
+        }
+        Some("7z") => {
+            let seven_zip = external_binary("7zz")
+                .or_else(|| external_binary("7z"))
+                .ok_or_else(|| {
+                    AppError::new(
+                        "unsupported",
+                        "errors.archiveProviderUnavailable",
+                        Some(archive),
+                        true,
+                    )
+                    .with_detail("provider", "7z")
+                })?;
+            let mut command = Command::new(seven_zip);
+            command.current_dir(staging).arg("a").arg("-y").arg(archive);
+            for entry in entries {
+                command.arg(entry);
+            }
+            run_external_command(operation_id, command, Some(archive))
+        }
+        _ => Err(AppError::new(
+            "unsupported",
+            "errors.archiveFormatUnsupported",
+            Some(archive),
+            true,
+        )),
+    }
+}
+
 fn unix_millis() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1678,11 +2144,11 @@ fn external_binary(name: &str) -> Option<String> {
 }
 
 fn archive_entry_is_unsafe(entry: &str) -> bool {
-    let path = Path::new(entry);
-    path.is_absolute()
-        || path
-            .components()
-            .any(|component| matches!(component, std::path::Component::ParentDir))
+    let normalized = entry.replace('\\', "/");
+    let bytes = normalized.as_bytes();
+    normalized.starts_with('/')
+        || bytes.get(1) == Some(&b':')
+        || normalized.split('/').any(|component| component == "..")
         || entry.contains('\0')
 }
 
@@ -1705,6 +2171,23 @@ pub(super) fn archive_create_summary_for_test(
         target_archive,
         format,
         password,
+    )
+}
+
+#[cfg(test)]
+pub(super) fn archive_add_summary_for_test(
+    sources: Vec<String>,
+    archive_path: String,
+    target_inner_dir: String,
+    policy: ConflictDecision,
+) -> OperationSummary {
+    run_archive_add(
+        None,
+        "archive-add-test",
+        sources,
+        archive_path,
+        target_inner_dir,
+        policy,
     )
 }
 
@@ -2069,6 +2552,87 @@ fn handle_conflict(
     }
 }
 
+fn handle_archive_conflict(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    source: &Path,
+    archive: &Path,
+    destination_entry: &str,
+    policy: ConflictDecision,
+    stats: &OperationStats,
+    kind: OperationKind,
+) -> ConflictDecision {
+    if app.is_none() {
+        return policy;
+    }
+    if let Some(decision) = conflict_apply_all_decision(operation_id, policy) {
+        return decision;
+    }
+    if let Ok(source_entry) = file_entry_from_path(source, false) {
+        let name = destination_entry
+            .rsplit('/')
+            .next()
+            .unwrap_or(destination_entry)
+            .to_string();
+        let destination = FileEntry {
+            path: format!("{}:/{}", display_path(archive), destination_entry),
+            name: name.clone(),
+            kind: source_entry.kind.clone(),
+            size_bytes: None,
+            modified_at: None,
+            created_at: None,
+            permissions: None,
+            owner: None,
+            group: None,
+            is_hidden: name.starts_with('.'),
+            is_virtual: false,
+        };
+        emit_conflict(
+            app,
+            ConflictPrompt {
+                operation_id: operation_id.to_string(),
+                source: source_entry,
+                destination,
+                default_decision: policy,
+                available_decisions: vec![
+                    ConflictDecision::Overwrite,
+                    ConflictDecision::Skip,
+                    ConflictDecision::AllOverwrite,
+                    ConflictDecision::AllSkip,
+                    ConflictDecision::Cancel,
+                ],
+            },
+        );
+        emit_progress(
+            app,
+            operation_id,
+            kind,
+            OperationState::WaitingForConflict,
+            stats,
+            Some(source),
+        );
+    }
+    wait_for_conflict_decision(operation_id, policy)
+}
+
+fn conflict_apply_all_decision(
+    operation_id: &str,
+    default_decision: ConflictDecision,
+) -> Option<ConflictDecision> {
+    if matches!(
+        default_decision,
+        ConflictDecision::AllOverwrite | ConflictDecision::AllSkip
+    ) {
+        return Some(default_decision);
+    }
+    conflict_registry()
+        .0
+        .lock()
+        .expect("conflict registry lock should not be poisoned")
+        .get(operation_id)
+        .and_then(|state| state.apply_all_decision)
+}
+
 fn same_path(left: &Path, right: &Path) -> bool {
     match (left.canonicalize(), right.canonicalize()) {
         (Ok(left), Ok(right)) => left == right,
@@ -2263,6 +2827,7 @@ fn next_operation_id(kind: OperationKind) -> String {
         OperationKind::CreateDir => "create-dir",
         OperationKind::ArchiveCreate => "archive-create",
         OperationKind::ArchiveExtract => "archive-extract",
+        OperationKind::ArchiveAdd => "archive-add",
     };
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -73,7 +73,7 @@
 | `toggle_layout` | Ctrl+W | View > Toggle Layout | `layout.toggleSingleDual` | implemented | P1 | Ctrl+W와 View > Toggle Layout가 settings.layout.singlePanel을 저장하고 단일/듀얼 패널 표시를 즉시 반영한다. |
 | `tab_new` | tn | - | `tab.new` | implemented | P1 | tn으로 현재 패널 경로를 tab 목록에 추가하고 Tab List overlay에서 확인한다. |
 | `tab_close` | tx | - | `tab.close` | implemented | P1 | tx로 현재 패널 tab 목록의 마지막 항목을 닫고 Tab List overlay에서 제거 상태를 확인한다. |
-| `copy` | y | Edit > Copy | `file.copy` | implemented | P0 | TUI Edit > Copy 메뉴와 y 단축키를 맞췄고, 선택이 없으면 포커스 항목을 대상으로 no-conflict copy를 확인 다이얼로그 없이 즉시 시작한다. 충돌은 독립 non-modal 상태/해결 UI로 처리하며 Rust start_copy no-silent-overwrite 안전성을 유지한다. |
+| `copy` | y | Edit > Copy | `file.copy` | implemented | P0 | 선택이 없으면 포커스 항목을 대상으로 확인 다이얼로그 없이 즉시 시작한다. 일반→일반은 `start_copy`, 압축 내부→일반은 선택 entry 기반 `archive_extract`, 일반→압축 내부는 `archive_add`로 라우팅하며 공통 충돌/취소/패널 refresh 정책을 적용한다. |
 | `move` | x | Edit > Move | `file.move` | implemented | P0 | TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation을 시작한다. 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리한다. |
 | `open_default` | o | File > Open Default App | `external.openDefault` | implemented | P1 | o/File > Open Default App가 선택 파일을 OS 기본 앱 command boundary로 전달하고, recoverable backend error는 dialog/status로 표시된다. |
 | `open_terminal_editor` | e | File > Open Terminal Editor | `external.openEditor` | implemented | P1 | e/File > Open Terminal Editor는 Settings Default Editor preset 또는 명시 editorId를 사용해 파일을 terminal editor로 연다. |
