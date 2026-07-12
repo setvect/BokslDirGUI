@@ -59,6 +59,8 @@ export interface DirectoryListing {
   sort: SortSpec;
   filter: string | null;
   version: number;
+  totalEntries?: number;
+  truncated?: boolean;
 }
 
 export interface FileMetadata extends FileEntry {
@@ -133,6 +135,8 @@ export interface ArchiveListing {
   archivePath: string;
   entries: FileEntry[];
   encrypted: boolean;
+  totalEntries: number;
+  truncated: boolean;
 }
 
 export interface ActionResult {

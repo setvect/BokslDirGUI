@@ -11,6 +11,7 @@ export interface ActionContextInput {
   shellCommandEnabled: boolean;
   operationBusy: boolean;
   backendAvailable?: boolean;
+  activePathIsArchive?: boolean;
 }
 
 interface ActionTargetPanel {
@@ -75,6 +76,7 @@ export const createActionContext = ({
   shellCommandEnabled,
   operationBusy,
   backendAvailable = true,
+  activePathIsArchive = false,
 }: ActionContextInput): ActionContext => {
   const hasConcreteFocus = hasConcreteFocusOverride ?? Boolean(focusedEntry && !focusedEntry.isVirtual);
   return {
@@ -87,6 +89,7 @@ export const createActionContext = ({
     shellCommandEnabled,
     operationBusy,
     backendAvailable,
+    activePathIsArchive,
   };
 };
 

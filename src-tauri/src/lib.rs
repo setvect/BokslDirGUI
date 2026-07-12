@@ -132,6 +132,8 @@ struct ArchiveListing {
     archive_path: String,
     entries: Vec<FileEntry>,
     encrypted: bool,
+    total_entries: u64,
+    truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -524,8 +526,12 @@ fn resolve_conflict(
 }
 
 #[tauri::command]
-fn archive_list(archive_path: String, password: Option<String>) -> CommandResult<ArchiveListing> {
-    archive::archive_list(&archive_path, password)
+fn archive_list(
+    archive_path: String,
+    password: Option<String>,
+    limit: Option<usize>,
+) -> CommandResult<ArchiveListing> {
+    archive::archive_list(&archive_path, password, limit)
 }
 
 #[tauri::command]
@@ -1097,6 +1103,9 @@ mod external {
 mod archive {
     use super::*;
 
+    const DEFAULT_ARCHIVE_LIST_LIMIT: usize = 50_000;
+    const MAX_ARCHIVE_LIST_LIMIT: usize = 200_000;
+
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct ArchiveEntryInfo {
         path: String,
@@ -1110,36 +1119,40 @@ mod archive {
     pub(super) fn archive_list(
         archive_path: &str,
         password: Option<String>,
+        limit: Option<usize>,
     ) -> CommandResult<ArchiveListing> {
-        if password.as_deref().is_some_and(|value| !value.is_empty()) {
-            return Err(AppError::new(
-                "unsupported",
-                "errors.archivePasswordListUnsupported",
-                None,
-                true,
-            ));
-        }
         let archive = navigation::canonical_existing_path(archive_path)?;
-        let entries = list_archive_entries(&archive)?
+        let password = password.as_deref().filter(|value| !value.is_empty());
+        let (entries, encrypted) = list_archive_entries(&archive, password)?;
+        let total_entries = entries.len() as u64;
+        let limit = limit
+            .unwrap_or(DEFAULT_ARCHIVE_LIST_LIMIT)
+            .clamp(1, MAX_ARCHIVE_LIST_LIMIT);
+        let truncated = entries.len() > limit;
+        let entries = entries
             .iter()
+            .take(limit)
             .map(|entry| archive_entry_for_info(&archive, entry))
             .collect();
         Ok(ArchiveListing {
             archive_path: display_path(&archive),
             entries,
-            encrypted: false,
+            encrypted,
+            total_entries,
+            truncated,
         })
     }
 
-    fn list_archive_entries(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
-        match archive
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(str::to_ascii_lowercase)
-            .as_deref()
-        {
-            Some("zip") => list_zip_entries_with_metadata(archive),
-            Some("7z") => list_7z_entries_with_metadata(archive),
+    fn list_archive_entries(
+        archive: &Path,
+        password: Option<&str>,
+    ) -> CommandResult<(Vec<ArchiveEntryInfo>, bool)> {
+        match archive_format_name(archive).as_deref() {
+            Some("zip" | "jar" | "war") => list_zip_entries_with_metadata(archive, password),
+            Some("7z") => list_7z_entries_with_metadata(archive, password),
+            Some("tar" | "tar.gz" | "tar.zst") => {
+                list_tar_entries_with_metadata(archive).map(|entries| (entries, false))
+            }
             _ => Err(AppError::new(
                 "unsupported",
                 "errors.archiveFormatUnsupported",
@@ -1149,22 +1162,41 @@ mod archive {
         }
     }
 
-    fn list_zip_entries_with_metadata(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
-        let output = Command::new("unzip")
-            .arg("-Z1")
+    fn list_zip_entries_with_metadata(
+        archive: &Path,
+        _password: Option<&str>,
+    ) -> CommandResult<(Vec<ArchiveEntryInfo>, bool)> {
+        let mut names_command = Command::new("unzip");
+        names_command.arg("-Z1");
+        let output = names_command
             .arg(archive)
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
-        let names = parse_zip_name_output(output, archive)?;
+        let names = parse_zip_name_output(output, archive, false)?;
         let detail_output = Command::new("unzip")
             .args(["-Z", "-T", "-l"])
             .arg(archive)
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
-        parse_zipinfo_long_output(detail_output, archive, &names)
+        let entries = parse_zipinfo_long_output(detail_output, archive, &names)?;
+        let encrypted = Command::new("zipinfo")
+            .arg("-v")
+            .arg(archive)
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .is_some_and(|output| {
+                String::from_utf8_lossy(&output.stdout)
+                    .to_ascii_lowercase()
+                    .contains("file security status:                           encrypted")
+            });
+        Ok((entries, encrypted))
     }
 
-    fn list_7z_entries_with_metadata(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
+    fn list_7z_entries_with_metadata(
+        archive: &Path,
+        password: Option<&str>,
+    ) -> CommandResult<(Vec<ArchiveEntryInfo>, bool)> {
         let binary = find_binary("7zz")
             .or_else(|| find_binary("7z"))
             .ok_or_else(|| {
@@ -1176,47 +1208,99 @@ mod archive {
                 )
                 .with_detail("provider", "7z")
             })?;
-        let output = Command::new(binary)
-            .arg("l")
-            .arg("-slt")
+        let mut command = Command::new(binary);
+        command.arg("l").arg("-slt");
+        if let Some(password) = password {
+            command.arg(format!("-p{password}"));
+        }
+        let output = command
             .arg(archive)
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
         if !output.status.success() {
-            return Err(AppError::new(
-                "external_command_failed",
-                "errors.externalCommandFailed",
-                Some(archive),
-                true,
-            )
-            .with_detail(
-                "stderr",
-                String::from_utf8_lossy(&output.stderr)
-                    .chars()
-                    .take(512)
-                    .collect::<String>(),
+            return Err(archive_provider_output_error(
+                &output,
+                archive,
+                password.is_some(),
             ));
         }
-        Ok(parse_7z_slt_entries(&output.stdout))
+        let encrypted = String::from_utf8_lossy(&output.stdout).contains("Encrypted = +");
+        Ok((parse_7z_slt_entries(&output.stdout), encrypted))
+    }
+
+    fn list_tar_entries_with_metadata(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
+        let output = Command::new("tar")
+            .arg("-tf")
+            .arg(archive)
+            .output()
+            .map_err(|error| map_io_error(error, Some(archive)))?;
+        if !output.status.success() {
+            return Err(archive_provider_output_error(&output, archive, false));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(|path| ArchiveEntryInfo {
+                path: path.to_string(),
+                kind: entry_kind_for_archive_member(path, path.ends_with('/'), None, None),
+                size_bytes: None,
+                modified_at: None,
+                created_at: None,
+                permissions: None,
+            })
+            .collect())
+    }
+
+    fn archive_provider_output_error(
+        output: &std::process::Output,
+        archive: &Path,
+        password_supplied: bool,
+    ) -> AppError {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let lowered = stderr.to_ascii_lowercase();
+        let password_error = lowered.contains("password") || lowered.contains("encrypted");
+        let (code, message_key) = if password_error && password_supplied {
+            ("invalid_password", "errors.archivePasswordInvalid")
+        } else if password_error {
+            ("password_required", "errors.archivePasswordRequired")
+        } else {
+            ("external_command_failed", "errors.externalCommandFailed")
+        };
+        AppError::new(code, message_key, Some(archive), true)
+            .with_detail("stderr", stderr.chars().take(512).collect::<String>())
+    }
+
+    fn archive_format_name(path: &Path) -> Option<String> {
+        let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
+        for (suffix, format) in [
+            (".tar.gz", "tar.gz"),
+            (".tgz", "tar.gz"),
+            (".tar.zst", "tar.zst"),
+            (".tzst", "tar.zst"),
+            (".zip", "zip"),
+            (".jar", "jar"),
+            (".war", "war"),
+            (".tar", "tar"),
+            (".7z", "7z"),
+        ] {
+            if name.ends_with(suffix) {
+                return Some(format.to_string());
+            }
+        }
+        None
     }
 
     fn parse_zip_name_output(
         output: std::process::Output,
         archive: &Path,
+        password_supplied: bool,
     ) -> CommandResult<Vec<String>> {
         if !output.status.success() {
-            return Err(AppError::new(
-                "external_command_failed",
-                "errors.externalCommandFailed",
-                Some(archive),
-                true,
-            )
-            .with_detail(
-                "stderr",
-                String::from_utf8_lossy(&output.stderr)
-                    .chars()
-                    .take(512)
-                    .collect::<String>(),
+            return Err(archive_provider_output_error(
+                &output,
+                archive,
+                password_supplied,
             ));
         }
         Ok(String::from_utf8_lossy(&output.stdout)
@@ -1938,7 +2022,7 @@ fn is_archive_path(path: &Path) -> bool {
     };
     let lowered = name.to_lowercase();
     [
-        ".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.zst", ".7z", ".rar",
+        ".zip", ".jar", ".war", ".tar", ".tar.gz", ".tgz", ".tar.zst", ".tzst", ".7z",
     ]
     .iter()
     .any(|suffix| lowered.ends_with(suffix))
@@ -2963,7 +3047,7 @@ mod tests {
         assert_eq!(created.kind, OperationKind::ArchiveCreate);
         assert!(archive_path.is_file());
 
-        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None)
+        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None, None)
             .expect("zip listing should succeed");
         assert!(listing
             .entries
@@ -2992,7 +3076,7 @@ mod tests {
         )
         .expect("archive add should start");
         assert_eq!(added.kind, OperationKind::ArchiveAdd);
-        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None)
+        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None, None)
             .expect("updated zip listing should succeed");
         assert!(listing
             .entries
@@ -3134,27 +3218,150 @@ mod tests {
     }
 
     #[test]
-    fn archive_operations_reject_passwords_and_unsafe_entries() {
+    fn archive_required_formats_create_list_and_extract_round_trip() {
+        if !command_available("zip") || !command_available("unzip") || !command_available("tar") {
+            return;
+        }
+        for (suffix, format) in [
+            ("jar", "jar"),
+            ("war", "war"),
+            ("tar", "tar"),
+            ("tar.gz", "tar.gz"),
+            ("tgz", "tar.gz"),
+            ("tar.zst", "tar.zst"),
+            ("tzst", "tar.zst"),
+        ] {
+            let fixture = TempFixture::new();
+            let archive_path = fixture.root.join(format!("required-format.{suffix}"));
+            let extract_dir = fixture.root.join("extract-required-format");
+            fs::create_dir_all(&extract_dir).expect("format extract directory should exist");
+            let created = operation::start_archive_create(
+                None,
+                vec![fixture
+                    .root
+                    .join("alpha.txt")
+                    .to_string_lossy()
+                    .into_owned()],
+                archive_path.to_string_lossy().into_owned(),
+                format.to_string(),
+                None,
+            )
+            .expect("required archive format create should start");
+            assert_eq!(created.kind, OperationKind::ArchiveCreate);
+            assert!(archive_path.is_file(), "{suffix} archive should be created");
+
+            let listing =
+                archive_list(archive_path.to_string_lossy().into_owned(), None, Some(100))
+                    .expect("required archive format listing should succeed");
+            assert!(listing
+                .entries
+                .iter()
+                .any(|entry| entry.name == "alpha.txt"));
+            assert!(!listing.truncated);
+
+            operation::start_archive_extract(
+                None,
+                archive_path.to_string_lossy().into_owned(),
+                extract_dir.to_string_lossy().into_owned(),
+                None,
+                ConflictDecision::Overwrite,
+                None,
+                None,
+            )
+            .expect("required archive format extract should start");
+            assert_eq!(
+                fs::read(extract_dir.join("alpha.txt"))
+                    .expect("required archive format should extract alpha.txt"),
+                b"hello",
+                "{suffix} round trip should preserve content"
+            );
+        }
+    }
+
+    #[test]
+    fn archive_listing_limit_reports_truncation() {
+        if !command_available("zip") || !command_available("unzip") {
+            return;
+        }
         let fixture = TempFixture::new();
+        let source_dir = fixture.root.join("large-listing");
+        fs::create_dir_all(&source_dir).expect("large listing directory should exist");
+        for index in 0..120 {
+            fs::write(source_dir.join(format!("entry-{index:03}.txt")), b"x")
+                .expect("large listing entry should be written");
+        }
+        let archive_path = fixture.root.join("large-listing.zip");
+        operation::start_archive_create(
+            None,
+            vec![source_dir.to_string_lossy().into_owned()],
+            archive_path.to_string_lossy().into_owned(),
+            "zip".to_string(),
+            None,
+        )
+        .expect("large listing archive create should start");
+        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None, Some(25))
+            .expect("limited archive listing should succeed");
+        assert_eq!(listing.entries.len(), 25);
+        assert!(listing.total_entries >= 120);
+        assert!(listing.truncated);
+    }
+
+    #[test]
+    fn archive_password_round_trip_and_unsafe_entry_guards() {
+        let fixture = TempFixture::new();
+        if !command_available("zip") || !command_available("unzip") {
+            return;
+        }
+        let secret_archive = fixture.root.join("secret.zip");
         let password_summary = operation::archive_create_summary_for_test(
             vec![fixture
                 .root
                 .join("alpha.txt")
                 .to_string_lossy()
                 .into_owned()],
-            fixture
-                .root
-                .join("secret.zip")
-                .to_string_lossy()
-                .into_owned(),
+            secret_archive.to_string_lossy().into_owned(),
             "zip".to_string(),
             Some("secret".to_string()),
         );
         assert_eq!(password_summary.kind, OperationKind::ArchiveCreate);
-        assert_eq!(password_summary.state, OperationState::Failed);
+        assert_eq!(password_summary.state, OperationState::Completed);
+        let listing = archive_list(
+            secret_archive.to_string_lossy().into_owned(),
+            Some("secret".to_string()),
+            Some(100),
+        )
+        .expect("password-protected zip listing should succeed");
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.name == "alpha.txt"));
+
+        let wrong_target = fixture.root.join("wrong-password-extract");
+        fs::create_dir_all(&wrong_target).expect("wrong-password target should exist");
+        let wrong_password = operation::archive_extract_summary_for_test(
+            secret_archive.to_string_lossy().into_owned(),
+            wrong_target.to_string_lossy().into_owned(),
+            Some("not-the-password".to_string()),
+            ConflictDecision::Overwrite,
+        );
+        assert_eq!(wrong_password.state, OperationState::Failed);
+        let serialized_wrong = serde_json::to_string(&wrong_password)
+            .expect("wrong-password summary should serialize");
+        assert!(!serialized_wrong.contains("not-the-password"));
+
+        let correct_target = fixture.root.join("correct-password-extract");
+        fs::create_dir_all(&correct_target).expect("correct-password target should exist");
+        let correct_password = operation::archive_extract_summary_for_test(
+            secret_archive.to_string_lossy().into_owned(),
+            correct_target.to_string_lossy().into_owned(),
+            Some("secret".to_string()),
+            ConflictDecision::Overwrite,
+        );
+        assert_eq!(correct_password.state, OperationState::Completed);
         assert_eq!(
-            password_summary.errors[0].message_key,
-            "errors.archivePasswordCreateUnsupported"
+            fs::read(correct_target.join("alpha.txt"))
+                .expect("password-protected zip should extract"),
+            b"hello"
         );
 
         assert!(operation::archive_entry_is_unsafe_for_test("../escape.txt"));
@@ -3334,7 +3541,7 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None)
+        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None, None)
             .expect("7z listing should succeed when provider is available");
         assert!(listing
             .entries
@@ -3355,7 +3562,7 @@ mod tests {
             ConflictDecision::Overwrite,
         )
         .expect("7z archive add should start");
-        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None)
+        let listing = archive_list(archive_path.to_string_lossy().into_owned(), None, None)
             .expect("updated 7z listing should succeed");
         assert!(listing
             .entries

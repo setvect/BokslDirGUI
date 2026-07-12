@@ -6,7 +6,7 @@ export interface ArchiveVirtualPath {
   innerPath: string;
 }
 
-const ARCHIVE_VIRTUAL_PATH_PATTERN = /^(.+\.(?:zip|7z)):\/?(.*)$/i;
+const ARCHIVE_VIRTUAL_PATH_PATTERN = /^(.+\.(?:tar\.gz|tar\.zst|tgz|tzst|zip|jar|war|tar|7z)):\/?(.*)$/i;
 
 export const archiveVirtualRootPath = (archivePath: string) => `${archivePath.replace(/\/+$/, '')}:/`;
 
@@ -122,7 +122,11 @@ export const archiveListingToDirectoryListing = ({
   }
 
   const entries = [archiveParentEntry(parsed.archivePath, currentInner), ...sortArchiveEntries([...children.values()], sort)];
-  return createDirectoryListing(panelId, archiveVirtualChildPath(parsed.archivePath, currentInner), entries, sort, filter, Date.now());
+  return {
+    ...createDirectoryListing(panelId, archiveVirtualChildPath(parsed.archivePath, currentInner), entries, sort, filter, Date.now()),
+    totalEntries: archiveListing.totalEntries,
+    truncated: archiveListing.truncated,
+  };
 };
 
 const archiveParentEntry = (archivePath: string, currentInner: string): FileEntry => ({

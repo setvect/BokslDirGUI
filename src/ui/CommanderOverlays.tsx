@@ -199,6 +199,47 @@ export function PathPrompt({ language, panel, onApply, onCancel }: {
   );
 }
 
+export function ArchivePasswordPrompt({ language, archivePath, onApply, onCancel }: {
+  language: SupportedLanguage;
+  archivePath: string;
+  onApply(password: string): void;
+  onCancel(): void;
+}) {
+  const text = OVERLAY_TEXT[language];
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState('');
+
+  useEffect(() => {
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  return (
+    <CommanderOverlayDialog owner="archive-password" title={text.archivePasswordTitle} ariaLabel={text.archivePasswordTitle} onClose={onCancel}>
+      <form className="filter-form" onSubmit={(event) => {
+        event.preventDefault();
+        onApply(value);
+      }}>
+        <p>{archivePath}</p>
+        <label>
+          <span>{text.archivePassword}</span>
+          <input
+            ref={inputRef}
+            type="password"
+            autoComplete="current-password"
+            aria-label={text.archivePassword}
+            value={value}
+            onChange={(event) => setValue(event.currentTarget.value)}
+          />
+        </label>
+        <div className="filter-actions">
+          <button type="button" onClick={onCancel}>{text.cancel}</button>
+          <button type="submit" className="primary">{text.open}</button>
+        </div>
+      </form>
+    </CommanderOverlayDialog>
+  );
+}
+
 export function FilterPrompt({ language, panel, onApply, onCancel }: {
   language: SupportedLanguage;
   panel: PanelNavigationState;

@@ -16,6 +16,7 @@ export interface ActionContext {
   shellCommandEnabled: boolean;
   operationBusy: boolean;
   backendAvailable: boolean;
+  activePathIsArchive: boolean;
 }
 
 export interface AppAction {
@@ -40,6 +41,7 @@ const hasFocus = (context: ActionContext) => context.focusedEntryKind !== null;
 const hasConcreteFocus = (context: ActionContext) => context.hasConcreteFocus;
 const hasEffectiveTarget = (context: ActionContext) => context.effectiveTargetCount > 0;
 const canMutate = (context: ActionContext) => context.backendAvailable && !context.operationBusy;
+const canMutateFilesystem = (context: ActionContext) => canMutate(context) && !context.activePathIsArchive;
 const canInvokeBackend = (context: ActionContext) => context.backendAvailable && !context.operationBusy;
 
 type ActionDefinition = Omit<AppAction, 'labelKey' | 'descriptionKey' | 'displayLabel' | 'hotkeyLabel' | 'isEnabled'> & {
@@ -86,11 +88,11 @@ export const ACTIONS = [
   action({ id: 'selection.toggle', category: 'selection', hotkeyLabel: 'Sel', shortcutLabel: 'Space', keyboardBindings: ['Space'], menuPath: ['Edit', 'Select'], dangerLevel: 'none', runPath: 'UI state', isEnabled: hasFocus }),
   action({ id: 'selection.all', category: 'selection', hotkeyLabel: 'SelAll', shortcutLabel: 'Ctrl+A', keyboardBindings: ['Ctrl+A'], menuPath: ['Edit', 'Select All'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'file.copy', category: 'file', displayLabel: 'Copy', shortcutLabel: 'y/F5', keyboardBindings: ['y', 'F5'], menuPath: ['Edit', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.startCopy, runPath: 'start_copy', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutate(c) }),
-  action({ id: 'file.move', category: 'file', displayLabel: 'Move', shortcutLabel: 'x/F6', keyboardBindings: ['x', 'F6'], menuPath: ['Edit', 'Move'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutate(c) }),
-  action({ id: 'file.trash', category: 'file', displayLabel: 'Delete', hotkeyLabel: 'Del', shortcutLabel: 'd', keyboardBindings: ['d'], menuPath: ['File', 'Delete'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startDelete, runPath: 'start_delete trash', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
-  action({ id: 'file.deletePermanent', category: 'file', displayLabel: 'Permanent Delete', hotkeyLabel: 'PermDel', shortcutLabel: 'D/Shift+Delete', keyboardBindings: ['Shift+D', 'Shift+Delete'], menuPath: ['File', 'Permanent Delete'], contextScopes: ['selection'], dangerLevel: 'irreversible', command: COMMANDS.startDelete, runPath: 'start_delete permanent', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
-  action({ id: 'file.mkdir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutate }),
-  action({ id: 'file.rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutate(c) }),
+  action({ id: 'file.move', category: 'file', displayLabel: 'Move', shortcutLabel: 'x/F6', keyboardBindings: ['x', 'F6'], menuPath: ['Edit', 'Move'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutateFilesystem(c) }),
+  action({ id: 'file.trash', category: 'file', displayLabel: 'Delete', hotkeyLabel: 'Del', shortcutLabel: 'd', keyboardBindings: ['d'], menuPath: ['File', 'Delete'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startDelete, runPath: 'start_delete trash', isEnabled: (c) => hasEffectiveTarget(c) && canMutateFilesystem(c) }),
+  action({ id: 'file.deletePermanent', category: 'file', displayLabel: 'Permanent Delete', hotkeyLabel: 'PermDel', shortcutLabel: 'D/Shift+Delete', keyboardBindings: ['Shift+D', 'Shift+Delete'], menuPath: ['File', 'Permanent Delete'], contextScopes: ['selection'], dangerLevel: 'irreversible', command: COMMANDS.startDelete, runPath: 'start_delete permanent', isEnabled: (c) => hasEffectiveTarget(c) && canMutateFilesystem(c) }),
+  action({ id: 'file.mkdir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutateFilesystem }),
+  action({ id: 'file.rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutateFilesystem(c) }),
   action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Cmd+Q', keyboardBindings: ['Cmd+Q'], menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close safety-gated by explicit menu/Cmd+Q' }),
   action({ id: 'file.properties', category: 'file', displayLabel: 'File Info', hotkeyLabel: 'Info', shortcutLabel: 'i', keyboardBindings: ['i'], menuPath: ['View', 'File Info'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.getMetadata, runPath: 'get_metadata', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
   action({ id: 'archive.list', category: 'archive', shortcutLabel: 'Enter on archive', menuPath: ['Archive', 'Open Archive'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list virtual-directory', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),

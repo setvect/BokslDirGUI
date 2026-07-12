@@ -34,6 +34,8 @@ const archiveEntry = (
 const listing: ArchiveListing = {
   archivePath,
   encrypted: false,
+  totalEntries: 4,
+  truncated: false,
   entries: [
     archiveEntry('dist/', 'directory', { modifiedAt: '2026-07-02T23:30:28', permissions: 'drwxr-xr-x' }),
     archiveEntry('dist/app.js'),

@@ -434,6 +434,7 @@ export const COMMANDER_UI_TEXT = {
     refresh: '새로고침',
     gotoPath: '경로 이동',
     brand: '[복슬Dir]',
+    partialArchive: '일부만 표시됨',
   },
   en: {
     name: 'Name',
@@ -462,6 +463,7 @@ export const COMMANDER_UI_TEXT = {
     refresh: 'Refresh',
     gotoPath: 'Go to path',
     brand: '[복슬Dir]',
+    partialArchive: 'PARTIAL LIST',
   },
 } as const satisfies Record<SupportedLanguage, Record<string, string>>;
 
@@ -713,6 +715,9 @@ export const ACTION_CATEGORY_LABELS = {
 
 export const OVERLAY_TEXT = {
   ko: {
+    archivePasswordTitle: '압축 파일 암호',
+    archivePassword: '암호',
+    open: '열기',
     keyboardShortcuts: '키보드 단축키',
     helpSearch: '기능 검색',
     helpSearchPlaceholder: '기능 이름, 메뉴, 단축키로 검색',
@@ -732,6 +737,9 @@ export const OVERLAY_TEXT = {
     move: '이동',
   },
   en: {
+    archivePasswordTitle: 'Archive Password',
+    archivePassword: 'Password',
+    open: 'Open',
     keyboardShortcuts: 'Keyboard Shortcuts',
     helpSearch: 'Search Commands',
     helpSearchPlaceholder: 'Search by command, menu, or shortcut',
@@ -807,6 +815,7 @@ export const OPERATION_DIALOG_TEXT = {
     eta: '예상',
     cancel: '취소',
     dismiss: '닫기',
+    archivePassword: '암호(선택 사항)',
   },
   en: {
     currentFolderTarget: 'This action targets the current folder.',
@@ -847,6 +856,7 @@ export const OPERATION_DIALOG_TEXT = {
     eta: 'ETA',
     cancel: 'Cancel',
     dismiss: 'Dismiss',
+    archivePassword: 'Password (optional)',
   },
 } as const satisfies Record<SupportedLanguage, Record<string, string>>;
 

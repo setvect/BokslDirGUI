@@ -204,7 +204,7 @@ export const tauriClient = {
   cancelOperation: (input: { operationId: string }) => invokeCommand<CancelAck>(COMMANDS.cancelOperation, input),
   resolveConflict: (input: { operationId: string; decision: ConflictDecision }) =>
     invokeCommand<ConflictAck>(COMMANDS.resolveConflict, input),
-  archiveList: (input: { archivePath: string; password?: string }) =>
+  archiveList: (input: { archivePath: string; password?: string; limit?: number }) =>
     invokeCommand<ArchiveListing>(COMMANDS.archiveList, input),
   archiveCreate: (input: { sources: string[]; targetArchive: string; format: string; password?: string }) =>
     invokeCommand<OperationStarted>(COMMANDS.archiveCreate, input),

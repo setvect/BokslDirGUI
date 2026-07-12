@@ -75,6 +75,7 @@ import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries }
 import { commanderKeyboardIsSuspended, commanderKeyboardOwners, useCommanderKeyboardBoundaryProps } from './keyboardOwnership';
 import {
   AboutDialog,
+  ArchivePasswordPrompt,
   FilterPrompt,
   HelpSearchDialog,
   NavigationListDialog,
@@ -87,6 +88,7 @@ import {
 const KEYBOARD_PAGE_STEP = 12;
 const FOCUSABLE_ROW_TAB_INDEX = -1;
 const KEYBOARD_SEQUENCE_TIMEOUT_MS = 900;
+const ARCHIVE_LIST_LIMIT = 50_000;
 const DEFAULT_DATA_SOURCE = createTauriPanelDataSource();
 const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 1,
@@ -158,7 +160,7 @@ interface SafeMutationClient {
   createDir(input: { parent: string; name: string }): ReturnType<typeof tauriClient.createDir>;
   renameEntry(input: { path: string; newName: string }): ReturnType<typeof tauriClient.renameEntry>;
   getMetadata?(input: { path: string }): ReturnType<typeof tauriClient.getMetadata>;
-  archiveList?(input: { archivePath: string; password?: string }): ReturnType<typeof tauriClient.archiveList>;
+  archiveList?(input: { archivePath: string; password?: string; limit?: number }): ReturnType<typeof tauriClient.archiveList>;
   openDefault?(input: { path: string }): ReturnType<typeof tauriClient.openDefault>;
   revealInManager?(input: { path: string }): ReturnType<typeof tauriClient.revealInManager>;
   openExternalEditor?(input: { path: string; editorId?: string }): ReturnType<typeof tauriClient.openExternalEditor>;
@@ -279,6 +281,8 @@ export function CommanderShell({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [filterPromptPanel, setFilterPromptPanel] = useState<PanelId | null>(null);
   const [pathPromptPanel, setPathPromptPanel] = useState<PanelId | null>(null);
+  const [archivePasswordRequest, setArchivePasswordRequest] = useState<{ panelId: PanelId; virtualPath: string; archivePath: string } | null>(null);
+  const archivePasswordsRef = useRef(new Map<string, string>());
   const [navigationList, setNavigationList] = useState<NavigationListState | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [settingsLoaded, setSettingsLoaded] = useState(() => !mutationClient.loadSettings);
@@ -479,8 +483,17 @@ export function CommanderShell({
         },
       };
     }
-    const result = await mutationClient.archiveList({ archivePath: parsed.archivePath });
+    const password = archivePasswordsRef.current.get(parsed.archivePath);
+    const result = await mutationClient.archiveList({
+      archivePath: parsed.archivePath,
+      password,
+      limit: ARCHIVE_LIST_LIMIT,
+    });
     if (!result.ok) {
+      if (result.error.code === 'password_required' || result.error.code === 'invalid_password') {
+        archivePasswordsRef.current.delete(parsed.archivePath);
+        setArchivePasswordRequest({ panelId, virtualPath, archivePath: parsed.archivePath });
+      }
       return result;
     }
     return {
@@ -1239,7 +1252,14 @@ export function CommanderShell({
         ? joinPath(panelState[oppositePanel].path, archiveAutoExtractFolderName(sources[0].name))
         : targetDirOverride ?? panelState[oppositePanel].path;
       const archiveCopyPlan = actionId === 'file.copy'
-        ? archiveCopyPlanForSources(sources, panelListing.path, operationTargetDir)
+        ? archiveCopyPlanForSources(
+            sources,
+            panelListing.path,
+            operationTargetDir,
+            parseArchiveVirtualPath(panelListing.path)
+              ? archivePasswordsRef.current.get(parseArchiveVirtualPath(panelListing.path)?.archivePath ?? '')
+              : undefined,
+          )
         : null;
       const archiveAddPlan = actionId === 'file.copy'
         ? archiveAddPlanForTarget(sources, operationTargetDir)
@@ -1334,6 +1354,7 @@ export function CommanderShell({
   const applyGotoPath = (panelId: PanelId, pathValue: string) => {
     const path = pathValue.trim();
     setPathPromptPanel(null);
+    setArchivePasswordRequest(null);
     if (!path) {
       shellRef.current?.focus({ preventScroll: true });
       return;
@@ -1363,6 +1384,7 @@ export function CommanderShell({
     shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: operationBusy || panelState.left.loading || panelState.right.loading,
     backendAvailable: runtimeBackendAvailable,
+    activePathIsArchive: isArchiveVirtualPath(activeListing.path),
   });
   const openFocusedRowContextMenu = () => {
     const row = document.getElementById(rowDomId(activePanel, panelState[activePanel].focusedIndex));
@@ -1755,6 +1777,19 @@ export function CommanderShell({
           language={settings.language}
           panel={panelState[pathPromptPanel]}
           onApply={(pathValue) => applyGotoPath(pathPromptPanel, pathValue)}
+          onCancel={closeOverlay}
+        />
+      ) : null}
+      {archivePasswordRequest ? (
+        <ArchivePasswordPrompt
+          language={settings.language}
+          archivePath={archivePasswordRequest.archivePath}
+          onApply={(password) => {
+            archivePasswordsRef.current.set(archivePasswordRequest.archivePath, password);
+            const request = archivePasswordRequest;
+            setArchivePasswordRequest(null);
+            void listPanel(request.panelId, request.virtualPath, { preserveSelection: true });
+          }}
           onCancel={closeOverlay}
         />
       ) : null}
@@ -2675,6 +2710,11 @@ function FilePanel({
       <footer className="panel-status">
         <span>{summary.files} {labels.files}, {summary.dirs} {labels.dirs}</span>
         <span>{panel.selectedPaths.length} {labels.selected}</span>
+        {listing.truncated ? (
+          <span className="panel-archive-truncated" title={`${listing.entries.length}/${listing.totalEntries ?? listing.entries.length}`}>
+            {labels.partialArchive}
+          </span>
+        ) : null}
         {panel.filter ? <span className="panel-filter-status">{labels.filter}: {panel.filter}</span> : null}
         <span>{active ? labels.active : labels.target}</span>
       </footer>
@@ -2716,6 +2756,7 @@ function BlankContextMenuContent({ language, listing, operationBusy, backendAvai
     shellCommandEnabled: false,
     operationBusy,
     backendAvailable,
+    activePathIsArchive: isArchiveVirtualPath(listing.path),
   });
   const actions = blankContextMenuActions(context, Boolean(listing.filter));
 
@@ -2757,6 +2798,7 @@ function EntryContextMenuContent({ language, entry, listing, selectedPaths, oper
     shellCommandEnabled: false,
     operationBusy,
     backendAvailable,
+    activePathIsArchive: isArchiveVirtualPath(listing.path),
   });
 
   return (
@@ -2815,6 +2857,7 @@ interface ArchiveCopyPlan {
   archivePath: string;
   entries: string[];
   stripPrefix: string;
+  password?: string;
 }
 
 interface ArchiveAddPlan {
@@ -2826,6 +2869,7 @@ const archiveCopyPlanForSources = (
   sources: readonly FileEntry[],
   workingDir: string,
   targetDir: string,
+  password?: string,
 ): ArchiveCopyPlan | null => {
   if (sources.length === 0 || isArchiveVirtualPath(targetDir)) {
     return null;
@@ -2842,6 +2886,7 @@ const archiveCopyPlanForSources = (
     archivePath: workingArchive.archivePath,
     entries: [...new Set(parsedSources.map((source) => source?.innerPath).filter(Boolean) as string[])],
     stripPrefix: workingArchive.innerPath,
+    password,
   };
 };
 
@@ -3425,11 +3470,12 @@ const longRunningExecutorForAction = (
         return unsupportedClientResult('archive_create', dialog.targetDir);
       }
       const targetArchive = joinPath(dialog.targetDir ?? '', dialog.inputValue.trim());
-      const format = targetArchive.toLowerCase().endsWith('.7z') ? '7z' : 'zip';
+      const format = archiveFormatForPath(targetArchive);
       return operationClient.archiveCreate({
         sources: dialog.sources.map((source) => source.path),
         targetArchive,
         format,
+        password: dialog.secretValue || undefined,
       });
     };
   }
@@ -3437,6 +3483,7 @@ const longRunningExecutorForAction = (
     return (dialog) => operationClient.archiveExtract ? operationClient.archiveExtract({
       archivePath: dialog.sources[0]?.path ?? '',
       targetDir: dialog.targetDir ?? '',
+      password: dialog.secretValue || undefined,
       policy: dialog.defaultDecision,
     }) : unsupportedClientResult('archive_extract', dialog.targetDir);
   }
@@ -3452,6 +3499,7 @@ const archiveCopyExecutorForPlan = (
   policy: dialog.defaultDecision,
   entries: plan.entries,
   stripPrefix: plan.stripPrefix,
+  password: plan.password,
 }) : unsupportedClientResult('archive_extract', dialog.targetDir);
 
 const archiveAddExecutorForPlan = (
@@ -3474,6 +3522,17 @@ const unsupportedClientResult = async (command: string, path: string | null) => 
     recoverable: true,
   },
 });
+
+const archiveFormatForPath = (path: string) => {
+  const lowered = path.toLowerCase();
+  if (lowered.endsWith('.tar.gz') || lowered.endsWith('.tgz')) return 'tar.gz';
+  if (lowered.endsWith('.tar.zst') || lowered.endsWith('.tzst')) return 'tar.zst';
+  if (lowered.endsWith('.jar')) return 'jar';
+  if (lowered.endsWith('.war')) return 'war';
+  if (lowered.endsWith('.tar')) return 'tar';
+  if (lowered.endsWith('.7z')) return '7z';
+  return 'zip';
+};
 
 const parseShellCommandInput = (value: string): { command: string; args: string[] } | null => {
   const parts = value.trim().match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) =>

@@ -41,6 +41,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
   const atomicResult = useOperationStore((state) => state.dialog?.atomicResult);
   const confirmDialog = useOperationStore((state) => state.confirmDialog);
   const updateDialogInput = useOperationStore((state) => state.updateDialogInput);
+  const updateDialogSecret = useOperationStore((state) => state.updateDialogSecret);
   const resolveConflict = useOperationStore((state) => state.resolveConflict);
   const cancelOperation = useOperationStore((state) => state.cancelOperation);
   const closeDialog = useOperationStore((state) => state.closeDialog);
@@ -222,6 +223,18 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                   {dialog.validationErrorKey ? (
                     <span className="operation-error" role="alert">{translateUserMessageKey(language, dialog.validationErrorKey)}</span>
                   ) : null}
+                </label>
+              ) : null}
+              {dialog.dialogKind === 'archiveCreate' || dialog.dialogKind === 'archiveExtract' ? (
+                <label className="operation-field">
+                  <span>{text.archivePassword}</span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    aria-label={text.archivePassword}
+                    value={dialog.secretValue}
+                    onChange={(event) => updateDialogSecret(event.currentTarget.value)}
+                  />
                 </label>
               ) : null}
               {dialog.shellPreview ? (

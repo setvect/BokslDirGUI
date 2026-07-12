@@ -164,6 +164,7 @@ describe('action registry', () => {
       shellCommandEnabled: false,
       operationBusy: false,
       backendAvailable: true,
+      activePathIsArchive: false,
     };
 
     expect(isActionAvailable(archiveOpen, baseContext)).toBe(false);

@@ -44,6 +44,7 @@ export interface OperationDialogDraft {
   shellPreview: ShellCommandPreview | null;
   atomicResult: unknown | null;
   inputValue: string;
+  secretValue: string;
   requiredConfirmationPhrase: string | null;
   validationErrorKey: string | null;
   atomicPending: boolean;
@@ -113,6 +114,7 @@ export interface OperationStoreState {
   openDialog(request: OpenDialogRequest): void;
   startLongRunningOperation(request: OpenDialogRequest): Promise<void>;
   updateDialogInput(value: string): void;
+  updateDialogSecret(value: string): void;
   confirmDialog(): Promise<void>;
   applyOperationStarted(started: OperationStarted): void;
   applyOperationProgress(progress: OperationProgress): void;
@@ -274,6 +276,11 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       },
       lastError: null,
     });
+  },
+  updateDialogSecret: (value) => {
+    set((current) => current.dialog ? {
+      dialog: { ...current.dialog, secretValue: value },
+    } : current);
   },
   confirmDialog: async () => {
     const dialog = get().dialog;
@@ -743,6 +750,7 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
     shellPreview: isShell ? disabledShellPreview(request.workingDir) : null,
     atomicResult: null,
     inputValue,
+    secretValue: '',
     requiredConfirmationPhrase,
     validationErrorKey: validateDialogInput(dialogKind, inputValue, requiredConfirmationPhrase),
     atomicPending: false,
@@ -864,7 +872,7 @@ const validateDialogInput = (dialogKind: DialogKind, value: string, requiredConf
     if (!trimmed || trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('\0')) {
       return 'errors.invalidName';
     }
-    if (!trimmed.endsWith('.zip') && !trimmed.endsWith('.7z')) {
+    if (!archiveCreateNameIsSupported(trimmed)) {
       return 'errors.archiveFormatUnsupported';
     }
     return null;
@@ -883,6 +891,10 @@ const validateDialogInput = (dialogKind: DialogKind, value: string, requiredConf
   }
   return null;
 };
+
+const archiveCreateNameIsSupported = (name: string) => [
+  '.zip', '.jar', '.war', '.tar', '.tar.gz', '.tgz', '.tar.zst', '.tzst', '.7z',
+].some((suffix) => name.toLowerCase().endsWith(suffix));
 
 const isTerminalState = (state: OperationState) =>
   state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';

@@ -922,18 +922,7 @@ fn run_archive_create(
     password: Option<String>,
 ) -> OperationSummary {
     let kind = OperationKind::ArchiveCreate;
-    if password.as_deref().is_some_and(|value| !value.is_empty()) {
-        return error_summary(
-            operation_id,
-            kind,
-            AppError::new(
-                "unsupported",
-                "errors.archivePasswordCreateUnsupported",
-                None,
-                true,
-            ),
-        );
-    }
+    let password = password.as_deref().filter(|value| !value.is_empty());
     let sources = match collect_source_paths(&sources) {
         Ok(paths) => paths,
         Err(error) => return error_summary(operation_id, kind, error),
@@ -991,23 +980,30 @@ fn run_archive_create(
         return cancel_summary(operation_id, kind, &stats);
     }
 
-    let archive_format = format.to_ascii_lowercase();
-    let command_result = if archive_format == "zip"
-        || target.extension().and_then(|value| value.to_str()) == Some("zip")
-    {
-        run_zip_create(operation_id, &target, &sources)
-    } else if archive_format == "7z"
-        || target.extension().and_then(|value| value.to_str()) == Some("7z")
-    {
-        run_7z_create(operation_id, &target, &sources)
-    } else {
-        Err(AppError::new(
+    let archive_format =
+        archive_format_name(&target).unwrap_or_else(|| format.to_ascii_lowercase());
+    let command_result = match archive_format.as_str() {
+        "zip" => run_zip_create(operation_id, &target, &sources, password),
+        "jar" | "war" if password.is_none() => {
+            run_zip_create(operation_id, &target, &sources, None)
+        }
+        "7z" => run_7z_create(operation_id, &target, &sources, password),
+        "tar" | "tar.gz" | "tar.zst" if password.is_none() => {
+            run_tar_create(operation_id, &target, &sources)
+        }
+        "jar" | "war" | "tar" | "tar.gz" | "tar.zst" => Err(AppError::new(
+            "unsupported",
+            "errors.archivePasswordFormatUnsupported",
+            Some(&target),
+            true,
+        )),
+        _ => Err(AppError::new(
             "unsupported",
             "errors.archiveFormatUnsupported",
             Some(&target),
             true,
         )
-        .with_detail("format", archive_format))
+        .with_detail("format", archive_format)),
     };
 
     match command_result {
@@ -1042,18 +1038,7 @@ fn run_archive_extract(
     strip_prefix: Option<String>,
 ) -> OperationSummary {
     let kind = OperationKind::ArchiveExtract;
-    if password.as_deref().is_some_and(|value| !value.is_empty()) {
-        return error_summary(
-            operation_id,
-            kind,
-            AppError::new(
-                "unsupported",
-                "errors.archivePasswordExtractUnsupported",
-                None,
-                true,
-            ),
-        );
-    }
+    let password = password.as_deref().filter(|value| !value.is_empty());
     let archive = match navigation::canonical_existing_path(&archive_path) {
         Ok(path) => path,
         Err(error) => return error_summary(operation_id, kind, error),
@@ -1093,7 +1078,8 @@ fn run_archive_extract(
         return cancel_summary(operation_id, kind, &stats);
     }
 
-    let all_entries = match list_archive_entry_names_for_operation(operation_id, &archive) {
+    let all_entries = match list_archive_entry_names_for_operation(operation_id, &archive, password)
+    {
         Ok(entries) => entries,
         Err(error) if is_operation_cancelled_error(&error) => {
             return cancel_summary(operation_id, kind, &stats)
@@ -1133,33 +1119,18 @@ fn run_archive_extract(
         return cancel_summary(operation_id, kind, &stats);
     }
 
-    let command_result = if selected_entries
-        .as_ref()
-        .is_some_and(|entries| !entries.is_empty())
-    {
-        run_archive_extract_selected(
-            app,
-            operation_id,
-            &archive,
-            &target,
-            policy,
-            &entries,
-            strip_prefix.as_deref().unwrap_or(""),
-            &mut stats,
-            kind,
-        )
-    } else if archive.extension().and_then(|value| value.to_str()) == Some("zip") {
-        run_zip_extract(operation_id, &archive, &target, policy, None)
-    } else if archive.extension().and_then(|value| value.to_str()) == Some("7z") {
-        run_7z_extract(operation_id, &archive, &target, policy, None)
-    } else {
-        Err(AppError::new(
-            "unsupported",
-            "errors.archiveFormatUnsupported",
-            Some(&archive),
-            true,
-        ))
-    };
+    let command_result = run_archive_extract_selected(
+        app,
+        operation_id,
+        &archive,
+        &target,
+        password,
+        policy,
+        &entries,
+        strip_prefix.as_deref().unwrap_or(""),
+        &mut stats,
+        kind,
+    );
 
     match command_result {
         Ok(()) => {
@@ -1210,11 +1181,10 @@ fn run_archive_add(
         Ok(path) => path,
         Err(error) => return error_summary(operation_id, kind, error),
     };
-    let extension = archive
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(str::to_ascii_lowercase);
-    if !matches!(extension.as_deref(), Some("zip" | "7z")) {
+    if !matches!(
+        archive_format_name(&archive).as_deref(),
+        Some("zip" | "jar" | "war" | "7z")
+    ) {
         return error_summary(
             operation_id,
             kind,
@@ -1258,13 +1228,14 @@ fn run_archive_add(
         return cancel_summary(operation_id, kind, &stats);
     }
 
-    let mut archive_entries = match list_archive_entry_names_for_operation(operation_id, &archive) {
-        Ok(entries) => entries,
-        Err(error) if is_operation_cancelled_error(&error) => {
-            return cancel_summary(operation_id, kind, &stats)
-        }
-        Err(error) => return error_summary(operation_id, kind, error),
-    };
+    let mut archive_entries =
+        match list_archive_entry_names_for_operation(operation_id, &archive, None) {
+            Ok(entries) => entries,
+            Err(error) if is_operation_cancelled_error(&error) => {
+                return cancel_summary(operation_id, kind, &stats)
+            }
+            Err(error) => return error_summary(operation_id, kind, error),
+        };
     if let Some(unsafe_entry) = archive_entries
         .iter()
         .find(|entry| archive_entry_is_unsafe(entry))
@@ -1440,7 +1411,12 @@ fn restore_archive_backup(backup: Option<&Path>, archive: &Path) -> CommandResul
         .map_err(|error| map_io_error(error, Some(archive)))
 }
 
-fn run_zip_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
+fn run_zip_create(
+    operation_id: &str,
+    target: &Path,
+    sources: &[PathBuf],
+    password: Option<&str>,
+) -> CommandResult<()> {
     let zip = external_binary("zip").ok_or_else(|| {
         AppError::new(
             "unsupported",
@@ -1453,7 +1429,11 @@ fn run_zip_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> Com
     let working_dir = common_source_parent(sources, target)?;
     let mut command = Command::new(zip);
     command.current_dir(&working_dir);
-    command.arg("-r").arg("-q").arg(target);
+    command.arg("-r").arg("-q");
+    if let Some(password) = password {
+        command.arg("-P").arg(password);
+    }
+    command.arg(target);
     for source in sources {
         command.arg(source.file_name().ok_or_else(|| {
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
@@ -1462,7 +1442,12 @@ fn run_zip_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> Com
     run_external_command(operation_id, command, Some(target))
 }
 
-fn run_7z_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
+fn run_7z_create(
+    operation_id: &str,
+    target: &Path,
+    sources: &[PathBuf],
+    password: Option<&str>,
+) -> CommandResult<()> {
     let seven_zip = external_binary("7zz")
         .or_else(|| external_binary("7z"))
         .ok_or_else(|| {
@@ -1477,7 +1462,32 @@ fn run_7z_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> Comm
     let working_dir = common_source_parent(sources, target)?;
     let mut command = Command::new(seven_zip);
     command.current_dir(&working_dir);
-    command.arg("a").arg("-y").arg(target);
+    command.arg("a").arg("-y");
+    if let Some(password) = password {
+        command.arg(format!("-p{password}")).arg("-mhe=on");
+    }
+    command.arg(target);
+    for source in sources {
+        command.arg(source.file_name().ok_or_else(|| {
+            AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
+        })?);
+    }
+    run_external_command(operation_id, command, Some(target))
+}
+
+fn run_tar_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
+    let tar = external_binary("tar").ok_or_else(|| {
+        AppError::new(
+            "unsupported",
+            "errors.archiveProviderUnavailable",
+            Some(target),
+            true,
+        )
+        .with_detail("provider", "tar")
+    })?;
+    let working_dir = common_source_parent(sources, target)?;
+    let mut command = Command::new(tar);
+    command.current_dir(&working_dir).arg("-acf").arg(target);
     for source in sources {
         command.arg(source.file_name().ok_or_else(|| {
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
@@ -1512,6 +1522,7 @@ fn run_zip_extract(
     operation_id: &str,
     archive: &Path,
     target: &Path,
+    password: Option<&str>,
     policy: ConflictDecision,
     entries: Option<&[String]>,
 ) -> CommandResult<()> {
@@ -1525,6 +1536,9 @@ fn run_zip_extract(
         .with_detail("provider", "unzip")
     })?;
     let mut command = Command::new(unzip);
+    if let Some(password) = password {
+        command.arg("-P").arg(password);
+    }
     match policy {
         ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {
             command.arg("-o");
@@ -1553,6 +1567,7 @@ fn run_7z_extract(
     operation_id: &str,
     archive: &Path,
     target: &Path,
+    password: Option<&str>,
     policy: ConflictDecision,
     entries: Option<&[String]>,
 ) -> CommandResult<()> {
@@ -1569,6 +1584,9 @@ fn run_7z_extract(
         })?;
     let mut command = Command::new(seven_zip);
     command.arg("x");
+    if let Some(password) = password {
+        command.arg(format!("-p{password}"));
+    }
     match policy {
         ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {
             command.arg("-aoa");
@@ -1594,11 +1612,35 @@ fn run_7z_extract(
     run_external_command(operation_id, command, Some(archive))
 }
 
+fn run_tar_extract(
+    operation_id: &str,
+    archive: &Path,
+    target: &Path,
+    entries: Option<&[String]>,
+) -> CommandResult<()> {
+    let tar = external_binary("tar").ok_or_else(|| {
+        AppError::new(
+            "unsupported",
+            "errors.archiveProviderUnavailable",
+            Some(archive),
+            true,
+        )
+        .with_detail("provider", "tar")
+    })?;
+    let mut command = Command::new(tar);
+    command.arg("-xf").arg(archive).arg("-C").arg(target);
+    for entry in entries.unwrap_or(&[]) {
+        command.arg(entry);
+    }
+    run_external_command(operation_id, command, Some(archive))
+}
+
 fn run_archive_extract_selected(
     app: Option<&tauri::AppHandle>,
     operation_id: &str,
     archive: &Path,
     target: &Path,
+    password: Option<&str>,
     policy: ConflictDecision,
     entries: &[String],
     strip_prefix: &str,
@@ -1609,29 +1651,38 @@ fn run_archive_extract_selected(
         return Ok(());
     }
     let staging = unique_archive_extract_staging_dir(operation_id)?;
-    let extract_result = if archive.extension().and_then(|value| value.to_str()) == Some("zip") {
-        run_zip_extract(
+    let extract_result = match archive_format_name(archive).as_deref() {
+        Some("zip" | "jar" | "war") => run_zip_extract(
             operation_id,
             archive,
             &staging,
+            password,
             ConflictDecision::Overwrite,
             Some(entries),
-        )
-    } else if archive.extension().and_then(|value| value.to_str()) == Some("7z") {
-        run_7z_extract(
+        ),
+        Some("7z") => run_7z_extract(
             operation_id,
             archive,
             &staging,
+            password,
             ConflictDecision::Overwrite,
             Some(entries),
-        )
-    } else {
-        Err(AppError::new(
+        ),
+        Some("tar" | "tar.gz" | "tar.zst") if password.is_none() => {
+            run_tar_extract(operation_id, archive, &staging, Some(entries))
+        }
+        Some("tar" | "tar.gz" | "tar.zst") => Err(AppError::new(
+            "unsupported",
+            "errors.archivePasswordFormatUnsupported",
+            Some(archive),
+            true,
+        )),
+        _ => Err(AppError::new(
             "unsupported",
             "errors.archiveFormatUnsupported",
             Some(archive),
             true,
-        ))
+        )),
     };
     if let Err(error) = extract_result {
         let _ = fs::remove_dir_all(&staging);
@@ -1805,6 +1856,26 @@ fn normalize_archive_entry(entry: &str) -> String {
         .join("/")
 }
 
+fn archive_format_name(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
+    for (suffix, format) in [
+        (".tar.gz", "tar.gz"),
+        (".tgz", "tar.gz"),
+        (".tar.zst", "tar.zst"),
+        (".tzst", "tar.zst"),
+        (".zip", "zip"),
+        (".jar", "jar"),
+        (".war", "war"),
+        (".tar", "tar"),
+        (".7z", "7z"),
+    ] {
+        if name.ends_with(suffix) {
+            return Some(format.to_string());
+        }
+    }
+    None
+}
+
 fn unique_archive_extract_staging_dir(operation_id: &str) -> CommandResult<PathBuf> {
     let base = env::temp_dir().join(format!(
         "boksldir-gui-archive-extract-{}-{}",
@@ -1846,13 +1917,8 @@ fn run_archive_delete_entries(
     if entries.is_empty() {
         return Ok(());
     }
-    match archive
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("zip") => {
+    match archive_format_name(archive).as_deref() {
+        Some("zip" | "jar" | "war") => {
             let zip = external_binary("zip").ok_or_else(|| {
                 AppError::new(
                     "unsupported",
@@ -1903,13 +1969,8 @@ fn run_archive_add_entries(
     staging: &Path,
     entries: &[String],
 ) -> CommandResult<()> {
-    match archive
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("zip") => {
+    match archive_format_name(archive).as_deref() {
+        Some("zip" | "jar" | "war") => {
             let zip = external_binary("zip").ok_or_else(|| {
                 AppError::new(
                     "unsupported",
@@ -1968,15 +2029,22 @@ fn unix_millis() -> u128 {
 fn list_archive_entry_names_for_operation(
     operation_id: &str,
     archive: &Path,
+    password: Option<&str>,
 ) -> CommandResult<Vec<String>> {
-    match archive
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("zip") => list_zip_entries_for_operation(operation_id, archive),
-        Some("7z") => list_7z_entries_for_operation(operation_id, archive),
+    match archive_format_name(archive).as_deref() {
+        Some("zip" | "jar" | "war") => {
+            list_zip_entries_for_operation(operation_id, archive, password)
+        }
+        Some("7z") => list_7z_entries_for_operation(operation_id, archive, password),
+        Some("tar" | "tar.gz" | "tar.zst") if password.is_none() => {
+            list_tar_entries_for_operation(operation_id, archive)
+        }
+        Some("tar" | "tar.gz" | "tar.zst") => Err(AppError::new(
+            "unsupported",
+            "errors.archivePasswordFormatUnsupported",
+            Some(archive),
+            true,
+        )),
         _ => Err(AppError::new(
             "unsupported",
             "errors.archiveFormatUnsupported",
@@ -1989,6 +2057,7 @@ fn list_archive_entry_names_for_operation(
 fn list_zip_entries_for_operation(
     operation_id: &str,
     archive: &Path,
+    _password: Option<&str>,
 ) -> CommandResult<Vec<String>> {
     let unzip = external_binary("unzip").ok_or_else(|| {
         AppError::new(
@@ -2000,7 +2069,8 @@ fn list_zip_entries_for_operation(
         .with_detail("provider", "unzip")
     })?;
     let mut command = Command::new(unzip);
-    command.arg("-Z1").arg(archive);
+    command.arg("-Z1");
+    command.arg(archive);
     let stdout = run_external_command_capture(operation_id, command, Some(archive))?;
     Ok(String::from_utf8_lossy(&stdout)
         .lines()
@@ -2010,7 +2080,11 @@ fn list_zip_entries_for_operation(
         .collect())
 }
 
-fn list_7z_entries_for_operation(operation_id: &str, archive: &Path) -> CommandResult<Vec<String>> {
+fn list_7z_entries_for_operation(
+    operation_id: &str,
+    archive: &Path,
+    password: Option<&str>,
+) -> CommandResult<Vec<String>> {
     let seven_zip = external_binary("7zz")
         .or_else(|| external_binary("7z"))
         .ok_or_else(|| {
@@ -2023,9 +2097,37 @@ fn list_7z_entries_for_operation(operation_id: &str, archive: &Path) -> CommandR
             .with_detail("provider", "7z")
         })?;
     let mut command = Command::new(seven_zip);
-    command.arg("l").arg("-slt").arg(archive);
+    command.arg("l").arg("-slt");
+    if let Some(password) = password {
+        command.arg(format!("-p{password}"));
+    }
+    command.arg(archive);
     let stdout = run_external_command_capture(operation_id, command, Some(archive))?;
     Ok(super::archive::parse_7z_slt_paths(&stdout))
+}
+
+fn list_tar_entries_for_operation(
+    operation_id: &str,
+    archive: &Path,
+) -> CommandResult<Vec<String>> {
+    let tar = external_binary("tar").ok_or_else(|| {
+        AppError::new(
+            "unsupported",
+            "errors.archiveProviderUnavailable",
+            Some(archive),
+            true,
+        )
+        .with_detail("provider", "tar")
+    })?;
+    let mut command = Command::new(tar);
+    command.arg("-tf").arg(archive);
+    let stdout = run_external_command_capture(operation_id, command, Some(archive))?;
+    Ok(String::from_utf8_lossy(&stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect())
 }
 
 fn run_external_command(
@@ -2192,6 +2294,25 @@ pub(super) fn archive_add_summary_for_test(
 }
 
 #[cfg(test)]
+pub(super) fn archive_extract_summary_for_test(
+    archive_path: String,
+    target_dir: String,
+    password: Option<String>,
+    policy: ConflictDecision,
+) -> OperationSummary {
+    run_archive_extract(
+        None,
+        "archive-extract-test",
+        archive_path,
+        target_dir,
+        password,
+        policy,
+        None,
+        None,
+    )
+}
+
+#[cfg(test)]
 pub(super) fn external_archive_command_cancel_for_test() -> Option<(CommandResult<()>, Duration)> {
     let sleep = external_binary("sleep")?;
     let operation_id = next_operation_id(OperationKind::ArchiveCreate);
@@ -2222,7 +2343,7 @@ pub(super) fn archive_entry_listing_cancel_for_test(
     let worker_operation_id = operation_id.clone();
     let worker = thread::spawn(move || {
         let started_at = Instant::now();
-        let result = list_archive_entry_names_for_operation(&worker_operation_id, &archive);
+        let result = list_archive_entry_names_for_operation(&worker_operation_id, &archive, None);
         (result, started_at.elapsed())
     });
     thread::sleep(Duration::from_millis(150));

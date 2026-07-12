@@ -784,7 +784,7 @@ describe('CommanderShell', () => {
       renameEntry: vi.fn(),
       archiveList: vi.fn(async () => ({
         ok: true as const,
-        data: { archivePath, encrypted: false, entries: [] },
+        data: { archivePath, encrypted: false, totalEntries: 0, truncated: false, entries: [] },
       })),
     };
     const operationClient = {
@@ -831,7 +831,11 @@ describe('CommanderShell', () => {
       panelId: 'left',
       path: leftPath,
     })));
-    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath }));
+    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({
+      archivePath,
+      password: undefined,
+      limit: 50_000,
+    }));
 
   });
 
@@ -966,6 +970,8 @@ describe('CommanderShell', () => {
           archivePath,
           encrypted: false,
           entries: [],
+          totalEntries: 0,
+          truncated: false,
         },
       })),
     };
@@ -1010,6 +1016,8 @@ describe('CommanderShell', () => {
     await waitFor(() => expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(0));
     await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({
       archivePath,
+      password: undefined,
+      limit: 50_000,
     }));
   });
 
@@ -1041,7 +1049,7 @@ describe('CommanderShell', () => {
       renameEntry: vi.fn(),
       archiveList: vi.fn(async () => ({
         ok: true as const,
-        data: { archivePath, encrypted: false, entries: [] },
+        data: { archivePath, encrypted: false, totalEntries: 0, truncated: false, entries: [] },
       })),
     };
     const operationClient = {
@@ -1075,7 +1083,11 @@ describe('CommanderShell', () => {
       errors: [],
     }));
 
-    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath }));
+    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({
+      archivePath,
+      password: undefined,
+      limit: 50_000,
+    }));
     expect(container.querySelectorAll('.file-row[aria-selected="true"]')).toHaveLength(1);
   });
 
@@ -1400,6 +1412,8 @@ describe('CommanderShell', () => {
         data: {
           archivePath: archiveEntry.path,
           encrypted: false,
+          totalEntries: 1,
+          truncated: false,
           entries: [{
             ...testEntry(archiveEntry.path, 'inside.txt'),
             path: `${archiveEntry.path}!inside.txt`,
@@ -1426,7 +1440,11 @@ describe('CommanderShell', () => {
     }
     fireEvent.doubleClick(archiveRow);
 
-    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({ archivePath: archiveEntry.path }));
+    await waitFor(() => expect(mutationClient.archiveList).toHaveBeenCalledWith({
+      archivePath: archiveEntry.path,
+      password: undefined,
+      limit: 50_000,
+    }));
     await waitFor(() => expect(rowByText(container, 'inside.txt')).not.toBeNull());
     expect(rowByText(container, 'inside.txt')?.textContent).toContain('2.0 KB');
     expect(rowByText(container, 'inside.txt')?.textContent).toContain('07-02 23:30');
