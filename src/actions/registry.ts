@@ -266,6 +266,11 @@ export const shortcutLabelForAction = (action: AppAction) =>
     ? (action.shortcutLabel === '/' ? '/' : action.shortcutLabel.split('/')[0])
     : action.keyboardBindings?.[0]?.replace(/\s+/g, '') ?? '·';
 
+export const shortcutHelpLabelForAction = (action: AppAction) =>
+  action.shortcutLabel
+    ?? action.keyboardBindings?.map((binding) => binding.replace(/\s+/g, '')).join('/')
+    ?? '';
+
 export type KeyboardShortcutEvent = Pick<
   KeyboardEvent,
   'key' | 'code' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'

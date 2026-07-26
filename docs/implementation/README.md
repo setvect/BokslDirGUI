@@ -20,6 +20,7 @@
 | `ralplan-consensus-plan.md` | RALPLAN 의사결정/ADR/후속 실행 가이드 | 거버넌스 기록 |
 | `implementation-todo.md` | 현재 구현 완료 내용과 남은 실제 파일 커맨드 구현 TODO | 후속 구현 실행 순서 기준 |
 | `prd-remaining-todo.md` | PRD 기준으로 실제 사용자 시나리오에서 아직 덜 닫힌 작업 체크리스트 | 남은 작업 추적 |
+| `ui-quality-audit-todo.md` | 전체 UI를 단계별로 점검하고 결함·수정·검증 증거를 추적하는 체크리스트 | UI 품질 감사와 완료 판정 |
 
 ## 구현 착수 순서 권장
 

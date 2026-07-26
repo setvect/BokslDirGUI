@@ -55,6 +55,28 @@ describe('action context helpers', () => {
     expect(isActionAvailable(archiveCreateAction, context)).toBe(true);
   });
 
+  it('uses every selected concrete row in listing order and excludes the virtual parent', () => {
+    const listing = SAMPLE_LISTINGS.left;
+    const virtualParent = listing.entries[0];
+    const directory = listing.entries.find((entry) => entry.kind === 'directory' && !entry.isVirtual);
+    const file = listing.entries.find((entry) => entry.kind === 'file');
+    if (!virtualParent || !directory || !file) {
+      throw new Error('mixed selection fixtures are required');
+    }
+
+    const targets = resolveActionTargets({
+      focusedIndex: listing.entries.findIndex((entry) => entry.path === file.path),
+      selectedPaths: [file.path, virtualParent.path, directory.path],
+      listing,
+    });
+
+    expect(targets.focusedEntry).toBe(file);
+    expect(targets.selectedEntries).toEqual([directory, file]);
+    expect(targets.effectiveSources).toEqual([directory, file]);
+    expect(targets.selectedCount).toBe(2);
+    expect(targets.effectiveTargetCount).toBe(2);
+  });
+
   it('uses the same enablement predicate for menu and context actions', () => {
     const entry = SAMPLE_LISTINGS.left.entries.find((candidate) => candidate.name === 'Architecture.md');
     if (!entry) {

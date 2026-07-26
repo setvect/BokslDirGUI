@@ -1,8 +1,14 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ACTIONS, labelForAction, menuPathSegmentsForAction, shortcutLabelForAction } from '../actions/registry';
+import { ACTIONS, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
 import type { FilePreview, PanelId } from '../domain/types';
-import { ACTION_CATEGORY_LABELS, OVERLAY_TEXT, type SupportedLanguage } from '../i18n-resources';
+import {
+  ACTION_CATEGORY_LABELS,
+  NAVIGATION_GROUP_LABELS,
+  OVERLAY_TEXT,
+  PANEL_ID_LABELS,
+  type SupportedLanguage,
+} from '../i18n-resources';
 import type { PanelNavigationState } from './panelState';
 import { useCommanderKeyboardBoundaryProps, type CommanderKeyboardOwner } from './keyboardOwnership';
 
@@ -67,7 +73,7 @@ export function ShortcutHelpDialog({ language, onClose }: { language: SupportedL
         <div className="shortcut-help-list" role="list">
           {ACTIONS.filter((action) => action.shortcutLabel || action.keyboardBindings?.length).map((action) => (
             <div className="shortcut-help-row" role="listitem" key={action.id}>
-              <kbd>{shortcutLabelForAction(action)}</kbd>
+              <kbd>{shortcutHelpLabelForAction(action)}</kbd>
               <span>{labelForAction(action, language)}</span>
               <small>{categoryLabelForAction(action, language)}</small>
             </div>
@@ -121,13 +127,7 @@ export function HelpSearchDialog({ language, onClose }: { language: SupportedLan
           />
         </label>
         <div className="shortcut-help-list" role="list">
-          {results.map((action) => (
-            <div className="shortcut-help-row" role="listitem" key={action.id}>
-              <kbd>{shortcutLabelForAction(action)}</kbd>
-              <span>{labelForAction(action, language)}</span>
-              <small>{categoryLabelForAction(action, language)}</small>
-            </div>
-          ))}
+          {results.map((action) => <HelpSearchResult action={action} language={language} key={action.id} />)}
           {results.length === 0 ? <p className="dialog-empty">{text.noSearchResults}</p> : null}
         </div>
         <div className="filter-actions">
@@ -142,6 +142,24 @@ type AppActionCategory = (typeof ACTIONS)[number]['category'];
 
 const categoryLabelForAction = (action: (typeof ACTIONS)[number], language: SupportedLanguage) =>
   ACTION_CATEGORY_LABELS[language][action.category] ?? action.category;
+
+function HelpSearchResult({
+  action,
+  language,
+}: {
+  action: (typeof ACTIONS)[number];
+  language: SupportedLanguage;
+}) {
+  const shortcut = shortcutHelpLabelForAction(action);
+  const menuPath = menuPathSegmentsForAction(action, language)?.join(' › ');
+  return (
+    <div className="shortcut-help-row" role="listitem">
+      <kbd>{shortcut || OVERLAY_TEXT[language].noShortcut}</kbd>
+      <span>{labelForAction(action, language)}</span>
+      <small>{menuPath ?? categoryLabelForAction(action, language)}</small>
+    </div>
+  );
+}
 
 export function AboutDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
   const text = OVERLAY_TEXT[language];
@@ -178,7 +196,7 @@ export function NavigationListDialog({ language, state, onChoose, onClose }: {
             >
               <span>{item.label}</span>
               <code>{item.path}</code>
-              <small>{item.group}</small>
+              <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
             </button>
           ))}
           {state.items.length === 0 ? <p className="dialog-empty">{text.emptyList}</p> : null}
@@ -215,7 +233,7 @@ export function PathPrompt({ language, panel, onApply, onCancel }: {
     <CommanderOverlayDialog owner="path-prompt" title={text.goToPath} ariaLabel={text.goToPath} onClose={onCancel}>
       <form className="filter-form" onSubmit={handleSubmit}>
         <label>
-          <span>{text.goToPath} · {panel.listing.panelId.toUpperCase()}</span>
+          <span>{text.goToPath} · {PANEL_ID_LABELS[language][panel.listing.panelId]}</span>
           <input
             ref={inputRef}
             aria-label={text.path}
@@ -320,6 +338,48 @@ export function FilterPrompt({ language, panel, onApply, onCancel }: {
           <button type="button" onClick={onCancel}>{text.cancel}</button>
           {panel.filter ? <button type="button" onClick={() => onApply('')}>{text.clearFilter}</button> : null}
           <button type="submit" className="primary">{text.applyFilter}</button>
+        </div>
+      </form>
+    </CommanderOverlayDialog>
+  );
+}
+
+export function BookmarkRenamePrompt({ language, initialValue, onApply, onCancel }: {
+  language: SupportedLanguage;
+  initialValue: string;
+  onApply(value: string): void;
+  onCancel(): void;
+}) {
+  const text = OVERLAY_TEXT[language];
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    inputRef.current?.focus({ preventScroll: true });
+    inputRef.current?.select();
+  }, []);
+
+  return (
+    <CommanderOverlayDialog owner="bookmark-rename" title={text.renameBookmark} ariaLabel={text.renameBookmark} onClose={onCancel}>
+      <form className="filter-form" onSubmit={(event) => {
+        event.preventDefault();
+        const trimmed = value.trim();
+        if (trimmed) {
+          onApply(trimmed);
+        }
+      }}>
+        <label>
+          <span>{text.bookmarkName}</span>
+          <input
+            ref={inputRef}
+            aria-label={text.bookmarkName}
+            value={value}
+            onChange={(event) => setValue(event.currentTarget.value)}
+          />
+        </label>
+        <div className="filter-actions">
+          <button type="button" onClick={onCancel}>{text.cancel}</button>
+          <button type="submit" className="primary" disabled={!value.trim()}>{text.save}</button>
         </div>
       </form>
     </CommanderOverlayDialog>

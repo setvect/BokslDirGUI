@@ -21,7 +21,6 @@ import {
   OPERATION_DIALOG_TEXT,
   OPERATION_DIALOG_TITLES,
   OPERATION_CONFIRMATION_TEXT,
-  OPERATION_OVERVIEW_TEXT,
   METADATA_KIND_LABELS,
   formatItemCount,
   formatUserErrorMessage,
@@ -185,21 +184,18 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
               <Dialog.Title className="operation-title">{dialogTitle}</Dialog.Title>
               <Dialog.Description className="operation-description">{dialogDescription}</Dialog.Description>
               <OperationOverview dialog={dialog} language={language} text={text} />
-              <div className="operation-section">
-                <h3>{text.sources}</h3>
-                {dialog.sources.length > 0 ? (
+              {dialog.sources.length > 0 ? (
+                <div className="operation-section">
+                  <h3>{text.sources}</h3>
                   <ul className="operation-source-list">
                     {dialog.sources.map((source) => (
                       <li key={source.path}>
-                        <span>{source.name}</span>
-                        <code>{source.path}</code>
+                        <code title={source.path}>{source.path}</code>
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="operation-muted">{text.currentFolderTarget}</p>
-                )}
-              </div>
+                </div>
+              ) : null}
               {dialog.backendExecutionStubbed ? (
                 <p className="operation-warning">
                   {translateUserMessageKey(language, dialog.backendExecutionStubReasonKey)}
@@ -264,24 +260,12 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 </div>
               ) : null}
               {conflictPrompt ? (
-                <div className="operation-section conflict-dialog">
-                  <h3>{text.conflictResolution}</h3>
-                  <p>{text.conflictPrompt}</p>
-                  <p>{conflictPrompt.source.name} → {conflictPrompt.destination.name}</p>
-                  <div className="conflict-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
-                    {conflictPrompt.availableDecisions.map((decision) => (
-                      <button
-                        type="button"
-                        key={decision}
-                        className={conflictDecisionButtonClassName(decision, conflictPrompt)}
-                        autoFocus={isDefaultConflictDecision(decision, conflictPrompt)}
-                        onClick={() => resolveConflict(decision)}
-                      >
-                        {conflictDecisionLabel(language, decision)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <ConflictResolutionView
+                  prompt={conflictPrompt}
+                  language={language}
+                  text={text}
+                  resolveConflict={resolveConflict}
+                />
               ) : null}
               {summary ? (
                 <div className="operation-section">
@@ -376,22 +360,9 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
             {conflictPrompt ? (
               <div className="operation-section conflict-dialog">
                 <Dialog.Title>{text.conflictResolution}</Dialog.Title>
-                <Dialog.Description>
-                  {text.conflictPrompt} {conflictPrompt.source.name} → {conflictPrompt.destination.name}
-                </Dialog.Description>
-                <div className="conflict-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
-                  {conflictPrompt.availableDecisions.map((decision) => (
-                    <button
-                      type="button"
-                      key={decision}
-                      className={conflictDecisionButtonClassName(decision, conflictPrompt)}
-                      autoFocus={isDefaultConflictDecision(decision, conflictPrompt)}
-                      onClick={() => resolveConflict(decision)}
-                    >
-                      {conflictDecisionLabel(language, decision)}
-                    </button>
-                  ))}
-                </div>
+                <Dialog.Description>{text.conflictPrompt}</Dialog.Description>
+                <ConflictComparison prompt={conflictPrompt} text={text} />
+                <ConflictActions prompt={conflictPrompt} language={language} resolveConflict={resolveConflict} />
               </div>
             ) : null}
             {summaryNeedsAttention && summary ? (
@@ -632,23 +603,17 @@ const progressWidth = (progress: OperationProgress) => `${operationProgressPerce
 
 const progressPercentLabel = (progress: OperationProgress) => Math.round(operationProgressPercent(progress));
 
-const operationOverviewText = (
-  dialogKind: OperationDialogDraft['dialogKind'],
-  count: number,
-  language: SupportedLanguage,
-) => {
-  return OPERATION_OVERVIEW_TEXT[language][dialogKind](formatItemCount(language, count));
-};
+const DESTINATION_DIALOGS: ReadonlySet<OperationDialogKind> = new Set([
+  'copy',
+  'move',
+  'archiveExtract',
+  'archiveCreate',
+]);
 
-const overviewPathLabel = (
-  dialogKind: OperationDialogDraft['dialogKind'],
-  text: OperationDialogText,
-) => {
-  if (dialogKind === 'copy' || dialogKind === 'move' || dialogKind === 'archiveExtract' || dialogKind === 'archiveCreate') {
-    return text.destination;
-  }
-  return text.currentLocation;
-};
+const CURRENT_LOCATION_DIALOGS: ReadonlySet<OperationDialogKind> = new Set([
+  'createDir',
+  'shellCommand',
+]);
 
 function OperationOverview({
   dialog,
@@ -659,18 +624,25 @@ function OperationOverview({
   language: SupportedLanguage;
   text: OperationDialogText;
 }) {
-  const count = dialog.sources.length || 1;
-  const destination = dialog.targetDir;
+  const pathLabel = DESTINATION_DIALOGS.has(dialog.dialogKind)
+    ? text.destination
+    : CURRENT_LOCATION_DIALOGS.has(dialog.dialogKind)
+      ? text.currentLocation
+      : null;
+  const displayedPath = pathLabel ? dialog.targetDir : null;
+  const showPermanentDeleteWarning = dialog.dialogKind === 'deletePermanent';
+  if (!displayedPath && !showPermanentDeleteWarning) {
+    return null;
+  }
   return (
     <div className="operation-overview">
-      <p>{operationOverviewText(dialog.dialogKind, count, language)}</p>
-      {destination ? (
+      {displayedPath ? (
         <div className="operation-overview-path">
-          <span>{overviewPathLabel(dialog.dialogKind, text)}</span>
-          <code title={destination}>{destination}</code>
+          <span>{pathLabel}</span>
+          <code title={displayedPath}>{displayedPath}</code>
         </div>
       ) : null}
-      {dialog.dialogKind === 'deletePermanent' ? (
+      {showPermanentDeleteWarning ? (
         <>
           <p className="operation-warning is-inline">{text.irreversibleHint}</p>
           {dialog.requiredConfirmationPhrase ? (
@@ -678,6 +650,89 @@ function OperationOverview({
           ) : null}
         </>
       ) : null}
+    </div>
+  );
+}
+
+function ConflictResolutionView({
+  prompt,
+  language,
+  text,
+  resolveConflict,
+}: {
+  prompt: ConflictPrompt;
+  language: SupportedLanguage;
+  text: OperationDialogText;
+  resolveConflict: (decision: ConflictDecision) => void;
+}) {
+  return (
+    <div className="operation-section conflict-dialog">
+      <h3>{text.conflictResolution}</h3>
+      <p>{text.conflictPrompt}</p>
+      <ConflictComparison prompt={prompt} text={text} />
+      <ConflictActions prompt={prompt} language={language} resolveConflict={resolveConflict} />
+    </div>
+  );
+}
+
+function ConflictComparison({
+  prompt,
+  text,
+}: {
+  prompt: ConflictPrompt;
+  text: OperationDialogText;
+}) {
+  return (
+    <div className="conflict-comparison">
+      <ConflictEntryDetails label={text.sourceItem} entry={prompt.source} text={text} />
+      <ConflictEntryDetails label={text.destinationItem} entry={prompt.destination} text={text} />
+    </div>
+  );
+}
+
+function ConflictEntryDetails({
+  label,
+  entry,
+  text,
+}: {
+  label: string;
+  entry: ConflictPrompt['source'];
+  text: OperationDialogText;
+}) {
+  return (
+    <section className="conflict-entry" aria-label={label}>
+      <h4>{label}</h4>
+      <dl>
+        <div><dt>{text.path}</dt><dd><code title={entry.path}>{entry.path}</code></dd></div>
+        <div><dt>{text.size}</dt><dd>{entry.sizeBytes === null ? '—' : formatBytes(entry.sizeBytes)}</dd></div>
+        <div><dt>{text.modified}</dt><dd>{entry.modifiedAt ?? '—'}</dd></div>
+      </dl>
+    </section>
+  );
+}
+
+function ConflictActions({
+  prompt,
+  language,
+  resolveConflict,
+}: {
+  prompt: ConflictPrompt;
+  language: SupportedLanguage;
+  resolveConflict: (decision: ConflictDecision) => void;
+}) {
+  return (
+    <div className="conflict-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
+      {prompt.availableDecisions.map((decision) => (
+        <button
+          type="button"
+          key={decision}
+          className={conflictDecisionButtonClassName(decision, prompt)}
+          autoFocus={isDefaultConflictDecision(decision, prompt)}
+          onClick={() => resolveConflict(decision)}
+        >
+          {conflictDecisionLabel(language, decision)}
+        </button>
+      ))}
     </div>
   );
 }

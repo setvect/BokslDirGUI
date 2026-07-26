@@ -63,7 +63,7 @@ describe('OperationDialogHost', () => {
     render(<OperationDialogHost />);
 
     expect(screen.getByRole('dialog', { name: 'Move' })).toBeTruthy();
-    expect(screen.getByText('source.txt')).toBeTruthy();
+    expect(screen.getByText(sampleEntry.path)).toBeTruthy();
     expect(screen.getByText(/This screen is a preview before running the action/)).toBeTruthy();
     expect(screen.queryByText('start_move')).toBeNull();
     expect(screen.queryByText('file.move')).toBeNull();
@@ -109,9 +109,84 @@ describe('OperationDialogHost', () => {
     render(<OperationDialogHost />);
 
     expect(screen.getByRole('dialog', { name: 'Move to Trash' })).toBeTruthy();
-    expect(screen.getAllByText(sampleEntry.path).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(sampleEntry.path)).toHaveLength(1);
+    expect(screen.queryByText('Current location')).toBeNull();
+    expect(screen.queryByText('source.txt')).toBeNull();
     expect(screen.queryByText('start_delete trash')).toBeNull();
     expect(screen.queryByText('skip')).toBeNull();
+  });
+
+  it('shows a multi-item source list once per path without repeating the overview sentence', () => {
+    const action = ACTION_BY_ID.get('file.move');
+    if (!action) {
+      throw new Error('file.move action is required');
+    }
+    const secondEntry = { ...sampleEntry, path: '/tmp/second.txt', name: 'second.txt' };
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'right',
+      sources: [sampleEntry, secondEntry],
+      targetDir: '/tmp/target',
+      workingDir: '/tmp',
+    });
+
+    render(<OperationDialogHost language="ko" />);
+
+    expect(screen.getByText('2개 항목을 반대 패널로 이동합니다.')).toBeTruthy();
+    expect(screen.queryByText('2개 항목을 대상 위치로 이동합니다.')).toBeNull();
+    expect(screen.getAllByText(sampleEntry.path)).toHaveLength(1);
+    expect(screen.getAllByText(secondEntry.path)).toHaveLength(1);
+    expect(screen.getAllByText('/tmp/target')).toHaveLength(1);
+  });
+
+  it('keeps hundreds of selected sources inside one bounded source-list region', () => {
+    const action = ACTION_BY_ID.get('file.copy');
+    if (!action) {
+      throw new Error('file.copy action is required');
+    }
+    const sources = Array.from({ length: 300 }, (_, index) => ({
+      ...sampleEntry,
+      path: `/tmp/batch/item-${String(index).padStart(3, '0')}.txt`,
+      name: `item-${String(index).padStart(3, '0')}.txt`,
+    }));
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'right',
+      sources,
+      targetDir: '/tmp/target',
+      workingDir: '/tmp',
+    });
+
+    render(<OperationDialogHost language="ko" />);
+    const sourceList = document.querySelector('.operation-source-list');
+
+    expect(screen.getByText('300개 항목을 반대 패널로 복사합니다.')).toBeTruthy();
+    expect(sourceList).toBeTruthy();
+    expect(sourceList?.querySelectorAll('li')).toHaveLength(300);
+    expect(sourceList?.textContent).toContain('/tmp/batch/item-000.txt');
+    expect(sourceList?.textContent).toContain('/tmp/batch/item-299.txt');
+  });
+
+  it('does not render an empty source section for current-folder operations', () => {
+    const action = ACTION_BY_ID.get('file.mkdir');
+    if (!action) {
+      throw new Error('file.mkdir action is required');
+    }
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'right',
+      sources: [],
+      targetDir: null,
+      workingDir: '/tmp',
+      atomicExecutor: vi.fn(),
+    });
+
+    render(<OperationDialogHost language="ko" />);
+
+    expect(screen.queryByText('대상 항목')).toBeNull();
+    expect(screen.queryByText('현재 폴더 자체를 대상으로 하는 작업입니다.')).toBeNull();
+    expect(screen.getByText('현재 위치')).toBeTruthy();
+    expect(screen.getByText('/tmp')).toBeTruthy();
   });
 
   it('closes the delete confirmation dialog after the trash operation starts', async () => {
@@ -480,8 +555,13 @@ describe('OperationDialogHost', () => {
       },
       conflictPrompt: {
         operationId: 'op-conflict',
-        source: sampleEntry,
-        destination: { ...sampleEntry, path: '/tmp/target/source.txt' },
+        source: { ...sampleEntry, modifiedAt: '2026-07-25T10:00:00+09:00' },
+        destination: {
+          ...sampleEntry,
+          path: '/tmp/target/source.txt',
+          sizeBytes: 25,
+          modifiedAt: '2026-07-26T10:00:00+09:00',
+        },
         defaultDecision: 'skip',
         availableDecisions: ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'],
       },
@@ -493,6 +573,11 @@ describe('OperationDialogHost', () => {
     expect(screen.queryByText('Progress')).toBeNull();
     expect(screen.queryByText(/waitingForConflict/)).toBeNull();
     expect(screen.getByText('Overwrite All')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Source' }).textContent).toContain('/tmp/source.txt');
+    expect(screen.getByRole('region', { name: 'Source' }).textContent).toContain('10 B');
+    expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('/tmp/target/source.txt');
+    expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('25 B');
+    expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('2026-07-26T10:00:00+09:00');
     expect(screen.getAllByRole('button', { name: 'Cancel' })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Skip' }).className).toContain('safe-default');
     expect(screen.getByRole('button', { name: 'Overwrite' }).className).toContain('danger');

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
@@ -190,6 +190,67 @@ describe('CommanderShell', () => {
     expect(row?.querySelector('.middle-ellipsis-end')?.textContent).toMatch(/\.json$/);
   });
 
+  it('keeps boundary filenames and metadata distinguishable through accessible row details', () => {
+    const edgeEntries = [
+      testEntry('/edge', '한글-English-123-📦.txt'),
+      testEntry('/edge', 'cafe\u0301-조합형'),
+      testEntry('/edge', 'README'),
+      testEntry('/edge', 'archive.backup.2026.07.tar.gz'),
+      { ...testEntry('/edge', '.숨김파일'), isHidden: true },
+      { ...testEntry('/edge', 'report-final.txt'), permissions: '-r--r--r--' },
+      testEntry('/edge', 'report-finaI.txt'),
+    ];
+    const dataSource = createFixturePanelDataSource({
+      left: createDirectoryListing('left', '/empty', []),
+      right: createDirectoryListing('right', '/edge', edgeEntries),
+    });
+    const { container } = render(
+      <CommanderShell
+        dataSource={dataSource}
+        initialFocusIndex={{ right: 0 }}
+        initialSelectedPaths={{ right: [] }}
+      />,
+    );
+
+    for (const entry of edgeEntries) {
+      const row = [...container.querySelectorAll<HTMLElement>('.file-panel.is-active .file-row')]
+        .find((candidate) => candidate.getAttribute('title')?.includes(`이름: ${entry.name}`));
+      expect(row, entry.name).toBeTruthy();
+      expect(row?.getAttribute('aria-label')).toContain(entry.name);
+      expect(row?.getAttribute('aria-description')).toContain(`경로: ${entry.path}`);
+      expect(row?.getAttribute('aria-description')).toContain(`권한: ${entry.permissions}`);
+    }
+  });
+
+  it('virtualizes a 10,000-entry directory while preserving End-key navigation', async () => {
+    const entries = Array.from({ length: 10_000 }, (_, index) =>
+      testEntry('/large', `entry-${String(index).padStart(5, '0')}.txt`),
+    );
+    const dataSource = createFixturePanelDataSource({
+      left: createDirectoryListing('left', '/empty', []),
+      right: createDirectoryListing('right', '/large', entries),
+    });
+    const { container } = render(
+      <CommanderShell
+        dataSource={dataSource}
+        initialFocusIndex={{ right: 0 }}
+        initialSelectedPaths={{ right: [] }}
+      />,
+    );
+    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+    const activeTable = container.querySelector<HTMLElement>('.file-panel.is-active [role="table"]');
+
+    expect(activeTable?.getAttribute('aria-rowcount')).toBe('10000');
+    expect(container.querySelectorAll('.file-panel.is-active .file-row').length).toBeLessThan(100);
+
+    shell.focus();
+    fireEvent.keyDown(document, { key: 'End' });
+
+    await waitFor(() => expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-9999'));
+    expect(screen.getByLabelText('활성 패널 상태').textContent).toContain('entry-09999.txt');
+    expect(container.querySelectorAll('.file-panel.is-active .file-row').length).toBeLessThan(100);
+  });
+
   it('uses Tab as active-panel switching instead of DOM focus traversal', async () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
@@ -204,6 +265,16 @@ describe('CommanderShell', () => {
     expect(document.activeElement).toBe(shell);
     expect(screen.queryByText('Action preview')).toBeNull();
     expect(container.querySelector('.transient-overlay')).toBeNull();
+  });
+
+  it('uses the global status strip for focused-item context instead of repeating panel counts', () => {
+    renderCommander();
+
+    const status = screen.getByLabelText('활성 패널 상태');
+    expect(status.textContent).toContain('generic-array-6de08afde610f112');
+    expect(status.textContent).toContain('폴더');
+    expect(status.textContent).not.toContain('파일,');
+    expect(status.textContent).not.toContain('선택');
   });
 
   it('keeps the document keydown listener stable across rerenders', async () => {
@@ -1351,7 +1422,7 @@ describe('CommanderShell', () => {
 
   it('renames the focused entry through the connected atomic command path and keeps row focus', async () => {
     const user = userEvent.setup();
-    const renamed = { ...testEntry(SAMPLE_LISTINGS.right.path, 'renamed-entry') };
+    const renamed = { ...testEntry(SAMPLE_LISTINGS.right.path, '한글-이름-📦') };
     const original = SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right];
     const dataSource = createFixturePanelDataSource();
     const listDirSpy = vi.spyOn(dataSource, 'listDir').mockImplementation(async (input) => ({
@@ -1373,19 +1444,20 @@ describe('CommanderShell', () => {
 
     await user.keyboard('{F2}');
     const input = await screen.findByLabelText('새 이름');
-    await user.clear(input);
-    await user.type(input, 'renamed-entry');
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: '한글-이름-📦' } });
+    fireEvent.compositionEnd(input, { data: '한글-이름-📦' });
     await user.click(screen.getByRole('button', { name: '이름 변경' }));
 
     await waitFor(() => expect(mutationClient.renameEntry).toHaveBeenCalledWith({
       path: original.path,
-      newName: 'renamed-entry',
+      newName: '한글-이름-📦',
     }));
     await waitFor(() => expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
       path: SAMPLE_LISTINGS.right.path,
     })));
-    expect(await screen.findByText('renamed-entry')).toBeTruthy();
-    expect(focusedRowText(container)).toContain('renamed-entry');
+    expect(await screen.findByText('한글-이름-📦')).toBeTruthy();
+    expect(focusedRowText(container)).toContain('한글-이름-📦');
   });
 
   it('opens properties and enters archives as virtual directories', async () => {
@@ -1981,7 +2053,69 @@ describe('CommanderShell', () => {
       throw new Error('shortcut dialog is required');
     }
     expect(within(shortcutDialog).getByText('복사')).toBeTruthy();
+    expect(within(shortcutDialog).getByText('y/F5')).toBeTruthy();
+    expect(within(shortcutDialog).getByText('D/Shift+Delete')).toBeTruthy();
+    expect(within(shortcutDialog).getByText('Ctrl+B/tb+a')).toBeTruthy();
     expect(within(shortcutDialog).queryByText('file.copy')).toBeNull();
+  });
+
+  it('renames a bookmark with an explicit localized name instead of an internal suffix', async () => {
+    const user = userEvent.setup();
+    const initialBookmark = {
+      id: 'bookmark-existing',
+      label: '기존 이름',
+      path: SAMPLE_LISTINGS.right.path,
+    };
+    const baseSettings = {
+      schemaVersion: 1,
+      theme: 'dark' as const,
+      language: 'ko' as const,
+      sizeFormat: 'binary' as const,
+      external: { editorId: null, shellCommand: { enabled: false } },
+      bookmarks: [initialBookmark],
+      layout: { singlePanel: false, ratio: '50:50' as const },
+      session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+      view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+    };
+    const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
+      ok: true as const,
+      data: { ...baseSettings, ...patch },
+    }));
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      loadSettings: vi.fn(async () => ({ ok: true as const, data: baseSettings })),
+      saveSettings,
+    };
+    renderCommander(createFixturePanelDataSource(), mutationClient);
+
+    await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: '이동(G)' }));
+    const goMenu = await screen.findByRole('menu', { name: '이동(G) menu' });
+    const bookmarkTrigger = within(goMenu).getAllByRole('menuitem')
+      .find((item) => item.getAttribute('aria-haspopup') === 'menu' && item.textContent?.includes('북마크'));
+    if (!bookmarkTrigger) {
+      throw new Error('bookmark submenu trigger is required');
+    }
+    fireEvent.mouseEnter(bookmarkTrigger);
+    const bookmarkMenu = await screen.findByRole('menu', { name: '북마크 submenu' });
+    await user.click(within(bookmarkMenu).getByRole('menuitem', { name: '이름 변경' }));
+
+    const input = await screen.findByLabelText('북마크 이름');
+    await user.clear(input);
+    await user.type(input, '프로젝트 📦');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: {
+        bookmarks: [{
+          ...initialBookmark,
+          label: '프로젝트 📦',
+        }],
+      },
+    }));
+    expect(screen.getByLabelText('활성 패널 상태').textContent).toContain('북마크 이름 변경: 프로젝트 📦');
+    expect(document.body.textContent).not.toContain('renamed');
   });
 
   it('uses an explicit Cmd+Q/File Quit policy instead of a bare q shortcut', async () => {
@@ -2064,7 +2198,7 @@ describe('CommanderShell', () => {
     expect(fireEvent.keyDown(document, { key: 'q', code: 'KeyQ', metaKey: true })).toBe(false);
 
     expect(appController.quit).not.toHaveBeenCalled();
-    expect(await screen.findByText(/Quit 차단/)).toBeTruthy();
+    expect(await screen.findByText(/종료 차단/)).toBeTruthy();
   });
 
   it('starts panel-to-panel drag copy through the operation client', async () => {
@@ -2078,12 +2212,24 @@ describe('CommanderShell', () => {
     const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
     const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
     const leftPanel = container.querySelector<HTMLElement>('.file-panel[aria-label^="left panel"]');
-    if (!sourceRow || !leftPanel) {
-      throw new Error('drag source row and left panel are required');
+    const rightPanel = container.querySelector<HTMLElement>('.file-panel[aria-label^="right panel"]');
+    if (!sourceRow || !leftPanel || !rightPanel) {
+      throw new Error('drag source row and both panels are required');
     }
 
     fireEvent.dragStart(sourceRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
+    fireEvent.dragOver(rightPanel, { dataTransfer: { files: [] } });
+    expect(within(rightPanel).getByText('이 위치에는 놓을 수 없음')).toBeTruthy();
+    expect(rightPanel.className).toContain('is-drop-blocked');
+
+    const moveDragOver = createEvent.dragOver(leftPanel, { dataTransfer: { files: [] } });
+    Object.defineProperty(moveDragOver, 'shiftKey', { value: true });
+    fireEvent(leftPanel, moveDragOver);
+    expect(within(leftPanel).getByText('여기로 이동')).toBeTruthy();
+    expect(leftPanel.className).toContain('is-drop-move');
+
     fireEvent.drop(leftPanel, { dataTransfer: { files: [] } });
+    expect(within(leftPanel).queryByRole('status')).toBeNull();
 
     await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
       sources: [expect.stringContaining('generic-array-7534a23a150ae5e7')],
@@ -2108,7 +2254,7 @@ describe('CommanderShell', () => {
 
     const blockedFile = new File(['blocked'], 'blocked.txt', { type: 'text/plain' });
     fireEvent.drop(leftPanel, { dataTransfer: { files: [blockedFile] } });
-    expect(await screen.findByText('External drop은 OS 파일 경로가 확인될 때만 import 대상으로 허용합니다.')).toBeTruthy();
+    expect(await screen.findByText('외부 드롭은 OS 파일 경로가 확인될 때만 가져올 수 있습니다.')).toBeTruthy();
     expect(operationClient.startCopy).not.toHaveBeenCalled();
 
     const externalFile = new File(['hello'], 'incoming.txt', { type: 'text/plain', lastModified: 1_700_000_000_000 });
@@ -2225,6 +2371,8 @@ describe('CommanderShell', () => {
 
     await user.keyboard('gp');
     const pathInput = await screen.findByLabelText('경로');
+    expect(screen.getByText('경로 이동 · 오른쪽')).toBeTruthy();
+    expect(screen.queryByText('경로 이동 · RIGHT')).toBeNull();
     await user.clear(pathInput);
     await user.type(pathInput, '/tmp/navigation-target');
     await user.click(screen.getByRole('button', { name: '이동' }));
@@ -2239,6 +2387,8 @@ describe('CommanderShell', () => {
     const tabDialog = await screen.findByRole('dialog', { name: '오른쪽 탭' });
     expect(within(tabDialog).getByText(SAMPLE_LISTINGS.right.path)).toBeTruthy();
     expect(within(tabDialog).getByText('/tmp/navigation-target')).toBeTruthy();
+    expect(within(tabDialog).getByText('활성 탭')).toBeTruthy();
+    expect(within(tabDialog).queryByText('active tab')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('tx');
@@ -2249,7 +2399,9 @@ describe('CommanderShell', () => {
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('th');
-    expect(await screen.findByRole('dialog', { name: '오른쪽 히스토리' })).toBeTruthy();
+    const historyDialog = await screen.findByRole('dialog', { name: '오른쪽 히스토리' });
+    expect(within(historyDialog).getByText('현재')).toBeTruthy();
+    expect(within(historyDialog).queryByText('current')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('tba');
@@ -2259,7 +2411,12 @@ describe('CommanderShell', () => {
 
     await user.click(screen.getByRole('button', { name: '도움말(H)' }));
     await user.click(await screen.findByText('검색'));
-    expect(await screen.findByLabelText('도움말 검색어')).toBeTruthy();
+    const helpSearchInput = await screen.findByLabelText('도움말 검색어');
+    await user.type(helpSearchInput, '정렬');
+    const helpSearchDialog = screen.getByRole('dialog', { name: '기능 검색' });
+    expect(within(helpSearchDialog).getByText('보기 › 정렬 › 이름')).toBeTruthy();
+    expect(within(helpSearchDialog).getAllByText('없음').length).toBeGreaterThan(0);
+    expect(within(helpSearchDialog).queryByText('·')).toBeNull();
     expect(screen.queryByText('action registry')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
@@ -2620,13 +2777,13 @@ describe('CommanderShell', () => {
 
     expect(shell.style.getPropertyValue('--row-height')).not.toBe(beforeRowHeight);
     expect(shell.style.getPropertyValue('--commander-font-size')).not.toBe('16px');
-    expect(await screen.findByText('Zoom · 110%')).toBeTruthy();
+    expect(await screen.findByText('화면 배율 · 110%')).toBeTruthy();
 
     fireEvent.keyDown(document, { key: '0', metaKey: true });
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
       patch: expect.objectContaining({ view: expect.objectContaining({ zoomStep: 0 }) }),
     }));
-    expect(await screen.findByText('Zoom · 100%')).toBeTruthy();
+    expect(await screen.findByText('화면 배율 · 100%')).toBeTruthy();
   });
 
   it('opens the right-clicked row from the context menu instead of the previous focused row', async () => {
@@ -2834,7 +2991,7 @@ describe('CommanderShell', () => {
 
     fireEvent.keyDown(document, { key: '=', metaKey: true });
 
-    expect(await screen.findByText('Zoom · 110%')).toBeTruthy();
+    expect(await screen.findByText('화면 배율 · 110%')).toBeTruthy();
     expect(saveSettings).not.toHaveBeenCalled();
     expect(screen.queryByText(/설정 읽기 실패|설정 저장 실패/)).toBeNull();
   });

@@ -16,6 +16,7 @@ export type CommanderKeyboardOwner =
   | 'filter-prompt'
   | 'path-prompt'
   | 'archive-password'
+  | 'bookmark-rename'
   | 'quick-preview'
   | 'shortcut-help'
   | 'help-search'

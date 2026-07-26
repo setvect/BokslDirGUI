@@ -50,6 +50,8 @@
   --row-focused-bg: #006fbd;
   --row-focused-text: #fff;
   --row-selected-bg: rgba(5, 137, 216, 0.45);
+  --row-selected-text: #fff;
+  --row-selected-marker: #ffe066;
   --row-executable-text: #4ec9b0;
   --row-symlink-text: #ce9178;
   --row-archive-text: #dcdcaa;
@@ -255,6 +257,7 @@ button {
 }
 
 .file-panel {
+  position: relative;
   display: grid;
   grid-template-rows: var(--panel-header-height) var(--path-control-height) minmax(0, 1fr) calc(24px * var(--commander-scale));
   min-width: 0;
@@ -262,6 +265,35 @@ button {
   border: 1px solid var(--line);
   background: var(--panel-bg);
   outline: 1px solid transparent;
+}
+
+.file-panel.is-drop-copy,
+.file-panel.is-drop-move,
+.file-panel.is-drop-import {
+  outline: 2px solid var(--cyan);
+  outline-offset: -3px;
+}
+
+.file-panel.is-drop-blocked {
+  outline: 2px solid var(--danger);
+  outline-offset: -3px;
+}
+
+.panel-drop-indicator {
+  position: absolute;
+  z-index: 5;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid currentColor;
+  background: var(--operation-status-bg);
+  color: var(--text);
+  padding: 8px 12px;
+  pointer-events: none;
+  box-shadow: var(--shadow-surface);
+}
+
+.file-panel.is-drop-blocked .panel-drop-indicator {
+  color: var(--danger);
 }
 
 .file-panel.is-active {
@@ -352,7 +384,7 @@ button {
 }
 
 .path-controls button {
-  height: calc(22px * var(--commander-scale));
+  height: calc(24px * var(--commander-scale));
   border: 1px solid var(--control-border);
   background: var(--control-bg);
   color: var(--control-text);
@@ -482,14 +514,28 @@ button {
   color: var(--row-focused-text);
 }
 
-.file-row.is-focused .file-cell,
-.file-row.is-selected .file-cell {
+.file-row.is-focused .file-cell {
   color: var(--row-focused-text);
 }
 
 .file-row.is-selected:not(.is-focused) {
   background: var(--row-selected-bg);
-  color: var(--row-focused-text);
+  color: var(--row-selected-text);
+}
+
+.file-row.is-selected:not(.is-focused) .file-cell {
+  color: var(--row-selected-text);
+}
+
+.file-row.is-selected:not(.is-focused),
+.file-row.is-selected.is-focused {
+  background-image: linear-gradient(
+    to right,
+    var(--row-selected-marker) 0,
+    var(--row-selected-marker) 3px,
+    transparent 3px
+  );
+  background-repeat: no-repeat;
 }
 
 .file-row.is-compare-different:not(.is-focused),
@@ -598,6 +644,14 @@ button {
   min-width: 0;
   overflow: hidden;
   color: var(--status-message-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-focused-entry {
+  min-width: 0;
+  max-width: 38%;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1088,10 +1142,65 @@ button {
 }
 
 .operation-source-list li {
-  display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  gap: 10px;
   min-width: 0;
+}
+
+.operation-source-list code {
+  display: block;
+}
+
+.conflict-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.conflict-entry {
+  min-width: 0;
+  border: 1px solid var(--dialog-section-border);
+  background: var(--dialog-section-bg);
+  padding: 8px;
+}
+
+.conflict-entry h4 {
+  margin: 0 0 6px;
+  color: var(--header-text);
+  font-size: 13px;
+}
+
+.conflict-entry dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.conflict-entry dl > div {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.conflict-entry dt {
+  color: var(--muted);
+}
+
+.conflict-entry dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.conflict-entry code {
+  display: block;
+  overflow: hidden;
+  color: var(--cyan);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .conflict-comparison {
+    grid-template-columns: 1fr;
+  }
 }
 
 .operation-warning {
@@ -1398,6 +1507,8 @@ body[data-theme="light"] {
   --row-focused-bg: #005ea8;
   --row-focused-text: #ffffff;
   --row-selected-bg: rgba(0, 94, 168, 0.22);
+  --row-selected-text: #123b5d;
+  --row-selected-marker: #005ea8;
   --row-executable-text: #087443;
   --row-symlink-text: #a15c12;
   --row-archive-text: #7a5b00;
@@ -1513,6 +1624,8 @@ body[data-theme="highContrast"] {
   --row-focused-bg: #ffff00;
   --row-focused-text: #000000;
   --row-selected-bg: #004d4d;
+  --row-selected-text: #ffffff;
+  --row-selected-marker: #00ffff;
   --row-executable-text: #00ff66;
   --row-symlink-text: #ffcc00;
   --row-archive-text: #ffff00;

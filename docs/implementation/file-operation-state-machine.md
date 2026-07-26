@@ -33,7 +33,7 @@ idle
 | --- | --- | --- | --- |
 | `validating` | 경로/권한/대상 위험 검사 | blocking dialog 또는 inline spinner | cancel |
 | `scanning` | 파일 수/바이트 계산 | progress 준비 | cancel |
-| `queued` | 향후 영속 작업 큐를 위한 예약 상태(현재 UI에서는 생성하지 않음) | 없음 | none |
+| `queued` | backend가 작업을 접수했거나 실제 I/O 시작을 기다리는 상태 | 지연 시간 전에는 즉시 상태만 반영하고, 긴 작업이면 progress dialog | cancel |
 | `running` | 실제 I/O 진행 | progress dialog | cancel |
 | `waitingForConflict` | 충돌 결정 대기 | conflict dialog | resolve/cancel |
 | `cancelling` | cooperative cancel 처리 중 | cancelling 표시 | none |
@@ -44,7 +44,7 @@ idle
 
 ## 4. 작업별 정책
 
-현재는 **단일 활성 작업**만 허용한다. 진행 중 새 파일 작업은 `operation_busy`로 차단해 충돌 결정, 취소, 완료 후 패널 새로고침의 순서를 결정적으로 유지한다. `queued`는 DTO 호환을 위한 예약 상태이며 실제 다중 작업 큐를 의미하지 않는다.
+현재는 **단일 활성 작업**만 허용한다. 진행 중 새 파일 작업은 `operation_busy`로 차단해 충돌 결정, 취소, 완료 후 패널 새로고침의 순서를 결정적으로 유지한다. `queued`는 작업 접수 직후 UI가 즉시 만드는 상태이지만 실제 다중 작업 큐를 의미하지 않는다.
 
 ### 4.1 Copy
 

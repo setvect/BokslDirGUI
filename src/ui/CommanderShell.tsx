@@ -76,6 +76,7 @@ import { commanderKeyboardIsSuspended, commanderKeyboardOwners, useCommanderKeyb
 import {
   AboutDialog,
   ArchivePasswordPrompt,
+  BookmarkRenamePrompt,
   FilterPrompt,
   HelpSearchDialog,
   NavigationListDialog,
@@ -292,6 +293,7 @@ export function CommanderShell({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [filterPromptPanel, setFilterPromptPanel] = useState<PanelId | null>(null);
   const [pathPromptPanel, setPathPromptPanel] = useState<PanelId | null>(null);
+  const [bookmarkRenameRequest, setBookmarkRenameRequest] = useState<{ bookmarkId: string; initialValue: string } | null>(null);
   const [archivePasswordRequest, setArchivePasswordRequest] = useState<{ panelId: PanelId; virtualPath: string; archivePath: string } | null>(null);
   const archivePasswordsRef = useRef(new Map<string, string>());
   const [navigationList, setNavigationList] = useState<NavigationListState | null>(null);
@@ -314,6 +316,7 @@ export function CommanderShell({
     right: [dataSource.initialListings.right.path],
   }));
   const [dragSource, setDragSource] = useState<{ panelId: PanelId; entry: FileEntry } | null>(null);
+  const [dragOverPanel, setDragOverPanel] = useState<{ panelId: PanelId; intent: 'copy' | 'move' | 'import' | 'blocked' } | null>(null);
   const viewMetrics = viewMetricsForSettings(settings.view);
   const statusText = COMMANDER_STATUS_TEXT[settings.language];
   const navigationText = COMMANDER_NAVIGATION_TEXT[settings.language];
@@ -683,12 +686,12 @@ export function CommanderShell({
       ? 0
       : clampNumber(currentStep + (command === 'in' ? 1 : -1), MIN_ZOOM_STEP, MAX_ZOOM_STEP);
     if (nextStep === currentStep) {
-      setStatusMessage(`Zoom · ${zoomPercentForStep(settings.view.zoomStep)}%`);
+      setStatusMessage(statusText.zoom(zoomPercentForStep(settings.view.zoomStep)));
       return;
     }
     void saveSettingsPatch({
       view: { ...settings.view, zoomStep: nextStep },
-    }, `Zoom · ${zoomPercentForStep(nextStep)}%`);
+    }, statusText.zoom(zoomPercentForStep(nextStep)));
   };
 
   const addBookmark = (panelId: PanelId) => {
@@ -707,10 +710,25 @@ export function CommanderShell({
   const renameBookmarkForPanel = (panelId: PanelId) => {
     const panel = panelState[panelId];
     const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
+    const bookmark = bookmarks.find((item) => item.path === panel.path);
+    if (!bookmark) {
+      setStatusMessage(statusText.bookmarkNotFound);
+      return;
+    }
+    setBookmarkRenameRequest({ bookmarkId: bookmark.id, initialValue: bookmark.label });
+  };
+
+  const applyBookmarkRename = (label: string) => {
+    const request = bookmarkRenameRequest;
+    if (!request) {
+      return;
+    }
+    const bookmarks = Array.isArray(settings.bookmarks) ? settings.bookmarks : [];
     const next = bookmarks.map((bookmark) =>
-      bookmark.path === panel.path ? { ...bookmark, label: `${shortenPath(panel.path)} · renamed` } : bookmark,
+      bookmark.id === request.bookmarkId ? { ...bookmark, label } : bookmark,
     );
-    void saveSettingsPatch({ bookmarks: next }, statusText.bookmarkRenamed(shortenPath(panel.path)));
+    setBookmarkRenameRequest(null);
+    void saveSettingsPatch({ bookmarks: next }, statusText.bookmarkRenamed(label));
   };
 
   const deleteBookmarkForPanel = (panelId: PanelId) => {
@@ -820,12 +838,12 @@ export function CommanderShell({
     };
     const theme = themeByAction[actionId];
     if (theme) {
-      void saveSettingsPatch({ theme }, `Theme · ${theme}`);
+      void saveSettingsPatch({ theme }, statusText.themeChanged(theme));
       return true;
     }
     const language = languageByAction[actionId];
     if (language) {
-      void saveSettingsPatch({ language }, `Language · ${language}`);
+      void saveSettingsPatch({ language }, COMMANDER_STATUS_TEXT[language].languageChanged(language));
       return true;
     }
     const sizeFormat = sizeByAction[actionId];
@@ -835,7 +853,7 @@ export function CommanderShell({
     }
     const editorId = editorByAction[actionId];
     if (editorId) {
-      void saveSettingsPatch({ external: { ...settings.external, editorId } }, `Default editor · ${editorId}`);
+      void saveSettingsPatch({ external: { ...settings.external, editorId } }, statusText.editorChanged(editorId));
       return true;
     }
     if (actionId === 'settings.toggleIcons') {
@@ -848,6 +866,7 @@ export function CommanderShell({
 
   const handlePanelDrop = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
     event.preventDefault();
+    setDragOverPanel(null);
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length > 0 && !dragSource) {
       const externalEntries = files
@@ -876,6 +895,20 @@ export function CommanderShell({
       setStatusMessage(statusText.dragOperation(event.shiftKey ? 'move' : 'copy', dragSource.entry.name, panelIdLabel(targetPanel, settings.language)));
     }
     setDragSource(null);
+  };
+
+  const handlePanelDragOver = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
+    event.preventDefault();
+    const intent = dragSource
+      ? dragSource.entry.isVirtual || dragSource.panelId === targetPanel
+        ? 'blocked'
+        : event.shiftKey
+          ? 'move'
+          : 'copy'
+      : 'import';
+    setDragOverPanel((current) =>
+      current?.panelId === targetPanel && current.intent === intent ? current : { panelId: targetPanel, intent },
+    );
   };
 
   const selectEntry = (panelId: PanelId, index: number, entry: FileEntry, mode: SelectionMode) => {
@@ -1154,19 +1187,19 @@ export function CommanderShell({
 
     if (actionId === 'selection.all') {
       selectAllEntries(panelOverride);
-      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelIdLabel(panelOverride, settings.language)}`);
       return;
     }
 
     if (actionId === 'selection.clear') {
       clearSelection(panelOverride);
-      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelIdLabel(panelOverride, settings.language)}`);
       return;
     }
 
     if (actionId === 'selection.invert') {
       invertSelection(panelOverride);
-      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelOverride.toUpperCase()}`);
+      setStatusMessage(`${labelForAction(action, settings.language)} · ${panelIdLabel(panelOverride, settings.language)}`);
       return;
     }
 
@@ -1431,6 +1464,7 @@ export function CommanderShell({
   const applyGotoPath = (panelId: PanelId, pathValue: string) => {
     const path = pathValue.trim();
     setPathPromptPanel(null);
+    setBookmarkRenameRequest(null);
     setArchivePasswordRequest(null);
     if (!path) {
       shellRef.current?.focus({ preventScroll: true });
@@ -1805,6 +1839,13 @@ export function CommanderShell({
           onClearFilter={() => handleAction(ACTION_BY_ID.get('filter.clear')!, 'left')}
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
           onEntryDragStart={(entry) => setDragSource({ panelId: 'left', entry })}
+          onEntryDragEnd={() => {
+            setDragSource(null);
+            setDragOverPanel(null);
+          }}
+          dropIntent={dragOverPanel?.panelId === 'left' ? dragOverPanel.intent : null}
+          onPanelDragOver={(event) => handlePanelDragOver(event, 'left')}
+          onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'left' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'left')}
         />
         <FilePanel
@@ -1833,17 +1874,23 @@ export function CommanderShell({
           onClearFilter={() => handleAction(ACTION_BY_ID.get('filter.clear')!, 'right')}
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
           onEntryDragStart={(entry) => setDragSource({ panelId: 'right', entry })}
+          onEntryDragEnd={() => {
+            setDragSource(null);
+            setDragOverPanel(null);
+          }}
+          dropIntent={dragOverPanel?.panelId === 'right' ? dragOverPanel.intent : null}
+          onPanelDragOver={(event) => handlePanelDragOver(event, 'right')}
+          onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'right' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'right')}
         />
       </section>
       <BottomStatusStrip
         language={settings.language}
-        listing={activeListing}
         activePanel={activePanel}
-        selectedCount={context.selectedCount}
-        selectedBytes={sumEntryBytes(activeTargets.selectedEntries)}
+        focusedEntry={activeTargets.focusedEntry}
         message={statusMessage}
         filter={activePanelState.filter}
+        sizeFormat={settings.sizeFormat}
       />
       <HotkeyStrip scale={viewMetrics.scale} language={settings.language} />
       {filterPromptPanel ? (
@@ -1859,6 +1906,14 @@ export function CommanderShell({
           language={settings.language}
           panel={panelState[pathPromptPanel]}
           onApply={(pathValue) => applyGotoPath(pathPromptPanel, pathValue)}
+          onCancel={closeOverlay}
+        />
+      ) : null}
+      {bookmarkRenameRequest ? (
+        <BookmarkRenamePrompt
+          language={settings.language}
+          initialValue={bookmarkRenameRequest.initialValue}
+          onApply={applyBookmarkRename}
           onCancel={closeOverlay}
         />
       ) : null}
@@ -2547,6 +2602,10 @@ interface FilePanelProps {
   onEntryOpen(entry: FileEntry): void;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
   onEntryDragStart(entry: FileEntry): void;
+  onEntryDragEnd(): void;
+  dropIntent: 'copy' | 'move' | 'import' | 'blocked' | null;
+  onPanelDragOver(event: DragEvent<HTMLElement>): void;
+  onPanelDragLeave(): void;
   onPanelDrop(event: DragEvent<HTMLElement>): void;
   onNavigateBack(): void;
   onNavigateForward(): void;
@@ -2576,6 +2635,10 @@ function FilePanel({
   onEntryOpen,
   onOpenAction,
   onEntryDragStart,
+  onEntryDragEnd,
+  dropIntent,
+  onPanelDragOver,
+  onPanelDragLeave,
   onPanelDrop,
   onNavigateBack,
   onNavigateForward,
@@ -2693,14 +2756,26 @@ function FilePanel({
   return (
     <section
       ref={panelRef}
-      className={`file-panel ${active ? 'is-active' : ''} ${hiddenByLayout ? 'is-hidden-by-layout' : ''}`}
+      className={`file-panel ${active ? 'is-active' : ''} ${hiddenByLayout ? 'is-hidden-by-layout' : ''} ${dropIntent ? `is-drop-${dropIntent}` : ''}`}
       aria-label={`${listing.panelId} panel ${listing.path}`}
       aria-current={active ? 'true' : undefined}
       aria-hidden={hiddenByLayout ? 'true' : undefined}
       onMouseDown={onActivate}
-      onDragOver={(event) => event.preventDefault()}
+      onDragOver={onPanelDragOver}
+      onDragLeave={onPanelDragLeave}
       onDrop={onPanelDrop}
     >
+      {dropIntent ? (
+        <span className="panel-drop-indicator" role="status">
+          {dropIntent === 'copy'
+            ? labels.dropCopy
+            : dropIntent === 'move'
+              ? labels.dropMove
+              : dropIntent === 'import'
+                ? labels.dropImport
+                : labels.dropBlocked}
+        </span>
+      ) : null}
       <PanelHeader panel={panel} active={active} tabCount={tabCount} language={language} onClearFilter={onClearFilter} />
       <PathControls
         panel={panel}
@@ -2760,6 +2835,7 @@ function FilePanel({
                         aria-description={tooltip}
                         draggable={!entry.isVirtual}
                         onDragStart={() => onEntryDragStart(entry)}
+                        onDragEnd={onEntryDragEnd}
                         onClick={(event) => onEntrySelect(
                           virtualRow.index,
                           entry,
@@ -3076,27 +3152,27 @@ const panelIdLabel = (panelId: PanelId, language: Settings['language']) => {
 
 function BottomStatusStrip({
   language,
-  listing,
   activePanel,
-  selectedCount,
-  selectedBytes,
+  focusedEntry,
   message,
   filter,
+  sizeFormat,
 }: {
   language: Settings['language'];
-  listing: DirectoryListing;
   activePanel: PanelId;
-  selectedCount: number;
-  selectedBytes: number;
+  focusedEntry: FileEntry | null;
   message: string | null;
   filter: string | null;
+  sizeFormat: Settings['sizeFormat'];
 }) {
-  const summary = summarizeEntries(listing.entries);
   const labels = COMMANDER_UI_TEXT[language];
   return (
     <footer className="bottom-status" aria-label={labels.activePanelStatus}>
-      <span>{summary.files} {labels.files}, {summary.dirs} {labels.dirs}</span>
-      <span>{selectedCount} {labels.selected}{selectedBytes ? ` · ${formatBytes(selectedBytes)}` : ''}</span>
+      {focusedEntry ? (
+        <span className="status-focused-entry" title={focusedEntry.path}>
+          {focusedEntry.name} · {METADATA_KIND_LABELS[language][focusedEntry.kind]}{formatSize(focusedEntry, sizeFormat) ? ` · ${formatSize(focusedEntry, sizeFormat)}` : ''}
+        </span>
+      ) : null}
       {filter ? <span className="status-filter">{labels.filter}: {filter}</span> : null}
       <span>{panelIdLabel(activePanel, language)}</span>
       {message ? <span className="status-message" aria-live="polite">{message}</span> : null}
@@ -3450,22 +3526,6 @@ const navigationItemsFromLocations = (locations: LocationList, settings: Setting
     })),
   ])
   );
-};
-
-const sumEntryBytes = (entries: readonly FileEntry[]) =>
-  entries.reduce((total, entry) => total + (entry.kind === 'directory' ? 0 : entry.sizeBytes ?? 0), 0);
-
-const formatBytes = (bytes: number) => {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  }
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 };
 
 const useLocalClock = () => {
