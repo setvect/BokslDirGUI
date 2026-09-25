@@ -732,7 +732,7 @@
 
 | 분류 | dialog kind | 현재 동작 | 판정 |
 | --- | --- | --- | --- |
-| 실제 destination 보유 | copy, move, archiveCreate, archiveExtract | 반대 패널 또는 계산된 대상 디렉터리를 `대상 위치`로 표시 | 의미는 맞지만 설명·overview 중복은 UI-002 |
+| 실제 destination 보유 | copy, move, archiveCreate, archiveExtract | 압축 생성은 활성 패널의 현재 디렉터리, 나머지는 반대 패널 또는 계산된 대상 디렉터리를 `대상 위치`로 표시 | 의미는 맞지만 설명·overview 중복은 UI-002 |
 | source path를 `현재 위치`로 표시 | trash, deletePermanent, rename, properties, externalOpenDefault, externalReveal, externalEditor | 첫 source 파일 경로를 `currentLocation`으로 표시 | UI-001 의미 오류 |
 | working directory 보유 | createDir, shellCommand | 활성 패널 경로를 `현재 위치`로 표시 | 의미 적합 |
 

@@ -1564,9 +1564,11 @@ export function CommanderShell({
         return;
       }
 
-      const operationTargetDir = actionId === 'archive.extractAuto' && sources[0]
-        ? joinPath(panelState[oppositePanel].path, archiveAutoExtractFolderName(sources[0].name))
-        : targetDirOverride ?? panelState[oppositePanel].path;
+      const operationTargetDir = actionId === 'archive.create'
+        ? targetDirOverride ?? panelListing.path
+        : actionId === 'archive.extractAuto' && sources[0]
+          ? joinPath(panelState[oppositePanel].path, archiveAutoExtractFolderName(sources[0].name))
+          : targetDirOverride ?? panelState[oppositePanel].path;
       const archiveCopyPlan = actionId === 'file.copy'
         ? archiveCopyPlanForSources(
             sources,
@@ -1593,8 +1595,8 @@ export function CommanderShell({
         panelId: panelOverride,
         sources,
         targetDir: operationTargetDir,
-        targetEntries: actionId === 'archive.create' && operationTargetDir === panelState[oppositePanel].path
-          ? panelState[oppositePanel].listing.entries
+        targetEntries: actionId === 'archive.create' && operationTargetDir === panelListing.path
+          ? panelListing.entries
           : undefined,
         workingDir: panelListing.path,
         atomicExecutor: atomicExecutorForAction(actionId, mutationClient, settings),

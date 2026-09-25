@@ -2041,7 +2041,7 @@ describe('CommanderShell', () => {
     expect(screen.getByText(/hello/)).toBeTruthy();
   });
 
-  it('starts archive creation through the connected operation client with the opposite panel target', async () => {
+  it('starts archive creation through the connected operation client in the source panel directory', async () => {
     const user = userEvent.setup();
     const operationClient = {
       startCopy: vi.fn(),
@@ -2060,7 +2060,37 @@ describe('CommanderShell', () => {
 
     await waitFor(() => expect(operationClient.archiveCreate).toHaveBeenCalledWith({
       sources: [expect.stringContaining('generic-array-6de08afde610f112')],
-      targetArchive: `${SAMPLE_LISTINGS.left.path}/generic-array-6de08afde610f112.zip`,
+      targetArchive: `${SAMPLE_LISTINGS.right.path}/generic-array-6de08afde610f112.zip`,
+      format: 'zip',
+    }));
+  });
+
+  it('numbers a new archive against names in the source panel directory', async () => {
+    const user = userEvent.setup();
+    const archiveName = 'generic-array-6de08afde610f112.zip';
+    const rightListing = {
+      ...SAMPLE_LISTINGS.right,
+      entries: [...SAMPLE_LISTINGS.right.entries, testEntry(SAMPLE_LISTINGS.right.path, archiveName)],
+    };
+    const dataSource = createFixturePanelDataSource({ ...SAMPLE_LISTINGS, right: rightListing });
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveCreate: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-numbered', kind: 'archiveCreate' as const, state: 'queued' as const } })),
+      archiveExtract: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(dataSource, undefined, operationClient);
+
+    await user.keyboard('zc');
+    expect(await screen.findByRole('dialog', { name: '압축 생성' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '압축 생성' }));
+
+    await waitFor(() => expect(operationClient.archiveCreate).toHaveBeenCalledWith({
+      sources: [expect.stringContaining('generic-array-6de08afde610f112')],
+      targetArchive: `${SAMPLE_LISTINGS.right.path}/generic-array-6de08afde610f112 (2).zip`,
       format: 'zip',
     }));
   });
