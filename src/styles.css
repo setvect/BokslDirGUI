@@ -1018,6 +1018,111 @@ button {
   white-space: pre-wrap;
 }
 
+.shortcut-help-dialog {
+  position: fixed;
+  top: 50%;
+  width: min(1120px, calc(100vw - 32px));
+  min-width: 0;
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  transform: translate(-50%, -50%);
+}
+
+.shortcut-help-dialog:focus-within {
+  border-width: 2px;
+}
+
+.shortcut-help-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  gap: 10px;
+}
+
+.shortcut-help-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 8px 10px 10px;
+}
+
+.shortcut-help-scroll:focus-visible {
+  outline: none;
+}
+
+.shortcut-help-groups {
+  columns: 245px;
+  column-gap: 16px;
+}
+
+.shortcut-help-column {
+  display: contents;
+}
+
+.shortcut-help-group {
+  break-inside: avoid-column;
+  margin: 0 0 10px;
+}
+
+@media (min-width: 1100px) {
+  .shortcut-help-groups {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    columns: initial;
+  }
+
+  .shortcut-help-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .shortcut-help-column .shortcut-help-group {
+    margin: 0;
+  }
+}
+
+.shortcut-help-group-title {
+  margin: 0 0 3px;
+  border-bottom: 1px solid var(--line-strong);
+  padding: 3px 4px;
+  color: var(--cyan);
+  font-size: 13px;
+}
+
+.shortcut-help-entries {
+  display: grid;
+}
+
+.shortcut-help-entry {
+  display: grid;
+  grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line-muted);
+  padding: 3px 4px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.shortcut-help-entry kbd {
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.shortcut-help-entry span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .shortcut-help-list {
   display: grid;
   gap: 4px;
@@ -1069,6 +1174,11 @@ button {
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.quick-preview-text:focus-visible {
+  outline: 2px solid var(--line-strong);
+  outline-offset: -2px;
 }
 
 .shortcut-help-row {
@@ -1247,6 +1357,8 @@ button {
   background: var(--error-bg);
   color: var(--danger);
   padding: 8px 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .progress-bar {

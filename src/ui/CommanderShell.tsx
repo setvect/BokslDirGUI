@@ -1142,7 +1142,7 @@ export function CommanderShell({
       navigateUp(panelId);
       return;
     }
-    if (entry.kind === 'directory') {
+    if (entry.kind === 'directory' || (entry.kind === 'symlink' && entry.symlinkTargetIsDirectory !== false)) {
       const panel = panelState[panelId];
       void listPanel(panelId, entry.path, {
         pushHistory: entry.path !== panel.path,

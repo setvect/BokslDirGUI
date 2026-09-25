@@ -28,6 +28,12 @@ struct WorkEntry {
     metadata: fs::Metadata,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SpecialFileScanPolicy {
+    Reject,
+    IncludeForCopy,
+}
+
 #[derive(Debug, Clone)]
 struct OperationStats {
     total_files: u64,
@@ -546,10 +552,15 @@ fn run_copy(
             Path::new(source_name),
             &mut work,
             &mut total_bytes,
+            SpecialFileScanPolicy::IncludeForCopy,
         )
         .map_err(|error| error_summary(operation_id, kind, error))?;
     }
-    let mut stats = OperationStats::new(work.len() as u64, total_bytes);
+    let actionable_files = work
+        .iter()
+        .filter(|entry| !is_socket_file_type(&entry.metadata.file_type()))
+        .count() as u64;
+    let mut stats = OperationStats::new(actionable_files, total_bytes);
     drop(work);
     stats.cancel_after_completed = cancel_after_completed;
     emit_progress(
@@ -587,6 +598,12 @@ fn run_copy(
             }
         };
         let destination = target_dir.join(&source_name);
+        if fs::symlink_metadata(source)
+            .is_ok_and(|metadata| is_socket_file_type(&metadata.file_type()))
+        {
+            stats.skipped_files += 1;
+            continue;
+        }
         if same_path(source, &destination) {
             stats.skipped_files += 1;
             continue;
@@ -694,7 +711,14 @@ fn run_move(
                 )
             }
         };
-        if let Err(error) = scan_work(operation_id, source, &name, &mut work, &mut total_bytes) {
+        if let Err(error) = scan_work(
+            operation_id,
+            source,
+            &name,
+            &mut work,
+            &mut total_bytes,
+            SpecialFileScanPolicy::Reject,
+        ) {
             return error_summary(operation_id, kind, error);
         }
         total_files += work.len() as u64;
@@ -1286,6 +1310,7 @@ fn run_archive_add(
             Path::new(""),
             &mut work,
             &mut source_bytes,
+            SpecialFileScanPolicy::Reject,
         ) {
             return error_summary(operation_id, kind, error);
         }
@@ -2171,12 +2196,8 @@ fn list_zip_entries_for_operation(
     let mut command = Command::new(unzip);
     command.arg("-Z1");
     command.arg(archive);
-    let stdout = run_external_command_capture_with_secret(
-        operation_id,
-        command,
-        Some(archive),
-        password,
-    )?;
+    let stdout =
+        run_external_command_capture_with_secret(operation_id, command, Some(archive), password)?;
     Ok(String::from_utf8_lossy(&stdout)
         .lines()
         .map(str::trim)
@@ -2207,12 +2228,8 @@ fn list_7z_entries_for_operation(
         command.arg(format!("-p{password}"));
     }
     command.arg(archive);
-    let stdout = run_external_command_capture_with_secret(
-        operation_id,
-        command,
-        Some(archive),
-        password,
-    )?;
+    let stdout =
+        run_external_command_capture_with_secret(operation_id, command, Some(archive), password)?;
     Ok(super::archive::parse_7z_slt_paths(&stdout))
 }
 
@@ -2592,6 +2609,19 @@ where
     Ok(())
 }
 
+fn is_socket_file_type(file_type: &fs::FileType) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::FileTypeExt;
+        file_type.is_socket()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = file_type;
+        false
+    }
+}
+
 fn copy_tree_to_destination(
     app: Option<&tauri::AppHandle>,
     operation_id: &str,
@@ -2608,6 +2638,11 @@ fn copy_tree_to_destination(
         Path::new(""),
         &mut work,
         &mut ignored_total_bytes,
+        if kind == OperationKind::Copy {
+            SpecialFileScanPolicy::IncludeForCopy
+        } else {
+            SpecialFileScanPolicy::Reject
+        },
     )?;
     let mut progress_ticker = ProgressTicker::new();
     for entry in work {
@@ -2659,6 +2694,28 @@ fn copy_tree_to_destination(
                 }
                 Ok(())
             })?;
+        } else {
+            if kind == OperationKind::Copy && is_socket_file_type(&file_type) {
+                stats.skipped_files += 1;
+                continue;
+            }
+            if kind != OperationKind::Copy || entry.relative.as_os_str().is_empty() {
+                return Err(AppError::new(
+                    "unsupported",
+                    "errors.specialFileCopyUnsupported",
+                    Some(&entry.source),
+                    true,
+                ));
+            }
+            stats.failed_files += 1;
+            stats.skipped_files += 1;
+            stats.errors.push(AppError::new(
+                "unsupported",
+                "errors.specialFileCopySkipped",
+                Some(&entry.source),
+                true,
+            ));
+            continue;
         }
         stats.completed_files += 1;
         if progress_ticker.should_emit() {
@@ -2768,11 +2825,16 @@ fn scan_work(
     relative: &Path,
     out: &mut Vec<WorkEntry>,
     total_bytes: &mut u64,
+    special_file_policy: SpecialFileScanPolicy,
 ) -> CommandResult<()> {
     check_cancelled(operation_id, source)?;
     let metadata =
         fs::symlink_metadata(source).map_err(|error| map_io_error(error, Some(source)))?;
-    if !metadata.is_file() && !metadata.is_dir() && !metadata.file_type().is_symlink() {
+    if !metadata.is_file()
+        && !metadata.is_dir()
+        && !metadata.file_type().is_symlink()
+        && special_file_policy == SpecialFileScanPolicy::Reject
+    {
         return Err(AppError::new(
             "unsupported",
             "errors.specialFileCopyUnsupported",
@@ -2797,6 +2859,7 @@ fn scan_work(
                 &relative.join(child.file_name()),
                 out,
                 total_bytes,
+                special_file_policy,
             )?;
         }
     }
@@ -2919,6 +2982,7 @@ fn handle_archive_conflict(
             path: format!("{}:/{}", display_path(archive), destination_entry),
             name: name.clone(),
             kind: source_entry.kind.clone(),
+            symlink_target_is_directory: None,
             size_bytes: None,
             modified_at: None,
             created_at: None,
@@ -3061,7 +3125,17 @@ fn move_to_trash(source: &Path) -> CommandResult<()> {
         return mutation::rename_no_replace(source, &target)
             .map_err(|error| map_io_error(error, Some(source)));
     }
-    trash::delete(source).map_err(|error| {
+    #[cfg(target_os = "macos")]
+    let result = {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        let mut context = trash::TrashContext::default();
+        context.set_delete_method(DeleteMethod::NsFileManager);
+        context.delete(source)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let result = trash::delete(source);
+
+    result.map_err(|error| {
         AppError::new("trash_failed", "errors.trashFailed", Some(source), true)
             .with_detail("message", error.to_string())
     })
@@ -3588,6 +3662,118 @@ mod review_tests {
 
     #[cfg(unix)]
     #[test]
+    fn copy_omits_nested_sockets_without_failing() {
+        use std::os::unix::net::UnixListener;
+        let fixture = Fixture::new();
+        let source = fixture.0.join("source");
+        let git_dir = source.join(".git");
+        let target = fixture.0.join("target");
+        fs::create_dir_all(&git_dir).unwrap();
+        fs::create_dir(&target).unwrap();
+        fs::write(source.join("keep.txt"), b"file").unwrap();
+        fs::write(git_dir.join("config"), b"config").unwrap();
+        let socket_one = git_dir.join("monitor.ipc");
+        let socket_two = git_dir.join("daemon.ipc");
+        let _listeners = (
+            UnixListener::bind(&socket_one).unwrap(),
+            UnixListener::bind(&socket_two).unwrap(),
+        );
+
+        let summary = run_copy(
+            None,
+            "copy-special-test",
+            &[display_path(&source)],
+            &display_path(&target),
+            ConflictDecision::AllOverwrite,
+            None,
+        )
+        .expect("copy should continue after unsupported nested entries");
+
+        assert_eq!(summary.state, OperationState::Completed);
+        assert_eq!(summary.completed_files, 4);
+        assert_eq!(summary.failed_files, 0);
+        assert_eq!(summary.skipped_files, 2);
+        assert!(summary.errors.is_empty());
+        assert_eq!(fs::read(target.join("source/keep.txt")).unwrap(), b"file");
+        assert_eq!(
+            fs::read(target.join("source/.git/config")).unwrap(),
+            b"config"
+        );
+        assert!(!target.join("source/.git/monitor.ipc").exists());
+        assert!(!target.join("source/.git/daemon.ipc").exists());
+        assert!(socket_one.exists());
+        assert!(socket_two.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_omits_a_directly_selected_socket_without_creating_a_target() {
+        use std::os::unix::net::UnixListener;
+        let fixture = Fixture::new();
+        let source = fixture.0.join("monitor.ipc");
+        let _listener = UnixListener::bind(&source).unwrap();
+        let target = fixture.0.join("target");
+        fs::create_dir(&target).unwrap();
+
+        let summary = run_copy(
+            None,
+            "copy-direct-socket-test",
+            &[display_path(&source)],
+            &display_path(&target),
+            ConflictDecision::AllOverwrite,
+            None,
+        )
+        .expect("a socket alone should be omitted without an error");
+
+        assert_eq!(summary.state, OperationState::Completed);
+        assert_eq!(summary.completed_files, 0);
+        assert_eq!(summary.failed_files, 0);
+        assert_eq!(summary.skipped_files, 1);
+        assert!(summary.errors.is_empty());
+        assert!(!target.join("monitor.ipc").exists());
+        assert!(source.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_still_reports_a_named_pipe_as_unsupported() {
+        let fixture = Fixture::new();
+        let source = fixture.0.join("source");
+        let target = fixture.0.join("target");
+        fs::create_dir(&source).unwrap();
+        fs::create_dir(&target).unwrap();
+        fs::write(source.join("keep.txt"), b"file").unwrap();
+        let pipe = source.join("queue");
+        assert!(Command::new("mkfifo")
+            .arg(&pipe)
+            .status()
+            .unwrap()
+            .success());
+
+        let summary = run_copy(
+            None,
+            "copy-pipe-test",
+            &[display_path(&source)],
+            &display_path(&target),
+            ConflictDecision::AllOverwrite,
+            None,
+        )
+        .expect("copy should report the unsupported pipe and continue");
+
+        assert_eq!(summary.state, OperationState::CompletedWithErrors);
+        assert_eq!(summary.failed_files, 1);
+        assert_eq!(summary.skipped_files, 1);
+        assert_eq!(summary.errors.len(), 1);
+        assert_eq!(
+            summary.errors[0].message_key,
+            "errors.specialFileCopySkipped"
+        );
+        assert_eq!(fs::read(target.join("source/keep.txt")).unwrap(), b"file");
+        assert!(!target.join("source/queue").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn move_rejects_socket_before_overwriting_or_deleting_anything() {
         use std::os::unix::net::UnixListener;
         let fixture = Fixture::new();
@@ -3717,7 +3903,14 @@ mod review_tests {
             &mut stats,
             &mut ProgressTicker::new(),
         );
-        let scan = scan_work(&id, &fixture.0, Path::new(""), &mut Vec::new(), &mut 0);
+        let scan = scan_work(
+            &id,
+            &fixture.0,
+            Path::new(""),
+            &mut Vec::new(),
+            &mut 0,
+            SpecialFileScanPolicy::Reject,
+        );
         finish_operation(&id);
         assert_eq!(result.unwrap_err().code, "operation_cancelled");
         assert_eq!(scan.unwrap_err().code, "operation_cancelled");

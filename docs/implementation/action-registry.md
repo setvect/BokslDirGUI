@@ -117,6 +117,7 @@ interface AppAction {
 ## 6. Help/menu generation
 
 - 도움말은 registry에서 category, label, shortcut, menuPath를 읽어 생성한다.
+- 단축키 도움말은 넓은 창에서 이동·패널·파일·보기 제목을 각 열의 같은 시작선에 맞추고, 남은 범주를 열 높이가 비슷하도록 배치한다. 좁은 창에서는 열 수를 줄이며, 높이가 부족하면 도움말 목록이 스크롤된다. 도움말이 열려 있는 동안 화살표·Page Up/Down·Home/End는 파일 패널 대신 목록 스크롤에 적용한다.
 - 메뉴 구조도 registry에서 생성하거나 registry ID를 참조한다.
 - hardcoded menu handler는 금지한다.
 

@@ -162,6 +162,9 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       applyAllConflictDecision: operationInFlight ? current.applyAllConflictDecision : null,
       activeOperationController: operationInFlight ? current.activeOperationController : null,
     }));
+    if (dialogKind === 'properties') {
+      void get().confirmDialog();
+    }
   },
   startLongRunningOperation: async (request) => {
     const dialogKind = dialogKindForAction(request.action.id as ActionId);

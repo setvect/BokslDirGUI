@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { ACTIONS, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
 import type { FilePreview, PanelId } from '../domain/types';
 import {
@@ -33,9 +33,57 @@ export function QuickPreviewDialog({ language, preview, loading, onClose }: {
   onClose(): void;
 }) {
   const text = OVERLAY_TEXT[language];
+  const scrollRef = useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    if (!loading && preview?.kind === 'text') {
+      scrollRef.current?.focus({ preventScroll: true });
+    }
+  }, [loading, preview]);
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const scrollArea = scrollRef.current;
+    if (!scrollArea || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+    const lineHeight = Number.parseFloat(window.getComputedStyle(scrollArea).lineHeight) || 28;
+    const pageHeight = Math.max(lineHeight, scrollArea.clientHeight - lineHeight);
+    const distance = {
+      ArrowDown: lineHeight,
+      ArrowUp: -lineHeight,
+      PageDown: pageHeight,
+      PageUp: -pageHeight,
+    }[event.key];
+    if (distance === undefined && event.key !== 'Home' && event.key !== 'End') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === 'Home') {
+      scrollArea.scrollTop = 0;
+    } else if (event.key === 'End') {
+      scrollArea.scrollTop = scrollArea.scrollHeight;
+    } else if (distance !== undefined) {
+      scrollArea.scrollTop += distance;
+    }
+  };
+
   return (
-    <CommanderOverlayDialog owner="quick-preview" title={text.quickView} ariaLabel={text.quickView} onClose={onClose} className="quick-preview-dialog">
-      <div className="quick-preview-content">
+    <CommanderOverlayDialog
+      owner="quick-preview"
+      title={text.quickView}
+      ariaLabel={text.quickView}
+      onClose={onClose}
+      className="quick-preview-dialog"
+      onOpenAutoFocus={(event) => {
+        if (scrollRef.current) {
+          event.preventDefault();
+          scrollRef.current.focus({ preventScroll: true });
+        }
+      }}
+    >
+      <div className="quick-preview-content" onKeyDown={handleKeyDown}>
         {loading ? <p>{text.previewLoading}</p> : null}
         {!loading && preview ? (
           <>
@@ -50,7 +98,13 @@ export function QuickPreviewDialog({ language, preview, loading, onClose }: {
             {preview.kind === 'text' ? (
               <>
                 {preview.truncated ? <p className="operation-warning">{text.previewTruncated}</p> : null}
-                <pre className="quick-preview-text">{preview.text}</pre>
+                <pre
+                  className="quick-preview-text"
+                  ref={scrollRef}
+                  role="region"
+                  aria-label={`${text.quickView}: ${preview.name}`}
+                  tabIndex={0}
+                >{preview.text}</pre>
               </>
             ) : null}
             {preview.kind === 'unsupported' ? <p>{text.previewUnsupported}</p> : null}
@@ -65,19 +119,95 @@ export function QuickPreviewDialog({ language, preview, loading, onClose }: {
   );
 }
 
+const SHORTCUT_HELP_COLUMNS: readonly (readonly AppActionCategory[])[] = [
+  ['navigation'],
+  ['panel', 'selection'],
+  ['file', 'help'],
+  ['view', 'archive', 'settings'],
+];
+
 export function ShortcutHelpDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
   const text = OVERLAY_TEXT[language];
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const shortcutGroups = new Map<AppActionCategory, (typeof ACTIONS)[number][]>();
+  for (const action of ACTIONS) {
+    if (!action.shortcutLabel && !action.keyboardBindings?.length) {
+      continue;
+    }
+    const group = shortcutGroups.get(action.category) ?? [];
+    group.push(action);
+    shortcutGroups.set(action.category, group);
+  }
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const scrollArea = scrollRef.current;
+    if (!scrollArea || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+
+    const rowHeight = scrollArea.querySelector<HTMLElement>('.shortcut-help-entry')?.getBoundingClientRect().height || 28;
+    const pageHeight = Math.max(rowHeight, scrollArea.clientHeight - rowHeight);
+    const distance = {
+      ArrowDown: rowHeight,
+      ArrowUp: -rowHeight,
+      PageDown: pageHeight,
+      PageUp: -pageHeight,
+    }[event.key];
+    if (distance === undefined && event.key !== 'Home' && event.key !== 'End') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === 'Home') {
+      scrollArea.scrollTop = 0;
+    } else if (event.key === 'End') {
+      scrollArea.scrollTop = scrollArea.scrollHeight;
+    } else if (distance !== undefined) {
+      scrollArea.scrollTop += distance;
+    }
+  };
+
   return (
-    <CommanderOverlayDialog owner="shortcut-help" title={text.keyboardShortcuts} ariaLabel={text.keyboardShortcuts} onClose={onClose}>
-      <div className="filter-form">
-        <div className="shortcut-help-list" role="list">
-          {ACTIONS.filter((action) => action.shortcutLabel || action.keyboardBindings?.length).map((action) => (
-            <div className="shortcut-help-row" role="listitem" key={action.id}>
-              <kbd>{shortcutHelpLabelForAction(action)}</kbd>
-              <span>{labelForAction(action, language)}</span>
-              <small>{categoryLabelForAction(action, language)}</small>
-            </div>
-          ))}
+    <CommanderOverlayDialog
+      owner="shortcut-help"
+      title={text.keyboardShortcuts}
+      ariaLabel={text.keyboardShortcuts}
+      onClose={onClose}
+      className="shortcut-help-dialog"
+      onOpenAutoFocus={(event) => {
+        if (scrollRef.current) {
+          event.preventDefault();
+          scrollRef.current.focus({ preventScroll: true });
+        }
+      }}
+    >
+      <div className="shortcut-help-content" onKeyDown={handleKeyDown}>
+        <div className="shortcut-help-scroll" ref={scrollRef} role="region" aria-label={text.shortcutListLabel} tabIndex={0}>
+          <div className="shortcut-help-groups">
+            {SHORTCUT_HELP_COLUMNS.map((column) => (
+              <div className="shortcut-help-column" key={column[0]}>
+                {column.map((category) => {
+                  const actions = shortcutGroups.get(category);
+                  return actions ? (
+                    <section className="shortcut-help-group" aria-labelledby={'shortcut-group-' + category} key={category}>
+                      <h3 className="shortcut-help-group-title" id={'shortcut-group-' + category}>
+                        {ACTION_CATEGORY_LABELS[language][category]}
+                      </h3>
+                      <div className="shortcut-help-entries" role="list">
+                        {actions.map((action) => (
+                          <div className="shortcut-help-entry" role="listitem" key={action.id}>
+                            <kbd>{shortcutHelpLabelForAction(action)}</kbd>
+                            <span>{labelForAction(action, language)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null;
+                })}
+              </div>
+            ))}
+          </div>
         </div>
         <div className="filter-actions">
           <button type="button" onClick={onClose}>{text.close}</button>
@@ -391,6 +521,7 @@ function CommanderOverlayDialog({
   title,
   ariaLabel,
   onClose,
+  onOpenAutoFocus,
   className,
   children,
 }: {
@@ -398,6 +529,7 @@ function CommanderOverlayDialog({
   title: string;
   ariaLabel: string;
   onClose(): void;
+  onOpenAutoFocus?: (event: Event) => void;
   className?: string;
   children: ReactNode;
 }) {
@@ -410,6 +542,7 @@ function CommanderOverlayDialog({
           className={`overlay-dialog ${className ?? ''}`.trim()}
           aria-label={ariaLabel}
           aria-describedby={undefined}
+          onOpenAutoFocus={onOpenAutoFocus}
           {...keyboardBoundaryProps}
         >
           <Dialog.Title className="overlay-title">{title}</Dialog.Title>

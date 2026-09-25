@@ -468,7 +468,7 @@ describe('OperationDialogHost', () => {
     expect(screen.getByText(/165 MB \/ 252 MB · 65%/)).toBeTruthy();
   });
 
-  it('does not keep a popup for successful completed operations and auto-clears the terminal summary', () => {
+  it('does not show a failure popup when a completed copy omitted a socket', () => {
     vi.useFakeTimers();
     useOperationStore.setState({
       dialog: null,
@@ -492,6 +492,7 @@ describe('OperationDialogHost', () => {
         state: 'completed',
         completedFiles: 1,
         failedFiles: 0,
+        skippedFiles: 1,
         errors: [],
       },
       lastError: null,
@@ -507,6 +508,30 @@ describe('OperationDialogHost', () => {
 
     expect(useOperationStore.getState().summary).toBeNull();
     expect(useOperationStore.getState().progress).toBeNull();
+  });
+
+  it('shows the system cause when moving a directory to Trash fails', () => {
+    useOperationStore.setState({
+      summary: {
+        operationId: 'trash-failure',
+        kind: 'trash',
+        state: 'failed',
+        completedFiles: 0,
+        failedFiles: 1,
+        errors: [{
+          code: 'trash_failed',
+          messageKey: 'errors.trashFailed',
+          path: '/Volumes/test/work',
+          details: { message: 'The volume does not allow Trash access' },
+          recoverable: true,
+        }],
+      },
+    });
+
+    render(<OperationDialogHost language="ko" />);
+
+    expect(screen.getByText(/휴지통으로 이동하지 못했습니다/)).toBeTruthy();
+    expect(screen.getByText(/The volume does not allow Trash access/)).toBeTruthy();
   });
 
   it('uses the selected language for operation status and translated errors', () => {
@@ -555,12 +580,12 @@ describe('OperationDialogHost', () => {
       },
       conflictPrompt: {
         operationId: 'op-conflict',
-        source: { ...sampleEntry, modifiedAt: '2026-07-25T10:00:00+09:00' },
+        source: { ...sampleEntry, modifiedAt: new Date(2026, 6, 25, 10).toISOString() },
         destination: {
           ...sampleEntry,
           path: '/tmp/target/source.txt',
           sizeBytes: 25,
-          modifiedAt: '2026-07-26T10:00:00+09:00',
+          modifiedAt: new Date(2026, 6, 26, 10).toISOString(),
         },
         defaultDecision: 'skip',
         availableDecisions: ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'],
@@ -577,14 +602,13 @@ describe('OperationDialogHost', () => {
     expect(screen.getByRole('region', { name: 'Source' }).textContent).toContain('10 B');
     expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('/tmp/target/source.txt');
     expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('25 B');
-    expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('2026-07-26T10:00:00+09:00');
+    expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('2026-07-26 10:00:00');
     expect(screen.getAllByRole('button', { name: 'Cancel' })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Skip' }).className).toContain('safe-default');
     expect(screen.getByRole('button', { name: 'Overwrite' }).className).toContain('danger');
   });
 
   it('shows only a close action after an atomic information result is loaded', async () => {
-    const user = userEvent.setup();
     const action = ACTION_BY_ID.get('file.properties');
     if (!action) {
       throw new Error('file.properties action is required');
@@ -603,18 +627,59 @@ describe('OperationDialogHost', () => {
           extension: 'txt',
           mimeType: 'text/plain',
           readonly: false,
+          directoryStats: null,
         },
       })),
     });
 
     render(<OperationDialogHost />);
 
-    await user.click(screen.getByRole('button', { name: 'Show Info' }));
+    expect(screen.queryByRole('button', { name: 'Show Info' })).toBeNull();
 
     expect(await screen.findByText('File information')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Dismiss' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Show Info' })).toBeNull();
+  });
+
+  it('shows recursive folder size and file and subdirectory counts', async () => {
+    const action = ACTION_BY_ID.get('file.properties');
+    if (!action) {
+      throw new Error('file.properties action is required');
+    }
+    const folder = { ...sampleEntry, kind: 'directory' as const, sizeBytes: null };
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'left',
+      sources: [folder],
+      targetDir: null,
+      workingDir: '/tmp',
+      atomicExecutor: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          ...folder,
+          absolutePath: folder.path,
+          extension: null,
+          mimeType: null,
+          readonly: false,
+          modifiedAt: new Date(2026, 8, 25, 14, 7, 6).toISOString().replace('.000Z', '.695328764+00:00'),
+          directoryStats: {
+            totalFileBytes: 1536,
+            fileCount: 1234,
+            directoryCount: 12,
+          },
+        },
+      })),
+    });
+
+    render(<OperationDialogHost language="ko" />);
+    expect(await screen.findByText('내부 파일 크기')).toBeTruthy();
+
+    expect(screen.getByText('내부 파일 크기').parentElement?.textContent).toContain('1.5 KB');
+    expect(screen.getByText('파일 수').parentElement?.textContent).toContain('1,234');
+    expect(screen.getByText('하위 폴더 수').parentElement?.textContent).toContain('12');
+    expect(screen.getByText('수정일').parentElement?.textContent).toContain('2026-09-25 14:07:06');
+    expect(screen.getByText(/링크와 특수 파일은 제외합니다/)).toBeTruthy();
   });
 
   it('centers conflict attention when no operation dialog is open', () => {
@@ -730,16 +795,7 @@ describe('OperationDialogHost', () => {
       sources: [sampleEntry],
       targetDir: null,
       workingDir: '/tmp',
-      atomicExecutor: vi.fn(async () => ({
-        ok: true as const,
-        data: {
-          ...sampleEntry,
-          absolutePath: sampleEntry.path,
-          extension: 'txt',
-          mimeType: 'text/plain',
-          readonly: false,
-        },
-      })),
+      atomicExecutor: vi.fn(() => new Promise<{ ok: true; data: unknown }>(() => {})),
     });
 
     render(<OperationDialogHost />);

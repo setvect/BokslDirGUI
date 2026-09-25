@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useOperationStore, type OperationDialogDraft } from './operationStore';
 import { useCommanderKeyboardBoundaryProps } from '../ui/keyboardOwnership';
+import { formatDateTime } from '../ui/format';
 import { tauriClient } from '../tauri/client';
 import type {
   ArchiveListing,
@@ -271,8 +272,8 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 <div className="operation-section">
                   <h3>{text.summary}</h3>
                   <p>{operationStateLabel(language, summary.state)} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</p>
-                  {summary.errors.map((error) => (
-                    <p className="operation-error" key={`${error.code}-${error.messageKey}`}>{formatOperationError(error, language)}</p>
+                  {summary.errors.map((error, index) => (
+                    <p className="operation-error" key={error.code + '-' + (error.path ?? '') + '-' + index}>{formatOperationError(error, language)}</p>
                   ))}
                 </div>
               ) : null}
@@ -369,8 +370,8 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
               <div className="operation-section">
                 <Dialog.Title>{text.operationSummary}</Dialog.Title>
                 <Dialog.Description>{operationKindLabel(language, summary.kind)} · {operationStateLabel(language, summary.state)} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</Dialog.Description>
-                {summary.errors.map((error) => (
-                  <p className="operation-error" key={`${error.code}-${error.messageKey}`}>{formatOperationError(error, language)}</p>
+                {summary.errors.map((error, index) => (
+                  <p className="operation-error" key={error.code + '-' + (error.path ?? '') + '-' + index}>{formatOperationError(error, language)}</p>
                 ))}
                 <button type="button" className="dialog-button secondary" onClick={clearSummary}>{text.dismiss}</button>
               </div>
@@ -705,7 +706,7 @@ function ConflictEntryDetails({
       <dl>
         <div><dt>{text.path}</dt><dd><code title={entry.path}>{entry.path}</code></dd></div>
         <div><dt>{text.size}</dt><dd>{entry.sizeBytes === null ? '—' : formatBytes(entry.sizeBytes)}</dd></div>
-        <div><dt>{text.modified}</dt><dd>{entry.modifiedAt ?? '—'}</dd></div>
+        <div><dt>{text.modified}</dt><dd>{formatDateTime(entry.modifiedAt) || '—'}</dd></div>
       </dl>
     </section>
   );
@@ -800,9 +801,15 @@ const formatEta = (etaSeconds: number | null, unknownLabel = 'unknown') => {
 };
 
 const formatOperationError = (
-  error: { messageKey: string; path?: string | null },
+  error: { code?: string; messageKey: string; path?: string | null; details?: Record<string, unknown> | null },
   language: SupportedLanguage,
-) => formatUserErrorMessage(language, error);
+) => {
+  const message = formatUserErrorMessage(language, error);
+  const cause = error.code === 'trash_failed' && typeof error.details?.message === 'string'
+    ? error.details.message.trim()
+    : '';
+  return cause ? message + '\n' + cause : message;
+};
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) {
@@ -828,15 +835,27 @@ function OperationResultView({
   text: OperationDialogText;
 }) {
   if (isFileMetadata(value)) {
+    const directoryStats = value.kind === 'directory' ? value.directoryStats : null;
+    const sizeBytes = directoryStats ? directoryStats.totalFileBytes : value.sizeBytes;
+    const locale = language === 'ko' ? 'ko-KR' : 'en-US';
     return (
-      <dl className="operation-result-list">
-        <div><dt>{text.fileInfo}</dt><dd>{value.name}</dd></div>
-        <div><dt>{text.currentLocation}</dt><dd><code title={value.absolutePath}>{value.absolutePath}</code></dd></div>
-        <div><dt>{text.type}</dt><dd>{metadataKindLabel(language, value.kind)}</dd></div>
-        <div><dt>{text.size}</dt><dd>{value.sizeBytes === null ? '—' : formatBytes(value.sizeBytes)}</dd></div>
-        <div><dt>{text.modified}</dt><dd>{value.modifiedAt ?? '—'}</dd></div>
-        <div><dt>{text.permissions}</dt><dd>{value.permissions ?? '—'}</dd></div>
-      </dl>
+      <div className="operation-result-stack">
+        <dl className="operation-result-list">
+          <div><dt>{text.fileInfo}</dt><dd>{value.name}</dd></div>
+          <div><dt>{text.currentLocation}</dt><dd><code title={value.absolutePath}>{value.absolutePath}</code></dd></div>
+          <div><dt>{text.type}</dt><dd>{metadataKindLabel(language, value.kind)}</dd></div>
+          <div><dt>{directoryStats ? text.directoryFileSize : text.size}</dt><dd>{sizeBytes === null ? '—' : formatBytes(sizeBytes)}</dd></div>
+          {directoryStats ? (
+            <>
+              <div><dt>{text.fileCount}</dt><dd>{directoryStats.fileCount.toLocaleString(locale)}</dd></div>
+              <div><dt>{text.directoryCount}</dt><dd>{directoryStats.directoryCount.toLocaleString(locale)}</dd></div>
+            </>
+          ) : null}
+          <div><dt>{text.modified}</dt><dd>{formatDateTime(value.modifiedAt) || '—'}</dd></div>
+          <div><dt>{text.permissions}</dt><dd>{value.permissions ?? '—'}</dd></div>
+        </dl>
+        {directoryStats ? <p className="operation-muted">{text.directoryScanScope}</p> : null}
+      </div>
     );
   }
   if (isArchiveListing(value)) {

@@ -719,7 +719,7 @@ describe('operation store', () => {
       workingDir: '/tmp',
       atomicExecutor: vi.fn(async () => ({ ok: true as const, data: sampleEntry })),
     });
-    await useOperationStore.getState().confirmDialog();
+    await vi.waitFor(() => expect(useOperationStore.getState().dialog?.atomicResult).toBe(sampleEntry));
 
     expect(useOperationStore.getState().dialog).toMatchObject({
       dialogKind: 'properties',
@@ -1045,20 +1045,29 @@ describe('review: delayed operation responses', () => {
   });
 
 
-  it('does not put an old atomic result into a newly opened dialog', async () => {
-    let complete!: (value: { ok: true; data: unknown }) => void;
-    const atomicExecutor = vi.fn(() => new Promise<{ ok: true; data: unknown }>((resolve) => { complete = resolve; }));
+  it('starts properties lookup immediately and ignores an old result after reopening', async () => {
+    const completes: Array<(value: { ok: true; data: unknown }) => void> = [];
+    const atomicExecutor = vi.fn(() => new Promise<{ ok: true; data: unknown }>((resolve) => {
+      completes.push(resolve);
+    }));
     const request = { action: ACTION_BY_ID.get('file.properties')!, panelId: 'left' as const,
       sources: [sampleEntry], targetDir: '/target', workingDir: '/source', atomicExecutor };
+
     useOperationStore.getState().openDialog(request);
-    const pending = useOperationStore.getState().confirmDialog();
+    expect(atomicExecutor).toHaveBeenCalledOnce();
+    expect(useOperationStore.getState().dialog?.atomicPending).toBe(true);
     useOperationStore.getState().closeDialog();
     useOperationStore.getState().openDialog(request);
     const newDialog = useOperationStore.getState().dialog;
-    complete({ ok: true, data: { name: 'old result' } });
-    await pending;
+    expect(atomicExecutor).toHaveBeenCalledTimes(2);
+
+    completes[0]({ ok: true, data: { name: 'old result' } });
+    await Promise.resolve();
     expect(useOperationStore.getState().dialog).toBe(newDialog);
     expect(useOperationStore.getState().dialog?.atomicResult).toBeNull();
+
+    completes[1]({ ok: true, data: { name: 'new result' } });
+    await vi.waitFor(() => expect(useOperationStore.getState().dialog?.atomicResult).toEqual({ name: 'new result' }));
   });
 
   it('ignores a start acknowledgement after completion and a new operation', async () => {

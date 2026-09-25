@@ -21,6 +21,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `path` | string | 절대 경로. UI 표시 전 escaping 필요 |
 | `name` | string | 파일명 |
 | `kind` | EntryKind | 타입 |
+| `symlinkTargetIsDirectory` | boolean/null | 링크 대상이 디렉터리면 true, 다른 종류면 false, 끊겼거나 확인할 수 없으면 null. 일반 항목은 null |
 | `sizeBytes` | number/null | 알 수 없으면 null |
 | `modifiedAt` | string/null | ISO timestamp |
 | `createdAt` | string/null | 플랫폼별 가능 시 |
@@ -30,7 +31,19 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `isHidden` | boolean | 숨김 여부 |
 | `isVirtual` | boolean | `..` 같은 가상 항목 |
 
-### 2.2 AppError
+### 2.2 FileMetadata / DirectoryStats
+
+파일 정보 응답은 FileEntry 필드에 절대 경로, 확장자, MIME 종류, 읽기 전용 여부와 directoryStats를 더한다. 일반 파일의 directoryStats는 null이다.
+
+| directoryStats 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| totalFileBytes | number | 선택 폴더 아래 일반 파일의 논리적 크기 합계(byte) |
+| fileCount | number | 하위 일반 파일 수. 숨김 파일 포함 |
+| directoryCount | number | 선택 폴더 자신을 제외한 하위 실제 폴더 수 |
+
+하위 폴더까지 별도 작업 스레드에서 순회하되 심볼릭 링크를 따라가지 않고 링크·소켓 등 특수 파일은 집계에서 제외한다. 접근 오류가 나면 불완전한 합계를 반환하지 않고 get_metadata 오류를 반환한다.
+
+### 2.3 AppError
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
@@ -40,7 +53,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `details` | object/null | 로그/디버그용 structured data |
 | `recoverable` | boolean | 계속 진행 가능 여부 |
 
-### 2.3 ShellCommandPreview
+### 2.4 ShellCommandPreview
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
@@ -55,7 +68,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | Command | 입력 | 출력 | 비고 |
 | --- | --- | --- | --- |
 | `list_dir` | `{ panelId, path, showHidden, sort, filter }` | `DirectoryListing` | 읽기 전용 |
-| `get_metadata` | `{ path }` | `FileMetadata` | 속성/preview |
+| `get_metadata` | `{ path }` | `FileMetadata` | 속성/preview; 폴더는 내부 파일 크기·파일 수·하위 폴더 수를 조회 시 계산 |
 | `watch_path` | `{ panelId, path }` | `WatchAck` | 현재: 경로 검증/version ACK. 실제 변경 이벤트 구독은 미구현 |
 | `goto_path` | `{ panelId, path }` | `DirectoryListing` | 주소 입력/북마크/히스토리 이동 |
 | `list_locations` | `{}` | `LocationList` | 홈/드라이브/마운트 quick access |

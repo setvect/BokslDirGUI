@@ -3,7 +3,7 @@ import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within }
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, type ComponentProps } from 'react';
-import { ACTION_BY_ID } from '../actions/registry';
+import { ACTIONS, ACTION_BY_ID } from '../actions/registry';
 import { useOperationStore } from '../operations/operationStore';
 import { CommanderShell, columnLayoutForPanelWidth, hotkeyStripActionsForWidth, splitMiddleEllipsisParts, zoomPercentForStep, zoomScaleForStep } from './CommanderShell';
 import type { AppError, DirectoryListing, PanelId } from '../domain/types';
@@ -453,6 +453,98 @@ describe('CommanderShell', () => {
     }
     await user.dblClick(parentRow);
     await waitFor(() => expect(activePanelLabel(container)).toContain(SAMPLE_LISTINGS.right.path));
+  });
+
+  it.each(['double-click', 'Enter'] as const)('opens a directory symlink inside the active panel with %s', async (method) => {
+    const user = userEvent.setup();
+    const link = {
+      ...testEntry('/tmp/home', 'IdeaProjects'),
+      kind: 'symlink' as const,
+      symlinkTargetIsDirectory: true,
+      sizeBytes: null,
+    };
+    const initial = {
+      left: SAMPLE_LISTINGS.left,
+      right: createDirectoryListing('right', '/tmp/home', [link]),
+    };
+    const targetListing = createDirectoryListing('right', '/tmp/projects', [testEntry('/tmp/projects', 'inside.txt')]);
+    const dataSource = createFixturePanelDataSource(initial);
+    const listDir = dataSource.listDir;
+    dataSource.listDir = vi.fn(async (input) => input.path === link.path
+      ? { ok: true as const, data: targetListing }
+      : listDir(input));
+    const openDefault = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } }));
+    const { container } = renderCommander(dataSource, { createDir: vi.fn(), renameEntry: vi.fn(), openDefault });
+    const linkRow = rowByText(container, 'IdeaProjects');
+    if (!linkRow) throw new Error('directory link row is required');
+
+    if (method === 'double-click') {
+      await user.dblClick(linkRow);
+    } else {
+      await user.click(linkRow);
+      await user.keyboard('{Enter}');
+    }
+
+    await waitFor(() => expect(activePanelLabel(container)).toContain('/tmp/projects'));
+    expect(screen.getByText('inside.txt')).toBeTruthy();
+    expect(dataSource.listDir).toHaveBeenCalledWith(expect.objectContaining({ path: link.path, panelId: 'right' }));
+    expect(openDefault).not.toHaveBeenCalled();
+  });
+
+  it('opens a file symlink with its default app', async () => {
+    const user = userEvent.setup();
+    const link = {
+      ...testEntry('/tmp/home', 'document-link'),
+      kind: 'symlink' as const,
+      symlinkTargetIsDirectory: false,
+      sizeBytes: null,
+    };
+    const initial = {
+      left: SAMPLE_LISTINGS.left,
+      right: createDirectoryListing('right', '/tmp/home', [link]),
+    };
+    const dataSource = createFixturePanelDataSource(initial);
+    const openDefault = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } }));
+    const { container } = renderCommander(dataSource, { createDir: vi.fn(), renameEntry: vi.fn(), openDefault });
+    const linkRow = rowByText(container, 'document-link');
+    if (!linkRow) throw new Error('file link row is required');
+
+    await user.dblClick(linkRow);
+
+    await waitFor(() => expect(openDefault).toHaveBeenCalledWith({ path: link.path }));
+    expect(activePanelLabel(container)).toContain('/tmp/home');
+  });
+
+  it('reports a broken directory link without launching Finder', async () => {
+    const user = userEvent.setup();
+    const link = {
+      ...testEntry('/tmp/home', 'broken-link'),
+      kind: 'symlink' as const,
+      symlinkTargetIsDirectory: null,
+      sizeBytes: null,
+    };
+    const initial = {
+      left: SAMPLE_LISTINGS.left,
+      right: createDirectoryListing('right', '/tmp/home', [link]),
+    };
+    const dataSource = createFixturePanelDataSource(initial);
+    const listDir = dataSource.listDir;
+    dataSource.listDir = vi.fn(async (input) => input.path === link.path
+      ? {
+          ok: false as const,
+          error: { code: 'not_found', messageKey: 'errors.notFound', path: link.path, details: null, recoverable: true },
+        }
+      : listDir(input));
+    const openDefault = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } }));
+    const { container } = renderCommander(dataSource, { createDir: vi.fn(), renameEntry: vi.fn(), openDefault });
+    const linkRow = rowByText(container, 'broken-link');
+    if (!linkRow) throw new Error('broken link row is required');
+
+    await user.dblClick(linkRow);
+
+    await waitFor(() => expect(screen.getByLabelText('활성 패널 상태').textContent).toContain('목록 읽기 실패'));
+    expect(activePanelLabel(container)).toContain('/tmp/home');
+    expect(openDefault).not.toHaveBeenCalled();
   });
 
   it('keeps per-panel history and parent navigation on the listDir path', async () => {
@@ -1477,6 +1569,7 @@ describe('CommanderShell', () => {
           extension: null,
           mimeType: null,
           readonly: false,
+          directoryStats: null,
         },
       })),
       archiveList: vi.fn(async () => ({
@@ -1498,9 +1591,9 @@ describe('CommanderShell', () => {
     const { container } = renderCommander(createFixturePanelDataSource(), mutationClient);
 
     await user.keyboard('i');
-    expect(await screen.findByText('파일 정보')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '정보 보기' }));
+    expect(await screen.findByRole('dialog', { name: '파일 정보' })).toBeTruthy();
     await waitFor(() => expect(mutationClient.getMetadata).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('button', { name: '정보 보기' })).toBeNull();
     expect(screen.queryByText(/absolutePath/)).toBeNull();
     expect(screen.getByText(/Architecture.md/)).toBeTruthy();
     useOperationStore.getState().closeDialog();
@@ -1778,7 +1871,7 @@ describe('CommanderShell', () => {
       loadInitialOnMount: false,
       initial: {
         left: createDirectoryListing('left', '/tmp/target', []),
-        right: createDirectoryListing('right', '/tmp/source', [file]),
+        right: createDirectoryListing('right', '/tmp/source', [file, testEntry('/tmp/source', 'next.md')]),
       },
     });
     const previewFile = vi.fn(async () => ({
@@ -1805,13 +1898,35 @@ describe('CommanderShell', () => {
 
     await user.keyboard('{F3}');
 
-    expect(await screen.findByRole('dialog', { name: '빠른 보기' })).toBeTruthy();
-    expect(screen.getByText((_, element) =>
-      element?.tagName === 'PRE' && element.textContent === '# BokslDirGUI\npreview text')).toBeTruthy();
+    const dialog = await screen.findByRole('dialog', { name: '빠른 보기' });
+    const scrollArea = within(dialog).getByRole('region', { name: '빠른 보기: README.md' });
+    expect(scrollArea.textContent).toBe('# BokslDirGUI\npreview text');
+    await waitFor(() => expect(document.activeElement).toBe(scrollArea));
+    scrollArea.style.lineHeight = '24px';
+    Object.defineProperties(scrollArea, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, value: 600 },
+    });
+    const focusedPath = document.querySelector('.commander-shell')?.getAttribute('aria-activedescendant');
+    expect(fireEvent.keyDown(scrollArea, { key: 'ArrowDown' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(24);
+    expect(fireEvent.keyDown(scrollArea, { key: 'PageDown' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(200);
+    expect(fireEvent.keyDown(scrollArea, { key: 'ArrowUp' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(176);
+    expect(fireEvent.keyDown(scrollArea, { key: 'PageUp' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(0);
+    expect(fireEvent.keyDown(scrollArea, { key: 'End' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(600);
+    expect(fireEvent.keyDown(scrollArea, { key: 'Home' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(0);
+    expect(document.querySelector('.commander-shell')?.getAttribute('aria-activedescendant')).toBe(focusedPath);
     expect(screen.getByText('파일 앞부분만 표시합니다.')).toBeTruthy();
     expect(previewFile).toHaveBeenCalledWith({ path: file.path });
     await user.click(screen.getByRole('button', { name: '닫기' }));
     expect(screen.queryByRole('dialog', { name: '빠른 보기' })).toBeNull();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByLabelText('활성 패널 상태').textContent).toContain('next.md');
   });
 
   it('swaps complete left and right panel navigation states with ts', async () => {
@@ -2057,6 +2172,45 @@ describe('CommanderShell', () => {
     expect(within(shortcutDialog).getByText('D/Shift+Delete')).toBeTruthy();
     expect(within(shortcutDialog).getByText('Ctrl+B/tb+a')).toBeTruthy();
     expect(within(shortcutDialog).queryByText('file.copy')).toBeNull();
+  });
+
+  it('groups every shortcut and scrolls the help dialog without moving a file row', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+
+    await user.click(screen.getByRole('button', { name: '도움말(H)' }));
+    await user.click(await screen.findByText('단축키 도움말'));
+
+    const dialog = await screen.findByRole('dialog', { name: '키보드 단축키' });
+    const scrollArea = within(dialog).getByRole('region', { name: '단축키 목록' });
+    expect(document.activeElement).toBe(scrollArea);
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(
+      ACTIONS.filter((action) => action.shortcutLabel || action.keyboardBindings?.length).length,
+    );
+    expect(within(dialog).getByRole('heading', { name: '이동' })).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: '파일' })).toBeTruthy();
+    expect([...dialog.querySelectorAll('.shortcut-help-column')].map((column) =>
+      column.querySelector('h3')?.textContent,
+    )).toEqual(['이동', '패널', '파일', '보기']);
+
+    Object.defineProperties(scrollArea, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, value: 600 },
+    });
+    const focusedPath = document.querySelector('.commander-shell')?.getAttribute('aria-activedescendant');
+    expect(fireEvent.keyDown(scrollArea, { key: 'ArrowDown' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(28);
+    expect(fireEvent.keyDown(scrollArea, { key: 'PageDown' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(200);
+    expect(fireEvent.keyDown(scrollArea, { key: 'ArrowUp' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(172);
+    expect(fireEvent.keyDown(scrollArea, { key: 'PageUp' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(0);
+    expect(fireEvent.keyDown(scrollArea, { key: 'End' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(600);
+    expect(fireEvent.keyDown(scrollArea, { key: 'Home' })).toBe(false);
+    expect(scrollArea.scrollTop).toBe(0);
+    expect(document.querySelector('.commander-shell')?.getAttribute('aria-activedescendant')).toBe(focusedPath);
   });
 
   it('renames a bookmark with an explicit localized name instead of an internal suffix', async () => {
@@ -2513,6 +2667,7 @@ describe('CommanderShell', () => {
         extension: 'txt',
         mimeType: 'text/plain',
         readonly: false,
+        directoryStats: null,
       },
     }));
     const operationClient = {

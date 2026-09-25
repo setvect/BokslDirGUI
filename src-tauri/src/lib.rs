@@ -69,6 +69,7 @@ struct FileEntry {
     path: String,
     name: String,
     kind: EntryKind,
+    symlink_target_is_directory: Option<bool>,
     size_bytes: Option<u64>,
     modified_at: Option<String>,
     created_at: Option<String>,
@@ -92,6 +93,14 @@ struct DirectoryListing {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+struct DirectoryStats {
+    total_file_bytes: u64,
+    file_count: u64,
+    directory_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 struct FileMetadata {
     #[serde(flatten)]
     entry: FileEntry,
@@ -99,6 +108,7 @@ struct FileMetadata {
     extension: Option<String>,
     mime_type: Option<String>,
     readonly: bool,
+    directory_stats: Option<DirectoryStats>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -459,8 +469,14 @@ fn goto_path(panel_id: PanelId, path: String) -> CommandResult<DirectoryListing>
 }
 
 #[tauri::command]
-fn get_metadata(path: String) -> CommandResult<FileMetadata> {
-    navigation::get_metadata(&path)
+async fn get_metadata(path: String) -> CommandResult<FileMetadata> {
+    let failure_path = PathBuf::from(&path);
+    tauri::async_runtime::spawn_blocking(move || navigation::get_metadata(&path))
+        .await
+        .map_err(|error| {
+            AppError::new("io_error", "errors.io", Some(&failure_path), false)
+                .with_detail("message", error.to_string())
+        })?
 }
 
 const DEFAULT_TEXT_PREVIEW_LIMIT: u64 = 256 * 1024;
@@ -1691,6 +1707,7 @@ mod archive {
                 .unwrap_or(&entry.path)
                 .to_string(),
             kind: entry.kind.clone(),
+            symlink_target_is_directory: None,
             size_bytes: entry.size_bytes,
             modified_at: entry.modified_at.clone(),
             created_at: entry.created_at.clone(),
@@ -1855,13 +1872,46 @@ mod navigation {
             .as_deref()
             .and_then(mime_from_extension)
             .map(str::to_string);
+        let directory_stats = if entry.kind == EntryKind::Directory {
+            Some(collect_directory_stats(&path)?)
+        } else {
+            None
+        };
         Ok(FileMetadata {
             absolute_path: display_path(&path),
             extension,
             mime_type,
             readonly,
+            directory_stats,
             entry,
         })
+    }
+
+    fn collect_directory_stats(root: &Path) -> CommandResult<DirectoryStats> {
+        let mut stats = DirectoryStats {
+            total_file_bytes: 0,
+            file_count: 0,
+            directory_count: 0,
+        };
+        let mut pending = vec![root.to_path_buf()];
+        while let Some(directory) = pending.pop() {
+            let children =
+                fs::read_dir(&directory).map_err(|error| map_io_error(error, Some(&directory)))?;
+            for child in children {
+                let child = child.map_err(|error| map_io_error(error, Some(&directory)))?;
+                let path = child.path();
+                let metadata = fs::symlink_metadata(&path)
+                    .map_err(|error| map_io_error(error, Some(&path)))?;
+                if metadata.is_dir() {
+                    stats.directory_count = stats.directory_count.saturating_add(1);
+                    pending.push(path);
+                } else if metadata.is_file() {
+                    stats.file_count = stats.file_count.saturating_add(1);
+                    stats.total_file_bytes = stats.total_file_bytes.saturating_add(metadata.len());
+                }
+            }
+        }
+        Ok(stats)
     }
 
     pub(super) fn list_locations() -> CommandResult<LocationList> {
@@ -2128,6 +2178,7 @@ fn parent_virtual_entry(parent: &Path) -> FileEntry {
         path: display_path(parent),
         name: "..".to_string(),
         kind: EntryKind::Directory,
+        symlink_target_is_directory: None,
         size_bytes: None,
         modified_at: None,
         created_at: None,
@@ -2146,6 +2197,11 @@ fn file_entry_from_path(path: &Path, is_virtual: bool) -> CommandResult<FileEntr
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_else(|| display_path(path));
     let kind = classify_entry(path, &metadata);
+    let symlink_target_is_directory = if metadata.file_type().is_symlink() {
+        fs::metadata(path).ok().map(|target| target.is_dir())
+    } else {
+        None
+    };
     let size_bytes = if metadata.is_file() {
         Some(metadata.len())
     } else {
@@ -2156,6 +2212,7 @@ fn file_entry_from_path(path: &Path, is_virtual: bool) -> CommandResult<FileEntr
         path: display_path(path),
         name: name.clone(),
         kind,
+        symlink_target_is_directory,
         size_bytes,
         modified_at: metadata.modified().ok().and_then(system_time_to_rfc3339),
         created_at: metadata.created().ok().and_then(system_time_to_rfc3339),
@@ -2550,6 +2607,55 @@ mod tests {
         assert!(!listing.entries.iter().any(|entry| entry.name == ".hidden"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn list_dir_identifies_symlink_targets_without_changing_link_kind() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = TempFixture::new();
+        let directory_link = fixture.root.join("directory-link");
+        let file_link = fixture.root.join("file-link");
+        let broken_link = fixture.root.join("broken-link");
+        symlink(fixture.root.join("folder"), &directory_link).unwrap();
+        symlink(fixture.root.join("alpha.txt"), &file_link).unwrap();
+        symlink(fixture.root.join("missing"), &broken_link).unwrap();
+
+        let listing = list_dir(
+            PanelId::Left,
+            fixture.root.to_string_lossy().into_owned(),
+            false,
+            SortSpec::default(),
+            None,
+        )
+        .unwrap();
+        for (name, target_is_directory) in [
+            ("directory-link", Some(true)),
+            ("file-link", Some(false)),
+            ("broken-link", None),
+        ] {
+            let entry = listing.entries.iter().find(|entry| entry.name == name).unwrap();
+            assert_eq!(entry.kind, EntryKind::Symlink);
+            assert_eq!(entry.symlink_target_is_directory, target_is_directory);
+            assert_eq!(
+                serde_json::to_value(entry).unwrap()["symlinkTargetIsDirectory"],
+                serde_json::json!(target_is_directory)
+            );
+        }
+
+        let target_listing = list_dir(
+            PanelId::Left,
+            directory_link.to_string_lossy().into_owned(),
+            false,
+            SortSpec::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            target_listing.path,
+            display_path(&fixture.root.join("folder").canonicalize().unwrap())
+        );
+    }
+
     #[test]
     fn list_dir_can_include_hidden_and_filter_entries() {
         let fixture = TempFixture::new();
@@ -2572,19 +2678,74 @@ mod tests {
     #[test]
     fn get_metadata_reports_file_details() {
         let fixture = TempFixture::new();
-        let metadata = get_metadata(
+        let metadata = tauri::async_runtime::block_on(get_metadata(
             fixture
                 .root
                 .join("alpha.txt")
                 .to_string_lossy()
                 .into_owned(),
-        )
+        ))
         .expect("metadata should succeed");
 
         assert_eq!(metadata.entry.name, "alpha.txt");
         assert_eq!(metadata.entry.size_bytes, Some(5));
         assert_eq!(metadata.extension, Some("txt".to_string()));
         assert_eq!(metadata.mime_type, Some("text/plain".to_string()));
+        assert_eq!(metadata.directory_stats, None);
+    }
+
+    #[test]
+    fn get_metadata_counts_nested_regular_files_and_subdirectories() {
+        let fixture = TempFixture::new();
+        let root = fixture.root.join("folder");
+        let nested = root.join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        fs::create_dir(root.join("empty")).unwrap();
+        fs::write(root.join("one.txt"), b"one").unwrap();
+        fs::write(nested.join("two.txt"), b"12345").unwrap();
+        fs::write(nested.join(".hidden"), b"xy").unwrap();
+
+        let metadata = tauri::async_runtime::block_on(get_metadata(display_path(&root))).unwrap();
+        assert_eq!(metadata.entry.kind, EntryKind::Directory);
+        assert_eq!(metadata.entry.size_bytes, None);
+        assert_eq!(
+            metadata.directory_stats,
+            Some(DirectoryStats {
+                total_file_bytes: 10,
+                file_count: 3,
+                directory_count: 2,
+            })
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn get_metadata_does_not_follow_links_or_count_sockets() {
+        use std::os::unix::net::UnixListener;
+        let short_root = env::temp_dir().join(format!(
+            "bdm-{}-{}",
+            std::process::id(),
+            FIXTURE_COUNTER.fetch_add(1, AtomicOrdering::Relaxed)
+        ));
+        fs::create_dir(&short_root).unwrap();
+        let fixture = TempFixture { root: short_root };
+        let root = fixture.root.join("folder");
+        let outside = fixture.root.join("outside");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("file.txt"), b"outside").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("linked-folder")).unwrap();
+        let _listener = UnixListener::bind(root.join("monitor.ipc")).unwrap();
+
+        let metadata = tauri::async_runtime::block_on(get_metadata(display_path(&root))).unwrap();
+        assert_eq!(
+            metadata.directory_stats,
+            Some(DirectoryStats {
+                total_file_bytes: 0,
+                file_count: 0,
+                directory_count: 0,
+            })
+        );
     }
 
     #[test]
@@ -2622,13 +2783,13 @@ mod tests {
     #[test]
     fn invalid_path_returns_typed_error() {
         let fixture = TempFixture::new();
-        let error = get_metadata(
+        let error = tauri::async_runtime::block_on(get_metadata(
             fixture
                 .root
                 .join("missing.txt")
                 .to_string_lossy()
                 .into_owned(),
-        )
+        ))
         .expect_err("missing file should fail");
 
         assert_eq!(error.code, "not_found");

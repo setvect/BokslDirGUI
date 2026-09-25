@@ -28,6 +28,7 @@ export interface FileEntry {
   path: string;
   name: string;
   kind: EntryKind;
+  symlinkTargetIsDirectory?: boolean | null;
   sizeBytes: number | null;
   modifiedAt: string | null;
   createdAt: string | null;
@@ -63,11 +64,18 @@ export interface DirectoryListing {
   truncated?: boolean;
 }
 
+export interface DirectoryStats {
+  totalFileBytes: number;
+  fileCount: number;
+  directoryCount: number;
+}
+
 export interface FileMetadata extends FileEntry {
   absolutePath: string;
   extension: string | null;
   mimeType: string | null;
   readonly: boolean;
+  directoryStats: DirectoryStats | null;
 }
 
 export interface FilePreview {
