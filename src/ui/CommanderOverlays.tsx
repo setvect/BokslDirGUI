@@ -386,9 +386,10 @@ export function PathPrompt({ language, panel, onApply, onCancel }: {
   );
 }
 
-export function ArchivePasswordPrompt({ language, archivePath, onApply, onCancel }: {
+export function ArchivePasswordPrompt({ language, archivePath, mode = 'open', onApply, onCancel }: {
   language: SupportedLanguage;
   archivePath: string;
+  mode?: 'open' | 'copy';
   onApply(password: string): void;
   onCancel(): void;
 }) {
@@ -404,7 +405,7 @@ export function ArchivePasswordPrompt({ language, archivePath, onApply, onCancel
     <CommanderOverlayDialog owner="archive-password" title={text.archivePasswordTitle} ariaLabel={text.archivePasswordTitle} onClose={onCancel}>
       <form className="filter-form" onSubmit={(event) => {
         event.preventDefault();
-        onApply(value);
+        if (value) onApply(value);
       }}>
         <p>{archivePath}</p>
         <label>
@@ -420,7 +421,7 @@ export function ArchivePasswordPrompt({ language, archivePath, onApply, onCancel
         </label>
         <div className="filter-actions">
           <button type="button" onClick={onCancel}>{text.cancel}</button>
-          <button type="submit" className="primary">{text.open}</button>
+          <button type="submit" className="primary" disabled={!value}>{mode === 'copy' ? text.copy : text.open}</button>
         </div>
       </form>
     </CommanderOverlayDialog>

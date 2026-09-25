@@ -1002,6 +1002,75 @@ describe('CommanderShell', () => {
 
   });
 
+  it('asks for an encrypted archive password before copying a member and cancels without starting', async () => {
+    const user = userEvent.setup();
+    const archivePath = '/tmp/secret.zip';
+    const archiveEntry = { ...testEntry('/tmp', 'secret.zip'), path: archivePath, kind: 'archive' as const };
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', '/tmp/target', []),
+        right: createDirectoryListing('right', '/tmp', [archiveEntry]),
+      },
+    });
+    const archiveList = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        archivePath,
+        encrypted: true,
+        totalEntries: 1,
+        truncated: false,
+        entries: [{ ...testEntry(archivePath, 'secret.txt'), path: `${archivePath}!secret.txt` }],
+      },
+    }));
+    const archiveExtract = vi.fn(async () => ({
+      ok: true as const,
+      data: { operationId: 'encrypted-archive-copy', kind: 'archiveExtract' as const, state: 'queued' as const },
+    }));
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      archiveExtract,
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={dataSource}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList }}
+        operationClient={operationClient}
+        initialFocusIndex={{ right: 0 }}
+      />,
+    );
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(rowByText(container, 'secret.txt')).not.toBeNull());
+    await user.keyboard('y');
+    expect(await screen.findByRole('dialog', { name: '압축 파일 암호' })).toBeTruthy();
+    expect(archiveExtract).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByRole('dialog', { name: '압축 파일 암호' })).toBeNull();
+    expect(archiveExtract).not.toHaveBeenCalled();
+
+    await user.keyboard('y');
+    const passwordInput = await screen.findByLabelText('암호');
+    expect(passwordInput.getAttribute('type')).toBe('password');
+    await user.type(passwordInput, 'secret');
+    expect(screen.queryByText('secret')).toBeNull();
+    await user.click(screen.getByRole('button', { name: '복사' }));
+
+    await waitFor(() => expect(archiveExtract).toHaveBeenCalledWith({
+      archivePath,
+      targetDir: '/tmp/target',
+      password: 'secret',
+      policy: 'skip',
+      entries: ['secret.txt'],
+      stripPrefix: '',
+    }));
+  });
+
   it('copies a selected archive directory to the opposite normal panel', async () => {
     const user = userEvent.setup();
     const archivePath = '/tmp/archive.zip';
@@ -1717,6 +1786,19 @@ describe('CommanderShell', () => {
         right: createDirectoryListing('right', '/tmp/target', []),
       },
     });
+    let modifiedAt = '2026-09-25T12:00:00Z';
+    const getMetadata = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        ...archiveEntry,
+        modifiedAt,
+        absolutePath: archivePath,
+        extension: 'zip',
+        mimeType: 'application/zip',
+        readonly: false,
+        directoryStats: null,
+      },
+    }));
     const archiveList = vi.fn(async () => ({
       ok: true as const,
       data: {
@@ -1733,7 +1815,7 @@ describe('CommanderShell', () => {
     const { container } = render(
       <CommanderShell
         dataSource={dataSource}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList }}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList, getMetadata }}
         initialFocusIndex={{ left: 0 }}
       />,
     );
@@ -1749,6 +1831,15 @@ describe('CommanderShell', () => {
     await user.keyboard('{Backspace}');
     await waitFor(() => expect(activePanelLabel(container)).toContain(`${archivePath}:/`));
     expect(activePanelLabel(container)).not.toContain(`${archivePath}:/folder`);
+    expect(archiveList).toHaveBeenCalledTimes(1);
+
+    modifiedAt = '2026-09-25T12:00:01Z';
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(activePanelLabel(container)).toContain(`${archivePath}:/folder`));
+    expect(archiveList).toHaveBeenCalledTimes(2);
+
+    await user.keyboard('{Control>}r{/Control}');
+    await waitFor(() => expect(archiveList).toHaveBeenCalledTimes(3));
   });
 
   it('selects multiple archive entries with Space and copies them to the normal panel', async () => {

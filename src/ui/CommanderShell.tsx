@@ -31,10 +31,10 @@ import {
   type ActionId,
   type AppAction,
 } from '../actions/registry';
-import type { AppError, DirectoryListing, FileEntry, FilePreview, LocationList, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
+import type { AppError, ArchiveListing, DirectoryListing, FileEntry, FilePreview, LocationList, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { operationSummaryStatusLabel } from '../operations/operationLabels';
-import { dialogKindForAction, isOperationInFlight, useOperationStore, type AtomicCommandExecutor, type DialogKind, type LongRunningOperationExecutor, type OperationDialogDraft } from '../operations/operationStore';
+import { dialogKindForAction, isOperationInFlight, useOperationStore, type AtomicCommandExecutor, type DialogKind, type LongRunningOperationExecutor, type OpenDialogRequest, type OperationDialogDraft } from '../operations/operationStore';
 import { isTauriRuntime, tauriClient } from '../tauri/client';
 import {
   COMMANDER_NAVIGATION_TEXT,
@@ -312,6 +312,23 @@ interface ListPanelOptions {
   statusAfterSuccess?: string | null;
   persistSession?: boolean;
   background?: boolean;
+  forceArchiveReload?: boolean;
+}
+
+interface CachedArchiveListing {
+  listing: ArchiveListing;
+  password: string | undefined;
+  fileSignature: string | null;
+}
+
+type ArchivePasswordRequest =
+  | { kind: 'open'; panelId: PanelId; virtualPath: string; archivePath: string }
+  | { kind: 'copy'; archivePath: string };
+
+interface PendingArchiveCopy {
+  request: OpenDialogRequest;
+  plan: ArchiveCopyPlan;
+  status: string;
 }
 
 export function CommanderShell({
@@ -357,8 +374,11 @@ export function CommanderShell({
   const [filterPromptPanel, setFilterPromptPanel] = useState<PanelId | null>(null);
   const [pathPromptPanel, setPathPromptPanel] = useState<PanelId | null>(null);
   const [bookmarkRenameRequest, setBookmarkRenameRequest] = useState<{ bookmarkId: string; initialValue: string } | null>(null);
-  const [archivePasswordRequest, setArchivePasswordRequest] = useState<{ panelId: PanelId; virtualPath: string; archivePath: string } | null>(null);
+  const [archivePasswordRequest, setArchivePasswordRequest] = useState<ArchivePasswordRequest | null>(null);
+  const pendingArchiveCopyRef = useRef<PendingArchiveCopy | null>(null);
   const archivePasswordsRef = useRef(new Map<string, string>());
+  const archiveListingsRef = useRef(new Map<string, CachedArchiveListing>());
+  const archiveCacheGenerationRef = useRef(new Map<string, number>());
   const [navigationList, setNavigationList] = useState<NavigationListState | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const settingsRef = useRef(settings);
@@ -491,7 +511,7 @@ export function CommanderShell({
     }));
 
     const result = isArchiveVirtualPath(path)
-      ? await listArchiveVirtualPanel(panelId, path, showHidden, sort, filter)
+      ? await listArchiveVirtualPanel(panelId, path, showHidden, sort, filter, options.forceArchiveReload)
       : await dataSource.listDir({ panelId, path, showHidden, sort, filter });
     if (!isCurrentPanelRequest(panelId, requestId)) {
       return;
@@ -565,6 +585,7 @@ export function CommanderShell({
     showHidden: boolean,
     sort: SortSpec,
     filter: string | null,
+    forceReload = false,
   ) => {
     const parsed = parseArchiveVirtualPath(virtualPath);
     if (!parsed || !mutationClient.archiveList || !runtimeBackendAvailable) {
@@ -579,25 +600,45 @@ export function CommanderShell({
         },
       };
     }
-    const password = archivePasswordsRef.current.get(parsed.archivePath);
-    const result = await mutationClient.archiveList({
-      archivePath: parsed.archivePath,
-      password,
-      limit: ARCHIVE_LIST_LIMIT,
-    });
-    if (!result.ok) {
-      if (result.error.code === 'password_required' || result.error.code === 'invalid_password') {
-        archivePasswordsRef.current.delete(parsed.archivePath);
-        setArchivePasswordRequest({ panelId, virtualPath, archivePath: parsed.archivePath });
+    const archivePath = parsed.archivePath;
+    const password = archivePasswordsRef.current.get(archivePath);
+    if (forceReload) {
+      archiveListingsRef.current.delete(archivePath);
+      archiveCacheGenerationRef.current.set(archivePath, (archiveCacheGenerationRef.current.get(archivePath) ?? 0) + 1);
+    }
+    const generation = archiveCacheGenerationRef.current.get(archivePath) ?? 0;
+    const metadata = mutationClient.getMetadata ? await mutationClient.getMetadata({ path: archivePath }) : null;
+    const fileSignature = metadata?.ok ? `${metadata.data.sizeBytes}:${metadata.data.modifiedAt}` : null;
+    const cached = archiveListingsRef.current.get(archivePath);
+    let listing: ArchiveListing;
+    if (!forceReload && cached && cached.password === password &&
+        (!mutationClient.getMetadata || (fileSignature !== null && cached.fileSignature === fileSignature))) {
+      listing = cached.listing;
+    } else {
+      const result = await mutationClient.archiveList({ archivePath, password, limit: ARCHIVE_LIST_LIMIT });
+      if (!result.ok) {
+        archiveListingsRef.current.delete(archivePath);
+        if (result.error.code === 'password_required' || result.error.code === 'invalid_password') {
+          archivePasswordsRef.current.delete(archivePath);
+          setArchivePasswordRequest({ kind: 'open', panelId, virtualPath, archivePath });
+        }
+        return result;
       }
-      return result;
+      listing = result.data;
+      if (generation === (archiveCacheGenerationRef.current.get(archivePath) ?? 0)) {
+        archiveListingsRef.current.delete(archivePath);
+        archiveListingsRef.current.set(archivePath, { listing, password, fileSignature });
+        if (archiveListingsRef.current.size > 2) {
+          archiveListingsRef.current.delete(archiveListingsRef.current.keys().next().value!);
+        }
+      }
     }
     return {
       ok: true as const,
       data: archiveListingToDirectoryListing({
         panelId,
         virtualPath,
-        archiveListing: result.data,
+        archiveListing: listing,
         showHidden,
         sort,
         filter,
@@ -613,6 +654,7 @@ export function CommanderShell({
       preserveFocusPath: focusedEntryOf(panel)?.path,
       persistSession: false,
       background,
+      forceArchiveReload: true,
     });
   };
 
@@ -623,6 +665,7 @@ export function CommanderShell({
       preserveFocusPath: focusedEntryOf(panel)?.path,
       statusAfterSuccess: status,
       persistSession: false,
+      forceArchiveReload: true,
     }).then(() => {
       shellRef.current?.focus({ preventScroll: true });
     });
@@ -1616,6 +1659,7 @@ export function CommanderShell({
               focusPath: currentPanel.path === panelListing.path ? entry.path : focusedEntryOf(currentPanel)?.path,
               background: true,
               persistSession: false,
+              forceArchiveReload: true,
             });
             setStatusMessage(statusText.operationDoneWithEntry(labelForAction(action, settings.language), entry.name));
             return;
@@ -1648,8 +1692,14 @@ export function CommanderShell({
       };
 
       if (actionId === 'file.copy') {
+        const copyStatus = statusText.operationStarted(labelForAction(action, settings.language), sources.length, operationRequest.targetDir);
+        if (archiveCopyPlan && panelListing.archiveEncrypted && !archiveCopyPlan.password) {
+          pendingArchiveCopyRef.current = { request: operationRequest, plan: archiveCopyPlan, status: copyStatus };
+          setArchivePasswordRequest({ kind: 'copy', archivePath: archiveCopyPlan.archivePath });
+          return;
+        }
         void startLongRunningOperation(operationRequest);
-        setStatusMessage(statusText.operationStarted(labelForAction(action, settings.language), sources.length, operationRequest.targetDir));
+        setStatusMessage(copyStatus);
         return;
       }
 
@@ -1681,6 +1731,7 @@ export function CommanderShell({
     setPathPromptPanel(null);
     setBookmarkRenameRequest(null);
     setArchivePasswordRequest(null);
+    pendingArchiveCopyRef.current = null;
     if (!path) {
       shellRef.current?.focus({ preventScroll: true });
       return;
@@ -1693,6 +1744,7 @@ export function CommanderShell({
     previewRequestRef.current += 1;
     setPathPromptPanel(null);
     setArchivePasswordRequest(null);
+    pendingArchiveCopyRef.current = null;
     setNavigationList(null);
     setHelpSearchOpen(false);
     setAboutDialogOpen(false);
@@ -2275,10 +2327,23 @@ export function CommanderShell({
         <ArchivePasswordPrompt
           language={settings.language}
           archivePath={archivePasswordRequest.archivePath}
+          mode={archivePasswordRequest.kind}
           onApply={(password) => {
-            archivePasswordsRef.current.set(archivePasswordRequest.archivePath, password);
             const request = archivePasswordRequest;
             setArchivePasswordRequest(null);
+            if (request.kind === 'copy') {
+              const pending = pendingArchiveCopyRef.current;
+              pendingArchiveCopyRef.current = null;
+              if (!pending || pending.plan.archivePath !== request.archivePath) return;
+              void startLongRunningOperation({
+                ...pending.request,
+                longRunningExecutor: archiveCopyExecutorForPlan({ ...pending.plan, password }, operationClient),
+              });
+              setStatusMessage(pending.status);
+              return;
+            }
+            archivePasswordsRef.current.set(request.archivePath, password);
+            archiveListingsRef.current.delete(request.archivePath);
             void listPanel(request.panelId, request.virtualPath, { preserveSelection: true });
           }}
           onCancel={closeOverlay}

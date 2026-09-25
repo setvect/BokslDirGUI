@@ -126,6 +126,7 @@ export const archiveListingToDirectoryListing = ({
     ...createDirectoryListing(panelId, archiveVirtualChildPath(parsed.archivePath, currentInner), entries, sort, filter, Date.now()),
     totalEntries: archiveListing.totalEntries,
     truncated: archiveListing.truncated,
+    archiveEncrypted: archiveListing.encrypted,
   };
 };
 

@@ -62,6 +62,7 @@ export interface DirectoryListing {
   version: number;
   totalEntries?: number;
   truncated?: boolean;
+  archiveEncrypted?: boolean;
 }
 
 export interface DirectoryStats {

@@ -3809,10 +3809,22 @@ mod tests {
             Some(100),
         )
         .expect("password-protected zip listing should succeed");
+        assert!(listing.encrypted);
         assert!(listing
             .entries
             .iter()
             .any(|entry| entry.name == "alpha.txt"));
+
+        let missing_target = fixture.root.join("missing-password-extract");
+        fs::create_dir_all(&missing_target).expect("missing-password target should exist");
+        let missing_password = operation::archive_extract_summary_for_test(
+            secret_archive.to_string_lossy().into_owned(),
+            missing_target.to_string_lossy().into_owned(),
+            None,
+            ConflictDecision::Overwrite,
+        );
+        assert_eq!(missing_password.state, OperationState::Failed);
+        assert!(!missing_target.join("alpha.txt").exists());
 
         let wrong_target = fixture.root.join("wrong-password-extract");
         fs::create_dir_all(&wrong_target).expect("wrong-password target should exist");

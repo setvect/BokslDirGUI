@@ -2553,7 +2553,10 @@ fn run_external_command_capture_observed(
     path: Option<&Path>,
     mut on_stdout: Option<&mut dyn FnMut(&[u8])>,
 ) -> CommandResult<Vec<u8>> {
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|error| map_io_error(error, path))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
