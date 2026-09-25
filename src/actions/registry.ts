@@ -13,6 +13,9 @@ export interface ActionContext {
   hasConcreteFocus: boolean;
   effectiveTargetCount: number;
   clipboardCount?: number;
+  clipboardMode?: 'copy' | 'move' | null;
+  clipboardCanMove?: boolean;
+  platform?: 'mac' | 'other';
   hasOppositePanel: boolean;
   shellCommandEnabled: boolean;
   operationBusy: boolean;
@@ -91,8 +94,10 @@ export const ACTIONS = [
   action({ id: 'tab.list', category: 'panel', shortcutLabel: 'tt', keyboardBindings: ['t t'], menuPath: ['View', 'Tab List'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.toggle', category: 'selection', hotkeyLabel: 'Sel', shortcutLabel: 'Space', keyboardBindings: ['Space'], menuPath: ['Edit', 'Select'], dangerLevel: 'none', runPath: 'UI state', isEnabled: hasFocus }),
   action({ id: 'selection.all', category: 'selection', hotkeyLabel: 'SelAll', shortcutLabel: 'Ctrl+A', keyboardBindings: ['Ctrl+A'], menuPath: ['Edit', 'Select All'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'file.clipboardCopy', category: 'file', displayLabel: 'Copy', shortcutLabel: 'Cmd+C', keyboardBindings: ['Cmd+C'], menuPath: ['Edit', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'UI clipboard state', isEnabled: hasEffectiveTarget }),
-  action({ id: 'file.clipboardPaste', category: 'file', displayLabel: 'Paste', shortcutLabel: 'Cmd+V', keyboardBindings: ['Cmd+V'], menuPath: ['Edit', 'Paste'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.startCopy, runPath: 'start_copy/archive_extract/archive_add', isEnabled: (c) => (c.clipboardCount ?? 0) > 0 && canMutate(c) }),
+  action({ id: 'file.clipboardCopy', category: 'file', displayLabel: 'Copy', shortcutLabel: 'Cmd+C', keyboardBindings: ['Cmd+C', 'Ctrl+C'], menuPath: ['Edit', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'UI clipboard state', isEnabled: hasEffectiveTarget }),
+  action({ id: 'file.clipboardCut', category: 'file', displayLabel: 'Cut', shortcutLabel: 'Ctrl+X', keyboardBindings: ['Ctrl+X'], menuPath: ['Edit', 'Cut'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'UI clipboard state', isEnabled: (c) => c.platform === 'other' && hasEffectiveTarget(c) && !c.activePathIsArchive && c.backendAvailable }),
+  action({ id: 'file.clipboardPaste', category: 'file', displayLabel: 'Paste', shortcutLabel: 'Cmd+V', keyboardBindings: ['Cmd+V', 'Ctrl+V'], menuPath: ['Edit', 'Paste'], contextScopes: ['blank'], dangerLevel: 'safe', runPath: 'start_copy/start_move/archive_extract/archive_add', isEnabled: (c) => (c.clipboardCount ?? 0) > 0 && (c.clipboardMode !== 'move' || c.clipboardCanMove === true) && canMutate(c) }),
+  action({ id: 'file.clipboardMovePaste', category: 'file', displayLabel: 'Move Here', shortcutLabel: 'Opt+Cmd+V', keyboardBindings: ['Alt+Cmd+V'], menuPath: ['Edit', 'Move Here'], contextScopes: ['blank'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move via confirmation dialog', isEnabled: (c) => c.platform === 'mac' && (c.clipboardCount ?? 0) > 0 && c.clipboardCanMove === true && canMutate(c) }),
   action({ id: 'file.copy', category: 'file', displayLabel: 'Copy', shortcutLabel: 'y/F5', keyboardBindings: ['y', 'F5'], menuPath: ['Edit', 'Copy to Other Panel'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.startCopy, runPath: 'start_copy', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutate(c) }),
   action({ id: 'file.move', category: 'file', displayLabel: 'Move', shortcutLabel: 'x/F6', keyboardBindings: ['x', 'F6'], menuPath: ['Edit', 'Move'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutateFilesystem(c) }),
   action({ id: 'file.trash', category: 'file', displayLabel: 'Delete', hotkeyLabel: 'Del', shortcutLabel: 'd', keyboardBindings: ['d'], menuPath: ['File', 'Delete'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startDelete, runPath: 'start_delete trash', isEnabled: (c) => hasEffectiveTarget(c) && canMutateFilesystem(c) }),
@@ -252,8 +257,16 @@ export const hotkeyLabelForAction = (action: AppAction, language: SupportedLangu
   HOTKEY_LABELS[language][action.id] ?? action.hotkeyLabel;
 
 
-export const actionsForMenu = (menuRoot: string) =>
-  ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot);
+export type FileShortcutPlatform = 'mac' | 'other';
+
+export const fileShortcutPlatform = (userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent): FileShortcutPlatform =>
+  /Windows|Linux/i.test(userAgent) ? 'other' : 'mac';
+
+export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortcutPlatform()) =>
+  action.id !== (platform === 'mac' ? 'file.clipboardCut' : 'file.clipboardMovePaste');
+
+export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform()) =>
+  ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform));
 
 export const menuRootLabelFromRegistry = (root: string, language: SupportedLanguage = 'en') => {
   const accelerator = MENU_ROOT_ACCELERATORS.get(root);
@@ -264,13 +277,23 @@ export const menuRootLabelFromRegistry = (root: string, language: SupportedLangu
 export const menuRootAcceleratorFromRegistry = (root: string) =>
   MENU_ROOT_ACCELERATORS.get(root) ?? null;
 
-export const shortcutLabelForAction = (action: AppAction) =>
-  action.shortcutLabel
-    ? (action.shortcutLabel === '/' ? '/' : action.shortcutLabel.split('/')[0])
-    : action.keyboardBindings?.[0]?.replace(/\s+/g, '') ?? '·';
+const platformShortcutLabel = (action: AppAction, platform = fileShortcutPlatform()) => {
+  if (platform === 'other') {
+    if (action.id === 'file.clipboardCopy') return 'Ctrl+C';
+    if (action.id === 'file.clipboardPaste') return 'Ctrl+V';
+  }
+  return action.shortcutLabel;
+};
 
-export const shortcutHelpLabelForAction = (action: AppAction) =>
-  action.shortcutLabel
+export const shortcutLabelForAction = (action: AppAction, platform = fileShortcutPlatform()) => {
+  const label = platformShortcutLabel(action, platform);
+  return label
+    ? (label === '/' ? '/' : label.split('/')[0])
+    : action.keyboardBindings?.[0]?.replace(/\s+/g, '') ?? '·';
+};
+
+export const shortcutHelpLabelForAction = (action: AppAction, platform = fileShortcutPlatform()) =>
+  platformShortcutLabel(action, platform)
     ?? action.keyboardBindings?.map((binding) => binding.replace(/\s+/g, '')).join('/')
     ?? '';
 

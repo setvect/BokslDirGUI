@@ -42,8 +42,10 @@ interface AppAction {
 | `tab.close` | panel | tx | View/Close Tab | none | UI state |
 | `selection.toggle` | selection | Space | Edit/Select | none | UI state |
 | `selection.all` | selection | Ctrl+A | Edit/Select All | none | UI state |
-| `file.clipboardCopy` | file | Cmd+C | Edit/Copy | safe | 현재 선택 항목 또는 포커스 항목을 앱 내부 복사 목록에 저장 |
-| `file.clipboardPaste` | file | Cmd+V | Edit/Paste | safe | 저장된 항목을 활성 패널 현재 폴더에 복사; 기존 `file.copy` 실행 경로 사용 |
+| `file.clipboardCopy` | file | macOS Cmd+C / Windows·Linux Ctrl+C | Edit/Copy | safe | 선택 또는 포커스 항목을 앱 내부 복사 목록에 저장 |
+| `file.clipboardCut` | file | Windows·Linux Ctrl+X | Edit/Cut | safe | 일반 파일 시스템 항목을 이동 준비; 아직 원본을 변경하지 않음 |
+| `file.clipboardPaste` | file | macOS Cmd+V / Windows·Linux Ctrl+V | Edit/Paste | safe | 복사 목록은 `file.copy`, 잘라내기 목록은 `file.move` 경로 사용 |
+| `file.clipboardMovePaste` | file | macOS Opt+Cmd+V | Edit/Move Here | destructive | Cmd+C로 준비한 일반 파일 시스템 항목을 `file.move` 확인 다이얼로그로 이동 |
 | `file.copy` | file | y/F5 | Edit/Copy to Other Panel | safe | 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add` |
 | `file.move` | file | x/F6 | Edit/Move | destructive | start_move |
 | `file.trash` | file | d | File/Delete | destructive | start_delete trash |
@@ -133,4 +135,6 @@ interface AppAction {
 
 ## 복사·붙여넣기 범위
 
-`Cmd+C`는 현재 선택 항목이 있으면 선택 항목을, 없으면 포커스 항목을 앱 내부 복사 목록에 보관한다. 이후 `Cmd+V`는 **활성 패널의 현재 폴더**를 대상으로 기존 복사 작업을 실행한다. 복사 목록은 반복 붙여넣기에 유지되며 앱 종료 시 사라진다. Finder 등 다른 앱의 파일 클립보드와는 연동하지 않는다. 입력 필드와 다이얼로그의 문자 복사·붙여넣기는 해당 UI가 처리한다. 같은 폴더에 붙여넣기는 원본 덮어쓰기를 피하도록 안내하고 실행하지 않는다. `y/F5`는 기존처럼 즉시 반대 패널로 복사한다.
+macOS는 Finder처럼 `Cmd+C`로 항목을 준비한 뒤 `Cmd+V`로 복사하거나 `Opt+Cmd+V`로 이동한다. Windows·Linux는 `Ctrl+C`로 복사 준비, `Ctrl+X`로 이동 준비, `Ctrl+V`로 활성 패널의 현재 폴더에 붙여넣는다. 잘라내기는 원본을 즉시 변경하지 않으며, 이동 확인 다이얼로그와 Rust의 충돌·취소 처리를 거친다. 완전히 이동했을 때 복사 목록을 비우고, 일부만 이동한 경우에는 남은 항목을 다시 선택하도록 알린다.
+
+선택 항목이 있으면 이를, 없으면 포커스 항목을 사용한다. 복사 목록은 반복 붙여넣기에 유지되며 앱 종료 시 사라진다. Finder 등 다른 앱의 파일 클립보드와는 연동하지 않는다. 입력 필드와 다이얼로그의 문자 복사·붙여넣기는 해당 UI가 처리한다. 같은 폴더에 붙여넣기는 원본 덮어쓰기를 피하도록 안내하고 실행하지 않는다. 압축 내부 항목은 복사만 가능하고 이동은 차단한다. `y/F5`와 `x/F6`는 기존처럼 반대 패널을 대상으로 하며, 이동은 확인 다이얼로그를 거친다.

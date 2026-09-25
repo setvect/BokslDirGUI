@@ -14,6 +14,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEven
 import {
   ACTIONS,
   ACTION_BY_ID,
+  actionVisibleOnPlatform,
+  fileShortcutPlatform,
   ariaKeyShortcutsFromRegistry,
   actionsForMenu,
   hotkeyLabelForAction,
@@ -27,6 +29,7 @@ import {
   menuSegmentLabel,
   menuRootsFromRegistry,
   shortcutLabelForAction,
+  shortcutHelpLabelForAction,
   type ActionContext,
   type ActionId,
   type AppAction,
@@ -332,6 +335,7 @@ interface PendingArchiveCopy {
 }
 
 interface FileClipboardSnapshot {
+  intent: 'copy' | 'move';
   panelId: PanelId;
   listing: DirectoryListing;
   entries: FileEntry[];
@@ -1265,6 +1269,7 @@ export function CommanderShell({
     sourceOverride?: FileEntry[],
     targetDirOverride?: string,
     sourceListingOverride?: DirectoryListing,
+    clipboardMoveSnapshot?: FileClipboardSnapshot,
   ): void => {
     const actionId = action.id as ActionId;
     if (actionId === 'menu.open') {
@@ -1306,29 +1311,48 @@ export function CommanderShell({
 
     const actionTargetEntry = sourceOverride?.[0] ?? focusedEntry;
 
-    if (actionId === 'file.clipboardCopy') {
+    if (actionId === 'file.clipboardCopy' || actionId === 'file.clipboardCut') {
       if (sources.length === 0) {
         setStatusMessage(statusText.virtualOperationTargetUnavailable(labelForAction(action, settings.language)));
         return;
       }
-      setFileClipboard({ panelId: panelOverride, listing: panelListing, entries: [...sources] });
-      setStatusMessage(statusText.clipboardCopied(sources.length));
+      if (actionId === 'file.clipboardCut' && (isArchiveVirtualPath(panelListing.path) || !runtimeBackendAvailable)) {
+        setStatusMessage(statusText.clipboardMoveUnavailable);
+        return;
+      }
+      const intent = actionId === 'file.clipboardCut' ? 'move' : 'copy';
+      setFileClipboard({ intent, panelId: panelOverride, listing: panelListing, entries: [...sources] });
+      setStatusMessage(intent === 'move'
+        ? statusText.clipboardCut(sources.length)
+        : statusText.clipboardCopied(sources.length, fileShortcutPlatform() === 'mac' ? '⌘V' : 'Ctrl+V'));
       return;
     }
 
-    if (actionId === 'file.clipboardPaste') {
+    if (actionId === 'file.clipboardPaste' || actionId === 'file.clipboardMovePaste') {
       if (!fileClipboard) {
         setStatusMessage(statusText.clipboardEmpty);
         return;
       }
       const targetDir = panelState[panelOverride].path;
+      const move = actionId === 'file.clipboardMovePaste' || fileClipboard.intent === 'move';
+      if (move && (isArchiveVirtualPath(fileClipboard.listing.path) || isArchiveVirtualPath(targetDir))) {
+        setStatusMessage(statusText.clipboardMoveUnavailable);
+        return;
+      }
       if (fileClipboard.entries.some((entry) => entry.path === joinPath(targetDir, entry.name))) {
         setStatusMessage(statusText.clipboardSameDirectory);
         return;
       }
-      const copyAction = ACTION_BY_ID.get('file.copy');
-      if (copyAction) {
-        handleAction(copyAction, fileClipboard.panelId, fileClipboard.entries, targetDir, fileClipboard.listing);
+      const operationAction = ACTION_BY_ID.get(move ? 'file.move' : 'file.copy');
+      if (operationAction) {
+        handleAction(
+          operationAction,
+          fileClipboard.panelId,
+          fileClipboard.entries,
+          targetDir,
+          fileClipboard.listing,
+          move ? fileClipboard : undefined,
+        );
       }
       return;
     }
@@ -1715,7 +1739,13 @@ export function CommanderShell({
           }
           refreshPanel(dialog.panelId, true);
           refreshPanel(oppositePanelOf(dialog.panelId), true);
-          setStatusMessage(`${labelForAction(action, settings.language)} ${operationSummaryStatusLabel(summary, settings.language)}`);
+          const clipboardMoveCompleted = summary.state === 'completed' && summary.failedFiles === 0 && (summary.skippedFiles ?? 0) === 0;
+          if (clipboardMoveSnapshot && (clipboardMoveCompleted || summary.completedFiles > 0)) {
+            setFileClipboard((current) => current === clipboardMoveSnapshot ? null : current);
+          }
+          const moveIncomplete = clipboardMoveSnapshot && summary.completedFiles > 0
+            && (summary.state !== 'completed' || summary.failedFiles > 0 || (summary.skippedFiles ?? 0) > 0);
+          setStatusMessage(`${labelForAction(action, settings.language)} ${operationSummaryStatusLabel(summary, settings.language)}${moveIncomplete ? statusText.clipboardMoveIncomplete : ''}`);
         },
         onOperationStartError: (error: AppError) => {
           if (actionNeedsConcreteSources(actionId) && error.code === 'not_found') {
@@ -1900,6 +1930,8 @@ export function CommanderShell({
     hasConcreteFocus: activeTargets.hasConcreteFocus,
     effectiveTargetCount: activeTargets.effectiveTargetCount,
     clipboardCount: fileClipboard?.entries.length ?? 0,
+    clipboardMode: fileClipboard?.intent ?? null,
+    clipboardCanMove: Boolean(fileClipboard && !isArchiveVirtualPath(fileClipboard.listing.path) && !isArchiveVirtualPath(activeListing.path)),
     hasOppositePanel: true,
     shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: operationBusy || panelState.left.loading || panelState.right.loading,
@@ -3405,7 +3437,7 @@ function BlankContextMenuContent({ language, listing, operationBusy, backendAvai
           onSelect={() => onOpenAction(action, [])}
         >
           <span>{labelForAction(action, language)}</span>
-          {action.shortcutLabel ? <kbd>{action.shortcutLabel}</kbd> : null}
+          {action.shortcutLabel ? <kbd>{shortcutHelpLabelForAction(action)}</kbd> : null}
         </ContextMenu.Item>
       ))}
     </ContextMenu.Content>
@@ -3739,6 +3771,8 @@ function HotkeyStrip({ scale, language }: { scale: number; language: Settings['l
 
 const BLANK_CONTEXT_ACTION_IDS = new Set<ActionId>([
   'file.mkdir',
+  'file.clipboardPaste',
+  'file.clipboardMovePaste',
   'nav.refresh',
   'nav.gotoPath',
   'filter.start',
@@ -3751,7 +3785,7 @@ const BLANK_CONTEXT_ACTION_IDS = new Set<ActionId>([
 ]);
 
 export const blankContextMenuActions = (context: ActionContext, hasFilter: boolean) => filterEnabledActions(
-  ACTIONS.filter((action) => BLANK_CONTEXT_ACTION_IDS.has(action.id as ActionId))
+  ACTIONS.filter((action) => actionVisibleOnPlatform(action) && BLANK_CONTEXT_ACTION_IDS.has(action.id as ActionId))
     .filter((action) => hasFilter || action.id !== 'filter.clear'),
   context,
 );
@@ -3759,7 +3793,7 @@ export const blankContextMenuActions = (context: ActionContext, hasFilter: boole
 export const contextMenuActions = (entry: FileEntry, context: ActionContext) => {
   const actions = entry.isVirtual
     ? ACTIONS.filter((action) => action.id === 'nav.enter')
-    : ACTIONS.filter((action) => action.contextScopes?.some((scope) => scope !== 'blank'));
+    : ACTIONS.filter((action) => actionVisibleOnPlatform(action) && action.contextScopes?.some((scope) => scope !== 'blank'));
   return filterEnabledActions(actions, context, entry);
 };
 

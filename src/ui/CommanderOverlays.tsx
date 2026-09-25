@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { ACTIONS, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
+import { ACTIONS, actionVisibleOnPlatform, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
 import type { FilePreview, PanelId } from '../domain/types';
 import {
   ACTION_CATEGORY_LABELS,
@@ -131,7 +131,7 @@ export function ShortcutHelpDialog({ language, onClose }: { language: SupportedL
   const scrollRef = useRef<HTMLDivElement>(null);
   const shortcutGroups = new Map<AppActionCategory, (typeof ACTIONS)[number][]>();
   for (const action of ACTIONS) {
-    if (!action.shortcutLabel && !action.keyboardBindings?.length) {
+    if ((!action.shortcutLabel && !action.keyboardBindings?.length) || !actionVisibleOnPlatform(action)) {
       continue;
     }
     const group = shortcutGroups.get(action.category) ?? [];
@@ -223,13 +223,14 @@ export function HelpSearchDialog({ language, onClose }: { language: SupportedLan
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
   const results = ACTIONS.filter((action) => {
+    if (!actionVisibleOnPlatform(action)) return false;
     if (!normalizedQuery) {
       return true;
     }
     return [
       labelForAction(action, language),
       categoryLabelForAction(action, language),
-      action.shortcutLabel ?? '',
+      shortcutHelpLabelForAction(action),
       ...(menuPathSegmentsForAction(action, language) ?? []),
     ].some((value) => value.toLowerCase().includes(normalizedQuery));
   });

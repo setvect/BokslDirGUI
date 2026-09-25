@@ -1,4 +1,4 @@
-import { isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope } from '../actions/registry';
+import { fileShortcutPlatform, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope, type FileShortcutPlatform } from '../actions/registry';
 import type { FileEntry, PanelId } from '../domain/types';
 
 export interface ActionContextInput {
@@ -8,6 +8,9 @@ export interface ActionContextInput {
   hasConcreteFocus?: boolean;
   effectiveTargetCount?: number;
   clipboardCount?: number;
+  clipboardMode?: 'copy' | 'move' | null;
+  clipboardCanMove?: boolean;
+  platform?: FileShortcutPlatform;
   hasOppositePanel: boolean;
   shellCommandEnabled: boolean;
   operationBusy: boolean;
@@ -74,6 +77,9 @@ export const createActionContext = ({
   hasConcreteFocus: hasConcreteFocusOverride,
   effectiveTargetCount,
   clipboardCount = 0,
+  clipboardMode = null,
+  clipboardCanMove = false,
+  platform = fileShortcutPlatform(),
   hasOppositePanel,
   shellCommandEnabled,
   operationBusy,
@@ -88,6 +94,9 @@ export const createActionContext = ({
     hasConcreteFocus,
     effectiveTargetCount: effectiveTargetCount ?? (selectedCount > 0 ? selectedCount : hasConcreteFocus ? 1 : 0),
     clipboardCount,
+    clipboardMode,
+    clipboardCanMove,
+    platform,
     hasOppositePanel,
     shellCommandEnabled,
     operationBusy,
@@ -122,6 +131,7 @@ export const filterEnabledActions = (actions: AppAction[], context: ActionContex
 const SOURCE_REQUIRED_ACTIONS = new Set<ActionId>([
   'file.copy',
   'file.clipboardCopy',
+  'file.clipboardCut',
   'file.move',
   'file.trash',
   'file.deletePermanent',

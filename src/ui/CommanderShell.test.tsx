@@ -3,7 +3,7 @@ import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within }
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, type ComponentProps } from 'react';
-import { ACTIONS, ACTION_BY_ID } from '../actions/registry';
+import { ACTIONS, ACTION_BY_ID, actionVisibleOnPlatform } from '../actions/registry';
 import { useOperationStore } from '../operations/operationStore';
 import { CommanderShell, columnLayoutForPanelWidth, hotkeyStripActionsForWidth, splitMiddleEllipsisParts, zoomPercentForStep, zoomScaleForStep } from './CommanderShell';
 import type { AppError, DirectoryListing, PanelId } from '../domain/types';
@@ -728,6 +728,74 @@ describe('CommanderShell', () => {
       targetDir: SAMPLE_LISTINGS.left.path,
       policy: 'skip',
     }));
+  });
+
+  it('uses Finder-style Cmd+C then Option+Cmd+V to move with confirmation', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-mac-paste-move', kind: 'move' as const, state: 'queued' as const } })),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+    await user.keyboard('{Meta>}c{/Meta}');
+    await user.keyboard('{Tab}');
+    await user.keyboard('{Alt>}{Meta>}v{/Meta}{/Alt}');
+
+    expect(await screen.findByRole('dialog', { name: '이동' })).toBeTruthy();
+    expect(operationClient.startMove).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: '이동' }));
+    await waitFor(() => expect(operationClient.startMove).toHaveBeenCalledWith({
+      sources: [SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right].path],
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+  });
+
+  it('uses Windows-style Ctrl+X then Ctrl+V and clears the cut list after a complete move', async () => {
+    const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Windows NT 10.0)');
+    try {
+      const user = userEvent.setup();
+      const operationClient = {
+        startCopy: vi.fn(),
+        startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-win-paste-move', kind: 'move' as const, state: 'queued' as const } })),
+        startDelete: vi.fn(),
+        cancelOperation: vi.fn(),
+        resolveConflict: vi.fn(),
+      };
+      renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+      await user.keyboard('{Control>}x{/Control}');
+      expect(screen.getByText(/이동 준비 · 대상 폴더에서 Ctrl\+V/)).toBeTruthy();
+      await user.keyboard('{Tab}');
+      await user.keyboard('{Control>}v{/Control}');
+
+      expect(await screen.findByRole('dialog', { name: '이동' })).toBeTruthy();
+      await user.click(screen.getByRole('button', { name: '이동' }));
+      await waitFor(() => expect(operationClient.startMove).toHaveBeenCalledWith({
+        sources: [SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right].path],
+        targetDir: SAMPLE_LISTINGS.left.path,
+        policy: 'skip',
+      }));
+      act(() => useOperationStore.getState().applyOperationSummary({
+        operationId: 'op-win-paste-move',
+        kind: 'move',
+        state: 'completed',
+        completedFiles: 1,
+        failedFiles: 0,
+        skippedFiles: 0,
+        errors: [],
+      }));
+      act(() => useOperationStore.getState().clearSummary());
+      await user.keyboard('{Control>}v{/Control}');
+      expect(operationClient.startMove).toHaveBeenCalledTimes(1);
+    } finally {
+      userAgent.mockRestore();
+    }
   });
 
   it('does not start a self-copy when pasting into the source folder', async () => {
@@ -2349,7 +2417,7 @@ describe('CommanderShell', () => {
     const scrollArea = within(dialog).getByRole('region', { name: '단축키 목록' });
     expect(document.activeElement).toBe(scrollArea);
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(
-      ACTIONS.filter((action) => action.shortcutLabel || action.keyboardBindings?.length).length,
+      ACTIONS.filter((action) => actionVisibleOnPlatform(action) && (action.shortcutLabel || action.keyboardBindings?.length)).length,
     );
     expect(within(dialog).getByRole('heading', { name: '이동' })).toBeTruthy();
     expect(within(dialog).getByRole('heading', { name: '파일' })).toBeTruthy();

@@ -133,8 +133,10 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Select: '선택',
     'Select All': '모두 선택',
     Copy: '복사',
-    'Copy to Other Panel': '반대 패널로 복사',
+    Cut: '잘라내기',
     Paste: '붙여넣기',
+    'Move Here': '여기로 이동',
+    'Copy to Other Panel': '반대 패널로 복사',
     Move: '이동',
     Delete: '삭제',
     'Permanent Delete': '영구 삭제',
@@ -213,8 +215,10 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Select: 'Select',
     'Select All': 'Select All',
     Copy: 'Copy',
-    'Copy to Other Panel': 'Copy to Other Panel',
+    Cut: 'Cut',
     Paste: 'Paste',
+    'Move Here': 'Move Here',
+    'Copy to Other Panel': 'Copy to Other Panel',
     Move: 'Move',
     Delete: 'Delete',
     'Permanent Delete': 'Permanent Delete',
@@ -293,7 +297,9 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'selection.clear': '선택 해제',
     'file.copy': '반대 패널로 복사',
     'file.clipboardCopy': '복사',
+    'file.clipboardCut': '잘라내기',
     'file.clipboardPaste': '붙여넣기',
+    'file.clipboardMovePaste': '여기로 이동',
     'file.move': '이동',
     'file.trash': '삭제',
     'file.deletePermanent': '영구 삭제',
@@ -345,7 +351,9 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'selection.clear': 'Clear Selection',
     'file.copy': 'Copy to Other Panel',
     'file.clipboardCopy': 'Copy',
+    'file.clipboardCut': 'Cut',
     'file.clipboardPaste': 'Paste',
+    'file.clipboardMovePaste': 'Move Here',
     'file.move': 'Move',
     'file.trash': 'Delete',
     'file.deletePermanent': 'Permanent Delete',
@@ -610,7 +618,10 @@ export interface CommanderStatusText {
   operationDone(action: string): string;
   operationTargetMissing(action: string): string;
   operationStarted(action: string, count: number, targetDir: string): string;
-  clipboardCopied(count: number): string;
+  clipboardCopied(count: number, pasteShortcut: string): string;
+  clipboardCut(count: number): string;
+  clipboardMoveUnavailable: string;
+  clipboardMoveIncomplete: string;
   clipboardEmpty: string;
   clipboardSameDirectory: string;
   actionReady(action: string): string;
@@ -670,7 +681,10 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     operationDone: (action) => `${action} 완료`,
     operationTargetMissing: (action) => `${action} 대상이 이미 없습니다. 목록을 새로고침했습니다.`,
     operationStarted: (action, count, targetDir) => `${action} 시작: ${count}개 항목 → ${targetDir}`,
-    clipboardCopied: (count) => `${count}개 항목 복사 준비 · 대상 폴더에서 ⌘V`,
+    clipboardCopied: (count, pasteShortcut) => `${count}개 항목 복사 준비 · 대상 폴더에서 ${pasteShortcut}`,
+    clipboardCut: (count) => `${count}개 항목 이동 준비 · 대상 폴더에서 Ctrl+V`,
+    clipboardMoveUnavailable: '압축 내부에서는 항목을 이동할 수 없습니다. 복사를 사용하세요.',
+    clipboardMoveIncomplete: ' · 일부 항목이 이동됐습니다. 남은 항목을 다시 선택하세요.',
     clipboardEmpty: '복사 준비한 항목이 없습니다.',
     clipboardSameDirectory: '같은 폴더에 붙여넣을 수 없습니다. 다른 폴더를 선택하세요.',
     actionReady: (action) => `${action} 준비됨`,
@@ -728,7 +742,10 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     operationDone: (action) => `${action} completed`,
     operationTargetMissing: (action) => `${action} target no longer exists. Refreshed the listing.`,
     operationStarted: (action, count, targetDir) => `${action} started: ${count} item${count === 1 ? '' : 's'} → ${targetDir}`,
-    clipboardCopied: (count) => `${count} item${count === 1 ? '' : 's'} ready to copy · press ⌘V in the destination folder`,
+    clipboardCopied: (count, pasteShortcut) => `${count} item${count === 1 ? '' : 's'} ready to copy · press ${pasteShortcut} in the destination folder`,
+    clipboardCut: (count) => `${count} item${count === 1 ? '' : 's'} ready to move · press Ctrl+V in the destination folder`,
+    clipboardMoveUnavailable: 'Items cannot be moved into or out of an archive. Use copy instead.',
+    clipboardMoveIncomplete: ' · Some items moved. Select the remaining items again.',
     clipboardEmpty: 'No items are ready to copy.',
     clipboardSameDirectory: 'Cannot paste into the same folder. Choose another folder.',
     actionReady: (action) => `${action} ready`,

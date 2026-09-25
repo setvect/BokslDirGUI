@@ -3,6 +3,9 @@ import {
   ACTIONS,
   ACTION_BY_ID,
   actionForKeyboardShortcut,
+  actionVisibleOnPlatform,
+  actionsForMenu,
+  fileShortcutPlatform,
   ariaKeyShortcutsFromRegistry,
   isActionAvailable,
   keyboardBindingCollisions,
@@ -192,6 +195,23 @@ describe('action registry', () => {
     }
   });
 
+  it('shows Finder move paste on Mac and cut paste on Windows', () => {
+    const copy = ACTION_BY_ID.get('file.clipboardCopy')!;
+    const cut = ACTION_BY_ID.get('file.clipboardCut')!;
+    const paste = ACTION_BY_ID.get('file.clipboardPaste')!;
+    const moveHere = ACTION_BY_ID.get('file.clipboardMovePaste')!;
+
+    expect(fileShortcutPlatform('Mozilla/5.0 (Macintosh; Intel Mac OS X)')).toBe('mac');
+    expect(fileShortcutPlatform('Mozilla/5.0 (Windows NT 10.0)')).toBe('other');
+    expect(shortcutHelpLabelForAction(copy, 'mac')).toBe('Cmd+C');
+    expect(shortcutHelpLabelForAction(copy, 'other')).toBe('Ctrl+C');
+    expect(shortcutHelpLabelForAction(paste, 'other')).toBe('Ctrl+V');
+    expect(actionVisibleOnPlatform(cut, 'mac')).toBe(false);
+    expect(actionVisibleOnPlatform(moveHere, 'other')).toBe(false);
+    expect(actionsForMenu('Edit', 'mac').some((action) => action.id === 'file.clipboardMovePaste')).toBe(true);
+    expect(actionsForMenu('Edit', 'other').some((action) => action.id === 'file.clipboardCut')).toBe(true);
+  });
+
   it('derives keyboard shortcut dispatch from explicit keyboardBindings metadata', () => {
     expect(actionForKeyboardShortcut(key('Tab'))?.id).toBe('panel.switchActive');
     expect(actionForKeyboardShortcut(key('F9'))?.id).toBe('menu.open');
@@ -201,6 +221,10 @@ describe('action registry', () => {
     expect(actionForKeyboardShortcut(key('F5'))?.id).toBe('file.copy');
     expect(actionForKeyboardShortcut(key('c', { metaKey: true }))?.id).toBe('file.clipboardCopy');
     expect(actionForKeyboardShortcut(key('v', { metaKey: true }))?.id).toBe('file.clipboardPaste');
+    expect(actionForKeyboardShortcut(key('v', { metaKey: true, altKey: true }))?.id).toBe('file.clipboardMovePaste');
+    expect(actionForKeyboardShortcut(key('c', { ctrlKey: true }))?.id).toBe('file.clipboardCopy');
+    expect(actionForKeyboardShortcut(key('x', { ctrlKey: true }))?.id).toBe('file.clipboardCut');
+    expect(actionForKeyboardShortcut(key('v', { ctrlKey: true }))?.id).toBe('file.clipboardPaste');
     expect(actionForKeyboardShortcut(key('ㅛ', { code: 'KeyY' }))?.id).toBe('file.copy');
     expect(actionForKeyboardShortcut(key('D', { shiftKey: true }))?.id).toBe('file.deletePermanent');
     expect(actionForKeyboardShortcut(key('ㅇ', { code: 'KeyD', shiftKey: true }))?.id).toBe('file.deletePermanent');

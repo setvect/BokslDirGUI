@@ -597,12 +597,24 @@
         ]
       ],
       "guiActionIds": [
+        "file.clipboardCut",
+        "file.clipboardMovePaste",
         "file.move"
       ],
       "guiShortcutLabels": [
+        "Ctrl+X",
+        "Opt+Cmd+V",
         "x/F6"
       ],
       "guiMenuPaths": [
+        [
+          "Edit",
+          "Cut"
+        ],
+        [
+          "Edit",
+          "Move Here"
+        ],
         [
           "Edit",
           "Move"
@@ -613,9 +625,10 @@
         "src/ui/CommanderShell.tsx: file.move opens operation dialog while file.copy direct-starts",
         "src/ui/CommanderShell.test.tsx: requires explicit confirmation before a move reaches the operation client",
         "src/operations/operationStore.ts: active operation controller preserves progress/conflict/summary callbacks",
-        "src-tauri/src/lib.rs tests: start_move_renames_to_target_directory and same-directory overwrite no-op safety"
+        "src-tauri/src/lib.rs tests: start_move_renames_to_target_directory and same-directory overwrite no-op safety",
+        "src/ui/CommanderShell.test.tsx: Finder Option+Cmd+V and Windows Ctrl+X/Ctrl+V route through the move confirmation dialog"
       ],
-      "notes": "TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation을 시작한다. 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리한다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다.",
+      "notes": "TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation을 시작한다. 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리한다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다. macOS Cmd+C 후 Opt+Cmd+V와 Windows Ctrl+X 후 Ctrl+V도 동일한 이동 다이얼로그와 start_move 경로를 사용한다.",
       "tuiId": "move",
       "tuiLabel": "Move",
       "tuiCategory": "FileOperation",
