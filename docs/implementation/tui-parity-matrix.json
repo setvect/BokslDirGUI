@@ -148,6 +148,10 @@
     {
       "guiActionId": "panel.compareDirectories",
       "reason": "GUI 듀얼 패널 편의 기능: 현재 좌우 목록의 이름·종류·크기·수정일 차이를 시각화"
+    },
+    {
+      "guiActionId": "file.clipboardPaste",
+      "reason": "GUI 확장 기능: 복사 목록의 항목을 활성 패널 현재 폴더에 붙여넣기"
     }
   ],
   "tuiActions": [
@@ -542,19 +546,25 @@
         ]
       ],
       "guiActionIds": [
+        "file.clipboardCopy",
         "file.copy"
       ],
       "guiShortcutLabels": [
+        "Cmd+C",
         "y/F5"
       ],
       "guiMenuPaths": [
         [
           "Edit",
           "Copy"
+        ],
+        [
+          "Edit",
+          "Copy to Other Panel"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: file.copy Edit menu binding",
+        "src/actions/registry.ts: file.clipboardCopy Edit/Copy and file.copy Edit/Copy to Other Panel",
         "src/ui/CommanderShell.tsx: direct startLongRunningOperation for file.copy",
         "src/operations/operationStore.ts: startLongRunningOperation with non-modal progress/conflict controller",
         "src/ui/CommanderShell.test.tsx: copy shortcut/focused fallback starts client without preflight dialog",

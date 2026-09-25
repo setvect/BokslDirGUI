@@ -7,6 +7,7 @@ export interface ActionContextInput {
   selectedCount: number;
   hasConcreteFocus?: boolean;
   effectiveTargetCount?: number;
+  clipboardCount?: number;
   hasOppositePanel: boolean;
   shellCommandEnabled: boolean;
   operationBusy: boolean;
@@ -72,6 +73,7 @@ export const createActionContext = ({
   selectedCount,
   hasConcreteFocus: hasConcreteFocusOverride,
   effectiveTargetCount,
+  clipboardCount = 0,
   hasOppositePanel,
   shellCommandEnabled,
   operationBusy,
@@ -85,6 +87,7 @@ export const createActionContext = ({
     selectedCount,
     hasConcreteFocus,
     effectiveTargetCount: effectiveTargetCount ?? (selectedCount > 0 ? selectedCount : hasConcreteFocus ? 1 : 0),
+    clipboardCount,
     hasOppositePanel,
     shellCommandEnabled,
     operationBusy,
@@ -118,6 +121,7 @@ export const filterEnabledActions = (actions: AppAction[], context: ActionContex
 
 const SOURCE_REQUIRED_ACTIONS = new Set<ActionId>([
   'file.copy',
+  'file.clipboardCopy',
   'file.move',
   'file.trash',
   'file.deletePermanent',

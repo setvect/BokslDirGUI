@@ -42,7 +42,9 @@ interface AppAction {
 | `tab.close` | panel | tx | View/Close Tab | none | UI state |
 | `selection.toggle` | selection | Space | Edit/Select | none | UI state |
 | `selection.all` | selection | Ctrl+A | Edit/Select All | none | UI state |
-| `file.copy` | file | y/F5 | Edit/Copy | safe | 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add` |
+| `file.clipboardCopy` | file | Cmd+C | Edit/Copy | safe | 현재 선택 항목 또는 포커스 항목을 앱 내부 복사 목록에 저장 |
+| `file.clipboardPaste` | file | Cmd+V | Edit/Paste | safe | 저장된 항목을 활성 패널 현재 폴더에 복사; 기존 `file.copy` 실행 경로 사용 |
+| `file.copy` | file | y/F5 | Edit/Copy to Other Panel | safe | 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add` |
 | `file.move` | file | x/F6 | Edit/Move | destructive | start_move |
 | `file.trash` | file | d | File/Delete | destructive | start_delete trash |
 | `file.deletePermanent` | file | D/Shift+Delete | File/Permanent Delete | irreversible | start_delete permanent |
@@ -127,3 +129,8 @@ interface AppAction {
 - 모든 context menu item은 scope에 맞는 enablement를 가진다.
 - help dialog의 shortcut 목록은 registry snapshot과 일치한다.
 - irreversible action은 confirm dialog 없이 command를 호출하지 않는다.
+
+
+## 복사·붙여넣기 범위
+
+`Cmd+C`는 현재 선택 항목이 있으면 선택 항목을, 없으면 포커스 항목을 앱 내부 복사 목록에 보관한다. 이후 `Cmd+V`는 **활성 패널의 현재 폴더**를 대상으로 기존 복사 작업을 실행한다. 복사 목록은 반복 붙여넣기에 유지되며 앱 종료 시 사라진다. Finder 등 다른 앱의 파일 클립보드와는 연동하지 않는다. 입력 필드와 다이얼로그의 문자 복사·붙여넣기는 해당 UI가 처리한다. 같은 폴더에 붙여넣기는 원본 덮어쓰기를 피하도록 안내하고 실행하지 않는다. `y/F5`는 기존처럼 즉시 반대 패널로 복사한다.

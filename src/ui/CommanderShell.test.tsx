@@ -706,6 +706,48 @@ describe('CommanderShell', () => {
     expect(await screen.findByLabelText('Operation status', {}, { timeout: 1000 })).toBeTruthy();
   });
 
+  it('copies the focused source with Cmd+C and pastes into the active panel with Cmd+V', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-clipboard-copy', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+    await user.keyboard('{Meta>}c{/Meta}');
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+    expect(screen.getByText(/복사 준비 · 대상 폴더에서 ⌘V/)).toBeTruthy();
+    await user.keyboard('{Tab}');
+    await user.keyboard('{Meta>}v{/Meta}');
+
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: [SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right].path],
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+  });
+
+  it('does not start a self-copy when pasting into the source folder', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+    await user.keyboard('{Meta>}c{/Meta}');
+    await user.keyboard('{Meta>}v{/Meta}');
+
+    expect(operationClient.startCopy).not.toHaveBeenCalled();
+    expect(screen.getByText(/같은 폴더에 붙여넣을 수 없습니다/)).toBeTruthy();
+  });
+
   it('disables real file mutation shortcuts in plain browser preview mode', async () => {
     const user = userEvent.setup();
     const operationClient = {
@@ -2289,6 +2331,7 @@ describe('CommanderShell', () => {
       throw new Error('shortcut dialog is required');
     }
     expect(within(shortcutDialog).getByText('복사')).toBeTruthy();
+    expect(within(shortcutDialog).getByText('반대 패널로 복사')).toBeTruthy();
     expect(within(shortcutDialog).getByText('y/F5')).toBeTruthy();
     expect(within(shortcutDialog).getByText('D/Shift+Delete')).toBeTruthy();
     expect(within(shortcutDialog).getByText('Ctrl+B/tb+a')).toBeTruthy();

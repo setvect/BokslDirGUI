@@ -138,8 +138,8 @@ describe('action registry', () => {
     if (!copy) {
       throw new Error('file.copy action is required');
     }
-    expect(labelForAction(copy)).toBe('Copy');
-    expect(labelForAction(copy, 'ko')).toBe('복사');
+    expect(labelForAction(copy)).toBe('Copy to Other Panel');
+    expect(labelForAction(copy, 'ko')).toBe('반대 패널로 복사');
     expect(copy.hotkeyLabel).toBe('Copy');
   });
 
@@ -199,6 +199,8 @@ describe('action registry', () => {
     expect(actionForKeyboardShortcut(key('h'))?.id).toBe('nav.up');
     expect(actionForKeyboardShortcut(key('y'))?.id).toBe('file.copy');
     expect(actionForKeyboardShortcut(key('F5'))?.id).toBe('file.copy');
+    expect(actionForKeyboardShortcut(key('c', { metaKey: true }))?.id).toBe('file.clipboardCopy');
+    expect(actionForKeyboardShortcut(key('v', { metaKey: true }))?.id).toBe('file.clipboardPaste');
     expect(actionForKeyboardShortcut(key('ㅛ', { code: 'KeyY' }))?.id).toBe('file.copy');
     expect(actionForKeyboardShortcut(key('D', { shiftKey: true }))?.id).toBe('file.deletePermanent');
     expect(actionForKeyboardShortcut(key('ㅇ', { code: 'KeyD', shiftKey: true }))?.id).toBe('file.deletePermanent');

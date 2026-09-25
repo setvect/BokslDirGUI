@@ -331,6 +331,12 @@ interface PendingArchiveCopy {
   status: string;
 }
 
+interface FileClipboardSnapshot {
+  panelId: PanelId;
+  listing: DirectoryListing;
+  entries: FileEntry[];
+}
+
 export function CommanderShell({
   dataSource = DEFAULT_DATA_SOURCE,
   mutationClient = tauriClient,
@@ -371,6 +377,7 @@ export function CommanderShell({
     },
   }));
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [fileClipboard, setFileClipboard] = useState<FileClipboardSnapshot | null>(null);
   const [filterPromptPanel, setFilterPromptPanel] = useState<PanelId | null>(null);
   const [pathPromptPanel, setPathPromptPanel] = useState<PanelId | null>(null);
   const [bookmarkRenameRequest, setBookmarkRenameRequest] = useState<{ bookmarkId: string; initialValue: string } | null>(null);
@@ -1257,7 +1264,8 @@ export function CommanderShell({
     panelOverride = activePanel,
     sourceOverride?: FileEntry[],
     targetDirOverride?: string,
-  ) => {
+    sourceListingOverride?: DirectoryListing,
+  ): void => {
     const actionId = action.id as ActionId;
     if (actionId === 'menu.open') {
       if (topMenuState) {
@@ -1289,7 +1297,7 @@ export function CommanderShell({
     }
 
     const panel = panelState[panelOverride];
-    const panelListing = panel.listing;
+    const panelListing = sourceListingOverride ?? panel.listing;
     const oppositePanel = oppositePanelOf(panelOverride);
     const actionTargets = resolveActionTargets(panel);
     const focusedEntry = actionTargets.focusedEntry;
@@ -1297,6 +1305,33 @@ export function CommanderShell({
       ?? actionTargets.effectiveSources;
 
     const actionTargetEntry = sourceOverride?.[0] ?? focusedEntry;
+
+    if (actionId === 'file.clipboardCopy') {
+      if (sources.length === 0) {
+        setStatusMessage(statusText.virtualOperationTargetUnavailable(labelForAction(action, settings.language)));
+        return;
+      }
+      setFileClipboard({ panelId: panelOverride, listing: panelListing, entries: [...sources] });
+      setStatusMessage(statusText.clipboardCopied(sources.length));
+      return;
+    }
+
+    if (actionId === 'file.clipboardPaste') {
+      if (!fileClipboard) {
+        setStatusMessage(statusText.clipboardEmpty);
+        return;
+      }
+      const targetDir = panelState[panelOverride].path;
+      if (fileClipboard.entries.some((entry) => entry.path === joinPath(targetDir, entry.name))) {
+        setStatusMessage(statusText.clipboardSameDirectory);
+        return;
+      }
+      const copyAction = ACTION_BY_ID.get('file.copy');
+      if (copyAction) {
+        handleAction(copyAction, fileClipboard.panelId, fileClipboard.entries, targetDir, fileClipboard.listing);
+      }
+      return;
+    }
 
     if (actionId === 'panel.swapPaths') {
       setDirectoryComparison(null);
@@ -1864,6 +1899,7 @@ export function CommanderShell({
     selectedCount: activeTargets.selectedCount,
     hasConcreteFocus: activeTargets.hasConcreteFocus,
     effectiveTargetCount: activeTargets.effectiveTargetCount,
+    clipboardCount: fileClipboard?.entries.length ?? 0,
     hasOppositePanel: true,
     shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: operationBusy || panelState.left.loading || panelState.right.loading,
