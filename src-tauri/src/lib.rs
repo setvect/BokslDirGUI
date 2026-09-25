@@ -9,7 +9,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -793,6 +793,7 @@ fn save_settings(patch: serde_json::Value) -> CommandResult<Settings> {
 
 mod settings_service {
     use super::*;
+    static SETTINGS_SAVE_LOCK: Mutex<()> = Mutex::new(());
 
     pub(super) fn load_settings() -> CommandResult<Settings> {
         let path = settings_path()?;
@@ -800,7 +801,7 @@ mod settings_service {
             return Ok(Settings::default());
         }
         let text = fs::read_to_string(&path).map_err(|error| map_io_error(error, Some(&path)))?;
-        serde_json::from_str::<Settings>(&text).map_err(|error| {
+        let settings = serde_json::from_str::<Settings>(&text).map_err(|error| {
             AppError::new(
                 "invalid_settings",
                 "errors.settingsInvalid",
@@ -808,12 +809,16 @@ mod settings_service {
                 true,
             )
             .with_detail("message", error.to_string())
-        })
+        })?;
+        validate_settings(&settings, &path)?;
+        Ok(settings)
     }
 
     pub(super) fn save_settings(patch: serde_json::Value) -> CommandResult<Settings> {
+        let _guard = SETTINGS_SAVE_LOCK.lock().map_err(|_| AppError::new(
+            "io_error", "errors.settingsSaveFailed", None, true))?;
         let path = settings_path()?;
-        let current = load_settings().unwrap_or_default();
+        let current = load_settings()?;
         let mut value = serde_json::to_value(current).map_err(|error| {
             AppError::new(
                 "invalid_settings",
@@ -1956,7 +1961,8 @@ mod mutation {
                     true,
                 )
             })?;
-        let source_name = validate_child_name(source_name, Some(&raw_source))?;
+        // The existing entry name is an exact filesystem identity, including whitespace.
+        validate_child_name(source_name, Some(&raw_source))?;
         let parent = navigation::canonical_existing_path(&raw_parent.to_string_lossy())?;
         if !parent.is_dir() {
             return Err(AppError::new(
@@ -2371,9 +2377,65 @@ fn display_path(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+#[tauri::command]
+fn show_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window is unavailable".to_string())?;
+    let overlay = app
+        .get_webview_window("drop-overlay")
+        .ok_or_else(|| "drop overlay window is unavailable".to_string())?;
+    let position = main.inner_position().map_err(|error| error.to_string())?;
+    let size = main.inner_size().map_err(|error| error.to_string())?;
+    overlay
+        .set_position(tauri::Position::Physical(position))
+        .map_err(|error| error.to_string())?;
+    overlay
+        .set_size(tauri::Size::Physical(size))
+        .map_err(|error| error.to_string())?;
+    overlay.show().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn hide_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
+    let overlay = app
+        .get_webview_window("drop-overlay")
+        .ok_or_else(|| "drop overlay window is unavailable".to_string())?;
+    overlay.hide().map_err(|error| error.to_string())
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClientCursorPosition {
+    x: f64,
+    y: f64,
+}
+
+#[tauri::command]
+fn main_cursor_position(app: tauri::AppHandle) -> Result<ClientCursorPosition, String> {
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window is unavailable".to_string())?;
+    let cursor = app.cursor_position().map_err(|error| error.to_string())?;
+    let origin = main.inner_position().map_err(|error| error.to_string())?;
+    let scale_factor = main.scale_factor().map_err(|error| error.to_string())?;
+    Ok(ClientCursorPosition {
+        x: (cursor.x - f64::from(origin.x)) / scale_factor,
+        y: (cursor.y - f64::from(origin.y)) / scale_factor,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_drag::init())
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(overlay) = window.app_handle().get_webview_window("drop-overlay") {
+                    let _ = overlay.close();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             health_check,
             list_dir,
@@ -2399,7 +2461,10 @@ pub fn run() {
             prepare_shell_command,
             run_shell_command,
             load_settings,
-            save_settings
+            save_settings,
+            show_drop_overlay,
+            hide_drop_overlay,
+            main_cursor_position
         ])
         .run(tauri::generate_context!())
         .expect("failed to run BokslDirGUI Tauri application");
@@ -2413,7 +2478,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
     static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
-    static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    pub(super) static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     struct TempFixture {
         root: PathBuf,
@@ -3215,6 +3280,7 @@ mod tests {
 
     #[test]
     fn archive_zip_create_list_extract_round_trip_uses_relative_entry_names() {
+        let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
         if !command_available("zip") || !command_available("unzip") {
             return;
         }
@@ -3417,6 +3483,7 @@ mod tests {
 
     #[test]
     fn archive_required_formats_create_list_and_extract_round_trip() {
+        let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
         if !command_available("zip") || !command_available("unzip") || !command_available("tar") {
             return;
         }
@@ -3478,6 +3545,7 @@ mod tests {
 
     #[test]
     fn archive_listing_limit_reports_truncation() {
+        let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
         if !command_available("zip") || !command_available("unzip") {
             return;
         }
@@ -3506,6 +3574,7 @@ mod tests {
 
     #[test]
     fn archive_password_round_trip_and_unsafe_entry_guards() {
+        let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
         let fixture = TempFixture::new();
         if !command_available("zip") || !command_available("unzip") {
             return;
@@ -3596,6 +3665,7 @@ mod tests {
 
     #[test]
     fn external_archive_provider_is_killed_when_operation_is_cancelled() {
+        let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
         let Some((result, elapsed)) = operation::external_archive_command_cancel_for_test() else {
             return;
         };
@@ -3652,6 +3722,7 @@ mod tests {
 
     #[test]
     fn archive_7z_slt_parser_preserves_spaces_and_unsafe_paths() {
+        let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
         let paths = archive::parse_7z_slt_paths_for_test(
             b"Path = fixture.7z\nType = 7z\n----------\nPath = dir/my file.txt\nSize = 5\nPath = ../escape file.txt\nSize = 1\n",
         );
@@ -3715,6 +3786,7 @@ mod tests {
 
     #[test]
     fn archive_7z_provider_lists_real_fixture_when_available() {
+        let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
         let Some(binary) = archive::seven_zip_binary_for_test() else {
             return;
         };
@@ -3796,6 +3868,7 @@ mod tests {
 
     #[test]
     fn archive_7z_password_and_large_listing_when_provider_is_available() {
+        let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
         let Some(_binary) = archive::seven_zip_binary_for_test() else {
             return;
         };

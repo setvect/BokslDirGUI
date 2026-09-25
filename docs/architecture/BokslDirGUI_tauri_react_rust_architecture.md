@@ -224,6 +224,7 @@ PoC 실패 시 `libarchive2` 또는 `compress-tools` 대안을 별도 ADR로 평
 | 플러그인 | 채택 단계 | 사용 이유/제약 |
 | --- | --- | --- |
 | `@tauri-apps/api` | 기준 기능 | frontend↔Rust command/event bridge |
+| `tauri-plugin-drag`, `@crabnebula/tauri-plugin-drag` | 기준 기능 | WebView 경계를 넘어 선택된 실제 파일 경로를 macOS/Windows/Linux 네이티브 드래그 세션으로 전달. 메인 WebView의 HTML5 drag와 Tauri native file-drop 가로채기 충돌을 피하기 위해 메인은 `dragDropEnabled: false`, 숨겨진 투명 `drop-overlay` WebView만 native drop을 수신한다. 절대 경로만 허용하고 실제 변경 작업은 기존 Rust operation 경계를 유지 |
 | `@tauri-apps/plugin-dialog` | 기준 기능 | 폴더 선택, 확인/메시지 다이얼로그 후보 |
 | `@tauri-apps/plugin-opener` | 기준 기능 | 기본 앱 열기/open URL 후보 |
 | `@tauri-apps/plugin-store` | 기준 기능 | 단순 설정/상태 저장 후보. 복잡해지면 Rust settings service로 흡수 |

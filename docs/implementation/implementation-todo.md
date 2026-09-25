@@ -250,13 +250,14 @@
 
 ## 7. Drag and drop / mouse GUI 기능 TODO
 
-상태: 2026-06-14 구현 반영. row drag source와 panel drop handler를 구현했다. 기본 drop은 copy, `Shift` modifier drop은 move로 해석한다. 외부 파일 drop은 Tauri/WebView가 OS absolute path를 노출한 경우에만 import copy dialog로 연결하고, 경로가 확인되지 않으면 recoverable 안내로 차단한다.
+상태: 2026-07-31 구현 반영. Tauri 데스크톱에서는 row drag 시작 시 선택된 OS absolute path를 `tauri-plugin-drag` 네이티브 세션으로 전달해 VS Code/Finder 등 창 밖까지 드래그를 유지한다. 외부 대상이 드롭을 수락하면 외부 드래그 완료로 처리하고, 네이티브 세션이 취소 상태로 끝났으나 커서가 반대 패널 안에 있으면 메인 창의 실제 커서/내부 창 좌표로 대상 패널을 판정해 기본 copy, `Shift` drag는 move로 기존 작업 경계에 연결한다. Tauri의 메인 WebView native file-drop 수신과 HTML5/native drag-out이 서로 가로채지 않도록 메인 창은 `dragDropEnabled: false`로 두고, 외부 파일이 들어올 때만 메인 콘텐츠 영역 위에 표시되는 투명 `drop-overlay`가 Finder/Explorer 경로와 물리 좌표를 수신한다. overlay는 좌표를 논리 좌표로 변환해 메인 창에 전달하고 즉시 숨으며, 메인 창은 대상 패널을 판별한 뒤 기존 copy operation/충돌 정책으로 연결한다. 네이티브 drag-out 시작 자체가 실패하면 이후 제스처는 HTML5 패널 드래그로 자동 강등해 패널 간 조작까지 함께 막히지 않게 한다.
 
 - [x] row drag source 모델 구현.
 - [x] panel-to-panel drag copy/move 의도 결정 modifier 정책 구현.
-- [x] external file drop/import 정책 결정: OS absolute path가 확인된 파일만 target panel로 copy import하고, 확인 불가 파일은 차단한다.
+- [x] external file drop/import 정책 결정 및 Tauri native event 연결: OS absolute path가 확인된 파일만 drop 좌표의 target panel로 copy import하고, 확인 불가 파일은 차단한다.
+- [x] native drag-out 연결: 선택 파일/디렉터리를 외부 앱에 OS 파일 목록으로 전달하고 완료/취소/오류 상태를 표시한다.
 - [x] drop target hover/forbidden target 기본 UI 구현.
-- [x] Tests: component-level handler tests.
+- [x] Tests: component-level HTML5 handler, native drag-out handoff/실패 시 HTML5 복구, Tauri native event/좌표 기반 target panel 및 native 종료 커서 기반 panel-to-panel 회귀 테스트.
 - [x] 후속 강화: 외부 파일 import는 기존 copy operation dialog/충돌 정책을 재사용해 안전 확인 후 실행한다.
 
 ## 8. Shell command TODO — 기본 비활성 유지
@@ -314,3 +315,17 @@
 - 기본 후속: `$ultragoal` — 위 TODO를 순차 goal로 분해해 ledger/checkpoint 기반으로 진행.
 - 병렬 후속: `$ultragoal` + `$team` — Rust operation service, React panel state, tests를 분리해 병렬 구현.
 - fallback: `$ralph` — 단일 owner가 한 기능 축을 끝까지 밀어야 할 때만 명시적으로 선택.
+
+
+## 2026-09-25 전체 코드 리뷰 후속
+
+기존 체크는 테스트·연결 근거이며 모든 플랫폼의 실동작 완료를 뜻하지 않는다. [전체 리뷰 보고서](code-review-2026-09-25.md)의 R01–R21 수정과 잔여 항목을 함께 확인한다.
+
+- [x] 파일 덮어쓰기/부분 파일/특수 파일/압축 작업 사본 보존 강화
+- [x] 작업별 지연 응답 차단, 현재 패널 경로·포커스 보존, 설정 저장 직렬화
+- [x] 탭별 패널 상태와 활성 탭 닫기, 5개 상한, 히스토리 100개 상한
+- [x] OS 휴지통 라이브러리 연결 및 임시 fixture 회귀
+- [ ] 쉘 취소·출력/시간 상한, terminal editor 실행 정책
+- [ ] 실제 watcher, 패널 기준 상대경로/홈 확장, 플랫폼별 위치 목록
+- [ ] backend 동시 작업 gate와 종료 정책
+- [ ] 실제 WebView/native DnD/휴지통 복원 및 Windows/Linux 검증

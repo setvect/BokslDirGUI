@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { COMMANDS, normalizeInvokeError } from '../tauri/client';
 import type {
   AppError,
   ConflictDecision,
@@ -31,7 +32,10 @@ export type DialogKind =
 
 export type DialogExecutionMode = 'atomicCommand' | 'longRunningOperation' | 'unsupportedPreview';
 
+let nextDialogId = 0;
+
 export interface OperationDialogDraft {
+  id: number;
   dialogKind: DialogKind;
   executionMode: DialogExecutionMode;
   panelId: PanelId;
@@ -216,6 +220,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       },
     });
     const result = await dialog.longRunningExecutor(dialog);
+    if (get().activeOperationController?.dialog !== dialog) return;
     if (!result.ok) {
       const errorHandling = dialog.onOperationStartError?.(result.error, dialog);
       set({
@@ -235,7 +240,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         : current.activeOperationController,
     }));
     if (cancelRequestedBeforeStart) {
-      void pendingController?.cancelExecutor?.(result.data.operationId);
+      observeOperationControl(pendingController?.cancelExecutor?.(result.data.operationId), result.data.operationId, 'cancelOperation');
       set((current) => ({
         progress: current.progress
           ? { ...current.progress, operationId: result.data.operationId, kind: result.data.kind, state: 'cancelling' }
@@ -319,6 +324,8 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       });
 
       const result = await dialog.atomicExecutor(dialog);
+      if (result.ok) dialog.onAtomicSuccess?.(result.data, dialog);
+      if (get().dialog?.id !== dialog.id) return;
       if (!result.ok) {
         set((current) => ({
           dialog: current.dialog ? { ...current.dialog, atomicPending: false } : null,
@@ -330,7 +337,6 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         return;
       }
 
-      dialog.onAtomicSuccess?.(result.data, dialog);
       const shellPreviewResult = isShellCommandPreviewResult(result.data) ? result.data : null;
       if (dialog.dialogKind === 'shellCommand' && shellPreviewResult) {
         set((current) => ({
@@ -414,6 +420,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         },
       });
       const result = await dialog.longRunningExecutor(dialog);
+      if (get().activeOperationController?.dialog !== dialog) return;
       if (!result.ok) {
         const errorHandling = dialog.onOperationStartError?.(result.error, dialog);
         set((current) => ({
@@ -438,7 +445,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
           : current.activeOperationController,
       }));
       if (cancelRequestedBeforeStart) {
-        void pendingController?.cancelExecutor?.(result.data.operationId);
+        observeOperationControl(pendingController?.cancelExecutor?.(result.data.operationId), result.data.operationId, 'cancelOperation');
         set((current) => ({
           progress: current.progress
             ? { ...current.progress, operationId: result.data.operationId, kind: result.data.kind, state: 'cancelling' }
@@ -485,6 +492,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
   },
   applyOperationStarted: (started) => {
     const currentProgress = get().progress;
+    if (get().operationHistory.some((summary) => summary.operationId === started.operationId)) return;
     if (currentProgress?.operationId === started.operationId) {
       set({ lastError: null });
       return;
@@ -507,6 +515,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
     });
   },
   applyOperationProgress: (progress) => {
+    if (get().operationHistory.some((entry) => entry.operationId === progress.operationId)) return;
     const current = get().progress;
     const controller = get().activeOperationController;
     if (current && isTerminalState(current.state)) {
@@ -524,6 +533,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
     }));
   },
   applyOperationConflict: (prompt) => {
+    if (get().operationHistory.some((entry) => entry.operationId === prompt.operationId)) return;
     const progress = get().progress;
     const controller = get().activeOperationController;
     if (progress && isTerminalState(progress.state)) {
@@ -543,15 +553,19 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
     }));
   },
   applyOperationSummary: (summary) => {
+    if (get().operationHistory.some((entry) => entry.operationId === summary.operationId)) {
+      set((current) => ({ operationHistory: appendOperationHistory(current.operationHistory, summary) }));
+      return;
+    }
     const currentProgress = get().progress;
     const controller = get().activeOperationController;
     if (currentProgress && currentProgress.operationId !== summary.operationId && !isPendingAliasForUnboundController(currentProgress, controller)) {
       return;
     }
     const dialog = get().dialog;
-    const summaryDialog = dialog ?? controller?.dialog ?? null;
+    const summaryDialog = controller?.dialog ?? dialog;
     if (summaryDialog) {
-      (dialog?.onOperationSummary ?? controller?.onOperationSummary)?.(summary, summaryDialog);
+      (controller?.onOperationSummary ?? dialog?.onOperationSummary)?.(summary, summaryDialog);
     }
     set((current) => ({
       summary,
@@ -572,7 +586,9 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
           etaSeconds: null,
           recentErrorCount: summary.failedFiles,
         },
-      dialog: current.dialog ? { ...current.dialog, operationPending: false } : null,
+      dialog: current.dialog?.id === controller?.dialog.id
+        ? null
+        : current.dialog,
       activeOperationController: current.activeOperationController?.operationId === summary.operationId || !current.activeOperationController?.operationId
         ? null
         : current.activeOperationController,
@@ -599,7 +615,10 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       ? operationKindForDialog(dialogKind)
       : 'copy');
     const completedFiles = progress?.completedFiles ?? 0;
-    void (get().dialog?.conflictResolver ?? controller?.conflictResolver)?.(operationId, decision);
+    observeOperationControl(
+      (controller?.conflictResolver ?? get().dialog?.conflictResolver)?.(operationId, decision),
+      operationId, 'resolveConflict', prompt,
+    );
     if (decision === 'cancel') {
       set({
         progress: progress
@@ -659,7 +678,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         return;
       }
       if (controller?.operationId) {
-        void controller.cancelExecutor?.(controller.operationId);
+        observeOperationControl(controller.cancelExecutor?.(controller.operationId), controller.operationId, 'cancelOperation', get().conflictPrompt);
         set({
           dialog: get().dialog ? { ...get().dialog!, operationPending: false } : null,
           conflictPrompt: null,
@@ -679,7 +698,10 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       });
       return;
     }
-    void (get().dialog?.cancelExecutor ?? controller?.cancelExecutor)?.(realOperationId ?? progress.operationId);
+    observeOperationControl(
+      (controller?.cancelExecutor ?? get().dialog?.cancelExecutor)?.(realOperationId ?? progress.operationId),
+      realOperationId ?? progress.operationId, 'cancelOperation', get().conflictPrompt,
+    );
     if (controller) {
       set({
         progress: { ...progress, operationId: realOperationId ?? progress.operationId, state: 'cancelling' },
@@ -709,6 +731,29 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
   clearOperationHistory: () => set({ operationHistory: [] }),
 }));
 
+const observeOperationControl = (
+  request: Promise<unknown> | undefined,
+  operationId: string,
+  command: 'cancelOperation' | 'resolveConflict',
+  prompt: ConflictPrompt | null = null,
+) => {
+  if (!request) return;
+  const fail = (error: unknown) => {
+    const current = useOperationStore.getState();
+    if (current.progress?.operationId !== operationId || isTerminalState(current.progress.state)) return;
+    useOperationStore.setState({
+      lastError: normalizeInvokeError(error, COMMANDS[command]),
+      progress: { ...current.progress, state: prompt ? 'waitingForConflict' : 'running' },
+      conflictPrompt: prompt ?? current.conflictPrompt,
+    });
+  };
+  void request.then((result) => {
+    if (result && typeof result === 'object' && 'ok' in result && result.ok === false && 'error' in result) {
+      fail(result.error);
+    }
+  }).catch(fail);
+};
+
 export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
   const mapping: Partial<Record<ActionId, DialogKind>> = {
     'file.copy': 'copy',
@@ -736,6 +781,7 @@ const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): O
   const inputValue = initialInputValueForDialog(dialogKind, request);
   const requiredConfirmationPhrase = requiredConfirmationPhraseForDialog(dialogKind, request);
   return {
+    id: ++nextDialogId,
     dialogKind,
     executionMode: dialogExecutionModeForDialog(dialogKind),
     panelId: request.panelId,

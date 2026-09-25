@@ -434,7 +434,9 @@ addCheck(
 );
 addCheck(
   'commander shell refreshes and focuses after safe mutation',
-  commanderShell.includes('focusPath: entry.path') && commanderShell.includes('onAtomicSuccess'),
+  commanderShell.includes('onAtomicSuccess') && commanderShell.includes('currentPanel.path')
+    && read('src/ui/CommanderShell.test.tsx').includes('creates a directory through the connected atomic command path and refreshes focus')
+    && read('src/ui/CommanderShell.test.tsx').includes('renames the focused entry through the connected atomic command path and keeps row focus'),
   'Safe mutation success must refresh the active panel and focus the changed row',
 );
 
@@ -491,7 +493,7 @@ addCheck('rust rename preserves source entry identity for symlinks', rustBackend
 addCheck('rust rename uses no-replace abstraction', rustBackend.includes('rename_no_replace') && rustBackend.includes('RENAME_EXCL') && rustBackend.includes('RENAME_NOREPLACE'), 'rename_entry overwrite prevention must not depend only on check-then-rename');
 addCheck('rust operation service emits progress and summary events', rustBackend.includes('operation_progress') && rustBackend.includes('operation_summary') && rustBackend.includes('operation_conflict'), 'long-running operation state must be observable by the GUI');
 addCheck('rust operation service implements copy move delete trash policies', rustBackend.includes('start_copy') && rustBackend.includes('start_move') && rustBackend.includes('DeleteMode::Trash') && rustBackend.includes('PERMANENT_DELETE'), 'copy/move/delete/trash must be real backend commands with safety policies');
-addCheck('rust trash does not fall back to permanent delete', rustBackend.includes('errors.trashUnsupported') && rustBackend.includes('trash_directory'), 'trash failure must be recoverable and must not silently remove files permanently');
+addCheck('rust trash does not fall back to permanent delete', rustBackend.includes('trash::delete(source)') && rustBackend.includes('move_to_trash(target)'), 'trash failure must be recoverable and must not silently remove files permanently');
 addCheck('rust archive commands use safe external provider boundary', rustBackend.includes('archive_entry_is_unsafe') && rustBackend.includes('common_source_parent') && rustBackend.includes('start_archive_add') && rustBackend.includes('errors.archiveProviderUnavailable'), 'archive create/extract/add/list must avoid unsafe paths and absolute source entries');
 addCheck(
   'archive virtual directories enforce read-only mutations while preserving copy-out',

@@ -2,7 +2,7 @@
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ComponentProps } from 'react';
+import { StrictMode, type ComponentProps } from 'react';
 import { ACTION_BY_ID } from '../actions/registry';
 import { useOperationStore } from '../operations/operationStore';
 import { CommanderShell, columnLayoutForPanelWidth, hotkeyStripActionsForWidth, splitMiddleEllipsisParts, zoomPercentForStep, zoomScaleForStep } from './CommanderShell';
@@ -2238,6 +2238,228 @@ describe('CommanderShell', () => {
     }));
   });
 
+  it('hands selected paths to a native drag session so dragging continues outside the window', async () => {
+    let finishNativeDrag: ((completion: {
+      result: 'Dropped' | 'Cancelled';
+      clientPosition: { x: number; y: number } | null;
+    }) => void) | null = null;
+    const nativeFileDragClient = {
+      start: vi.fn(async (
+        _paths: string[],
+        _mode: 'copy' | 'move',
+        onResult: NonNullable<typeof finishNativeDrag>,
+      ) => {
+        finishNativeDrag = onResult;
+      }),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
+        runtimeBackendAvailable
+        nativeFileDragClient={nativeFileDragClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
+    if (!sourceRow) {
+      throw new Error('native drag source row is required');
+    }
+    const dragStart = createEvent.dragStart(sourceRow, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent(sourceRow, dragStart);
+
+    expect(dragStart.defaultPrevented).toBe(true);
+    await waitFor(() => expect(nativeFileDragClient.start).toHaveBeenCalledWith(
+      [expect.stringContaining('generic-array-7534a23a150ae5e7')],
+      'copy',
+      expect.any(Function),
+    ));
+    expect(await screen.findByText('외부 드래그 시작 · 1개 항목')).toBeTruthy();
+
+    act(() => finishNativeDrag?.({ result: 'Dropped', clientPosition: null }));
+    expect(await screen.findByText('외부 드래그 완료 · 1개 항목')).toBeTruthy();
+  });
+
+  it('restores HTML panel dragging after a native drag startup failure', async () => {
+    const nativeFileDragClient = {
+      start: vi.fn(async () => {
+        throw new Error('native drag unavailable');
+      }),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
+        runtimeBackendAvailable
+        nativeFileDragClient={nativeFileDragClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
+    const leftPanel = container.querySelector<HTMLElement>('.file-panel[data-panel-id="left"]');
+    if (!sourceRow || !leftPanel) {
+      throw new Error('native drag fallback fixtures are required');
+    }
+
+    const failedDragStart = createEvent.dragStart(sourceRow, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent(sourceRow, failedDragStart);
+    expect(failedDragStart.defaultPrevented).toBe(true);
+    expect(await screen.findByText(/외부 드래그 실패:.*native drag unavailable/)).toBeTruthy();
+
+    const fallbackDragStart = createEvent.dragStart(sourceRow, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent(sourceRow, fallbackDragStart);
+    expect(fallbackDragStart.defaultPrevented).toBe(false);
+    fireEvent.dragOver(leftPanel, { dataTransfer: { files: [], types: [] } });
+    expect(leftPanel.className).toContain('is-drop-copy');
+  });
+
+  it('treats a cancelled native drag released over the opposite panel as an internal copy', async () => {
+    let finishNativeDrag: ((completion: {
+      result: 'Dropped' | 'Cancelled';
+      clientPosition: { x: number; y: number } | null;
+    }) => void) | null = null;
+    let draggedPaths: string[] = [];
+    const nativeFileDragClient = {
+      start: vi.fn(async (
+        paths: string[],
+        _mode: 'copy' | 'move',
+        onResult: NonNullable<typeof finishNativeDrag>,
+      ) => {
+        draggedPaths = paths;
+        finishNativeDrag = onResult;
+      }),
+    };
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-native-panel-copy', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
+        operationClient={operationClient}
+        runtimeBackendAvailable
+        nativeFileDragClient={nativeFileDragClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
+    const leftPanel = container.querySelector<HTMLElement>('.file-panel[data-panel-id="left"]');
+    if (!sourceRow || !leftPanel) {
+      throw new Error('native cursor drop fixtures are required');
+    }
+    const previousElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => leftPanel),
+    });
+
+    try {
+      fireEvent.dragStart(sourceRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
+      await waitFor(() => expect(nativeFileDragClient.start).toHaveBeenCalledOnce());
+      act(() => finishNativeDrag?.({ result: 'Cancelled', clientPosition: { x: 40, y: 80 } }));
+
+      await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+        sources: draggedPaths,
+        targetDir: SAMPLE_LISTINGS.left.path,
+        policy: 'skip',
+      }));
+    } finally {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: previousElementFromPoint,
+      });
+    }
+  });
+
+  it('keeps Shift move semantics when a native drag is dropped onto the other BokslDirGUI panel', async () => {
+    let nativeDropHandler: ((event:
+      | { type: 'enter'; paths: string[]; position: { x: number; y: number } }
+      | { type: 'over'; position: { x: number; y: number } }
+      | { type: 'drop'; paths: string[]; position: { x: number; y: number } }
+      | { type: 'leave' }
+    ) => void) | null = null;
+    let draggedPaths: string[] = [];
+    const nativeFileDropClient = {
+      listen: vi.fn(async (handler: NonNullable<typeof nativeDropHandler>) => {
+        nativeDropHandler = handler;
+        return vi.fn();
+      }),
+    };
+    const nativeFileDragClient = {
+      start: vi.fn(async (paths: string[]) => {
+        draggedPaths = paths;
+      }),
+    };
+    const operationClient = {
+      startCopy: vi.fn(),
+      startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-native-panel-move', kind: 'move' as const, state: 'queued' as const } })),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container, unmount } = render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
+        operationClient={operationClient}
+        runtimeBackendAvailable
+        nativeFileDropClient={nativeFileDropClient}
+        nativeFileDragClient={nativeFileDragClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+    await waitFor(() => expect(nativeFileDropClient.listen).toHaveBeenCalledOnce());
+    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
+    const leftPanel = container.querySelector<HTMLElement>('.file-panel[data-panel-id="left"]');
+    if (!sourceRow || !leftPanel || !nativeDropHandler) {
+      throw new Error('native panel drag fixtures are required');
+    }
+    const previousElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => leftPanel),
+    });
+
+    try {
+      const dragStart = createEvent.dragStart(sourceRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
+      Object.defineProperty(dragStart, 'shiftKey', { value: true });
+      fireEvent(sourceRow, dragStart);
+      await waitFor(() => expect(nativeFileDragClient.start).toHaveBeenCalledOnce());
+      act(() => nativeDropHandler?.({ type: 'enter', paths: draggedPaths, position: { x: 40, y: 80 } }));
+      expect(leftPanel.className).toContain('is-drop-move');
+      act(() => nativeDropHandler?.({ type: 'drop', paths: draggedPaths, position: { x: 40, y: 80 } }));
+
+      expect(await screen.findByRole('dialog', { name: '이동' })).toBeTruthy();
+      expect(operationClient.startMove).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: '이동' }));
+      await waitFor(() => expect(operationClient.startMove).toHaveBeenCalledWith({
+        sources: draggedPaths,
+        targetDir: SAMPLE_LISTINGS.left.path,
+        policy: 'skip',
+      }));
+    } finally {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: previousElementFromPoint,
+      });
+      unmount();
+    }
+  });
+
   it('imports external dropped files only when the OS path is exposed', async () => {
     const operationClient = {
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-external-import', kind: 'copy' as const, state: 'queued' as const } })),
@@ -2266,6 +2488,82 @@ describe('CommanderShell', () => {
       targetDir: SAMPLE_LISTINGS.left.path,
       policy: 'skip',
     }));
+  });
+
+  it('copies Finder files with exact whitespace in paths into the panel under the native Tauri drop position', async () => {
+    let nativeDropHandler: ((event:
+      | { type: 'enter'; paths: string[]; position: { x: number; y: number } }
+      | { type: 'over'; position: { x: number; y: number } }
+      | { type: 'drop'; paths: string[]; position: { x: number; y: number } }
+      | { type: 'leave' }
+    ) => void) | null = null;
+    const unlisten = vi.fn();
+    const nativeFileDropClient = {
+      listen: vi.fn(async (handler: NonNullable<typeof nativeDropHandler>) => {
+        nativeDropHandler = handler;
+        return unlisten;
+      }),
+    };
+    const incomingPath = '/tmp/incoming.txt ';
+    const getMetadata = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        ...testEntry('/tmp', 'incoming.txt'),
+        absolutePath: incomingPath,
+        extension: 'txt',
+        mimeType: 'text/plain',
+        readonly: false,
+      },
+    }));
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-native-drop', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container, unmount } = render(
+      <CommanderShell
+        dataSource={createFixturePanelDataSource()}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), getMetadata }}
+        operationClient={operationClient}
+        runtimeBackendAvailable
+        nativeFileDropClient={nativeFileDropClient}
+        initialFocusIndex={INITIAL_FOCUS_INDEX}
+        initialSelectedPaths={INITIAL_SELECTED_PATHS}
+      />,
+    );
+    await waitFor(() => expect(nativeFileDropClient.listen).toHaveBeenCalledOnce());
+    const leftPanel = container.querySelector<HTMLElement>('.file-panel[data-panel-id="left"]');
+    if (!leftPanel || !nativeDropHandler) {
+      throw new Error('native drop listener and left panel are required');
+    }
+    const previousElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => leftPanel),
+    });
+
+    try {
+      act(() => nativeDropHandler?.({ type: 'enter', paths: [incomingPath], position: { x: 40, y: 80 } }));
+      expect(leftPanel.className).toContain('is-drop-import');
+
+      act(() => nativeDropHandler?.({ type: 'drop', paths: [incomingPath], position: { x: 40, y: 80 } }));
+      await waitFor(() => expect(getMetadata).toHaveBeenCalledWith({ path: incomingPath }));
+      await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+        sources: [incomingPath],
+        targetDir: SAMPLE_LISTINGS.left.path,
+        policy: 'skip',
+      }));
+      expect(leftPanel.className).not.toContain('is-drop-import');
+    } finally {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: previousElementFromPoint,
+      });
+      unmount();
+    }
+    expect(unlisten).toHaveBeenCalledOnce();
   });
 
   it('dispatches registry sequence shortcuts without web text focus', async () => {
@@ -2385,8 +2683,8 @@ describe('CommanderShell', () => {
     await user.keyboard('tn');
     await user.keyboard('tt');
     const tabDialog = await screen.findByRole('dialog', { name: '오른쪽 탭' });
-    expect(within(tabDialog).getByText(SAMPLE_LISTINGS.right.path)).toBeTruthy();
-    expect(within(tabDialog).getByText('/tmp/navigation-target')).toBeTruthy();
+    expect(within(tabDialog).queryByText(SAMPLE_LISTINGS.right.path)).toBeNull();
+    expect(within(tabDialog).getAllByText('/tmp/navigation-target')).toHaveLength(2);
     expect(within(tabDialog).getByText('활성 탭')).toBeTruthy();
     expect(within(tabDialog).queryByText('active tab')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
@@ -2394,8 +2692,8 @@ describe('CommanderShell', () => {
     await user.keyboard('tx');
     await user.keyboard('tt');
     const closedTabDialog = await screen.findByRole('dialog', { name: '오른쪽 탭' });
-    expect(within(closedTabDialog).getByText(SAMPLE_LISTINGS.right.path)).toBeTruthy();
-    expect(within(closedTabDialog).queryByText('/tmp/navigation-target')).toBeNull();
+    expect(within(closedTabDialog).queryByText(SAMPLE_LISTINGS.right.path)).toBeNull();
+    expect(within(closedTabDialog).getByText('/tmp/navigation-target')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.keyboard('th');
@@ -3137,3 +3435,96 @@ function KeyboardOwnerProbe({ label }: { label: string }) {
   useCommanderKeyboardOwner('menu-popover');
   return <div>{label}</div>;
 }
+
+
+describe('review: navigation and persistence races', () => {
+  it('loads initial listings under StrictMode effect replay', async () => {
+    const dataSource = mockedPanelDataSource({ loadInitialOnMount: true,
+      initial: emptyListings('/boot-left', '/boot-right'),
+      loadResult: {
+        left: createDirectoryListing('left', '/real-left', [testEntry('/real-left', 'strict-left.txt')]),
+        right: createDirectoryListing('right', '/real-right', [testEntry('/real-right', 'strict-right.txt')]),
+      },
+    });
+    render(<StrictMode><CommanderShell dataSource={dataSource} mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }} /></StrictMode>);
+    expect(await screen.findByText('strict-left.txt')).toBeTruthy();
+    expect(await screen.findByText('strict-right.txt')).toBeTruthy();
+  });
+
+  it('refreshes current paths after copy without switching the active panel or stealing input focus', async () => {
+    const dataSource = createFixturePanelDataSource();
+    const listDir = vi.spyOn(dataSource, 'listDir');
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'review-path', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(), startDelete: vi.fn(), cancelOperation: vi.fn(), resolveConflict: vi.fn(),
+    };
+    const { container } = renderCommander(dataSource, { createDir: vi.fn(), renameEntry: vi.fn() }, operationClient);
+    await userEvent.setup().keyboard('y');
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalled());
+    await userEvent.setup().keyboard('h');
+    await waitFor(() => expect(listDir).toHaveBeenCalled());
+    const currentRightPath = listDir.mock.calls.at(-1)![0].path;
+    expect(currentRightPath).not.toBe(SAMPLE_LISTINGS.right.path);
+    listDir.mockClear();
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    const activeBefore = activePanelLabel(container);
+    act(() => useOperationStore.getState().applyOperationSummary({ operationId: 'review-path', kind: 'copy', state: 'completed',
+      completedFiles: 1, failedFiles: 0, errors: [] }));
+    await waitFor(() => expect(listDir).toHaveBeenCalledTimes(2));
+    expect(listDir).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right', path: currentRightPath }));
+    expect(activePanelLabel(container)).toBe(activeBefore);
+    expect(document.activeElement).toBe(input);
+    input.remove();
+  });
+
+  it('serializes settings saves and keeps newer optimistic zoom while an old save finishes', async () => {
+    type Settings = import('../domain/types').Settings;
+    const pending: Array<{ patch: Partial<Settings>; resolve: (value: { ok: true; data: Settings }) => void }> = [];
+    const saveSettings = vi.fn(({ patch }: { patch: Partial<Settings> }) => new Promise<{ ok: true; data: Settings }>((resolve) => {
+      pending.push({ patch, resolve });
+    }));
+    const { container } = renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+    fireEvent.keyDown(document, { key: '=', metaKey: true });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    fireEvent.keyDown(document, { key: '=', metaKey: true });
+    expect(saveSettings).toHaveBeenCalledTimes(1);
+    const settings: Settings = { schemaVersion: 1, theme: 'dark', language: 'ko', sizeFormat: 'binary',
+      external: { editorId: null, shellCommand: { enabled: false } }, bookmarks: [],
+      layout: { singlePanel: false, ratio: '50:50' }, session: { leftPath: null, rightPath: null, activePanel: 'right' },
+      view: { zoomStep: 1, density: 'compact', showIcons: true } };
+    await act(async () => pending[0].resolve({ ok: true, data: settings }));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[1].patch.view?.zoomStep).toBe(2);
+    expect(container.querySelector('.commander-shell')?.getAttribute('style')).toContain('1.25');
+    await act(async () => pending[1].resolve({ ok: true, data: { ...settings, view: { ...settings.view, zoomStep: 2 } } }));
+  });
+});
+
+describe('review: independent tabs and large listings', () => {
+  it('restores a tab selection and closes the active tab instead of the last one', async () => {
+    const user = userEvent.setup();
+    const { container } = renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn() });
+    const originalPath = activePanelLabel(container);
+    const originalSelected = container.querySelectorAll('.file-panel.is-active .file-row[aria-selected="true"]').length;
+    await user.keyboard('tn');
+    await user.keyboard('h');
+    await waitFor(() => expect(activePanelLabel(container)).not.toBe(originalPath));
+    const secondPath = activePanelLabel(container);
+    await user.keyboard('tt');
+    const firstTab = await screen.findByRole('button', { name: /^1\./ });
+    await user.click(firstTab);
+    expect(activePanelLabel(container)).toBe(originalPath);
+    expect(container.querySelectorAll('.file-panel.is-active .file-row[aria-selected="true"]')).toHaveLength(originalSelected);
+    await user.keyboard('tx');
+    expect(activePanelLabel(container)).toBe(secondPath);
+    await user.keyboard('tx');
+    expect(activePanelLabel(container)).toBe(secondPath);
+  });
+
+  it('handles the maximum archive listing size without spreading entries into function arguments', () => {
+    const entries = Array.from({ length: 200_000 }, () => testEntry('/large', 'same.txt'));
+    expect(columnLayoutForPanelWidth(170 * 8, 1, entries).gridTemplateColumns).toContain('minmax');
+  });
+});

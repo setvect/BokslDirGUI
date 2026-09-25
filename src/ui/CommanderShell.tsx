@@ -1,4 +1,7 @@
 import * as ContextMenu from '@radix-ui/react-context-menu';
+import { startDrag, type DragResult as NativeDragResult } from '@crabnebula/tauri-plugin-drag';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   flexRender,
@@ -32,7 +35,7 @@ import type { AppError, DirectoryListing, FileEntry, FilePreview, LocationList, 
 import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { operationSummaryStatusLabel } from '../operations/operationLabels';
 import { dialogKindForAction, isOperationInFlight, useOperationStore, type AtomicCommandExecutor, type DialogKind, type LongRunningOperationExecutor, type OperationDialogDraft } from '../operations/operationStore';
-import { tauriClient } from '../tauri/client';
+import { isTauriRuntime, tauriClient } from '../tauri/client';
 import {
   COMMANDER_NAVIGATION_TEXT,
   COMMANDER_STATUS_TEXT,
@@ -72,7 +75,8 @@ import {
   type PanelStateById,
 } from './panelState';
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
-import { commanderKeyboardIsSuspended, commanderKeyboardOwners, useCommanderKeyboardBoundaryProps } from './keyboardOwnership';
+import { commanderKeyboardHasOwner, commanderKeyboardIsSuspended, commanderKeyboardOwners, useCommanderKeyboardBoundaryProps } from './keyboardOwnership';
+import nativeFileDragIcon from '../../src-tauri/icons/32x32.png?inline';
 import {
   AboutDialog,
   ArchivePasswordPrompt,
@@ -135,10 +139,17 @@ const ZOOM_PRESETS_BY_STEP: Record<number, number> = {
   4: 1.75,
   5: 2,
 };
+const NATIVE_FILE_DROP_EVENT = 'boksldir://native-file-drop';
 
 type PanelUiPatch = Partial<Pick<PanelNavigationState, 'focusedIndex' | 'selectedPaths'>>;
 type SelectionMode = 'replace' | 'additive' | 'range';
 type ExternalDropFile = File & { path?: unknown };
+type NativeFileDragMode = 'copy' | 'move';
+type NativeFileDropEvent =
+  | { type: 'enter'; paths: string[]; position: { x: number; y: number } }
+  | { type: 'over'; position: { x: number; y: number } }
+  | { type: 'drop'; paths: string[]; position: { x: number; y: number } }
+  | { type: 'leave' };
 type DirectoryComparisonState = 'same' | 'different' | 'left-only' | 'right-only';
 interface DirectoryComparison {
   byPanel: Record<PanelId, Record<string, DirectoryComparisonState>>;
@@ -156,6 +167,32 @@ interface CommanderShellProps {
   runtimeBackendAvailable?: boolean;
   initialFocusIndex?: Partial<Record<PanelId, number>>;
   initialSelectedPaths?: Partial<Record<PanelId, string[]>>;
+  nativeFileDropClient?: NativeFileDropClient;
+  nativeFileDragClient?: NativeFileDragClient;
+}
+
+interface NativeFileDragCompletion {
+  result: NativeDragResult;
+  clientPosition: { x: number; y: number } | null;
+}
+
+interface NativeFileDragClient {
+  start(paths: string[], mode: NativeFileDragMode, onResult: (completion: NativeFileDragCompletion) => void): Promise<void>;
+}
+
+interface NativeFileDropClient {
+  listen(handler: (event: NativeFileDropEvent) => void): Promise<() => void>;
+}
+
+interface NativeFileDropRuntime {
+  handle(event: NativeFileDropEvent): void;
+  handleListenError(error: unknown): void;
+}
+
+interface NativeFileDragSource {
+  panelId: PanelId;
+  entries: FileEntry[];
+  mode: NativeFileDragMode;
 }
 
 interface AppController {
@@ -164,6 +201,26 @@ interface AppController {
 
 const DEFAULT_APP_CONTROLLER: AppController = {
   quit: () => getCurrentWindow().close(),
+};
+
+const TAURI_NATIVE_FILE_DROP_CLIENT: NativeFileDropClient = {
+  listen: (handler) => listen<NativeFileDropEvent>(NATIVE_FILE_DROP_EVENT, (event) => handler(event.payload)),
+};
+
+const TAURI_NATIVE_FILE_DRAG_CLIENT: NativeFileDragClient = {
+  start: (paths, mode, onResult) => startDrag({
+    item: paths,
+    icon: nativeFileDragIcon,
+    mode,
+  }, async ({ result }) => {
+    let clientPosition: NativeFileDragCompletion['clientPosition'] = null;
+    try {
+      clientPosition = await invoke<NonNullable<NativeFileDragCompletion['clientPosition']>>('main_cursor_position');
+    } catch {
+      // The drag result is still useful for external targets when cursor lookup is unavailable.
+    }
+    onResult({ result, clientPosition });
+  }),
 };
 
 interface SafeMutationClient {
@@ -254,6 +311,7 @@ interface ListPanelOptions {
   showHidden?: boolean;
   statusAfterSuccess?: string | null;
   persistSession?: boolean;
+  background?: boolean;
 }
 
 export function CommanderShell({
@@ -264,6 +322,8 @@ export function CommanderShell({
   runtimeBackendAvailable = true,
   initialFocusIndex,
   initialSelectedPaths,
+  nativeFileDropClient,
+  nativeFileDragClient,
 }: CommanderShellProps) {
   const openOperationDialog = useOperationStore((state) => state.openDialog);
   const startLongRunningOperation = useOperationStore((state) => state.startLongRunningOperation);
@@ -275,6 +335,9 @@ export function CommanderShell({
   const keyboardRuntimeRef = useRef<KeyboardRuntime | null>(null);
   const topMenuKeyboardRuntimeRef = useRef<TopMenuKeyboardRuntime | null>(null);
   const topMenuStateRef = useRef<TopMenuState | null>(null);
+  const nativeFileDropRuntimeRef = useRef<NativeFileDropRuntime | null>(null);
+  const nativeFileDragSourceRef = useRef<NativeFileDragSource | null>(null);
+  const nativeDropOverlayRequestedRef = useRef(false);
   const navigationRequestRef = useRef<Record<PanelId, number>>({ left: 0, right: 0 });
   const locationsRequestRef = useRef(0);
   const previewRequestRef = useRef(0);
@@ -298,6 +361,12 @@ export function CommanderShell({
   const archivePasswordsRef = useRef(new Map<string, string>());
   const [navigationList, setNavigationList] = useState<NavigationListState | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const settingsSaveVersionRef = useRef(0);
+  const panelStateRef = useRef(panelState);
+  panelStateRef.current = panelState;
   const [settingsLoaded, setSettingsLoaded] = useState(() => !mutationClient.loadSettings);
   const initialPanelLoadStartedRef = useRef(false);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
@@ -311,15 +380,21 @@ export function CommanderShell({
     topMenuStateRef.current = next;
     setTopMenuStateValue(next);
   };
-  const [panelTabs, setPanelTabs] = useState<Record<PanelId, string[]>>(() => ({
-    left: [dataSource.initialListings.left.path],
-    right: [dataSource.initialListings.right.path],
+  const [panelTabs, setPanelTabs] = useState<Record<PanelId, PanelNavigationState[]>>(() => ({
+    left: [panelState.left],
+    right: [panelState.right],
   }));
+  const [activeTab, setActiveTab] = useState<Record<PanelId, number>>({ left: 0, right: 0 });
   const [dragSource, setDragSource] = useState<{ panelId: PanelId; entry: FileEntry } | null>(null);
   const [dragOverPanel, setDragOverPanel] = useState<{ panelId: PanelId; intent: 'copy' | 'move' | 'import' | 'blocked' } | null>(null);
+  const [nativeFileDragUnavailable, setNativeFileDragUnavailable] = useState(false);
   const viewMetrics = viewMetricsForSettings(settings.view);
   const statusText = COMMANDER_STATUS_TEXT[settings.language];
   const navigationText = COMMANDER_NAVIGATION_TEXT[settings.language];
+  const nativeFileDropEnabled = runtimeBackendAvailable && Boolean(nativeFileDropClient || isTauriRuntime());
+  const resolvedNativeFileDragClient = nativeFileDragUnavailable
+    ? null
+    : nativeFileDragClient ?? (isTauriRuntime() ? TAURI_NATIVE_FILE_DRAG_CLIENT : null);
   const shellStyle = {
     '--commander-scale': String(viewMetrics.scale),
     '--commander-font-size': `${viewMetrics.fontSizePx}px`,
@@ -399,12 +474,12 @@ export function CommanderShell({
   const listPanel = async (panelId: PanelId, path: string, options: ListPanelOptions = {}) => {
     setDirectoryComparison(null);
     const requestId = beginPanelRequest(panelId);
-    const requestPanel = panelState[panelId];
+    const requestPanel = panelStateRef.current[panelId];
     const sort = options.sort ?? requestPanel.sort;
     const filter = Object.hasOwn(options, 'filter') ? options.filter ?? null : requestPanel.filter;
     const showHidden = options.showHidden ?? requestPanel.showHidden;
 
-    setActivePanel(panelId);
+    if (!options.background) setActivePanel(panelId);
     setPanelState((current) => ({
       ...current,
       [panelId]: {
@@ -427,7 +502,7 @@ export function CommanderShell({
         [panelId]: markPanelError(current[panelId], result.error),
       }));
       setStatusMessage(statusText.listFailed(formatUserErrorMessage(settings.language, result.error)));
-      shellRef.current?.focus({ preventScroll: true });
+      if (!options.background && !commanderKeyboardHasOwner()) shellRef.current?.focus({ preventScroll: true });
       return;
     }
 
@@ -446,14 +521,18 @@ export function CommanderShell({
         showHidden,
       },
     }));
-    setStatusMessage(options.statusAfterSuccess ?? null);
+    if (!options.background) setStatusMessage(options.statusAfterSuccess ?? null);
     if (options.persistSession !== false && !isArchiveVirtualPath(result.data.path)) {
       persistSessionPaths(panelId, result.data.path);
     }
-    shellRef.current?.focus({ preventScroll: true });
+    if (!options.background && !commanderKeyboardHasOwner()) shellRef.current?.focus({ preventScroll: true });
   };
 
   const gotoPanelPath = async (panelId: PanelId, path: string) => {
+    if (isArchiveVirtualPath(path)) {
+      await listPanel(panelId, path, { pushHistory: true, focusFallback: 'first-concrete' });
+      return;
+    }
     const requestId = beginPanelRequest(panelId);
     setActivePanel(panelId);
     setPanelState((current) => ({ ...current, [panelId]: markPanelLoading(current[panelId]) }));
@@ -526,12 +605,14 @@ export function CommanderShell({
     };
   };
 
-  const refreshPanel = (panelId: PanelId) => {
-    const panel = panelState[panelId];
+  const refreshPanel = (panelId: PanelId, background = false) => {
+    const panel = panelStateRef.current[panelId];
+    if (background && panel.loading) return;
     void listPanel(panelId, panel.path, {
       preserveSelection: true,
       preserveFocusPath: focusedEntryOf(panel)?.path,
       persistSession: false,
+      background,
     });
   };
 
@@ -655,26 +736,33 @@ export function CommanderShell({
   };
 
   const saveSettingsPatch = async (patch: Partial<Settings>, successMessage: string | null, options: { silent?: boolean } = {}) => {
-    setSettings((current) => mergeSettings(current, patch));
-    if (!options.silent && successMessage) {
-      setStatusMessage(successMessage);
-    }
-    if (!runtimeBackendAvailable || !mutationClient.saveSettings) {
-      return;
-    }
-    const result = await mutationClient.saveSettings({ patch });
-    if (!result.ok) {
-      setStatusMessage(statusText.settingsSaveFailed(formatUserErrorMessage(settings.language, result.error)));
-      return;
-    }
-    setSettings(normalizeSettings(result.data));
+    const nextSettings = mergeSettings(settingsRef.current, patch);
+    settingsRef.current = nextSettings;
+    setSettings(nextSettings);
+    const version = ++settingsSaveVersionRef.current;
+    if (!options.silent && successMessage) setStatusMessage(successMessage);
+    if (!runtimeBackendAvailable || !mutationClient.saveSettings) return;
+    const save = async () => {
+      const result = await mutationClient.saveSettings!({ patch });
+      if (!result.ok) {
+        setStatusMessage(statusText.settingsSaveFailed(formatUserErrorMessage(settingsRef.current.language, result.error)));
+        return;
+      }
+      if (version === settingsSaveVersionRef.current) {
+        const saved = normalizeSettings(result.data);
+        settingsRef.current = saved;
+        setSettings(saved);
+      }
+    };
+    settingsSaveQueueRef.current = settingsSaveQueueRef.current.then(save, save);
+    await settingsSaveQueueRef.current;
   };
 
   const persistSessionPaths = (nextPanelId: PanelId, nextPath: string) => {
     const nextSession: Settings['session'] = {
-      ...settings.session,
-      leftPath: nextPanelId === 'left' ? nextPath : panelState.left.path,
-      rightPath: nextPanelId === 'right' ? nextPath : panelState.right.path,
+      ...settingsRef.current.session,
+      leftPath: nextPanelId === 'left' ? nextPath : settingsRef.current.session.leftPath ?? panelStateRef.current.left.path,
+      rightPath: nextPanelId === 'right' ? nextPath : settingsRef.current.session.rightPath ?? panelStateRef.current.right.path,
       activePanel: nextPanelId,
     };
     void saveSettingsPatch({ session: nextSession }, null, { silent: true });
@@ -777,12 +865,11 @@ export function CommanderShell({
       kind: 'tabs',
       panelId,
       title: navigationText.tabsTitle(panelIdLabel(panelId, settings.language)),
-      items: panelTabs[panelId].map((path, index) => ({
-        id: `tab-${index}-${path}`,
-        label: `${index + 1}. ${shortenPath(path)}`,
-        path,
-        group: path === panelState[panelId].path ? 'active tab' : 'tab',
-      })),
+      items: panelTabs[panelId].map((tab, index) => {
+        const path = index === activeTab[panelId] ? panelStateRef.current[panelId].path : tab.path;
+        return { id: `tab-${index}`, label: `${index + 1}. ${shortenPath(path)}`, path,
+          group: index === activeTab[panelId] ? 'active tab' : 'tab' };
+      }),
     });
     setStatusMessage(null);
   };
@@ -809,6 +896,23 @@ export function CommanderShell({
 
   const chooseNavigationItem = (state: NavigationListState, item: NavigationListItem) => {
     setNavigationList(null);
+    if (state.kind === 'tabs') {
+      const index = state.items.findIndex((candidate) => candidate.id === item.id);
+      const saved = panelTabs[state.panelId][index];
+      if (!saved || index === activeTab[state.panelId]) return;
+      beginPanelRequest(state.panelId);
+      const outgoing = { ...panelStateRef.current[state.panelId], loading: false };
+      setPanelTabs((current) => ({ ...current, [state.panelId]: current[state.panelId].map((tab, tabIndex) =>
+        tabIndex === activeTab[state.panelId] ? outgoing : tab) }));
+      setPanelState((current) => ({ ...current, [state.panelId]: reassignPanelState({ ...saved, loading: false }, state.panelId) }));
+      setActiveTab((current) => ({ ...current, [state.panelId]: index }));
+      setActivePanel(state.panelId);
+      selectionAnchorRef.current[state.panelId] = null;
+      setDirectoryComparison(null);
+      if (!isArchiveVirtualPath(saved.path)) persistSessionPaths(state.panelId, saved.path);
+      shellRef.current?.focus({ preventScroll: true });
+      return;
+    }
     void gotoPanelPath(state.panelId, item.path);
   };
 
@@ -864,11 +968,82 @@ export function CommanderShell({
     return false;
   };
 
+  const handleEntryDragStart = (event: DragEvent<HTMLElement>, panelId: PanelId, entry: FileEntry) => {
+    if (!resolvedNativeFileDragClient || entry.isVirtual) {
+      setDragSource({ panelId, entry });
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const panel = panelState[panelId];
+    const selected = new Set(panel.selectedPaths);
+    const entries = selected.has(entry.path)
+      ? panel.listing.entries.filter((candidate) => !candidate.isVirtual && selected.has(candidate.path))
+      : [entry];
+    const mode: NativeFileDragMode = event.shiftKey ? 'move' : 'copy';
+    const session: NativeFileDragSource = { panelId, entries, mode };
+    nativeFileDragSourceRef.current = session;
+    setActivePanel(panelId);
+    setStatusMessage(statusText.externalDragStart(entries.length));
+
+    void resolvedNativeFileDragClient.start(
+      entries.map((candidate) => candidate.path),
+      mode,
+      ({ result, clientPosition }) => {
+        const targetPanel = result !== 'Dropped' && clientPosition
+          ? panelIdAtClientPosition(clientPosition)
+          : null;
+        if (targetPanel) {
+          nativeFileDragSourceRef.current = null;
+          setDragOverPanel(null);
+          const action = ACTION_BY_ID.get(mode === 'move' ? 'file.move' : 'file.copy');
+          const targetState = panelState[targetPanel];
+          if (!action) {
+            return;
+          }
+          if (targetPanel === panelId || operationBusy || isArchiveVirtualPath(targetState.path)) {
+            setStatusMessage(statusText.unavailableInContext(labelForAction(action, settings.language)));
+            return;
+          }
+          handleAction(action, panelId, entries, targetState.path);
+          const subject = entries.length === 1 ? entries[0].name : statusText.dragItemCount(entries.length);
+          setStatusMessage(statusText.dragOperation(
+            mode,
+            subject,
+            panelIdLabel(targetPanel, settings.language),
+          ));
+          return;
+        }
+        window.setTimeout(() => {
+          if (nativeFileDragSourceRef.current !== session) {
+            return;
+          }
+          nativeFileDragSourceRef.current = null;
+          setDragOverPanel(null);
+          setStatusMessage(result === 'Dropped'
+            ? statusText.externalDragDone(entries.length)
+            : statusText.externalDragCancelled);
+        }, result === 'Dropped' ? 250 : 0);
+      },
+    ).catch((error: unknown) => {
+      if (nativeFileDragSourceRef.current === session) {
+        nativeFileDragSourceRef.current = null;
+      }
+      setNativeFileDragUnavailable(true);
+      setDragOverPanel(null);
+      setStatusMessage(statusText.externalDragFailed(String(error)));
+    });
+  };
+
   const handlePanelDrop = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
     event.preventDefault();
     setDragOverPanel(null);
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length > 0 && !dragSource) {
+      if (nativeFileDropEnabled) {
+        return;
+      }
       const externalEntries = files
         .map(fileEntryFromExternalDropFile)
         .filter((entry): entry is FileEntry => Boolean(entry));
@@ -891,7 +1066,12 @@ export function CommanderShell({
     }
     const action = ACTIONS.find((candidate) => candidate.id === (event.shiftKey ? 'file.move' : 'file.copy'));
     if (action) {
-      handleAction(action, dragSource.panelId, [dragSource.entry]);
+      const sourcePanel = panelStateRef.current[dragSource.panelId];
+      const selected = new Set(sourcePanel.selectedPaths);
+      const sources = selected.has(dragSource.entry.path)
+        ? sourcePanel.listing.entries.filter((entry) => !entry.isVirtual && selected.has(entry.path))
+        : [dragSource.entry];
+      handleAction(action, dragSource.panelId, sources, panelStateRef.current[targetPanel].path);
       setStatusMessage(statusText.dragOperation(event.shiftKey ? 'move' : 'copy', dragSource.entry.name, panelIdLabel(targetPanel, settings.language)));
     }
     setDragSource(null);
@@ -899,6 +1079,14 @@ export function CommanderShell({
 
   const handlePanelDragOver = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
     event.preventDefault();
+    const isExternalFileDrag = !dragSource && Array.from(event.dataTransfer.types ?? []).includes('Files');
+    if (isExternalFileDrag && nativeFileDropEnabled && isTauriRuntime() && !nativeDropOverlayRequestedRef.current) {
+      nativeDropOverlayRequestedRef.current = true;
+      void invoke('show_drop_overlay').catch((error: unknown) => {
+        nativeDropOverlayRequestedRef.current = false;
+        setStatusMessage(statusText.externalDropUnavailable(String(error)));
+      });
+    }
     const intent = dragSource
       ? dragSource.entry.isVirtual || dragSource.panelId === targetPanel
         ? 'blocked'
@@ -1073,7 +1261,13 @@ export function CommanderShell({
         left: reassignPanelState(current.right, 'left'),
         right: reassignPanelState(current.left, 'right'),
       }));
-      setPanelTabs((current) => ({ left: current.right, right: current.left }));
+      beginPanelRequest('left');
+      beginPanelRequest('right');
+      setPanelTabs((current) => ({
+        left: current.right.map((tab) => reassignPanelState(tab, 'left')),
+        right: current.left.map((tab) => reassignPanelState(tab, 'right')),
+      }));
+      setActiveTab((current) => ({ left: current.right, right: current.left }));
       void saveSettingsPatch({
         session: {
           ...settings.session,
@@ -1249,21 +1443,33 @@ export function CommanderShell({
     }
 
     if (actionId === 'tab.new') {
-      setPanelTabs((current) => ({
-        ...current,
-        [panelOverride]: [...current[panelOverride], panel.path],
-      }));
+      if (panelTabs[panelOverride].length >= 5) {
+        setStatusMessage(settings.language === 'ko' ? '패널당 탭은 최대 5개입니다.' : 'Each panel supports up to 5 tabs.');
+        return;
+      }
+      beginPanelRequest(panelOverride);
+      const snapshot = { ...panel, loading: false };
+      setPanelTabs((current) => ({ ...current, [panelOverride]: [
+        ...current[panelOverride].map((tab, index) => index === activeTab[panelOverride] ? snapshot : tab), snapshot,
+      ] }));
+      setActiveTab((current) => ({ ...current, [panelOverride]: panelTabs[panelOverride].length }));
+      setPanelState((current) => ({ ...current, [panelOverride]: snapshot }));
       setStatusMessage(statusText.tabAdded(panelIdLabel(panelOverride, settings.language), shortenPath(panel.path)));
       return;
     }
 
     if (actionId === 'tab.close') {
-      setPanelTabs((current) => ({
-        ...current,
-        [panelOverride]: current[panelOverride].length > 1
-          ? current[panelOverride].slice(0, -1)
-          : current[panelOverride],
-      }));
+      if (panelTabs[panelOverride].length <= 1) return;
+      beginPanelRequest(panelOverride);
+      const remaining = panelTabs[panelOverride].filter((_, index) => index !== activeTab[panelOverride]);
+      const nextIndex = Math.min(activeTab[panelOverride], remaining.length - 1);
+      const restored = reassignPanelState({ ...remaining[nextIndex], loading: false }, panelOverride);
+      setPanelTabs((current) => ({ ...current, [panelOverride]: remaining }));
+      setActiveTab((current) => ({ ...current, [panelOverride]: nextIndex }));
+      setPanelState((current) => ({ ...current, [panelOverride]: restored }));
+      selectionAnchorRef.current[panelOverride] = null;
+      setDirectoryComparison(null);
+      if (!isArchiveVirtualPath(restored.path)) persistSessionPaths(panelOverride, restored.path);
       setStatusMessage(statusText.tabClosed(panelIdLabel(panelOverride, settings.language)));
       return;
     }
@@ -1399,9 +1605,12 @@ export function CommanderShell({
         onAtomicSuccess: (result: unknown) => {
           const entry = result as Partial<FileEntry>;
           if (typeof entry.path === 'string' && typeof entry.name === 'string') {
-            void listPanel(panelOverride, panelListing.path, {
-              preserveSelection: false,
-              focusPath: entry.path,
+            const currentPanel = panelStateRef.current[panelOverride];
+            if (!currentPanel.loading) void listPanel(panelOverride, currentPanel.path, {
+              preserveSelection: currentPanel.path !== panelListing.path,
+              focusPath: currentPanel.path === panelListing.path ? entry.path : focusedEntryOf(currentPanel)?.path,
+              background: true,
+              persistSession: false,
             });
             setStatusMessage(statusText.operationDoneWithEntry(labelForAction(action, settings.language), entry.name));
             return;
@@ -1409,7 +1618,8 @@ export function CommanderShell({
           setStatusMessage(statusText.operationDone(labelForAction(action, settings.language)));
         },
         onOperationSummary: (summary: OperationSummary, dialog: OperationDialogDraft) => {
-          if (shouldClearSourceSelectionAfterOperation(summary, dialog.dialogKind)) {
+          if (shouldClearSourceSelectionAfterOperation(summary, dialog.dialogKind)
+              && panelStateRef.current[dialog.panelId].path === panelListing.path) {
             selectionAnchorRef.current[dialog.panelId] = null;
             setPanelState((current) => ({
               ...current,
@@ -1419,8 +1629,8 @@ export function CommanderShell({
               },
             }));
           }
-          refreshPanel(dialog.panelId);
-          refreshPanel(oppositePanelOf(dialog.panelId));
+          refreshPanel(dialog.panelId, true);
+          refreshPanel(oppositePanelOf(dialog.panelId), true);
           setStatusMessage(`${labelForAction(action, settings.language)} ${operationSummaryStatusLabel(summary, settings.language)}`);
         },
         onOperationStartError: (error: AppError) => {
@@ -1485,6 +1695,109 @@ export function CommanderShell({
     shellRef.current?.focus({ preventScroll: true });
   };
 
+  const importNativeDroppedPaths = async (paths: string[], targetPanel: PanelId, targetDir: string) => {
+    const normalizedPaths = uniqueAbsolutePaths(paths);
+    if (normalizedPaths.length !== paths.length) {
+      setStatusMessage(statusText.externalDropPathRequired);
+      return;
+    }
+
+    const externalEntries: FileEntry[] = [];
+    if (mutationClient.getMetadata) {
+      const metadataResults = await Promise.all(
+        normalizedPaths.map((path) => mutationClient.getMetadata!({ path })),
+      );
+      for (const [index, result] of metadataResults.entries()) {
+        if (!result.ok) {
+          setStatusMessage(formatUserErrorMessage(settings.language, result.error));
+          return;
+        }
+        const sourcePath = normalizedPaths[index];
+        externalEntries.push({
+          ...result.data,
+          path: sourcePath,
+          name: basenameFromPath(sourcePath),
+        });
+      }
+    } else {
+      externalEntries.push(...normalizedPaths.map(fileEntryFromExternalDropPath));
+    }
+
+    const action = ACTION_BY_ID.get('file.copy');
+    if (!action) {
+      return;
+    }
+    handleAction(action, targetPanel, externalEntries, targetDir);
+    setActivePanel(targetPanel);
+    setStatusMessage(statusText.externalImport(externalEntries.length, panelIdLabel(targetPanel, settings.language)));
+  };
+
+  const handleNativeFileDropEvent = (event: NativeFileDropEvent) => {
+    if (event.type === 'leave') {
+      nativeDropOverlayRequestedRef.current = false;
+      setDragOverPanel((current) => current?.intent === 'import' || current?.intent === 'blocked' ? null : current);
+      return;
+    }
+
+    if (event.type === 'drop') {
+      nativeDropOverlayRequestedRef.current = false;
+    }
+
+    const targetPanel = panelIdAtClientPosition(event.position);
+    if (!targetPanel) {
+      setDragOverPanel(null);
+      return;
+    }
+    const targetState = panelState[targetPanel];
+    const nativeDragSource = nativeFileDragSourceRef.current;
+    const isOwnNativeDrag = Boolean(
+      nativeDragSource
+      && (event.type !== 'drop' || samePathSet(
+        nativeDragSource.entries.map((entry) => entry.path),
+        event.paths,
+      )),
+    );
+    const blocked = operationBusy
+      || isArchiveVirtualPath(targetState.path)
+      || Boolean(isOwnNativeDrag && nativeDragSource?.panelId === targetPanel);
+
+    if (event.type === 'enter' || event.type === 'over') {
+      setDragOverPanel({
+        panelId: targetPanel,
+        intent: blocked ? 'blocked' : isOwnNativeDrag ? nativeDragSource!.mode : 'import',
+      });
+      return;
+    }
+
+    setDragOverPanel(null);
+    const blockedAction = ACTION_BY_ID.get(
+      isOwnNativeDrag && nativeDragSource?.mode === 'move' ? 'file.move' : 'file.copy',
+    );
+    if (blocked || event.paths.length === 0) {
+      if (blockedAction) {
+        setStatusMessage(statusText.unavailableInContext(labelForAction(blockedAction, settings.language)));
+      }
+      return;
+    }
+    if (isOwnNativeDrag && nativeDragSource) {
+      nativeFileDragSourceRef.current = null;
+      const action = ACTION_BY_ID.get(nativeDragSource.mode === 'move' ? 'file.move' : 'file.copy');
+      if (action) {
+        handleAction(action, nativeDragSource.panelId, nativeDragSource.entries, targetState.path);
+        const subject = nativeDragSource.entries.length === 1
+          ? nativeDragSource.entries[0].name
+          : statusText.dragItemCount(nativeDragSource.entries.length);
+        setStatusMessage(statusText.dragOperation(
+          nativeDragSource.mode,
+          subject,
+          panelIdLabel(targetPanel, settings.language),
+        ));
+      }
+      return;
+    }
+    void importNativeDroppedPaths(event.paths, targetPanel, targetState.path);
+  };
+
   const activeListing = panelState[activePanel].listing;
   const activePanelState = panelState[activePanel];
   const activeTargets = resolveActionTargets(activePanelState);
@@ -1537,26 +1850,61 @@ export function CommanderShell({
       shellRef.current?.focus({ preventScroll: true });
     },
   };
+  nativeFileDropRuntimeRef.current = {
+    handle: handleNativeFileDropEvent,
+    handleListenError: (error) => setStatusMessage(statusText.externalDropUnavailable(String(error))),
+  };
+
+  useEffect(() => {
+    if (!runtimeBackendAvailable) {
+      return undefined;
+    }
+    const client = nativeFileDropClient ?? (isTauriRuntime() ? TAURI_NATIVE_FILE_DROP_CLIENT : null);
+    if (!client) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void client.listen((event) => nativeFileDropRuntimeRef.current?.handle(event))
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        unlisten = nextUnlisten;
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          nativeFileDropRuntimeRef.current?.handleListenError(error);
+        }
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [nativeFileDropClient, runtimeBackendAvailable]);
 
   useEffect(() => {
     if (!runtimeBackendAvailable || !mutationClient.loadSettings) {
       setSettingsLoaded(true);
       return;
     }
+    let disposed = false;
     void mutationClient.loadSettings().then((result) => {
+      if (disposed) return;
       if (result.ok) {
         const loaded = normalizeSettings(result.data);
         setSettings(loaded);
         setActivePanel(loaded.session.activePanel);
-        setPanelTabs((current) => ({
-          left: current.left.length ? current.left : [loaded.session.leftPath ?? panelState.left.path],
-          right: current.right.length ? current.right : [loaded.session.rightPath ?? panelState.right.path],
-        }));
+
       } else {
         setStatusMessage(statusText.settingsLoadFailed(formatUserErrorMessage(settings.language, result.error)));
       }
       setSettingsLoaded(true);
     });
+    return () => { disposed = true; };
   }, [mutationClient, runtimeBackendAvailable]);
 
   useEffect(() => {
@@ -1629,8 +1977,9 @@ export function CommanderShell({
 
     return () => {
       cancelled = true;
+      initialPanelLoadStartedRef.current = false;
     };
-  }, [dataSource, settingsLoaded, settings.session.leftPath, settings.session.rightPath]);
+  }, [dataSource, settingsLoaded]);
 
 
   useEffect(() => {
@@ -1838,7 +2187,7 @@ export function CommanderShell({
           onGotoPath={() => setPathPromptPanel('left')}
           onClearFilter={() => handleAction(ACTION_BY_ID.get('filter.clear')!, 'left')}
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
-          onEntryDragStart={(entry) => setDragSource({ panelId: 'left', entry })}
+          onEntryDragStart={(event, entry) => handleEntryDragStart(event, 'left', entry)}
           onEntryDragEnd={() => {
             setDragSource(null);
             setDragOverPanel(null);
@@ -1873,7 +2222,7 @@ export function CommanderShell({
           onGotoPath={() => setPathPromptPanel('right')}
           onClearFilter={() => handleAction(ACTION_BY_ID.get('filter.clear')!, 'right')}
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
-          onEntryDragStart={(entry) => setDragSource({ panelId: 'right', entry })}
+          onEntryDragStart={(event, entry) => handleEntryDragStart(event, 'right', entry)}
           onEntryDragEnd={() => {
             setDragSource(null);
             setDragOverPanel(null);
@@ -2419,8 +2768,11 @@ interface PanelMetadataColumnWidths {
 }
 
 const metadataColumnWidthsForEntries = (entries: readonly FileEntry[], sizeFormat: Settings['sizeFormat'] = 'binary'): PanelMetadataColumnWidths => {
-  const maxWidth = (values: string[], base: number) =>
-    Math.max(base, ...values.map((value) => textDisplayWidth(value)));
+  const maxWidth = (values: string[], base: number) => {
+    let width = base;
+    for (const value of new Set(values)) width = Math.max(width, textDisplayWidth(value));
+    return width;
+  };
 
   return {
     modifiedShort: maxWidth(
@@ -2601,7 +2953,7 @@ interface FilePanelProps {
   onEntrySelect(index: number, entry: FileEntry, mode: SelectionMode): void;
   onEntryOpen(entry: FileEntry): void;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
-  onEntryDragStart(entry: FileEntry): void;
+  onEntryDragStart(event: DragEvent<HTMLElement>, entry: FileEntry): void;
   onEntryDragEnd(): void;
   dropIntent: 'copy' | 'move' | 'import' | 'blocked' | null;
   onPanelDragOver(event: DragEvent<HTMLElement>): void;
@@ -2757,6 +3109,7 @@ function FilePanel({
     <section
       ref={panelRef}
       className={`file-panel ${active ? 'is-active' : ''} ${hiddenByLayout ? 'is-hidden-by-layout' : ''} ${dropIntent ? `is-drop-${dropIntent}` : ''}`}
+      data-panel-id={listing.panelId}
       aria-label={`${listing.panelId} panel ${listing.path}`}
       aria-current={active ? 'true' : undefined}
       aria-hidden={hiddenByLayout ? 'true' : undefined}
@@ -2834,7 +3187,7 @@ function FilePanel({
                         aria-label={accessibleName}
                         aria-description={tooltip}
                         draggable={!entry.isVirtual}
-                        onDragStart={() => onEntryDragStart(entry)}
+                        onDragStart={(event) => onEntryDragStart(event, entry)}
                         onDragEnd={onEntryDragEnd}
                         onClick={(event) => onEntrySelect(
                           virtualRow.index,
@@ -3781,13 +4134,52 @@ const fileEntryFromExternalDropFile = (file: File): FileEntry | null => {
   };
 };
 
+const fileEntryFromExternalDropPath = (path: string): FileEntry => {
+  const name = basenameFromPath(path);
+  return {
+    path,
+    name,
+    kind: 'file',
+    sizeBytes: null,
+    modifiedAt: null,
+    createdAt: null,
+    permissions: null,
+    owner: null,
+    group: null,
+    isHidden: name.startsWith('.'),
+    isVirtual: false,
+  };
+};
+
+const uniqueAbsolutePaths = (paths: string[]) => [...new Set(
+  paths
+    .filter((path) => pathLooksAbsolute(path)),
+)];
+
+const samePathSet = (left: readonly string[], right: readonly string[]) => {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const rightPaths = new Set(right);
+  return left.every((path) => rightPaths.has(path));
+};
+
+const panelIdAtClientPosition = (position: { x: number; y: number }): PanelId | null => {
+  const panelElement = document.elementFromPoint(position.x, position.y)
+    ?.closest<HTMLElement>('.file-panel[data-panel-id]');
+  if (!panelElement || panelElement.getAttribute('aria-hidden') === 'true') {
+    return null;
+  }
+  const panelId = panelElement.dataset.panelId;
+  return panelId === 'left' || panelId === 'right' ? panelId : null;
+};
+
 const externalDropPath = (file: File): string | null => {
   const candidate = (file as ExternalDropFile).path;
   if (typeof candidate !== 'string') {
     return null;
   }
-  const trimmed = candidate.trim();
-  return pathLooksAbsolute(trimmed) ? trimmed : null;
+  return pathLooksAbsolute(candidate) ? candidate : null;
 };
 
 const pathLooksAbsolute = (path: string) =>

@@ -56,7 +56,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | --- | --- | --- | --- |
 | `list_dir` | `{ panelId, path, showHidden, sort, filter }` | `DirectoryListing` | 읽기 전용 |
 | `get_metadata` | `{ path }` | `FileMetadata` | 속성/preview |
-| `watch_path` | `{ panelId, path }` | `WatchAck` | 변경 이벤트 구독 |
+| `watch_path` | `{ panelId, path }` | `WatchAck` | 현재: 경로 검증/version ACK. 실제 변경 이벤트 구독은 미구현 |
 | `goto_path` | `{ panelId, path }` | `DirectoryListing` | 주소 입력/북마크/히스토리 이동 |
 | `list_locations` | `{}` | `LocationList` | 홈/드라이브/마운트 quick access |
 | `create_dir` | `{ parent, name }` | `FileEntry` | 이름 검증 |

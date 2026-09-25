@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "drop-overlay",
+  "description": "투명 드롭 창이 네이티브 파일 드롭을 메인 창으로 전달하고 즉시 숨을 수 있도록 허용한다.",
+  "windows": ["drop-overlay"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit-to",
+    "core:window:allow-hide"
+  ]
+}

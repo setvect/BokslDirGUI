@@ -4,6 +4,11 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
   ko: {
     'app.name': 'BokslDirGUI',
     'errors.notFound': '대상을 찾을 수 없습니다.',
+    'errors.specialFileCopyUnsupported': '소켓이나 장치 같은 특수 파일은 복사하거나 이동할 수 없습니다.',
+    'errors.trashFailed': '휴지통으로 이동하지 못했습니다. 원본 위치를 확인하세요.',
+    'errors.copyIntoSelf': '원본 내부나 원본을 포함하는 경로로 복사할 수 없습니다.',
+    'errors.moveIntoSelf': '원본 내부나 원본을 포함하는 경로로 이동할 수 없습니다.',
+    'errors.settingsInvalid': '설정 파일이 올바르지 않습니다. 기존 파일을 보존했습니다.',
     'errors.notDirectory': '디렉터리가 아닙니다.',
     'errors.permissionDenied': '권한이 거부되었습니다.',
     'errors.invalidPath': '잘못된 경로입니다.',
@@ -36,6 +41,11 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
   en: {
     'app.name': 'BokslDirGUI',
     'errors.notFound': 'The target was not found.',
+    'errors.specialFileCopyUnsupported': 'Special files such as sockets or devices cannot be copied or moved.',
+    'errors.trashFailed': 'Could not move the item to Trash. Check the original location.',
+    'errors.copyIntoSelf': 'Cannot copy inside the source or over a directory containing it.',
+    'errors.moveIntoSelf': 'Cannot move inside the source or over a directory containing it.',
+    'errors.settingsInvalid': 'The settings file is invalid. The existing file has been preserved.',
     'errors.notDirectory': 'The target is not a directory.',
     'errors.permissionDenied': 'Permission was denied.',
     'errors.invalidPath': 'The path is invalid.',
@@ -562,7 +572,13 @@ export interface CommanderStatusText {
   sizeFormat(format: string): string;
   icons(enabled: boolean): string;
   externalDropPathRequired: string;
+  externalDropUnavailable(error: string): string;
   externalImport(count: number, panel: string): string;
+  externalDragStart(count: number): string;
+  externalDragDone(count: number): string;
+  externalDragCancelled: string;
+  externalDragFailed(error: string): string;
+  dragItemCount(count: number): string;
   dragOperation(kind: 'copy' | 'move', name: string, panel: string): string;
   openDefaultUnavailable(name: string): string;
   openDefaultStart(name: string): string;
@@ -613,7 +629,13 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     sizeFormat: (format) => `크기 형식 · ${format === 'bytes' ? '바이트' : '자동'}`,
     icons: (enabled) => `아이콘 · ${enabled ? '켜짐' : '꺼짐'}`,
     externalDropPathRequired: '외부 드롭은 OS 파일 경로가 확인될 때만 가져올 수 있습니다.',
+    externalDropUnavailable: (error) => `외부 드롭을 시작할 수 없습니다: ${error}`,
     externalImport: (count, panel) => `외부 가져오기 · ${count}개 → ${panel}`,
+    externalDragStart: (count) => `외부 드래그 시작 · ${count}개 항목`,
+    externalDragDone: (count) => `외부 드래그 완료 · ${count}개 항목`,
+    externalDragCancelled: '외부 드래그가 취소되었습니다.',
+    externalDragFailed: (error) => `외부 드래그 실패: ${error}`,
+    dragItemCount: (count) => `${count}개 항목`,
     dragOperation: (kind, name, panel) => `드래그 ${kind === 'move' ? '이동' : '복사'} · ${name} → ${panel}`,
     openDefaultUnavailable: (name) => `기본 앱 열기 실패: 데스크톱 앱에서 다시 시도하세요. · ${name}`,
     openDefaultStart: (name) => `기본 앱으로 여는 중 · ${name}`,
@@ -662,7 +684,13 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     sizeFormat: (format) => `Size format · ${format}`,
     icons: (enabled) => `Icons · ${enabled ? 'on' : 'off'}`,
     externalDropPathRequired: 'External drops are allowed only when OS file paths are available.',
+    externalDropUnavailable: (error) => `External drop is unavailable: ${error}`,
     externalImport: (count, panel) => `External import · ${count} → ${panel}`,
+    externalDragStart: (count) => `External drag started · ${count} item${count === 1 ? '' : 's'}`,
+    externalDragDone: (count) => `External drag completed · ${count} item${count === 1 ? '' : 's'}`,
+    externalDragCancelled: 'External drag was cancelled.',
+    externalDragFailed: (error) => `External drag failed: ${error}`,
+    dragItemCount: (count) => `${count} item${count === 1 ? '' : 's'}`,
     dragOperation: (kind, name, panel) => `Drag ${kind} · ${name} → ${panel}`,
     openDefaultUnavailable: (name) => `Open default app failed: try again in the desktop app. · ${name}`,
     openDefaultStart: (name) => `Open default app · ${name}`,

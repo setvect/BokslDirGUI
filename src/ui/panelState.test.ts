@@ -93,3 +93,13 @@ const virtualParent = (path: string): FileEntry => ({
   isHidden: false,
   isVirtual: true,
 });
+
+it('bounds navigation history to the most recent 100 paths', () => {
+  let panel = createPanelStateFromListing(createDirectoryListing('left', '/0'));
+  for (let index = 1; index <= 150; index++) {
+    panel = replacePanelListing(panel, createDirectoryListing('left', `/${index}`), { pushHistory: true });
+  }
+  expect(panel.historyBack).toHaveLength(100);
+  expect(panel.historyBack[0]).toBe('/50');
+  expect(panel.historyBack.at(-1)).toBe('/149');
+});

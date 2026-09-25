@@ -111,10 +111,10 @@ export const replacePanelListing = (
     listing,
     focusedIndex,
     selectedPaths,
-    historyBack: options.replaceBack ?? (options.pushHistory && current.path !== listing.path
+    historyBack: (options.replaceBack ?? (options.pushHistory && current.path !== listing.path
       ? [...current.historyBack, current.path]
-      : current.historyBack),
-    historyForward: options.replaceForward ?? (options.pushHistory ? [] : current.historyForward),
+      : current.historyBack)).slice(-100),
+    historyForward: (options.replaceForward ?? (options.pushHistory ? [] : current.historyForward)).slice(0, 100),
     sort: listing.sort,
     filter: listing.filter,
     loading: false,

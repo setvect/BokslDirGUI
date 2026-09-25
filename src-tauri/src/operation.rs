@@ -507,7 +507,12 @@ fn run_copy(
         Err(error) => return Err(error_summary(operation_id, kind, error)),
     };
     for source in &sources {
-        if source.is_dir() && target_dir.starts_with(source) {
+        let destination = source.file_name().map(|name| target_dir.join(name));
+        if (source.is_dir() && target_dir.starts_with(source))
+            || destination.is_some_and(|destination| {
+                source != &destination && source.starts_with(&destination)
+            })
+        {
             return Err(error_summary(
                 operation_id,
                 kind,
@@ -535,10 +540,17 @@ fn run_copy(
         let Ok(source_name) = source_name else {
             return Err(error_summary(operation_id, kind, source_name.unwrap_err()));
         };
-        scan_work(source, Path::new(source_name), &mut work, &mut total_bytes)
-            .map_err(|error| error_summary(operation_id, kind, error))?;
+        scan_work(
+            operation_id,
+            source,
+            Path::new(source_name),
+            &mut work,
+            &mut total_bytes,
+        )
+        .map_err(|error| error_summary(operation_id, kind, error))?;
     }
     let mut stats = OperationStats::new(work.len() as u64, total_bytes);
+    drop(work);
     stats.cancel_after_completed = cancel_after_completed;
     emit_progress(
         app,
@@ -644,7 +656,12 @@ fn run_move(
         Err(error) => return error_summary(operation_id, kind, error),
     };
     for source in &sources {
-        if source.is_dir() && target_dir.starts_with(source) {
+        let destination = source.file_name().map(|name| target_dir.join(name));
+        if (source.is_dir() && target_dir.starts_with(source))
+            || destination.is_some_and(|destination| {
+                source != &destination && source.starts_with(&destination)
+            })
+        {
             return error_summary(
                 operation_id,
                 kind,
@@ -677,7 +694,7 @@ fn run_move(
                 )
             }
         };
-        if let Err(error) = scan_work(source, &name, &mut work, &mut total_bytes) {
+        if let Err(error) = scan_work(operation_id, source, &name, &mut work, &mut total_bytes) {
             return error_summary(operation_id, kind, error);
         }
         total_files += work.len() as u64;
@@ -765,11 +782,15 @@ fn run_move(
             ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {}
         }
         let mut source_bytes = 0;
-        let source_entries = match count_entries_and_bytes(source, &mut source_bytes) {
+        let source_entries = match count_entries_and_bytes(operation_id, source, &mut source_bytes)
+        {
             Ok(count) => count,
             Err(error) => {
                 stats.failed_files += 1;
-                stats.errors.push(map_io_error(error, Some(source)));
+                if is_operation_cancelled_error(&error) {
+                    return cancel_summary(operation_id, kind, &stats);
+                }
+                stats.errors.push(error);
                 continue;
             }
         };
@@ -845,14 +866,12 @@ fn run_delete(
     let mut total_files = 0;
     let mut target_counts = BTreeMap::new();
     for target in &targets {
-        match count_entries_and_bytes(target, &mut total_bytes) {
+        match count_entries_and_bytes(operation_id, target, &mut total_bytes) {
             Ok(count) => {
                 total_files += count;
                 target_counts.insert(target.clone(), count);
             }
-            Err(error) => {
-                return error_summary(operation_id, kind, map_io_error(error, Some(target)))
-            }
+            Err(error) => return error_summary(operation_id, kind, error),
         }
     }
     let mut stats = OperationStats::new(total_files, total_bytes);
@@ -873,28 +892,26 @@ fn run_delete(
         None,
     );
 
-    let trash_dir = if mode == DeleteMode::Trash {
-        match trash_directory() {
-            Ok(path) => Some(path),
-            Err(error) => return error_summary(operation_id, kind, error),
-        }
-    } else {
-        None
-    };
-
     for target in &targets {
         if is_cancelled(operation_id) {
             return cancel_summary(operation_id, kind, &stats);
         }
-        let result = if let Some(trash_dir) = trash_dir.as_ref() {
-            let trash_target = unique_trash_target(trash_dir, target);
-            fs::rename(target, trash_target).map_err(|error| map_io_error(error, Some(target)))
+        let result = if mode == DeleteMode::Trash {
+            move_to_trash(target)
         } else {
-            remove_entry_any(target).map_err(|error| map_io_error(error, Some(target)))
+            delete_tree_cancellable(
+                app,
+                operation_id,
+                target,
+                &mut stats,
+                &mut ProgressTicker::new(),
+            )
         };
         match result {
             Ok(()) => {
-                stats.completed_files += target_counts.get(target).copied().unwrap_or(1);
+                if mode == DeleteMode::Trash {
+                    stats.completed_files += target_counts.get(target).copied().unwrap_or(1);
+                }
                 emit_progress(
                     app,
                     operation_id,
@@ -905,6 +922,9 @@ fn run_delete(
                 );
             }
             Err(error) => {
+                if is_operation_cancelled_error(&error) {
+                    return cancel_summary(operation_id, kind, &stats);
+                }
                 stats.failed_files += 1;
                 stats.errors.push(error);
             }
@@ -962,12 +982,26 @@ fn run_archive_create(
         );
     }
 
-    let total_bytes = sources
+    if sources
         .iter()
-        .filter_map(|path| fs::metadata(path).ok())
-        .map(|metadata| metadata.len())
-        .sum();
-    let mut stats = OperationStats::new(sources.len() as u64, total_bytes);
+        .any(|source| source.is_dir() && parent.starts_with(source))
+    {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new("invalid_path", "errors.copyIntoSelf", Some(&target), true),
+        );
+    }
+    let staged_target = unique_temp_target(&parent, &target);
+    let mut total_bytes = 0;
+    let mut total_files = 0;
+    for source in &sources {
+        match count_entries_and_bytes(operation_id, source, &mut total_bytes) {
+            Ok(count) => total_files += count,
+            Err(error) => return error_summary(operation_id, kind, error),
+        }
+    }
+    let mut stats = OperationStats::new(total_files, total_bytes);
     emit_progress(
         app,
         operation_id,
@@ -983,13 +1017,13 @@ fn run_archive_create(
     let archive_format =
         archive_format_name(&target).unwrap_or_else(|| format.to_ascii_lowercase());
     let command_result = match archive_format.as_str() {
-        "zip" => run_zip_create(operation_id, &target, &sources, password),
+        "zip" => run_zip_create(operation_id, &staged_target, &sources, password),
         "jar" | "war" if password.is_none() => {
-            run_zip_create(operation_id, &target, &sources, None)
+            run_zip_create(operation_id, &staged_target, &sources, None)
         }
-        "7z" => run_7z_create(operation_id, &target, &sources, password),
+        "7z" => run_7z_create(operation_id, &staged_target, &sources, password),
         "tar" | "tar.gz" | "tar.zst" if password.is_none() => {
-            run_tar_create(operation_id, &target, &sources)
+            run_tar_create(operation_id, &staged_target, &sources)
         }
         "jar" | "war" | "tar" | "tar.gz" | "tar.zst" => Err(AppError::new(
             "unsupported",
@@ -1006,9 +1040,17 @@ fn run_archive_create(
         .with_detail("format", archive_format)),
     };
 
+    let command_result = command_result.and_then(|()| {
+        mutation::rename_no_replace(&staged_target, &target)
+            .map_err(|error| map_io_error(error, Some(&target)))
+    });
+    if command_result.is_err() {
+        let _ = fs::remove_file(&staged_target);
+    }
+
     match command_result {
         Ok(()) => {
-            stats.completed_files = sources.len() as u64;
+            stats.completed_files = total_files;
             stats.completed_bytes = total_bytes;
             emit_progress(
                 app,
@@ -1038,6 +1080,18 @@ fn run_archive_extract(
     strip_prefix: Option<String>,
 ) -> OperationSummary {
     let kind = OperationKind::ArchiveExtract;
+    if strip_prefix.as_deref().is_some_and(archive_entry_is_unsafe) {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new(
+                "unsafe_archive_entry",
+                "errors.archiveUnsafePath",
+                Some(Path::new(&archive_path)),
+                true,
+            ),
+        );
+    }
     let password = password.as_deref().filter(|value| !value.is_empty());
     let archive = match navigation::canonical_existing_path(&archive_path) {
         Ok(path) => path,
@@ -1106,6 +1160,24 @@ fn run_archive_extract(
         Ok(entries) => entries,
         Err(error) => return error_summary(operation_id, kind, error),
     };
+    let normalized_prefix = normalize_archive_entry(strip_prefix.as_deref().unwrap_or(""));
+    if !normalized_prefix.is_empty()
+        && entries.iter().any(|entry| {
+            let entry = normalize_archive_entry(entry);
+            entry != normalized_prefix && !entry.starts_with(&format!("{normalized_prefix}/"))
+        })
+    {
+        return error_summary(
+            operation_id,
+            kind,
+            AppError::new(
+                "unsafe_archive_entry",
+                "errors.archiveUnsafePath",
+                Some(&archive),
+                true,
+            ),
+        );
+    }
     stats.total_files = entries.len() as u64;
     emit_progress(
         app,
@@ -1134,9 +1206,6 @@ fn run_archive_extract(
 
     match command_result {
         Ok(()) => {
-            if stats.completed_files < entries.len() as u64 {
-                stats.completed_files = entries.len() as u64;
-            }
             emit_progress(
                 app,
                 operation_id,
@@ -1150,7 +1219,11 @@ fn run_archive_extract(
         Err(error) if is_operation_cancelled_error(&error) => {
             cancel_summary(operation_id, kind, &stats)
         }
-        Err(error) => error_summary(operation_id, kind, error),
+        Err(error) => {
+            stats.failed_files += 1;
+            stats.errors.push(error);
+            summary_from_stats(operation_id, kind, &stats)
+        }
     }
 }
 
@@ -1207,7 +1280,13 @@ fn run_archive_add(
     for source in &sources {
         let mut work = Vec::new();
         let mut source_bytes = 0_u64;
-        if let Err(error) = scan_work(source, Path::new(""), &mut work, &mut source_bytes) {
+        if let Err(error) = scan_work(
+            operation_id,
+            source,
+            Path::new(""),
+            &mut work,
+            &mut source_bytes,
+        ) {
             return error_summary(operation_id, kind, error);
         }
         let count = work.len() as u64;
@@ -1359,29 +1438,36 @@ fn run_archive_add(
 
     entries_to_delete.sort();
     entries_to_delete.dedup();
-    let backup = if entries_to_delete.is_empty() {
-        None
-    } else {
-        let backup = staging.join(".archive-backup");
-        if let Err(error) = fs::copy(&archive, &backup) {
-            let _ = fs::remove_dir_all(&staging);
-            return error_summary(operation_id, kind, map_io_error(error, Some(&archive)));
+    let working_archive = unique_temp_target(archive.parent().unwrap(), &archive);
+    if let Err(error) = copy_file_no_replace(&archive, &working_archive, |_| {
+        if is_cancelled(operation_id) {
+            Err(AppError::new(
+                "operation_cancelled",
+                "errors.operationCancelled",
+                Some(&archive),
+                true,
+            ))
+        } else {
+            Ok(())
         }
-        Some(backup)
-    };
-    if let Err(error) = run_archive_delete_entries(operation_id, &archive, &entries_to_delete) {
-        let _ = restore_archive_backup(backup.as_deref(), &archive);
+    }) {
         let _ = fs::remove_dir_all(&staging);
         return if is_operation_cancelled_error(&error) {
+            stats.completed_files = 0;
+            stats.completed_bytes = 0;
             cancel_summary(operation_id, kind, &stats)
         } else {
             error_summary(operation_id, kind, error)
         };
     }
-    let add_result = run_archive_add_entries(operation_id, &archive, &staging, &roots_to_add);
-    if add_result.is_err() {
-        let _ = restore_archive_backup(backup.as_deref(), &archive);
-    }
+    let add_result = run_archive_delete_entries(operation_id, &working_archive, &entries_to_delete)
+        .and_then(|()| {
+            run_archive_add_entries(operation_id, &working_archive, &staging, &roots_to_add)
+        })
+        .and_then(|()| {
+            publish_replacement(&working_archive, &archive, mutation::rename_no_replace)
+        });
+    let _ = fs::remove_file(&working_archive);
     let _ = fs::remove_dir_all(&staging);
     match add_result {
         Ok(()) => {
@@ -1396,19 +1482,12 @@ fn run_archive_add(
             summary_from_stats(operation_id, kind, &stats)
         }
         Err(error) if is_operation_cancelled_error(&error) => {
+            stats.completed_files = 0;
+            stats.completed_bytes = 0;
             cancel_summary(operation_id, kind, &stats)
         }
         Err(error) => error_summary(operation_id, kind, error),
     }
-}
-
-fn restore_archive_backup(backup: Option<&Path>, archive: &Path) -> CommandResult<()> {
-    let Some(backup) = backup else {
-        return Ok(());
-    };
-    fs::copy(backup, archive)
-        .map(|_| ())
-        .map_err(|error| map_io_error(error, Some(archive)))
 }
 
 fn run_zip_create(
@@ -1435,9 +1514,9 @@ fn run_zip_create(
     }
     command.arg(target);
     for source in sources {
-        command.arg(source.file_name().ok_or_else(|| {
+        command.arg(Path::new(".").join(source.file_name().ok_or_else(|| {
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
-        })?);
+        })?));
     }
     run_external_command_with_secret(operation_id, command, Some(target), password)
 }
@@ -1468,9 +1547,9 @@ fn run_7z_create(
     }
     command.arg(target);
     for source in sources {
-        command.arg(source.file_name().ok_or_else(|| {
+        command.arg(Path::new(".").join(source.file_name().ok_or_else(|| {
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
-        })?);
+        })?));
     }
     run_external_command_with_secret(operation_id, command, Some(target), password)
 }
@@ -1489,9 +1568,9 @@ fn run_tar_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> Com
     let mut command = Command::new(tar);
     command.current_dir(&working_dir).arg("-acf").arg(target);
     for source in sources {
-        command.arg(source.file_name().ok_or_else(|| {
+        command.arg(Path::new(".").join(source.file_name().ok_or_else(|| {
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
-        })?);
+        })?));
     }
     run_external_command(operation_id, command, Some(target))
 }
@@ -1705,7 +1784,22 @@ fn run_archive_extract_selected(
         if !copied.insert(source.clone()) {
             continue;
         }
-        if !source.exists() {
+        let canonical_staging = staging
+            .canonicalize()
+            .map_err(|error| map_io_error(error, Some(&staging)))?;
+        let canonical_parent = source
+            .parent()
+            .and_then(|parent| parent.canonicalize().ok());
+        if !canonical_parent.is_some_and(|parent| parent.starts_with(&canonical_staging)) {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(AppError::new(
+                "unsafe_archive_entry",
+                "errors.archiveUnsafePath",
+                Some(archive),
+                true,
+            ));
+        }
+        if !path_is_occupied(&source) {
             stats.failed_files += 1;
             stats.errors.push(AppError::new(
                 "not_found",
@@ -1744,7 +1838,7 @@ fn run_archive_extract_selected(
             ConflictDecision::Overwrite | ConflictDecision::AllOverwrite
                 if path_is_occupied(&destination) =>
             {
-                copy_tree_replacing(
+                if let Err(error) = copy_tree_replacing(
                     app,
                     operation_id,
                     &source,
@@ -1752,10 +1846,16 @@ fn run_archive_extract_selected(
                     &destination,
                     stats,
                     kind,
-                )?;
+                ) {
+                    let _ = fs::remove_dir_all(&staging);
+                    return Err(error);
+                }
             }
             ConflictDecision::Overwrite | ConflictDecision::AllOverwrite => {
-                copy_tree(app, operation_id, &source, target, stats, kind)?;
+                if let Err(error) = copy_tree(app, operation_id, &source, target, stats, kind) {
+                    let _ = fs::remove_dir_all(&staging);
+                    return Err(error);
+                }
             }
         }
     }
@@ -2446,15 +2546,49 @@ fn copy_tree_replacing(
         let _ = remove_entry_any(&temp_destination);
         return Err(error);
     }
-    if let Err(error) = remove_entry_any(destination) {
+    if is_cancelled(operation_id) {
         let _ = remove_entry_any(&temp_destination);
-        return Err(map_io_error(error, Some(destination)));
+        return Err(AppError::new(
+            "operation_cancelled",
+            "errors.operationCancelled",
+            Some(source_root),
+            true,
+        ));
     }
-    if let Err(error) = fs::rename(&temp_destination, destination) {
+    if let Err(error) =
+        publish_replacement(&temp_destination, destination, mutation::rename_no_replace)
+    {
         let _ = remove_entry_any(&temp_destination);
-        return Err(map_io_error(error, Some(destination)));
+        return Err(error);
     }
     *stats = staged_stats;
+    Ok(())
+}
+
+// Keep the old entry until the staged copy has been published. If rollback is
+// blocked by another writer, retain the backup and report its recovery path.
+fn publish_replacement<F>(staged: &Path, destination: &Path, publish: F) -> CommandResult<()>
+where
+    F: FnOnce(&Path, &Path) -> io::Result<()>,
+{
+    let backup = unique_temp_target(
+        destination.parent().unwrap_or_else(|| Path::new(".")),
+        destination,
+    );
+    mutation::rename_no_replace(destination, &backup)
+        .map_err(|error| map_io_error(error, Some(destination)))?;
+    if let Err(error) = publish(staged, destination) {
+        let mut error = map_io_error(error, Some(destination));
+        if let Err(rollback) = mutation::rename_no_replace(&backup, destination) {
+            error = error
+                .with_detail("backupPath", display_path(&backup))
+                .with_detail("rollbackError", rollback.to_string());
+        }
+        return Err(error);
+    }
+    remove_entry_any(&backup).map_err(|error| {
+        map_io_error(error, Some(&backup)).with_detail("backupPath", display_path(&backup))
+    })?;
     Ok(())
 }
 
@@ -2469,6 +2603,7 @@ fn copy_tree_to_destination(
     let mut work = Vec::new();
     let mut ignored_total_bytes = 0;
     scan_work(
+        operation_id,
         source_root,
         Path::new(""),
         &mut work,
@@ -2491,7 +2626,10 @@ fn copy_tree_to_destination(
         };
         let file_type = entry.metadata.file_type();
         if file_type.is_dir() {
-            fs::create_dir_all(&destination)
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).map_err(|error| map_io_error(error, Some(parent)))?;
+            }
+            fs::create_dir(&destination)
                 .map_err(|error| map_io_error(error, Some(&destination)))?;
         } else if file_type.is_symlink() {
             copy_symlink(&entry.source, &destination)?;
@@ -2551,23 +2689,52 @@ where
 {
     let mut source_file =
         fs::File::open(source).map_err(|error| map_io_error(error, Some(source)))?;
-    let mut destination_file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mode = source_file
+            .metadata()
+            .map_err(|error| map_io_error(error, Some(source)))?
+            .permissions()
+            .mode();
+        options.mode(mode);
+    }
+    let mut destination_file = options
         .open(destination)
         .map_err(|error| map_io_error(error, Some(destination)))?;
-    let mut buffer = vec![0_u8; COPY_PROGRESS_CHUNK_BYTES];
-    loop {
-        let read = source_file
-            .read(&mut buffer)
-            .map_err(|error| map_io_error(error, Some(source)))?;
-        if read == 0 {
-            break;
+    let result: CommandResult<()> = (|| {
+        let mut buffer = vec![0_u8; COPY_PROGRESS_CHUNK_BYTES];
+        loop {
+            let read = source_file
+                .read(&mut buffer)
+                .map_err(|error| map_io_error(error, Some(source)))?;
+            if read == 0 {
+                break;
+            }
+            destination_file
+                .write_all(&buffer[..read])
+                .map_err(|error| map_io_error(error, Some(destination)))?;
+            on_chunk(read as u64)?;
         }
+        let permissions = source_file
+            .metadata()
+            .map_err(|error| map_io_error(error, Some(source)))?
+            .permissions();
         destination_file
-            .write_all(&buffer[..read])
+            .set_permissions(permissions)
             .map_err(|error| map_io_error(error, Some(destination)))?;
-        on_chunk(read as u64)?;
+        Ok(())
+    })();
+    drop(destination_file);
+    if let Err(mut error) = result {
+        if let Err(cleanup) = fs::remove_file(destination) {
+            error = error
+                .with_detail("partialPath", display_path(destination))
+                .with_detail("cleanupError", cleanup.to_string());
+        }
+        return Err(error);
     }
     Ok(())
 }
@@ -2596,13 +2763,23 @@ impl ProgressTicker {
 }
 
 fn scan_work(
+    operation_id: &str,
     source: &Path,
     relative: &Path,
     out: &mut Vec<WorkEntry>,
     total_bytes: &mut u64,
 ) -> CommandResult<()> {
+    check_cancelled(operation_id, source)?;
     let metadata =
         fs::symlink_metadata(source).map_err(|error| map_io_error(error, Some(source)))?;
+    if !metadata.is_file() && !metadata.is_dir() && !metadata.file_type().is_symlink() {
+        return Err(AppError::new(
+            "unsupported",
+            "errors.specialFileCopyUnsupported",
+            Some(source),
+            true,
+        ));
+    }
     if metadata.is_file() {
         *total_bytes += metadata.len();
     }
@@ -2615,6 +2792,7 @@ fn scan_work(
         for child in fs::read_dir(source).map_err(|error| map_io_error(error, Some(source)))? {
             let child = child.map_err(|error| map_io_error(error, Some(source)))?;
             scan_work(
+                operation_id,
                 &child.path(),
                 &relative.join(child.file_name()),
                 out,
@@ -2874,47 +3052,40 @@ fn is_protected_delete_path(path: &Path) -> bool {
         .is_some_and(|home| path == home)
 }
 
-fn trash_directory() -> CommandResult<PathBuf> {
+fn move_to_trash(source: &Path) -> CommandResult<()> {
+    #[cfg(test)]
     if let Some(path) = env::var_os("BOKSLDIRGUI_TRASH_DIR") {
-        let path = PathBuf::from(path);
-        fs::create_dir_all(&path).map_err(|error| map_io_error(error, Some(&path)))?;
-        return Ok(path);
+        let trash_dir = PathBuf::from(path);
+        fs::create_dir_all(&trash_dir).map_err(|error| map_io_error(error, Some(&trash_dir)))?;
+        let target = unique_temp_target(&trash_dir, source);
+        return mutation::rename_no_replace(source, &target)
+            .map_err(|error| map_io_error(error, Some(source)));
     }
-    #[cfg(target_os = "macos")]
-    let candidate = env::var_os("HOME")
-        .map(PathBuf::from)
-        .map(|home| home.join(".Trash"));
-    #[cfg(target_os = "linux")]
-    let candidate = env::var_os("HOME")
-        .map(PathBuf::from)
-        .map(|home| home.join(".local/share/Trash/files"));
-    #[cfg(windows)]
-    let candidate: Option<PathBuf> = None;
-    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
-    let candidate: Option<PathBuf> = None;
-    let Some(candidate) = candidate else {
+    trash::delete(source).map_err(|error| {
+        AppError::new("trash_failed", "errors.trashFailed", Some(source), true)
+            .with_detail("message", error.to_string())
+    })
+}
+
+fn check_cancelled(operation_id: &str, path: &Path) -> CommandResult<()> {
+    if is_cancelled(operation_id) {
         return Err(AppError::new(
-            "unsupported",
-            "errors.trashUnsupported",
-            None,
+            "operation_cancelled",
+            "errors.operationCancelled",
+            Some(path),
             true,
         ));
-    };
-    fs::create_dir_all(&candidate).map_err(|error| map_io_error(error, Some(&candidate)))?;
-    Ok(candidate)
+    }
+    Ok(())
 }
 
-fn unique_trash_target(trash_dir: &Path, source: &Path) -> PathBuf {
-    let name = source.file_name().unwrap_or_default().to_string_lossy();
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or_default();
-    trash_dir.join(format!("BokslDirGUI-{nonce}-{name}"))
-}
-
-fn count_entries_and_bytes(path: &Path, total_bytes: &mut u64) -> io::Result<u64> {
-    let metadata = fs::symlink_metadata(path)?;
+fn count_entries_and_bytes(
+    operation_id: &str,
+    path: &Path,
+    total_bytes: &mut u64,
+) -> CommandResult<u64> {
+    check_cancelled(operation_id, path)?;
+    let metadata = fs::symlink_metadata(path).map_err(|error| map_io_error(error, Some(path)))?;
     if metadata.is_file() {
         *total_bytes += metadata.len();
     }
@@ -2922,10 +3093,50 @@ fn count_entries_and_bytes(path: &Path, total_bytes: &mut u64) -> io::Result<u64
         return Ok(1);
     }
     let mut total = 1;
-    for child in fs::read_dir(path)? {
-        total += count_entries_and_bytes(&child?.path(), total_bytes)?;
+    for child in fs::read_dir(path).map_err(|error| map_io_error(error, Some(path)))? {
+        let child = child.map_err(|error| map_io_error(error, Some(path)))?;
+        total += count_entries_and_bytes(operation_id, &child.path(), total_bytes)?;
     }
     Ok(total)
+}
+
+fn delete_tree_cancellable(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    path: &Path,
+    stats: &mut OperationStats,
+    ticker: &mut ProgressTicker,
+) -> CommandResult<()> {
+    check_cancelled(operation_id, path)?;
+    let metadata = fs::symlink_metadata(path).map_err(|error| map_io_error(error, Some(path)))?;
+    if metadata.is_dir() {
+        for child in fs::read_dir(path).map_err(|error| map_io_error(error, Some(path)))? {
+            let child = child.map_err(|error| map_io_error(error, Some(path)))?;
+            delete_tree_cancellable(app, operation_id, &child.path(), stats, ticker)?;
+        }
+        check_cancelled(operation_id, path)?;
+        fs::remove_dir(path).map_err(|error| map_io_error(error, Some(path)))?;
+    } else {
+        fs::remove_file(path).map_err(|error| map_io_error(error, Some(path)))?;
+        if metadata.is_file() {
+            stats.completed_bytes += metadata.len();
+        }
+    }
+    stats.completed_files += 1;
+    if ticker.should_emit() {
+        emit_progress(
+            app,
+            operation_id,
+            OperationKind::Delete,
+            OperationState::Running,
+            stats,
+            Some(path),
+        );
+    }
+    if should_cancel_for_test(operation_id, stats) {
+        check_cancelled(operation_id, path)?;
+    }
+    Ok(())
 }
 
 fn unique_temp_target(parent: &Path, destination: &Path) -> PathBuf {
@@ -3122,9 +3333,17 @@ fn error_summary(operation_id: &str, kind: OperationKind, error: AppError) -> Op
     OperationSummary {
         operation_id: operation_id.to_string(),
         kind,
-        state: OperationState::Failed,
+        state: if is_operation_cancelled_error(&error) {
+            OperationState::Cancelled
+        } else {
+            OperationState::Failed
+        },
         completed_files: 0,
-        failed_files: 1,
+        failed_files: if is_operation_cancelled_error(&error) {
+            0
+        } else {
+            1
+        },
         skipped_files: 0,
         errors: vec![error],
     }
@@ -3269,4 +3488,323 @@ pub(super) fn start_copy_cancel_after_for_test(
     };
     finish_operation(&operation_id);
     summary
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+
+    struct Fixture(PathBuf);
+    impl Fixture {
+        fn new() -> Self {
+            let root = env::temp_dir().join(next_operation_id(OperationKind::Copy));
+            fs::create_dir(&root).unwrap();
+            Self(root)
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn cancelled_copy_removes_partial_file_and_preserves_source() {
+        let fixture = Fixture::new();
+        let source = fixture.0.join("source");
+        let destination = fixture.0.join("destination");
+        fs::write(&source, vec![42; COPY_PROGRESS_CHUNK_BYTES + 1]).unwrap();
+        let error = copy_file_no_replace(&source, &destination, |_| {
+            Err(AppError::new(
+                "operation_cancelled",
+                "errors.operationCancelled",
+                None,
+                true,
+            ))
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "operation_cancelled");
+        assert!(!destination.exists());
+        assert_eq!(
+            fs::metadata(source).unwrap().len(),
+            (COPY_PROGRESS_CHUNK_BYTES + 1) as u64
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_preserves_executable_and_private_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let fixture = Fixture::new();
+        let source = fixture.0.join("source");
+        let destination = fixture.0.join("destination");
+        fs::write(&source, b"#!/bin/sh\n").unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o700)).unwrap();
+        copy_file_no_replace(&source, &destination, |_| Ok(())).unwrap();
+        assert_eq!(
+            fs::metadata(destination).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
+
+    #[test]
+    fn failed_overwrite_publication_restores_original() {
+        let fixture = Fixture::new();
+        let staged = fixture.0.join("staged");
+        let destination = fixture.0.join("destination");
+        fs::write(&staged, b"new").unwrap();
+        fs::write(&destination, b"original").unwrap();
+        let result = publish_replacement(&staged, &destination, |_, _| {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "injected publication failure",
+            ))
+        });
+        assert!(result.is_err());
+        assert_eq!(fs::read(&destination).unwrap(), b"original");
+        assert_eq!(fs::read(&staged).unwrap(), b"new");
+        assert_eq!(fs::read_dir(&fixture.0).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn blocked_overwrite_rollback_keeps_backup_and_concurrent_file() {
+        let fixture = Fixture::new();
+        let staged = fixture.0.join("staged");
+        let destination = fixture.0.join("destination");
+        fs::write(&staged, b"new").unwrap();
+        fs::write(&destination, b"original").unwrap();
+        let error = publish_replacement(&staged, &destination, |_, dest| {
+            fs::write(dest, b"concurrent").unwrap();
+            Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "concurrent writer",
+            ))
+        })
+        .unwrap_err();
+        let backup = &error.details.unwrap()["backupPath"];
+        assert_eq!(fs::read(backup).unwrap(), b"original");
+        assert_eq!(fs::read(destination).unwrap(), b"concurrent");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn move_rejects_socket_before_overwriting_or_deleting_anything() {
+        use std::os::unix::net::UnixListener;
+        let fixture = Fixture::new();
+        let source = fixture.0.join("source");
+        let target = fixture.0.join("target");
+        fs::create_dir(&source).unwrap();
+        fs::create_dir(&target).unwrap();
+        fs::write(source.join("keep"), b"source").unwrap();
+        let _socket = UnixListener::bind(source.join("socket")).unwrap();
+        fs::write(target.join("source"), b"destination").unwrap();
+        let summary = run_move(
+            None,
+            "socket-test",
+            &[display_path(&source)],
+            &display_path(&target),
+            ConflictDecision::AllOverwrite,
+        );
+        assert_eq!(summary.state, OperationState::Failed);
+        assert_eq!(
+            summary.errors[0].message_key,
+            "errors.specialFileCopyUnsupported"
+        );
+        assert_eq!(fs::read(source.join("keep")).unwrap(), b"source");
+        assert_eq!(fs::read(target.join("source")).unwrap(), b"destination");
+    }
+
+    #[test]
+    fn archive_extract_rejects_escaping_strip_prefix_before_creating_target() {
+        let fixture = Fixture::new();
+        let target = fixture.0.join("not-created");
+        let summary = run_archive_extract(
+            None,
+            "prefix-test",
+            "missing.zip".into(),
+            display_path(&target),
+            None,
+            ConflictDecision::AllOverwrite,
+            Some(vec!["safe.txt".into()]),
+            Some("../outside".into()),
+        );
+        assert_eq!(summary.errors[0].code, "unsafe_archive_entry");
+        assert!(!target.exists());
+    }
+
+    #[test]
+    fn archive_skip_does_not_count_as_success() {
+        let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+        if external_binary("zip").is_none() || external_binary("unzip").is_none() {
+            return;
+        }
+        let fixture = Fixture::new();
+        let source = fixture.0.join("source.txt");
+        let archive = fixture.0.join("test.zip");
+        let target = fixture.0.join("target");
+        fs::write(&source, b"source").unwrap();
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("source.txt"), b"original").unwrap();
+        run_zip_create("zip-test", &archive, &[source], None).unwrap();
+        let summary = run_archive_extract(
+            None,
+            "skip-test",
+            display_path(&archive),
+            display_path(&target),
+            None,
+            ConflictDecision::AllSkip,
+            None,
+            None,
+        );
+        assert_eq!(summary.completed_files, 0);
+        assert_eq!(summary.skipped_files, 1);
+        assert_eq!(fs::read(target.join("source.txt")).unwrap(), b"original");
+    }
+
+    #[test]
+    fn rename_preserves_exact_source_name_with_surrounding_spaces() {
+        let fixture = Fixture::new();
+        fs::write(fixture.0.join(" note "), b"intended").unwrap();
+        fs::write(fixture.0.join("note"), b"unrelated").unwrap();
+        mutation::rename_entry(&display_path(&fixture.0.join(" note ")), "renamed").unwrap();
+        assert_eq!(fs::read(fixture.0.join("renamed")).unwrap(), b"intended");
+        assert_eq!(fs::read(fixture.0.join("note")).unwrap(), b"unrelated");
+    }
+    #[test]
+    fn copy_and_move_reject_overwriting_a_source_ancestor() {
+        let fixture = Fixture::new();
+        let parent = fixture.0.join("same");
+        fs::create_dir(&parent).unwrap();
+        let source = parent.join("same");
+        fs::write(&source, b"source").unwrap();
+        fs::write(parent.join("sibling"), b"keep").unwrap();
+        let paths = vec![display_path(&source)];
+        let copied = run_copy(
+            None,
+            "ancestor-copy",
+            &paths,
+            &display_path(&fixture.0),
+            ConflictDecision::AllOverwrite,
+            None,
+        )
+        .unwrap_err();
+        let moved = run_move(
+            None,
+            "ancestor-move",
+            &paths,
+            &display_path(&fixture.0),
+            ConflictDecision::AllOverwrite,
+        );
+        assert_eq!(copied.state, OperationState::Failed);
+        assert_eq!(moved.state, OperationState::Failed);
+        assert_eq!(fs::read(source).unwrap(), b"source");
+        assert_eq!(fs::read(parent.join("sibling")).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn recursive_scan_and_delete_observe_cancellation() {
+        let fixture = Fixture::new();
+        fs::write(fixture.0.join("first"), b"one").unwrap();
+        fs::write(fixture.0.join("second"), b"two").unwrap();
+        let id = next_operation_id(OperationKind::Delete);
+        register_operation(&id);
+        let mut stats = OperationStats::new(3, 6);
+        stats.cancel_after_completed = Some(1);
+        let result = delete_tree_cancellable(
+            None,
+            &id,
+            &fixture.0,
+            &mut stats,
+            &mut ProgressTicker::new(),
+        );
+        let scan = scan_work(&id, &fixture.0, Path::new(""), &mut Vec::new(), &mut 0);
+        finish_operation(&id);
+        assert_eq!(result.unwrap_err().code, "operation_cancelled");
+        assert_eq!(scan.unwrap_err().code, "operation_cancelled");
+        assert_eq!(stats.completed_files, 1);
+        assert_eq!(fs::read_dir(&fixture.0).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn settings_save_preserves_corrupt_file_and_serializes_patches() {
+        let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+        let fixture = Fixture::new();
+        let path = fixture.0.join("settings.json");
+        fs::write(&path, b"{corrupt user settings").unwrap();
+        let old = env::var_os("BOKSLDIRGUI_SETTINGS_PATH");
+        env::set_var("BOKSLDIRGUI_SETTINGS_PATH", &path);
+        let failed = settings_service::save_settings(serde_json::json!({"theme": "light"}));
+        let contents = fs::read(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        let a = thread::spawn(|| {
+            settings_service::save_settings(serde_json::json!({"theme": "light"}))
+        });
+        let b = thread::spawn(|| {
+            settings_service::save_settings(serde_json::json!({"language": "en"}))
+        });
+        let outcomes = (a.join().unwrap(), b.join().unwrap());
+        let saved = settings_service::load_settings();
+        match old {
+            Some(value) => env::set_var("BOKSLDIRGUI_SETTINGS_PATH", value),
+            None => env::remove_var("BOKSLDIRGUI_SETTINGS_PATH"),
+        }
+        assert!(failed.is_err());
+        assert_eq!(contents, b"{corrupt user settings");
+        assert!(outcomes.0.is_ok() && outcomes.1.is_ok());
+        let saved = saved.unwrap();
+        assert_eq!(saved.theme, "light");
+        assert_eq!(saved.language, "en");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failing_archive_provider_never_publishes_partial_create_or_add() {
+        use std::os::unix::fs::PermissionsExt;
+        let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+        if external_binary("zip").is_none() || external_binary("unzip").is_none() {
+            return;
+        }
+        let fixture = Fixture::new();
+        let source = fixture.0.join("source.txt");
+        let archive = fixture.0.join("original.zip");
+        fs::write(&source, b"source").unwrap();
+        run_zip_create("provider-setup", &archive, &[source.clone()], None).unwrap();
+        let original = fs::read(&archive).unwrap();
+        let bin = fixture.0.join("bin");
+        fs::create_dir(&bin).unwrap();
+        let fake_zip = bin.join("zip");
+        fs::write(&fake_zip, "#!/bin/sh\nfor arg do\n case \"$arg\" in /*.zip) printf broken > \"$arg\";; esac\ndone\nexit 1\n").unwrap();
+        fs::set_permissions(&fake_zip, fs::Permissions::from_mode(0o755)).unwrap();
+        let old_path = env::var_os("PATH").unwrap();
+        let mut paths = vec![bin];
+        paths.extend(env::split_paths(&old_path));
+        env::set_var("PATH", env::join_paths(paths).unwrap());
+        let created_path = fixture.0.join("new.zip");
+        let created = run_archive_create(
+            None,
+            "failed-create",
+            vec![display_path(&source)],
+            display_path(&created_path),
+            "zip".into(),
+            None,
+        );
+        let added = run_archive_add(
+            None,
+            "failed-add",
+            vec![display_path(&source)],
+            display_path(&archive),
+            "new-folder".into(),
+            ConflictDecision::AllOverwrite,
+        );
+        env::set_var("PATH", old_path);
+        assert_eq!(created.state, OperationState::Failed);
+        assert_eq!(added.state, OperationState::Failed);
+        assert!(!created_path.exists());
+        assert_eq!(fs::read(&archive).unwrap(), original);
+        assert!(!fs::read_dir(&fixture.0).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".boksldirgui-op")));
+    }
 }

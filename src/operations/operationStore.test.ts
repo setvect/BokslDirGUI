@@ -1028,3 +1028,88 @@ describe('operation store', () => {
   });
 
 });
+
+describe('review: delayed operation responses', () => {
+  beforeEach(() => {
+    useOperationStore.setState({
+      dialog: null,
+      progress: null,
+      conflictPrompt: null,
+      summary: null,
+      operationHistory: [],
+      lastError: null,
+      lastConflictDecision: null,
+      applyAllConflictDecision: null,
+      activeOperationController: null,
+    });
+  });
+
+
+  it('does not put an old atomic result into a newly opened dialog', async () => {
+    let complete!: (value: { ok: true; data: unknown }) => void;
+    const atomicExecutor = vi.fn(() => new Promise<{ ok: true; data: unknown }>((resolve) => { complete = resolve; }));
+    const request = { action: ACTION_BY_ID.get('file.properties')!, panelId: 'left' as const,
+      sources: [sampleEntry], targetDir: '/target', workingDir: '/source', atomicExecutor };
+    useOperationStore.getState().openDialog(request);
+    const pending = useOperationStore.getState().confirmDialog();
+    useOperationStore.getState().closeDialog();
+    useOperationStore.getState().openDialog(request);
+    const newDialog = useOperationStore.getState().dialog;
+    complete({ ok: true, data: { name: 'old result' } });
+    await pending;
+    expect(useOperationStore.getState().dialog).toBe(newDialog);
+    expect(useOperationStore.getState().dialog?.atomicResult).toBeNull();
+  });
+
+  it('ignores a start acknowledgement after completion and a new operation', async () => {
+    let complete!: (value: { ok: true; data: import('../domain/types').OperationStarted }) => void;
+    const request = { action: ACTION_BY_ID.get('file.copy')!, panelId: 'left' as const,
+      sources: [sampleEntry], targetDir: '/target', workingDir: '/source' };
+    const first = useOperationStore.getState().startLongRunningOperation({ ...request,
+      longRunningExecutor: () => new Promise((resolve) => { complete = resolve; }) });
+    useOperationStore.getState().applyOperationSummary({ operationId: 'review-first', kind: 'copy', state: 'completed',
+      completedFiles: 1, failedFiles: 0, errors: [] });
+    await useOperationStore.getState().startLongRunningOperation({ ...request,
+      longRunningExecutor: async () => ({ ok: true, data: { operationId: 'review-second', kind: 'copy', state: 'queued' } }) });
+    complete({ ok: true, data: { operationId: 'review-first', kind: 'copy', state: 'queued' } });
+    await first;
+    expect(useOperationStore.getState().progress?.operationId).toBe('review-second');
+    expect(useOperationStore.getState().activeOperationController?.operationId).toBe('review-second');
+  });
+
+  it('uses the running operation callback while a properties dialog is open', async () => {
+    const onOperationSummary = vi.fn();
+    await useOperationStore.getState().startLongRunningOperation({ action: ACTION_BY_ID.get('file.copy')!, panelId: 'left',
+      sources: [sampleEntry], targetDir: '/target', workingDir: '/source', onOperationSummary,
+      longRunningExecutor: async () => ({ ok: true, data: { operationId: 'review-callback', kind: 'copy', state: 'queued' } }) });
+    openAction('file.properties');
+    const properties = useOperationStore.getState().dialog;
+    const summary = { operationId: 'review-callback', kind: 'copy' as const, state: 'completed' as const,
+      completedFiles: 1, failedFiles: 0, errors: [] };
+    useOperationStore.getState().applyOperationSummary(summary);
+    useOperationStore.getState().applyOperationSummary(summary);
+    expect(onOperationSummary).toHaveBeenCalledOnce();
+    expect(onOperationSummary.mock.calls[0][1].dialogKind).toBe('copy');
+    expect(useOperationStore.getState().dialog).toBe(properties);
+  });
+});
+
+it('restores a conflict prompt after a failed resolution request so it can be retried', async () => {
+  useOperationStore.setState({ dialog: null, progress: null, summary: null, conflictPrompt: null,
+    activeOperationController: null, operationHistory: [], lastError: null });
+  const error = { code: 'io_error', messageKey: 'errors.tauriInvokeFailed', path: null, details: null, recoverable: true };
+  await useOperationStore.getState().startLongRunningOperation({ action: ACTION_BY_ID.get('file.copy')!, panelId: 'left',
+    sources: [sampleEntry], targetDir: '/target', workingDir: '/source',
+    longRunningExecutor: async () => ({ ok: true, data: { operationId: 'review-control-failed', kind: 'copy', state: 'queued' } }),
+    conflictResolver: async () => ({ ok: false, error }),
+  });
+  const prompt = { operationId: 'review-control-failed', source: sampleEntry, destination: { ...sampleEntry, path: '/target/source.txt' },
+    defaultDecision: 'skip' as const, availableDecisions: ['skip', 'overwrite', 'cancel'] as import('../domain/types').ConflictDecision[] };
+  useOperationStore.getState().applyOperationConflict(prompt);
+  useOperationStore.getState().resolveConflict('overwrite');
+  await Promise.resolve();
+  expect(useOperationStore.getState().conflictPrompt).toEqual(prompt);
+  expect(useOperationStore.getState().progress?.state).toBe('waitingForConflict');
+  expect(useOperationStore.getState().lastError).toBe(error);
+  expect(useOperationStore.getState().activeOperationController?.operationId).toBe('review-control-failed');
+});
