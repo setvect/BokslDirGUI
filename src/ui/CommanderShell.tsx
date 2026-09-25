@@ -1593,6 +1593,9 @@ export function CommanderShell({
         panelId: panelOverride,
         sources,
         targetDir: operationTargetDir,
+        targetEntries: actionId === 'archive.create' && operationTargetDir === panelState[oppositePanel].path
+          ? panelState[oppositePanel].listing.entries
+          : undefined,
         workingDir: panelListing.path,
         atomicExecutor: atomicExecutorForAction(actionId, mutationClient, settings),
         longRunningExecutor: archiveCopyPlan

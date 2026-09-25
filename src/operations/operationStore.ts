@@ -86,6 +86,7 @@ export interface OpenDialogRequest {
   panelId: PanelId;
   sources: FileEntry[];
   targetDir: string | null;
+  targetEntries?: FileEntry[];
   workingDir: string;
   atomicExecutor?: AtomicCommandExecutor;
   longRunningExecutor?: LongRunningOperationExecutor;
@@ -897,10 +898,37 @@ const initialInputValueForDialog = (dialogKind: DialogKind, request: OpenDialogR
     return request.sources[0]?.name ?? '';
   }
   if (dialogKind === 'archiveCreate') {
-    return `archive-${Date.now()}.zip`;
+    return defaultArchiveCreateName(request);
   }
   return '';
 };
+
+const defaultArchiveCreateName = (request: OpenDialogRequest) => {
+  const baseName = request.sources.length === 1
+    ? request.sources[0]?.name
+    : basenameOfPath(request.workingDir);
+  const base = (baseName || '선택 항목').replace(/[\\/]/g, '_');
+  const extension = '.zip';
+  const candidate = `${base}${extension}`;
+  const existingNames = new Set((request.targetEntries ?? [])
+    .map((entry) => normalizeArchiveCandidate(entry.name)));
+  if (!existingNames.has(normalizeArchiveCandidate(candidate))) {
+    return candidate;
+  }
+  for (let number = 2; ; number += 1) {
+    const numberedCandidate = `${base} (${number})${extension}`;
+    if (!existingNames.has(normalizeArchiveCandidate(numberedCandidate))) {
+      return numberedCandidate;
+    }
+  }
+};
+
+const basenameOfPath = (path: string) => {
+  const name = path.replace(/\\/g, '/').split('/').filter(Boolean).at(-1) ?? '';
+  return /^[a-z]:$/i.test(name) ? '' : name;
+};
+
+const normalizeArchiveCandidate = (name: string) => name.normalize('NFD').toLowerCase();
 
 const requiredConfirmationPhraseForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
   if (dialogKind !== 'deletePermanent') {

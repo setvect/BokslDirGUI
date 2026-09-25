@@ -2060,7 +2060,7 @@ describe('CommanderShell', () => {
 
     await waitFor(() => expect(operationClient.archiveCreate).toHaveBeenCalledWith({
       sources: [expect.stringContaining('generic-array-6de08afde610f112')],
-      targetArchive: expect.stringMatching(new RegExp(`^${SAMPLE_LISTINGS.left.path}/archive-\\d+\\.zip$`)),
+      targetArchive: `${SAMPLE_LISTINGS.left.path}/generic-array-6de08afde610f112.zip`,
       format: 'zip',
     }));
   });
