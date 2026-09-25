@@ -75,6 +75,7 @@ idle
 - extract는 모든 entry path를 target directory 아래로 normalize한 후 쓰기 시작한다.
 - zip/7z password는 masked UI로 입력받고 log/event/history/error details에 남기지 않는다. jar/war/tar 계열에 암호를 요청하면 typed unsupported 오류를 반환한다.
 - 7z는 `archive-7z` fixture gate를 통과해야 완료로 본다.
+- 압축 생성 중에는 provider의 출력에서 처리량을 읽어 `operation_progress`를 갱신한다. ZIP/JAR/WAR는 처리한 항목·원본 바이트와 대용량 파일의 진행 점을 사용하고, 7z는 provider 백분율로 바이트·항목 수를 추정한다. 압축 파일 게시가 끝난 뒤에만 완료 상태를 보낸다.
 - 일반 패널에서 압축 가상 디렉터리로 복사하면 `file.copy` UX를 유지하되 backend 실행은 `archive_add`로 라우팅한다.
 - archive add는 source를 안전한 staging 경로에 구성한 뒤 provider에 상대 경로만 넘긴다.
 - 같은 archive entry가 있으면 `overwrite`, `skip`, `allOverwrite`, `allSkip`, `cancel`을 적용하고 overwrite는 기존 entry subtree를 제거한 뒤 추가한다.

@@ -2,7 +2,7 @@ use super::*;
 use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Condvar};
+use std::sync::{mpsc, Arc, Condvar};
 use std::thread;
 use std::time::Duration;
 
@@ -1040,12 +1040,42 @@ fn run_archive_create(
 
     let archive_format =
         archive_format_name(&target).unwrap_or_else(|| format.to_ascii_lowercase());
+    emit_progress(
+        app,
+        operation_id,
+        kind,
+        OperationState::Running,
+        &stats,
+        Some(&target),
+    );
     let command_result = match archive_format.as_str() {
-        "zip" => run_zip_create(operation_id, &staged_target, &sources, password),
-        "jar" | "war" if password.is_none() => {
-            run_zip_create(operation_id, &staged_target, &sources, None)
-        }
-        "7z" => run_7z_create(operation_id, &staged_target, &sources, password),
+        "zip" => run_zip_create_with_progress(
+            app,
+            operation_id,
+            &staged_target,
+            &sources,
+            password,
+            &target,
+            &mut stats,
+        ),
+        "jar" | "war" if password.is_none() => run_zip_create_with_progress(
+            app,
+            operation_id,
+            &staged_target,
+            &sources,
+            None,
+            &target,
+            &mut stats,
+        ),
+        "7z" => run_7z_create_with_progress(
+            app,
+            operation_id,
+            &staged_target,
+            &sources,
+            password,
+            &target,
+            &mut stats,
+        ),
         "tar" | "tar.gz" | "tar.zst" if password.is_none() => {
             run_tar_create(operation_id, &staged_target, &sources)
         }
@@ -1515,11 +1545,59 @@ fn run_archive_add(
     }
 }
 
+#[cfg(test)]
 fn run_zip_create(
     operation_id: &str,
     target: &Path,
     sources: &[PathBuf],
     password: Option<&str>,
+) -> CommandResult<()> {
+    run_zip_create_observed(operation_id, target, sources, password, None)
+}
+
+fn run_zip_create_with_progress(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    staged_target: &Path,
+    sources: &[PathBuf],
+    password: Option<&str>,
+    display_target: &Path,
+    stats: &mut OperationStats,
+) -> CommandResult<()> {
+    // Info-ZIP reports completed input bytes per entry and emits dots while a large entry runs.
+    let mut parser = ZipProgressParser::default();
+    let mut ticker = ProgressTicker::new();
+    let mut observer = |chunk: &[u8]| {
+        if let Some((completed_files, completed_bytes)) = parser.ingest(chunk) {
+            stats.completed_files = completed_files.min(stats.total_files);
+            stats.completed_bytes = completed_bytes.min(stats.total_bytes);
+            if ticker.should_emit() {
+                emit_progress(
+                    app,
+                    operation_id,
+                    OperationKind::ArchiveCreate,
+                    OperationState::Running,
+                    stats,
+                    Some(display_target),
+                );
+            }
+        }
+    };
+    run_zip_create_observed(
+        operation_id,
+        staged_target,
+        sources,
+        password,
+        Some(&mut observer),
+    )
+}
+
+fn run_zip_create_observed(
+    operation_id: &str,
+    target: &Path,
+    sources: &[PathBuf],
+    password: Option<&str>,
+    observer: Option<&mut dyn FnMut(&[u8])>,
 ) -> CommandResult<()> {
     let zip = external_binary("zip").ok_or_else(|| {
         AppError::new(
@@ -1533,7 +1611,12 @@ fn run_zip_create(
     let working_dir = common_source_parent(sources, target)?;
     let mut command = Command::new(zip);
     command.current_dir(&working_dir);
-    command.arg("-r").arg("-q");
+    command.arg("-r");
+    if observer.is_some() {
+        command.args(["-db", "-dc", "-dd", "-du", "-ds", "1m"]);
+    } else {
+        command.arg("-q");
+    }
     if let Some(password) = password {
         command.arg("-P").arg(password);
     }
@@ -1543,14 +1626,143 @@ fn run_zip_create(
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
         })?));
     }
-    run_external_command_with_secret(operation_id, command, Some(target), password)
+    run_external_command_capture_observed(operation_id, command, Some(target), observer)
+        .map(|_| ())
+        .map_err(|error| redact_error_secret(error, password))
 }
 
-fn run_7z_create(
+const ZIP_PROGRESS_DOT_BYTES: u64 = 1024 * 1024;
+
+#[derive(Default)]
+struct ZipProgressParser {
+    line: Vec<u8>,
+    completed_files: u64,
+    completed_bytes: u64,
+}
+
+impl ZipProgressParser {
+    fn ingest(&mut self, chunk: &[u8]) -> Option<(u64, u64)> {
+        let previous = (self.completed_files, self.completed_bytes);
+        for &byte in chunk {
+            if byte == b'\n' || byte == b'\r' {
+                self.update(true);
+                self.line.clear();
+            } else {
+                self.line.push(byte);
+            }
+        }
+        self.update(false);
+        let current = (self.completed_files, self.completed_bytes);
+        (current != previous).then_some(current)
+    }
+
+    fn update(&mut self, line_finished: bool) {
+        let line = String::from_utf8_lossy(&self.line);
+        let Some((before_files, before_bytes)) = zip_progress_prefix(&line) else {
+            return;
+        };
+        self.completed_files = self.completed_files.max(before_files);
+        self.completed_bytes = self.completed_bytes.max(before_bytes);
+        if !line.contains(" adding: ") {
+            return;
+        }
+        let trailing_dots = self
+            .line
+            .iter()
+            .rev()
+            .take_while(|&&byte| byte == b'.')
+            .count();
+        if trailing_dots > 0
+            && self.line.len() > trailing_dots
+            && self.line.get(self.line.len() - trailing_dots - 1) == Some(&b' ')
+        {
+            self.completed_bytes = self
+                .completed_bytes
+                .max(before_bytes.saturating_add(trailing_dots as u64 * ZIP_PROGRESS_DOT_BYTES));
+        }
+        if line_finished && line.ends_with(')') {
+            self.completed_files = self.completed_files.max(before_files.saturating_add(1));
+            if let Some(size) = zip_completed_entry_size(&line) {
+                self.completed_bytes = self.completed_bytes.max(before_bytes.saturating_add(size));
+            }
+        }
+    }
+}
+
+fn zip_progress_prefix(line: &str) -> Option<(u64, u64)> {
+    let bracket = line.find('[')?;
+    let file_count = line[..bracket].split('/').next()?.trim().parse().ok()?;
+    let bytes_end = line[bracket + 1..].find(']')? + bracket + 1;
+    let bytes = parse_zip_human_bytes(line[bracket + 1..bytes_end].split('/').next()?.trim())?;
+    Some((file_count, bytes))
+}
+
+fn zip_completed_entry_size(line: &str) -> Option<u64> {
+    let status_start = line.rfind(" (")?;
+    let before_status = &line[..status_start];
+    let size_start = before_status.rfind(" (")? + 2;
+    parse_zip_human_bytes(before_status[size_start..].strip_suffix(')')?)
+}
+
+fn parse_zip_human_bytes(value: &str) -> Option<u64> {
+    let number_end = value
+        .find(|character: char| !character.is_ascii_digit() && character != '.')
+        .unwrap_or(value.len());
+    let number: f64 = value[..number_end].parse().ok()?;
+    let multiplier = match value[number_end..].trim() {
+        "" => 1_u64,
+        "K" => 1024,
+        "M" => 1024 * 1024,
+        "G" => 1024 * 1024 * 1024,
+        "T" => 1024_u64.pow(4),
+        _ => return None,
+    };
+    Some((number * multiplier as f64) as u64)
+}
+
+fn run_7z_create_with_progress(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    staged_target: &Path,
+    sources: &[PathBuf],
+    password: Option<&str>,
+    display_target: &Path,
+    stats: &mut OperationStats,
+) -> CommandResult<()> {
+    let mut parser = SevenZipProgressParser::default();
+    let mut ticker = ProgressTicker::new();
+    let mut observer = |chunk: &[u8]| {
+        if let Some(percent) = parser.ingest(chunk) {
+            // 7z exposes a percent, so both counters are estimates until publication succeeds.
+            stats.completed_bytes = (stats.total_bytes as u128 * percent as u128 / 100) as u64;
+            stats.completed_files = (stats.total_files as u128 * percent as u128 / 100) as u64;
+            if ticker.should_emit() {
+                emit_progress(
+                    app,
+                    operation_id,
+                    OperationKind::ArchiveCreate,
+                    OperationState::Running,
+                    stats,
+                    Some(display_target),
+                );
+            }
+        }
+    };
+    run_7z_create_observed(
+        operation_id,
+        staged_target,
+        sources,
+        password,
+        Some(&mut observer),
+    )
+}
+
+fn run_7z_create_observed(
     operation_id: &str,
     target: &Path,
     sources: &[PathBuf],
     password: Option<&str>,
+    observer: Option<&mut dyn FnMut(&[u8])>,
 ) -> CommandResult<()> {
     let seven_zip = external_binary("7zz")
         .or_else(|| external_binary("7z"))
@@ -1567,6 +1779,9 @@ fn run_7z_create(
     let mut command = Command::new(seven_zip);
     command.current_dir(&working_dir);
     command.arg("a").arg("-y");
+    if observer.is_some() {
+        command.arg("-bsp1");
+    }
     if let Some(password) = password {
         command.arg(format!("-p{password}")).arg("-mhe=on");
     }
@@ -1576,7 +1791,45 @@ fn run_7z_create(
             AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
         })?));
     }
-    run_external_command_with_secret(operation_id, command, Some(target), password)
+    run_external_command_capture_observed(operation_id, command, Some(target), observer)
+        .map(|_| ())
+        .map_err(|error| redact_error_secret(error, password))
+}
+
+#[derive(Default)]
+struct SevenZipProgressParser {
+    line: Vec<u8>,
+    percent: u8,
+}
+
+impl SevenZipProgressParser {
+    fn ingest(&mut self, chunk: &[u8]) -> Option<u8> {
+        let previous = self.percent;
+        for &byte in chunk {
+            if byte == b'\n' || byte == b'\r' {
+                self.update();
+                self.line.clear();
+            } else {
+                self.line.push(byte);
+            }
+        }
+        self.update();
+        (self.percent > previous).then_some(self.percent)
+    }
+
+    fn update(&mut self) {
+        let line = String::from_utf8_lossy(&self.line);
+        let trimmed = line.trim_start();
+        let digits = trimmed.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 || digits > 3 || trimmed.as_bytes().get(digits) != Some(&b'%') {
+            return;
+        }
+        if let Ok(value) = trimmed[..digits].parse::<u8>() {
+            if value <= 100 {
+                self.percent = self.percent.max(value);
+            }
+        }
+    }
 }
 
 fn run_tar_create(operation_id: &str, target: &Path, sources: &[PathBuf]) -> CommandResult<()> {
@@ -2288,17 +2541,39 @@ fn redact_error_secret(mut error: AppError, secret: Option<&str>) -> AppError {
 
 fn run_external_command_capture(
     operation_id: &str,
+    command: Command,
+    path: Option<&Path>,
+) -> CommandResult<Vec<u8>> {
+    run_external_command_capture_observed(operation_id, command, path, None)
+}
+
+fn run_external_command_capture_observed(
+    operation_id: &str,
     mut command: Command,
     path: Option<&Path>,
+    mut on_stdout: Option<&mut dyn FnMut(&[u8])>,
 ) -> CommandResult<Vec<u8>> {
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|error| map_io_error(error, path))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
+    let (progress_tx, progress_rx) = mpsc::channel::<Vec<u8>>();
+    let observe_stdout = on_stdout.is_some();
     let mut stdout_reader = stdout.map(|mut stdout| {
         thread::spawn(move || {
             let mut bytes = Vec::new();
-            let _ = stdout.read_to_end(&mut bytes);
+            let mut chunk = [0; 8192];
+            loop {
+                match stdout.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(count) => {
+                        bytes.extend_from_slice(&chunk[..count]);
+                        if observe_stdout {
+                            let _ = progress_tx.send(chunk[..count].to_vec());
+                        }
+                    }
+                }
+            }
             bytes
         })
     });
@@ -2313,6 +2588,11 @@ fn run_external_command_capture(
     register_external_process(operation_id, Arc::clone(&child_handle));
 
     let status = loop {
+        if let Some(observer) = on_stdout.as_mut() {
+            while let Ok(chunk) = progress_rx.try_recv() {
+                observer(&chunk);
+            }
+        }
         if is_cancelled(operation_id) {
             kill_external_child(&child_handle);
         }
@@ -2345,6 +2625,11 @@ fn run_external_command_capture(
         Some(reader) => reader.join().unwrap_or_default(),
         None => Vec::new(),
     };
+    if let Some(observer) = on_stdout.as_mut() {
+        while let Ok(chunk) = progress_rx.try_recv() {
+            observer(&chunk);
+        }
+    }
     let stderr = match stderr_reader.take() {
         Some(reader) => reader.join().unwrap_or_default(),
         None => Vec::new(),
@@ -3569,6 +3854,90 @@ mod review_tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn zip_progress_parser_tracks_entries_bytes_and_chunked_dot_output() {
+        let mut parser = ZipProgressParser::default();
+        assert_eq!(
+            parser.ingest(b"  0/  3 [   0/ 305]   adding: folder/ (0) (stored 0%)\n"),
+            Some((1, 0))
+        );
+        assert_eq!(
+            parser.ingest(b"  1/  2 [   0/ 305]   adding: folder/b.txt (5) (stored 0%)\n"),
+            Some((2, 5))
+        );
+        assert_eq!(
+            parser.ingest(b"  2/  1 [   5/ 16M]   adding: folder/big.bin ."),
+            Some((2, ZIP_PROGRESS_DOT_BYTES + 5))
+        );
+        assert_eq!(
+            parser.ingest(b"... (16M) (deflated 50%)\n"),
+            Some((3, 16 * 1024 * 1024 + 5))
+        );
+        assert_eq!(parse_zip_human_bytes("1.5G"), Some(1610612736));
+    }
+
+    #[test]
+    fn seven_zip_progress_parser_tracks_carriage_return_percentages() {
+        let mut parser = SevenZipProgressParser::default();
+        assert_eq!(parser.ingest(b" 12% 3 + file\r 47"), Some(12));
+        assert_eq!(parser.ingest(b"% 8 + file\r"), Some(47));
+        assert_eq!(parser.ingest(b"warning 99%\n 100%\r"), Some(100));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_command_observer_receives_output_before_process_exit() {
+        let fixture = Fixture::new();
+        let signal = fixture.0.join("observed");
+        let mut command = Command::new("/bin/sh");
+        command.arg("-c").arg(
+            r#"printf 'ready\n'; count=0; while [ ! -f "$1" ] && [ "$count" -lt 40 ]; do sleep 0.05; count=$((count + 1)); done; test -f "$1""#,
+        );
+        command.arg("sh").arg(&signal);
+        let mut observer = |chunk: &[u8]| {
+            if chunk.windows(5).any(|window| window == b"ready") {
+                fs::write(&signal, b"seen").unwrap();
+            }
+        };
+        let output = run_external_command_capture_observed(
+            "stream-test",
+            command,
+            Some(&fixture.0),
+            Some(&mut observer),
+        )
+        .unwrap();
+        assert_eq!(output, b"ready\n");
+        assert!(signal.exists());
+    }
+
+    #[test]
+    fn zip_create_reports_processed_items_before_publication() {
+        let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+        if external_binary("zip").is_none() {
+            return;
+        }
+        let fixture = Fixture::new();
+        let source = fixture.0.join("한글 폴더");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("가.txt"), b"hello").unwrap();
+        fs::write(source.join("b.txt"), b"world").unwrap();
+        let archive = fixture.0.join("output.zip");
+        let mut stats = OperationStats::new(3, 10);
+        run_zip_create_with_progress(
+            None,
+            "zip-progress-test",
+            &archive,
+            &[source],
+            None,
+            &archive,
+            &mut stats,
+        )
+        .unwrap();
+        assert!(archive.exists());
+        assert_eq!(stats.completed_files, 3);
+        assert_eq!(stats.completed_bytes, 10);
     }
 
     #[test]
