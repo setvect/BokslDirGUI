@@ -49,7 +49,7 @@ interface AppAction {
 | `file.copy` | file | y/F5 | Edit/Copy to Other Panel | safe | 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add` |
 | `file.move` | file | x/F6 | Edit/Move | destructive | start_move |
 | `file.trash` | file | d | File/Delete | destructive | start_delete trash |
-| `file.deletePermanent` | file | D/Shift+Delete | File/Permanent Delete | irreversible | start_delete permanent |
+| `file.deletePermanent` | file | Shift+D/Shift+Delete | File/Permanent Delete | irreversible | start_delete permanent |
 | `file.mkdir` | file | a/F7 | File/New Folder | safe | create_dir |
 | `file.rename` | file | r/F2 | File/Rename | destructive | rename_entry |
 | `app.quit` | file | Cmd+Q | File/Quit | none | getCurrentWindow().close safety policy |

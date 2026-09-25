@@ -2401,7 +2401,7 @@ describe('CommanderShell', () => {
     expect(within(shortcutDialog).getByText('복사')).toBeTruthy();
     expect(within(shortcutDialog).getByText('반대 패널로 복사')).toBeTruthy();
     expect(within(shortcutDialog).getByText('y/F5')).toBeTruthy();
-    expect(within(shortcutDialog).getByText('D/Shift+Delete')).toBeTruthy();
+    expect(within(shortcutDialog).getByText('Shift+D/Shift+Delete')).toBeTruthy();
     expect(within(shortcutDialog).getByText('Ctrl+B/tb+a')).toBeTruthy();
     expect(within(shortcutDialog).queryByText('file.copy')).toBeNull();
   });

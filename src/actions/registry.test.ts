@@ -280,7 +280,7 @@ describe('action registry', () => {
     expect(shortcutLabelForAction(ACTION_BY_ID.get('filter.start')!)).toBe('/');
     expect(shortcutLabelForAction(ACTION_BY_ID.get('archive.list')!)).toBe('Enter on archive');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('file.copy')!)).toBe('y/F5');
-    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('file.deletePermanent')!)).toBe('D/Shift+Delete');
+    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('file.deletePermanent')!)).toBe('Shift+D/Shift+Delete');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('bookmark.add')!)).toBe('Ctrl+B/tb+a');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('help.search')!)).toBe('');
   });

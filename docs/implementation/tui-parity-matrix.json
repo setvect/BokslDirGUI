@@ -806,7 +806,7 @@
         "file.deletePermanent"
       ],
       "guiShortcutLabels": [
-        "D/Shift+Delete"
+        "Shift+D/Shift+Delete"
       ],
       "guiMenuPaths": [
         [
@@ -815,7 +815,7 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: file.deletePermanent maps D/Shift+Delete and File > Permanent Delete",
+        "src/actions/registry.ts: file.deletePermanent maps Shift+D/Shift+Delete and File > Permanent Delete",
         "src/ui/CommanderShell.test.tsx: typed PERMANENT_DELETE confirmation before operation client execution",
         "src/operations/operationStore.test.ts: permanent delete defaults to cancellation until confirmation text is typed",
         "src-tauri/src/lib.rs: start_delete_requires_confirm_token_for_permanent_delete and start_delete_permanently_removes_confirmed_targets"
