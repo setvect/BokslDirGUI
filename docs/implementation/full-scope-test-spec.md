@@ -49,7 +49,7 @@
 
 ### 3.4 압축
 
-- zip/jar/war list/create/extract fixture.
+- zip/jar/war list/create/extract fixture. macOS `zip`이 UTF-8 표시 비트 없이 저장한 한글 이름도 목록·선택 추출에서 원본대로 보여야 한다.
 - tar/tar.gz/tgz/tar.zst/tzst list/create/extract fixture.
 - zip/7z list/create/extract/password fixture. provider가 있는 환경에서 7z 대형 목록과 암호 round-trip을 조건부 검증한다.
 - zip-slip/path traversal fixture 차단.

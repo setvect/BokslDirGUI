@@ -2184,18 +2184,7 @@ fn list_zip_entries_for_operation(
     archive: &Path,
     password: Option<&str>,
 ) -> CommandResult<Vec<String>> {
-    let unzip = external_binary("unzip").ok_or_else(|| {
-        AppError::new(
-            "unsupported",
-            "errors.archiveProviderUnavailable",
-            Some(archive),
-            true,
-        )
-        .with_detail("provider", "unzip")
-    })?;
-    let mut command = Command::new(unzip);
-    command.arg("-Z1");
-    command.arg(archive);
+    let command = super::archive::zip_name_listing_command(archive);
     let stdout =
         run_external_command_capture_with_secret(operation_id, command, Some(archive), password)?;
     Ok(String::from_utf8_lossy(&stdout)

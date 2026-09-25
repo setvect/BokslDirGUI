@@ -1348,14 +1348,31 @@ mod archive {
         }
     }
 
+    // macOS unzip -Z1 mangles UTF-8 filenames when the ZIP UTF-8 flag is absent.
+    // The system tar (libarchive) preserves the stored names, including archives
+    // written by macOS zip, while unzip still supplies the metadata below.
+    pub(super) fn zip_name_listing_command(archive: &Path) -> Command {
+        #[cfg(target_os = "macos")]
+        let mut command = {
+            let mut command = Command::new("tar");
+            command.arg("-tf");
+            command
+        };
+        #[cfg(not(target_os = "macos"))]
+        let mut command = {
+            let mut command = Command::new("unzip");
+            command.arg("-Z1");
+            command
+        };
+        command.arg(archive);
+        command
+    }
+
     fn list_zip_entries_with_metadata(
         archive: &Path,
         _password: Option<&str>,
     ) -> CommandResult<(Vec<ArchiveEntryInfo>, bool)> {
-        let mut names_command = Command::new("unzip");
-        names_command.arg("-Z1");
-        let output = names_command
-            .arg(archive)
+        let output = zip_name_listing_command(archive)
             .output()
             .map_err(|error| map_io_error(error, Some(archive)))?;
         let names = parse_zip_name_output(output, archive, None)?;
@@ -3448,6 +3465,10 @@ mod tests {
         let fixture = TempFixture::new();
         fs::write(fixture.root.join("folder").join("beta.txt"), b"nested")
             .expect("nested archive fixture should be written");
+        let korean_dir = fixture.root.join("한글 폴더");
+        fs::create_dir_all(&korean_dir).expect("Korean archive directory should be created");
+        fs::write(korean_dir.join("메모.md"), b"korean path")
+            .expect("Korean archive fixture should be written");
         let archive_path = fixture.root.join("round-trip.zip");
         let extract_dir = fixture.root.join("extract");
         let partial_extract_dir = fixture.root.join("partial-extract");
@@ -3463,6 +3484,7 @@ mod tests {
                     .to_string_lossy()
                     .into_owned(),
                 fixture.root.join("folder").to_string_lossy().into_owned(),
+                korean_dir.to_string_lossy().into_owned(),
             ],
             archive_path.to_string_lossy().into_owned(),
             "zip".to_string(),
@@ -3478,6 +3500,14 @@ mod tests {
             .entries
             .iter()
             .any(|entry| entry.name == "alpha.txt"));
+        assert!(listing
+            .entries
+            .iter()
+            .any(|entry| entry.path.ends_with("!한글 폴더/메모.md")));
+        assert!(listing
+            .entries
+            .iter()
+            .all(|entry| !entry.name.contains('�')));
         assert!(!listing
             .entries
             .iter()
@@ -3549,6 +3579,11 @@ mod tests {
             fs::read(extract_dir.join("folder").join("beta.txt"))
                 .expect("nested extracted file should exist"),
             b"nested"
+        );
+        assert_eq!(
+            fs::read(extract_dir.join("한글 폴더").join("메모.md"))
+                .expect("Korean extracted file should exist"),
+            b"korean path"
         );
         assert_eq!(
             fs::read(extract_dir.join("folder").join("added.txt"))
@@ -3639,6 +3674,21 @@ mod tests {
         assert!(
             !partial_extract_dir.join("folder").exists(),
             "copying from inside archive folder should not recreate the current folder prefix"
+        );
+        operation::start_archive_extract(
+            None,
+            archive_path.to_string_lossy().into_owned(),
+            partial_extract_dir.to_string_lossy().into_owned(),
+            None,
+            ConflictDecision::Overwrite,
+            Some(vec!["한글 폴더/메모.md".to_string()]),
+            Some("한글 폴더".to_string()),
+        )
+        .expect("Korean entry should extract by its displayed name");
+        assert_eq!(
+            fs::read(partial_extract_dir.join("메모.md"))
+                .expect("selected Korean entry should exist"),
+            b"korean path"
         );
     }
 
@@ -3845,15 +3895,16 @@ mod tests {
 
         let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
         let fixture = TempFixture::new();
-        let fake_unzip = fixture.root.join("unzip");
-        fs::write(&fake_unzip, "#!/bin/sh\nwhile :; do :; done\n")
-            .expect("fake unzip provider should be written");
-        let mut permissions = fs::metadata(&fake_unzip)
-            .expect("fake unzip metadata should exist")
+        let listing_provider = if cfg!(target_os = "macos") { "tar" } else { "unzip" };
+        let fake_provider = fixture.root.join(listing_provider);
+        fs::write(&fake_provider, "#!/bin/sh\nwhile :; do :; done\n")
+            .expect("fake archive listing provider should be written");
+        let mut permissions = fs::metadata(&fake_provider)
+            .expect("fake archive listing metadata should exist")
             .permissions();
         permissions.set_mode(0o755);
-        fs::set_permissions(&fake_unzip, permissions)
-            .expect("fake unzip provider should be executable");
+        fs::set_permissions(&fake_provider, permissions)
+            .expect("fake archive listing provider should be executable");
         let archive = fixture.root.join("blocked.zip");
         File::create(&archive).expect("blocked archive fixture should be created");
         let old_path = env::var_os("PATH");
