@@ -14,6 +14,7 @@
 | `tui-parity-matrix.md` / `tui-parity-matrix.json` | 기존 TUI 액션·단축키·메뉴·서브메뉴와 GUI 구현 상태를 1:1로 대조 | Phase 0 하드 게이트, 허위 완료 방지 |
 | `full-scope-baseline.md` | 첫 완성 기준과 범위 분류 | 구현 범위 기준선 |
 | `tauri-command-api.md` | React↔Rust command/event DTO 계약 | 프론트/백엔드 병렬 구현 기준 |
+| [drag-and-drop.md](drag-and-drop.md) | 내부 포인터 세션, 외부 인계, 좌표 계약과 회귀 검증 | 잘못된 대상 파일 작업 방지 |
 | `component-design.md` | React 컴포넌트 구조와 책임 | UI 구현 분해 기준 |
 | `file-operation-state-machine.md` | 복사/이동/삭제/압축 작업 상태와 전이 | 데이터 안전성 기준 |
 | `action-registry.md` | 메뉴/단축키/컨텍스트 메뉴 공통 액션 모델 | UX 일관성 기준 |

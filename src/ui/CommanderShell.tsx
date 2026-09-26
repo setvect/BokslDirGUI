@@ -10,7 +10,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import {
   ACTIONS,
   ACTION_BY_ID,
@@ -80,6 +80,8 @@ import {
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
 import { commanderKeyboardHasOwner, commanderKeyboardIsSuspended, commanderKeyboardOwners, useCommanderKeyboardBoundaryProps } from './keyboardOwnership';
 import nativeFileDragIcon from '../../src-tauri/icons/32x32.png?inline';
+import { nativeDragPreview } from './nativeDragPreview';
+import { beginPointerFileDrag, traceFileDrag, type DragPoint } from './pointerFileDrag';
 import {
   AboutDialog,
   ArchivePasswordPrompt,
@@ -176,11 +178,10 @@ interface CommanderShellProps {
 
 interface NativeFileDragCompletion {
   result: NativeDragResult;
-  clientPosition: { x: number; y: number } | null;
 }
 
 interface NativeFileDragClient {
-  start(paths: string[], mode: NativeFileDragMode, onResult: (completion: NativeFileDragCompletion) => void): Promise<void>;
+  start(paths: string[], mode: NativeFileDragMode, preview: string, onResult: (completion: NativeFileDragCompletion) => void): Promise<void>;
 }
 
 interface NativeFileDropClient {
@@ -192,10 +193,11 @@ interface NativeFileDropRuntime {
   handleListenError(error: unknown): void;
 }
 
-interface NativeFileDragSource {
+interface FileDragSource {
   panelId: PanelId;
   entries: FileEntry[];
   mode: NativeFileDragMode;
+  sourcePath: string;
 }
 
 interface AppController {
@@ -211,19 +213,11 @@ const TAURI_NATIVE_FILE_DROP_CLIENT: NativeFileDropClient = {
 };
 
 const TAURI_NATIVE_FILE_DRAG_CLIENT: NativeFileDragClient = {
-  start: (paths, mode, onResult) => startDrag({
+  start: (paths, mode, preview, onResult) => startDrag({
     item: paths,
-    icon: nativeFileDragIcon,
+    icon: preview,
     mode,
-  }, async ({ result }) => {
-    let clientPosition: NativeFileDragCompletion['clientPosition'] = null;
-    try {
-      clientPosition = await invoke<NonNullable<NativeFileDragCompletion['clientPosition']>>('main_cursor_position');
-    } catch {
-      // The drag result is still useful for external targets when cursor lookup is unavailable.
-    }
-    onResult({ result, clientPosition });
-  }),
+  }, ({ result }) => onResult({ result })),
 };
 
 interface SafeMutationClient {
@@ -363,7 +357,10 @@ export function CommanderShell({
   const topMenuKeyboardRuntimeRef = useRef<TopMenuKeyboardRuntime | null>(null);
   const topMenuStateRef = useRef<TopMenuState | null>(null);
   const nativeFileDropRuntimeRef = useRef<NativeFileDropRuntime | null>(null);
-  const nativeFileDragSourceRef = useRef<NativeFileDragSource | null>(null);
+  const nativeFileDragSourceRef = useRef<FileDragSource | null>(null);
+  const pointerDragCleanupRef = useRef<(() => void) | null>(null);
+  const commitPanelDragRef = useRef<(source: FileDragSource, target: PanelId | null, mode: NativeFileDragMode) => void>(() => {});
+  const [pointerDragPreview, setPointerDragPreview] = useState<{ entries: FileEntry[]; point: DragPoint; mode: NativeFileDragMode } | null>(null);
   const nativeDropOverlayRequestedRef = useRef(false);
   const navigationRequestRef = useRef<Record<PanelId, number>>({ left: 0, right: 0 });
   const locationsRequestRef = useRef(0);
@@ -416,7 +413,6 @@ export function CommanderShell({
     right: [panelState.right],
   }));
   const [activeTab, setActiveTab] = useState<Record<PanelId, number>>({ left: 0, right: 0 });
-  const [dragSource, setDragSource] = useState<{ panelId: PanelId; entry: FileEntry } | null>(null);
   const [dragOverPanel, setDragOverPanel] = useState<{ panelId: PanelId; intent: 'copy' | 'move' | 'import' | 'blocked' } | null>(null);
   const [nativeFileDragUnavailable, setNativeFileDragUnavailable] = useState(false);
   const viewMetrics = viewMetricsForSettings(settings.view);
@@ -1022,21 +1018,48 @@ export function CommanderShell({
     return false;
   };
 
-  const handleEntryDragStart = (event: DragEvent<HTMLElement>, panelId: PanelId, entry: FileEntry) => {
-    if (!resolvedNativeFileDragClient || entry.isVirtual) {
-      setDragSource({ panelId, entry });
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    const panel = panelState[panelId];
+  const dragEntries = (panelId: PanelId, entry: FileEntry): FileDragSource => {
+    const panel = panelStateRef.current[panelId];
     const selected = new Set(panel.selectedPaths);
-    const entries = selected.has(entry.path)
+    return { panelId, sourcePath: panel.path, mode: 'copy', entries: selected.has(entry.path)
       ? panel.listing.entries.filter((candidate) => !candidate.isVirtual && selected.has(candidate.path))
-      : [entry];
-    const mode: NativeFileDragMode = event.shiftKey ? 'move' : 'copy';
-    const session: NativeFileDragSource = { panelId, entries, mode };
+      : [entry] };
+  };
+
+  const dragTargetBlocked = (source: FileDragSource, target: PanelId | null) => {
+    if (!target || target === source.panelId) return true;
+    const panels = panelStateRef.current;
+    return isOperationInFlight(useOperationStore.getState()) || commanderKeyboardHasOwner()
+      || panels[source.panelId].loading || panels[target].loading
+      || panels[source.panelId].path !== source.sourcePath
+      || panels[target].path === source.sourcePath || isArchiveVirtualPath(panels[target].path)
+      || !sourcesBelongToListing(source.entries, panels[source.panelId].listing);
+  };
+
+  commitPanelDragRef.current = (source, target, mode) => {
+    setPointerDragPreview(null);
+    setDragOverPanel(null);
+    const blocked = dragTargetBlocked(source, target);
+    traceFileDrag('drop', { source: source.panelId, target, mode, blocked, count: source.entries.length });
+    if (blocked || !target) return;
+    const action = ACTION_BY_ID.get(mode === 'move' ? 'file.move' : 'file.copy')!;
+    handleAction(action, source.panelId, source.entries, panelStateRef.current[target].path);
+  };
+
+  const startNativeEntryDrag = (session: FileDragSource, mode: NativeFileDragMode) => {
+    setPointerDragPreview(null);
+    setDragOverPanel(null);
+    if (!resolvedNativeFileDragClient || isArchiveVirtualPath(session.sourcePath)) return;
+    const { panelId, entries } = session;
+    let preview = nativeFileDragIcon;
+    if (isTauriRuntime()) {
+      try {
+        preview = nativeDragPreview(entries);
+      } catch {
+        // Keep file dragging available if canvas rendering fails on this WebView.
+      }
+    }
+    session.mode = mode;
     nativeFileDragSourceRef.current = session;
     setActivePanel(panelId);
     setStatusMessage(statusText.externalDragStart(entries.length));
@@ -1044,31 +1067,9 @@ export function CommanderShell({
     void resolvedNativeFileDragClient.start(
       entries.map((candidate) => candidate.path),
       mode,
-      ({ result, clientPosition }) => {
-        const targetPanel = result !== 'Dropped' && clientPosition
-          ? panelIdAtClientPosition(clientPosition)
-          : null;
-        if (targetPanel) {
-          nativeFileDragSourceRef.current = null;
-          setDragOverPanel(null);
-          const action = ACTION_BY_ID.get(mode === 'move' ? 'file.move' : 'file.copy');
-          const targetState = panelState[targetPanel];
-          if (!action) {
-            return;
-          }
-          if (targetPanel === panelId || operationBusy || isArchiveVirtualPath(targetState.path)) {
-            setStatusMessage(statusText.unavailableInContext(labelForAction(action, settings.language)));
-            return;
-          }
-          handleAction(action, panelId, entries, targetState.path);
-          const subject = entries.length === 1 ? entries[0].name : statusText.dragItemCount(entries.length);
-          setStatusMessage(statusText.dragOperation(
-            mode,
-            subject,
-            panelIdLabel(targetPanel, settings.language),
-          ));
-          return;
-        }
+      preview,
+      ({ result }) => {
+        traceFileDrag('native-end', { source: panelId, result });
         window.setTimeout(() => {
           if (nativeFileDragSourceRef.current !== session) {
             return;
@@ -1090,67 +1091,73 @@ export function CommanderShell({
     });
   };
 
+  const handleEntryPointerDown = (event: ReactPointerEvent<HTMLElement>, panelId: PanelId, entry: FileEntry) => {
+    if (entry.isVirtual || event.button !== 0 || operationBusy || commanderKeyboardHasOwner()) return;
+    pointerDragCleanupRef.current?.();
+    const source = dragEntries(panelId, entry);
+    let previousHover = '';
+    pointerDragCleanupRef.current = beginPointerFileDrag(event, {
+      start: () => {
+        setActivePanel(panelId);
+        shortcutSequenceRef.current = [];
+        if (shortcutSequenceTimeoutRef.current) window.clearTimeout(shortcutSequenceTimeoutRef.current);
+        traceFileDrag('start', { source: panelId, count: source.entries.length });
+      },
+      update: (point, mode) => {
+        const target = panelIdAtClientPosition(point);
+        const blocked = dragTargetBlocked(source, target);
+        const hoverKey = `${target}:${mode}:${blocked}`;
+        if (hoverKey !== previousHover) {
+          traceFileDrag('hover', { source: panelId, target, mode, blocked, point, pixelRatio: window.devicePixelRatio });
+          previousHover = hoverKey;
+        }
+        setPointerDragPreview({ entries: source.entries, point, mode });
+        setDragOverPanel(target ? { panelId: target, intent: blocked ? 'blocked' : mode } : null);
+      },
+      drop: (point, mode) => {
+        traceFileDrag('release', { source: panelId, point, mode });
+        commitPanelDragRef.current(source, panelIdAtClientPosition(point), mode);
+      },
+      external: (mode) => startNativeEntryDrag(source, mode),
+      cancel: () => {
+        setPointerDragPreview(null);
+        setDragOverPanel(null);
+        traceFileDrag('cancel', { source: panelId });
+      },
+    });
+  };
+
+  useEffect(() => () => pointerDragCleanupRef.current?.(), []);
+
+  // HTML drop events belong only to files arriving from outside this WebView.
   const handlePanelDrop = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
     event.preventDefault();
     setDragOverPanel(null);
     const files = Array.from(event.dataTransfer.files ?? []);
-    if (files.length > 0 && !dragSource) {
-      if (nativeFileDropEnabled) {
-        return;
-      }
-      const externalEntries = files
-        .map(fileEntryFromExternalDropFile)
-        .filter((entry): entry is FileEntry => Boolean(entry));
-      if (externalEntries.length !== files.length) {
-        setDragSource(null);
-        setStatusMessage(statusText.externalDropPathRequired);
-        return;
-      }
-      const action = ACTIONS.find((candidate) => candidate.id === 'file.copy');
-      if (action) {
-        handleAction(action, targetPanel, externalEntries, panelState[targetPanel].path);
-        setStatusMessage(statusText.externalImport(externalEntries.length, panelIdLabel(targetPanel, settings.language)));
-      }
-      setDragSource(null);
+    if (files.length === 0 || nativeFileDropEnabled) return;
+    const externalEntries = files.map(fileEntryFromExternalDropFile)
+      .filter((entry): entry is FileEntry => Boolean(entry));
+    if (externalEntries.length !== files.length) {
+      setStatusMessage(statusText.externalDropPathRequired);
       return;
     }
-    if (!dragSource || dragSource.panelId === targetPanel || dragSource.entry.isVirtual) {
-      setDragSource(null);
-      return;
-    }
-    const action = ACTIONS.find((candidate) => candidate.id === (event.shiftKey ? 'file.move' : 'file.copy'));
-    if (action) {
-      const sourcePanel = panelStateRef.current[dragSource.panelId];
-      const selected = new Set(sourcePanel.selectedPaths);
-      const sources = selected.has(dragSource.entry.path)
-        ? sourcePanel.listing.entries.filter((entry) => !entry.isVirtual && selected.has(entry.path))
-        : [dragSource.entry];
-      handleAction(action, dragSource.panelId, sources, panelStateRef.current[targetPanel].path);
-      setStatusMessage(statusText.dragOperation(event.shiftKey ? 'move' : 'copy', dragSource.entry.name, panelIdLabel(targetPanel, settings.language)));
-    }
-    setDragSource(null);
+    const action = ACTION_BY_ID.get('file.copy')!;
+    handleAction(action, targetPanel, externalEntries, panelStateRef.current[targetPanel].path);
+    setStatusMessage(statusText.externalImport(externalEntries.length, panelIdLabel(targetPanel, settings.language)));
   };
 
   const handlePanelDragOver = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
+    if (!Array.from(event.dataTransfer.types ?? []).includes('Files')) return;
     event.preventDefault();
-    const isExternalFileDrag = !dragSource && Array.from(event.dataTransfer.types ?? []).includes('Files');
-    if (isExternalFileDrag && nativeFileDropEnabled && isTauriRuntime() && !nativeDropOverlayRequestedRef.current) {
+    if (nativeFileDropEnabled && isTauriRuntime() && !nativeDropOverlayRequestedRef.current) {
       nativeDropOverlayRequestedRef.current = true;
       void invoke('show_drop_overlay').catch((error: unknown) => {
         nativeDropOverlayRequestedRef.current = false;
         setStatusMessage(statusText.externalDropUnavailable(String(error)));
       });
     }
-    const intent = dragSource
-      ? dragSource.entry.isVirtual || dragSource.panelId === targetPanel
-        ? 'blocked'
-        : event.shiftKey
-          ? 'move'
-          : 'copy'
-      : 'import';
-    setDragOverPanel((current) =>
-      current?.panelId === targetPanel && current.intent === intent ? current : { panelId: targetPanel, intent },
-    );
+    const blocked = operationBusy || isArchiveVirtualPath(panelStateRef.current[targetPanel].path);
+    setDragOverPanel({ panelId: targetPanel, intent: blocked ? 'blocked' : 'import' });
   };
 
   const selectEntry = (panelId: PanelId, index: number, entry: FileEntry, mode: SelectionMode) => {
@@ -1903,18 +1910,7 @@ export function CommanderShell({
     }
     if (isOwnNativeDrag && nativeDragSource) {
       nativeFileDragSourceRef.current = null;
-      const action = ACTION_BY_ID.get(nativeDragSource.mode === 'move' ? 'file.move' : 'file.copy');
-      if (action) {
-        handleAction(action, nativeDragSource.panelId, nativeDragSource.entries, targetState.path);
-        const subject = nativeDragSource.entries.length === 1
-          ? nativeDragSource.entries[0].name
-          : statusText.dragItemCount(nativeDragSource.entries.length);
-        setStatusMessage(statusText.dragOperation(
-          nativeDragSource.mode,
-          subject,
-          panelIdLabel(targetPanel, settings.language),
-        ));
-      }
+      commitPanelDragRef.current(nativeDragSource, targetPanel, nativeDragSource.mode);
       return;
     }
     void importNativeDroppedPaths(event.paths, targetPanel, targetState.path);
@@ -2312,11 +2308,7 @@ export function CommanderShell({
           onGotoPath={() => setPathPromptPanel('left')}
           onClearFilter={() => handleAction(ACTION_BY_ID.get('filter.clear')!, 'left')}
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
-          onEntryDragStart={(event, entry) => handleEntryDragStart(event, 'left', entry)}
-          onEntryDragEnd={() => {
-            setDragSource(null);
-            setDragOverPanel(null);
-          }}
+          onEntryPointerDown={(event, entry) => handleEntryPointerDown(event, 'left', entry)}
           dropIntent={dragOverPanel?.panelId === 'left' ? dragOverPanel.intent : null}
           onPanelDragOver={(event) => handlePanelDragOver(event, 'left')}
           onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'left' ? null : current)}
@@ -2347,17 +2339,23 @@ export function CommanderShell({
           onGotoPath={() => setPathPromptPanel('right')}
           onClearFilter={() => handleAction(ACTION_BY_ID.get('filter.clear')!, 'right')}
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
-          onEntryDragStart={(event, entry) => handleEntryDragStart(event, 'right', entry)}
-          onEntryDragEnd={() => {
-            setDragSource(null);
-            setDragOverPanel(null);
-          }}
+          onEntryPointerDown={(event, entry) => handleEntryPointerDown(event, 'right', entry)}
           dropIntent={dragOverPanel?.panelId === 'right' ? dragOverPanel.intent : null}
           onPanelDragOver={(event) => handlePanelDragOver(event, 'right')}
           onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'right' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'right')}
         />
       </section>
+      {pointerDragPreview && (
+        <div className="file-drag-preview" aria-hidden="true" style={{
+          left: Math.min(pointerDragPreview.point.x + 16, Math.max(0, window.innerWidth - 340)),
+          top: Math.min(pointerDragPreview.point.y + 16, Math.max(0, window.innerHeight - 160)),
+        }}>
+          <strong>{labelForAction(ACTION_BY_ID.get(pointerDragPreview.mode === 'move' ? 'file.move' : 'file.copy')!, settings.language)}</strong>
+          {pointerDragPreview.entries.slice(0, 3).map((entry) => <div key={entry.path}>{entryIcon(entry.kind)} {entry.name}</div>)}
+          {pointerDragPreview.entries.length > 3 && <div>+{pointerDragPreview.entries.length - 3}</div>}
+        </div>
+      )}
       <BottomStatusStrip
         language={settings.language}
         activePanel={activePanel}
@@ -3091,8 +3089,7 @@ interface FilePanelProps {
   onEntrySelect(index: number, entry: FileEntry, mode: SelectionMode): void;
   onEntryOpen(entry: FileEntry): void;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
-  onEntryDragStart(event: DragEvent<HTMLElement>, entry: FileEntry): void;
-  onEntryDragEnd(): void;
+  onEntryPointerDown(event: ReactPointerEvent<HTMLElement>, entry: FileEntry): void;
   dropIntent: 'copy' | 'move' | 'import' | 'blocked' | null;
   onPanelDragOver(event: DragEvent<HTMLElement>): void;
   onPanelDragLeave(): void;
@@ -3124,8 +3121,7 @@ function FilePanel({
   onEntrySelect,
   onEntryOpen,
   onOpenAction,
-  onEntryDragStart,
-  onEntryDragEnd,
+  onEntryPointerDown,
   dropIntent,
   onPanelDragOver,
   onPanelDragLeave,
@@ -3324,9 +3320,9 @@ function FilePanel({
                         title={tooltip}
                         aria-label={accessibleName}
                         aria-description={tooltip}
-                        draggable={!entry.isVirtual}
-                        onDragStart={(event) => onEntryDragStart(event, entry)}
-                        onDragEnd={onEntryDragEnd}
+                        draggable={false}
+                        onPointerDown={(event) => onEntryPointerDown(event, entry)}
+                        onDragStart={(event) => event.preventDefault()}
                         onClick={(event) => onEntrySelect(
                           virtualRow.index,
                           entry,

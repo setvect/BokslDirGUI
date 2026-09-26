@@ -2478,27 +2478,6 @@ fn hide_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
     overlay.hide().map_err(|error| error.to_string())
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ClientCursorPosition {
-    x: f64,
-    y: f64,
-}
-
-#[tauri::command]
-fn main_cursor_position(app: tauri::AppHandle) -> Result<ClientCursorPosition, String> {
-    let main = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window is unavailable".to_string())?;
-    let cursor = app.cursor_position().map_err(|error| error.to_string())?;
-    let origin = main.inner_position().map_err(|error| error.to_string())?;
-    let scale_factor = main.scale_factor().map_err(|error| error.to_string())?;
-    Ok(ClientCursorPosition {
-        x: (cursor.x - f64::from(origin.x)) / scale_factor,
-        y: (cursor.y - f64::from(origin.y)) / scale_factor,
-    })
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -2537,8 +2516,7 @@ pub fn run() {
             load_settings,
             save_settings,
             show_drop_overlay,
-            hide_drop_overlay,
-            main_cursor_position
+            hide_drop_overlay
         ])
         .run(tauri::generate_context!())
         .expect("failed to run BokslDirGUI Tauri application");

@@ -250,15 +250,19 @@
 
 ## 7. Drag and drop / mouse GUI 기능 TODO
 
-상태: 2026-07-31 구현 반영. Tauri 데스크톱에서는 row drag 시작 시 선택된 OS absolute path를 `tauri-plugin-drag` 네이티브 세션으로 전달해 VS Code/Finder 등 창 밖까지 드래그를 유지한다. 외부 대상이 드롭을 수락하면 외부 드래그 완료로 처리하고, 네이티브 세션이 취소 상태로 끝났으나 커서가 반대 패널 안에 있으면 메인 창의 실제 커서/내부 창 좌표로 대상 패널을 판정해 기본 copy, `Shift` drag는 move로 기존 작업 경계에 연결한다. Tauri의 메인 WebView native file-drop 수신과 HTML5/native drag-out이 서로 가로채지 않도록 메인 창은 `dragDropEnabled: false`로 두고, 외부 파일이 들어올 때만 메인 콘텐츠 영역 위에 표시되는 투명 `drop-overlay`가 Finder/Explorer 경로와 물리 좌표를 수신한다. overlay는 좌표를 논리 좌표로 변환해 메인 창에 전달하고 즉시 숨으며, 메인 창은 대상 패널을 판별한 뒤 기존 copy operation/충돌 정책으로 연결한다. 네이티브 drag-out 시작 자체가 실패하면 이후 제스처는 HTML5 패널 드래그로 자동 강등해 패널 간 조작까지 함께 막히지 않게 한다.
+상태: 2026-09-27 내부 드래그 구조 수정. 세부 원인·세션 계약·검증 범위는 [드래그 앤 드롭 설계](drag-and-drop.md)를 참조한다.
 
-- [x] row drag source 모델 구현.
-- [x] panel-to-panel drag copy/move 의도 결정 modifier 정책 구현.
-- [x] external file drop/import 정책 결정 및 Tauri native event 연결: OS absolute path가 확인된 파일만 drop 좌표의 target panel로 copy import하고, 확인 불가 파일은 차단한다.
-- [x] native drag-out 연결: 선택 파일/디렉터리를 외부 앱에 OS 파일 목록으로 전달하고 완료/취소/오류 상태를 표시한다.
-- [x] drop target hover/forbidden target 기본 UI 구현.
-- [x] Tests: component-level HTML5 handler, native drag-out handoff/실패 시 HTML5 복구, Tauri native event/좌표 기반 target panel 및 native 종료 커서 기반 panel-to-panel 회귀 테스트.
-- [x] 후속 강화: 외부 파일 import는 기존 copy operation dialog/충돌 정책을 재사용해 안전 확인 후 실행한다.
+- [x] 내부 포인터 세션에서 시작 패널과 선택 항목을 고정하고, 실제 `pointerup` 위치의 패널만 대상으로 사용한다.
+- [x] 좌→우 / 우→좌 복사·이동, 같은 패널·같은 경로·유효하지 않은 대상 차단.
+- [x] 드래그 중 Shift 누름/해제 즉시 표시 갱신, 놓는 순간의 상태로 복사/이동 결정.
+- [x] Escape, 포인터 취소, 창 포커스 상실과 네이티브 취소에서 파일 작업을 실행하지 않는다. 취소 후 커서로 내부 복사를 추측하던 보정은 제거했다.
+- [x] 창 밖으로 나갈 때 네이티브 드래그로 인계한다. 네이티브 시작 실패는 이후 내부 드래그를 막지 않는다.
+- [x] 내부에서는 선택 파일 행의 DOM 미리보기를, 외부 인계에서는 PNG 미리보기를 사용한다.
+- [x] 외부 파일 수신 오버레이의 macOS 논리 좌표 이중 배율 변환을 수정했다.
+- [x] 회귀 테스트: 양방향 복사·이동, 다중 선택, 실시간 보조키, 같은 패널/경로, 작업 중 차단, 취소, 외부 실패 후 내부 복구.
+- [x] 독립 Chrome의 실제 마우스·키보드 입력: 배율 1/2에서 총 14개 시나리오 통과(샘플 데이터와 작업 클라이언트 사용).
+- [ ] 실제 Tauri 앱 및 Finder/Chrome 간 네이티브 드롭 수락 검증. 이번 환경의 macOS 입력 자동화 권한 부족으로 미확인.
+- [ ] 같은 패널 안의 특정 하위 폴더 행을 대상으로 하는 드롭(FR-29.2).
 
 ## 8. Shell command TODO — 기본 비활성 유지
 

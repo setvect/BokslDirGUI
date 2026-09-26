@@ -2587,263 +2587,177 @@ describe('CommanderShell', () => {
     expect(await screen.findByText(/종료 차단/)).toBeTruthy();
   });
 
-  it('starts panel-to-panel drag copy through the operation client', async () => {
-    const operationClient = {
-      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-dnd-copy', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-dnd-move', kind: 'move' as const, state: 'queued' as const } })),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
-    const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
-    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
-    const leftPanel = container.querySelector<HTMLElement>('.file-panel[aria-label^="left panel"]');
-    const rightPanel = container.querySelector<HTMLElement>('.file-panel[aria-label^="right panel"]');
-    if (!sourceRow || !leftPanel || !rightPanel) {
-      throw new Error('drag source row and both panels are required');
-    }
-
-    fireEvent.dragStart(sourceRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
-    fireEvent.dragOver(rightPanel, { dataTransfer: { files: [] } });
-    expect(within(rightPanel).getByText('이 위치에는 놓을 수 없음')).toBeTruthy();
-    expect(rightPanel.className).toContain('is-drop-blocked');
-
-    const moveDragOver = createEvent.dragOver(leftPanel, { dataTransfer: { files: [] } });
-    Object.defineProperty(moveDragOver, 'shiftKey', { value: true });
-    fireEvent(leftPanel, moveDragOver);
-    expect(within(leftPanel).getByText('여기로 이동')).toBeTruthy();
-    expect(leftPanel.className).toContain('is-drop-move');
-
-    fireEvent.drop(leftPanel, { dataTransfer: { files: [] } });
-    expect(within(leftPanel).queryByRole('status')).toBeNull();
-
-    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
-      sources: [expect.stringContaining('generic-array-7534a23a150ae5e7')],
-      targetDir: SAMPLE_LISTINGS.left.path,
-      policy: 'skip',
-    }));
-  });
-
-  it('hands selected paths to a native drag session so dragging continues outside the window', async () => {
-    let finishNativeDrag: ((completion: {
-      result: 'Dropped' | 'Cancelled';
-      clientPosition: { x: number; y: number } | null;
-    }) => void) | null = null;
-    const nativeFileDragClient = {
-      start: vi.fn(async (
-        _paths: string[],
-        _mode: 'copy' | 'move',
-        onResult: NonNullable<typeof finishNativeDrag>,
-      ) => {
-        finishNativeDrag = onResult;
-      }),
-    };
-    const { container } = render(
-      <CommanderShell
-        dataSource={createFixturePanelDataSource()}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
-        runtimeBackendAvailable
-        nativeFileDragClient={nativeFileDragClient}
-        initialFocusIndex={INITIAL_FOCUS_INDEX}
-        initialSelectedPaths={INITIAL_SELECTED_PATHS}
-      />,
-    );
-    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
-    if (!sourceRow) {
-      throw new Error('native drag source row is required');
-    }
-    const dragStart = createEvent.dragStart(sourceRow, {
-      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+  describe('app-local pointer file dragging', () => {
+    const originalElementFromPoint = document.elementFromPoint;
+    afterEach(() => {
+      Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: originalElementFromPoint });
     });
-    fireEvent(sourceRow, dragStart);
 
-    expect(dragStart.defaultPrevented).toBe(true);
-    await waitFor(() => expect(nativeFileDragClient.start).toHaveBeenCalledWith(
-      [expect.stringContaining('generic-array-7534a23a150ae5e7')],
-      'copy',
-      expect.any(Function),
-    ));
-    expect(await screen.findByText('외부 드래그 시작 · 1개 항목')).toBeTruthy();
-
-    act(() => finishNativeDrag?.({ result: 'Dropped', clientPosition: null }));
-    expect(await screen.findByText('외부 드래그 완료 · 1개 항목')).toBeTruthy();
-  });
-
-  it('restores HTML panel dragging after a native drag startup failure', async () => {
-    const nativeFileDragClient = {
-      start: vi.fn(async () => {
-        throw new Error('native drag unavailable');
-      }),
-    };
-    const { container } = render(
-      <CommanderShell
-        dataSource={createFixturePanelDataSource()}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
-        runtimeBackendAvailable
-        nativeFileDragClient={nativeFileDragClient}
-        initialFocusIndex={INITIAL_FOCUS_INDEX}
-        initialSelectedPaths={INITIAL_SELECTED_PATHS}
-      />,
-    );
-    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
-    const leftPanel = container.querySelector<HTMLElement>('.file-panel[data-panel-id="left"]');
-    if (!sourceRow || !leftPanel) {
-      throw new Error('native drag fallback fixtures are required');
-    }
-
-    const failedDragStart = createEvent.dragStart(sourceRow, {
-      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
-    });
-    fireEvent(sourceRow, failedDragStart);
-    expect(failedDragStart.defaultPrevented).toBe(true);
-    expect(await screen.findByText(/외부 드래그 실패:.*native drag unavailable/)).toBeTruthy();
-
-    const fallbackDragStart = createEvent.dragStart(sourceRow, {
-      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
-    });
-    fireEvent(sourceRow, fallbackDragStart);
-    expect(fallbackDragStart.defaultPrevented).toBe(false);
-    fireEvent.dragOver(leftPanel, { dataTransfer: { files: [], types: [] } });
-    expect(leftPanel.className).toContain('is-drop-copy');
-  });
-
-  it('treats a cancelled native drag released over the opposite panel as an internal copy', async () => {
-    let finishNativeDrag: ((completion: {
-      result: 'Dropped' | 'Cancelled';
-      clientPosition: { x: number; y: number } | null;
-    }) => void) | null = null;
-    let draggedPaths: string[] = [];
-    const nativeFileDragClient = {
-      start: vi.fn(async (
-        paths: string[],
-        _mode: 'copy' | 'move',
-        onResult: NonNullable<typeof finishNativeDrag>,
-      ) => {
-        draggedPaths = paths;
-        finishNativeDrag = onResult;
-      }),
-    };
-    const operationClient = {
-      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-native-panel-copy', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
-    const { container } = render(
-      <CommanderShell
-        dataSource={createFixturePanelDataSource()}
+    const setupDrag = (selectedLeft: string[] = [], listings = SAMPLE_LISTINGS) => {
+      let finishNative: ((completion: { result: 'Dropped' | 'Cancelled'; clientPosition?: { x: number; y: number } | null }) => void) | undefined;
+      const nativeFileDragClient = { start: vi.fn(async (_paths: string[], _mode: 'copy' | 'move', _preview: string, done: NonNullable<typeof finishNative>) => { finishNative = done; }) };
+      const operationClient = {
+        startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'drag-copy', kind: 'copy' as const, state: 'queued' as const } })),
+        startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'drag-move', kind: 'move' as const, state: 'queued' as const } })),
+        startDelete: vi.fn(), cancelOperation: vi.fn(), resolveConflict: vi.fn(),
+      };
+      const rendered = render(<CommanderShell
+        dataSource={createFixturePanelDataSource(listings)}
         mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
         operationClient={operationClient}
-        runtimeBackendAvailable
         nativeFileDragClient={nativeFileDragClient}
         initialFocusIndex={INITIAL_FOCUS_INDEX}
-        initialSelectedPaths={INITIAL_SELECTED_PATHS}
-      />,
-    );
-    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
-    const leftPanel = container.querySelector<HTMLElement>('.file-panel[data-panel-id="left"]');
-    if (!sourceRow || !leftPanel) {
-      throw new Error('native cursor drop fixtures are required');
-    }
-    const previousElementFromPoint = document.elementFromPoint;
-    Object.defineProperty(document, 'elementFromPoint', {
-      configurable: true,
-      value: vi.fn(() => leftPanel),
-    });
-
-    try {
-      fireEvent.dragStart(sourceRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
-      await waitFor(() => expect(nativeFileDragClient.start).toHaveBeenCalledOnce());
-      act(() => finishNativeDrag?.({ result: 'Cancelled', clientPosition: { x: 40, y: 80 } }));
-
-      await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
-        sources: draggedPaths,
-        targetDir: SAMPLE_LISTINGS.left.path,
-        policy: 'skip',
-      }));
-    } finally {
-      Object.defineProperty(document, 'elementFromPoint', {
-        configurable: true,
-        value: previousElementFromPoint,
+        initialSelectedPaths={{ ...INITIAL_SELECTED_PATHS, left: selectedLeft }}
+        runtimeBackendAvailable
+      />);
+      const panels = {
+        left: rendered.container.querySelector<HTMLElement>('.file-panel[data-panel-id="left"]')!,
+        right: rendered.container.querySelector<HTMLElement>('.file-panel[data-panel-id="right"]')!,
+      };
+      const rows = {
+        left: [...panels.left.querySelectorAll<HTMLElement>('.file-row')].find((row) => row.textContent?.includes('Architecture.md'))!,
+        right: rowByText(rendered.container, 'generic-array-7534a23a150ae5e7')!,
+      };
+      Object.defineProperty(document, 'elementFromPoint', { configurable: true,
+        value: vi.fn((x: number, y: number) => y > 500 ? null : x < 400 ? panels.left : panels.right),
       });
-    }
-  });
+      const x = (panel: PanelId) => panel === 'left' ? 100 : 700;
+      const down = (panel: PanelId) => fireEvent.pointerDown(rows[panel], { pointerId: 7, button: 0, clientX: x(panel), clientY: 200 });
+      const move = (panel: PanelId, shiftKey = false) => fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: x(panel) + 10, clientY: 210, shiftKey });
+      const up = (panel: PanelId, shiftKey = false) => fireEvent.pointerUp(window, { pointerId: 7, button: 0, clientX: x(panel) + 10, clientY: 210, shiftKey });
+      return { ...rendered, panels, rows, down, move, up, operationClient, nativeFileDragClient, finishNative: () => finishNative };
+    };
 
-  it('keeps Shift move semantics when a native drag is dropped onto the other BokslDirGUI panel', async () => {
-    let nativeDropHandler: ((event:
-      | { type: 'enter'; paths: string[]; position: { x: number; y: number } }
-      | { type: 'over'; position: { x: number; y: number } }
-      | { type: 'drop'; paths: string[]; position: { x: number; y: number } }
-      | { type: 'leave' }
-    ) => void) | null = null;
-    let draggedPaths: string[] = [];
-    const nativeFileDropClient = {
-      listen: vi.fn(async (handler: NonNullable<typeof nativeDropHandler>) => {
-        nativeDropHandler = handler;
-        return vi.fn();
-      }),
-    };
-    const nativeFileDragClient = {
-      start: vi.fn(async (paths: string[]) => {
-        draggedPaths = paths;
-      }),
-    };
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-native-panel-move', kind: 'move' as const, state: 'queued' as const } })),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
-    const { container, unmount } = render(
-      <CommanderShell
-        dataSource={createFixturePanelDataSource()}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
-        operationClient={operationClient}
-        runtimeBackendAvailable
-        nativeFileDropClient={nativeFileDropClient}
-        nativeFileDragClient={nativeFileDragClient}
-        initialFocusIndex={INITIAL_FOCUS_INDEX}
-        initialSelectedPaths={INITIAL_SELECTED_PATHS}
-      />,
-    );
-    await waitFor(() => expect(nativeFileDropClient.listen).toHaveBeenCalledOnce());
-    const sourceRow = rowByText(container, 'generic-array-7534a23a150ae5e7');
-    const leftPanel = container.querySelector<HTMLElement>('.file-panel[data-panel-id="left"]');
-    if (!sourceRow || !leftPanel || !nativeDropHandler) {
-      throw new Error('native panel drag fixtures are required');
-    }
-    const previousElementFromPoint = document.elementFromPoint;
-    Object.defineProperty(document, 'elementFromPoint', {
-      configurable: true,
-      value: vi.fn(() => leftPanel),
+    it.each([
+      ['left', 'right', false], ['right', 'left', false],
+      ['left', 'right', true], ['right', 'left', true],
+    ] as const)('drops %s to %s with Shift=%s using the actual target', async (source, target, shift) => {
+      const fixture = setupDrag();
+      expect(fixture.rows[source].draggable).toBe(false);
+      fixture.down(source);
+      fixture.move(target, shift);
+      expect(fixture.panels[target].className).toContain(shift ? 'is-drop-move' : 'is-drop-copy');
+      fixture.up(target, shift);
+      expect(fixture.nativeFileDragClient.start).not.toHaveBeenCalled();
+      if (shift) {
+        expect(await screen.findByRole('dialog', { name: '이동' })).toBeTruthy();
+        expect(fixture.operationClient.startMove).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: '이동' }));
+      }
+      const execute = shift ? fixture.operationClient.startMove : fixture.operationClient.startCopy;
+      await waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      expect(execute).toHaveBeenCalledWith({
+        sources: [expect.stringContaining(source === 'left' ? 'Architecture.md' : 'generic-array-7534a23a150ae5e7')],
+        targetDir: SAMPLE_LISTINGS[target].path, policy: 'skip',
+      });
+      fixture.up(target, shift);
+      expect(execute).toHaveBeenCalledTimes(1);
     });
 
-    try {
-      const dragStart = createEvent.dragStart(sourceRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
-      Object.defineProperty(dragStart, 'shiftKey', { value: true });
-      fireEvent(sourceRow, dragStart);
-      await waitFor(() => expect(nativeFileDragClient.start).toHaveBeenCalledOnce());
-      act(() => nativeDropHandler?.({ type: 'enter', paths: draggedPaths, position: { x: 40, y: 80 } }));
-      expect(leftPanel.className).toContain('is-drop-move');
-      act(() => nativeDropHandler?.({ type: 'drop', paths: draggedPaths, position: { x: 40, y: 80 } }));
+    it.each(['left', 'right'] as const)('blocks a drop on its own %s panel after crossing the other panel', (source) => {
+      const f = setupDrag();
+      f.down(source);
+      f.move(source === 'left' ? 'right' : 'left');
+      f.move(source);
+      expect(f.panels[source].className).toContain('is-drop-blocked');
+      f.up(source);
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+      expect(f.operationClient.startMove).not.toHaveBeenCalled();
+      expect(useOperationStore.getState().dialog).toBeNull();
+    });
 
+    it('updates Shift while stationary and uses the modifier at release', async () => {
+      const f = setupDrag();
+      f.down('left'); f.move('right');
+      fireEvent.keyDown(window, { key: 'Shift', shiftKey: true });
+      expect(f.panels.right.className).toContain('is-drop-move');
+      expect(f.container.querySelector('.file-drag-preview strong')?.textContent).toBe('이동');
+      fireEvent.keyUp(window, { key: 'Shift', shiftKey: false });
+      expect(f.panels.right.className).toContain('is-drop-copy');
+      f.up('right', true);
       expect(await screen.findByRole('dialog', { name: '이동' })).toBeTruthy();
-      expect(operationClient.startMove).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole('button', { name: '이동' }));
-      await waitFor(() => expect(operationClient.startMove).toHaveBeenCalledWith({
-        sources: draggedPaths,
-        targetDir: SAMPLE_LISTINGS.left.path,
-        policy: 'skip',
-      }));
-    } finally {
-      Object.defineProperty(document, 'elementFromPoint', {
-        configurable: true,
-        value: previousElementFromPoint,
-      });
-      unmount();
-    }
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+    });
+
+    it.each(['Escape', 'pointercancel', 'blur', 'outside-panel'] as const)('cancels safely on %s', (reason) => {
+      const f = setupDrag(); f.down('right'); f.move('left');
+      if (reason === 'Escape') fireEvent.keyDown(window, { key: 'Escape' });
+      if (reason === 'pointercancel') fireEvent.pointerCancel(window, { pointerId: 7 });
+      if (reason === 'blur') fireEvent.blur(window);
+      if (reason === 'outside-panel') fireEvent.pointerUp(window, { pointerId: 7, button: 0, clientX: 100, clientY: 600 });
+      f.up('left');
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+      expect(f.operationClient.startMove).not.toHaveBeenCalled();
+      expect(f.container.querySelector('.file-drag-preview')).toBeNull();
+    });
+
+    it('ignores a click, tiny movement and another pointer', () => {
+      const f = setupDrag(); f.down('left');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: 102, clientY: 202 });
+      fireEvent.pointerUp(window, { pointerId: 8, button: 0, clientX: 700, clientY: 210 });
+      f.up('right');
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+      expect(f.nativeFileDragClient.start).not.toHaveBeenCalled();
+    });
+
+    it('hands off only when leaving the window; native cancellation never copies into a panel', async () => {
+      const f = setupDrag(); f.down('right'); f.move('left');
+      expect(f.nativeFileDragClient.start).not.toHaveBeenCalled();
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
+      await waitFor(() => expect(f.nativeFileDragClient.start).toHaveBeenCalledOnce());
+      act(() => f.finishNative()?.({ result: 'Cancelled', clientPosition: { x: 100, y: 200 } }));
+      expect(await screen.findByText('외부 드래그가 취소되었습니다.')).toBeTruthy();
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+      expect(f.operationClient.startMove).not.toHaveBeenCalled();
+    });
+
+    it('keeps the selected source snapshot when another row becomes selected during the gesture', async () => {
+      const selected = ['Architecture.md', 'PRD.md'].map((name) => `${SAMPLE_LISTINGS.left.path}/${name}`);
+      const f = setupDrag(selected); f.down('left'); f.move('right');
+      fireEvent.click([...f.panels.left.querySelectorAll<HTMLElement>('.file-row')].find((row) => row.textContent?.includes('Requirements.md'))!);
+      f.up('right');
+      await waitFor(() => expect(f.operationClient.startCopy).toHaveBeenCalledWith({ sources: selected, targetDir: SAMPLE_LISTINGS.right.path, policy: 'skip' }));
+    });
+
+    it('uses the release position even when no final pointermove was delivered', () => {
+      const f = setupDrag(); f.down('right'); f.move('left'); f.up('right');
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+      expect(f.operationClient.startMove).not.toHaveBeenCalled();
+    });
+
+    it('rechecks busy state at release', () => {
+      const f = setupDrag(); f.down('left'); f.move('right');
+      act(() => useOperationStore.setState({ progress: {
+        operationId: 'busy-during-drag', kind: 'copy', state: 'running', totalFiles: 1,
+        completedFiles: 0, totalBytes: null, completedBytes: 0, currentPath: null,
+        bytesPerSecond: null, etaSeconds: null, recentErrorCount: 0,
+      } }));
+      f.up('right');
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+    });
+
+    it('blocks a different panel that shows the same directory', () => {
+      const f = setupDrag([], { ...SAMPLE_LISTINGS, right: { ...SAMPLE_LISTINGS.right, path: SAMPLE_LISTINGS.left.path } });
+      f.down('left'); f.move('right');
+      expect(f.panels.right.className).toContain('is-drop-blocked');
+      f.up('right');
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+    });
+
+    it('keeps internal dragging available after an external handoff fails', async () => {
+      const f = setupDrag();
+      f.nativeFileDragClient.start.mockRejectedValueOnce(new Error('test native failure'));
+      f.down('right');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
+      expect(await screen.findByText(/외부 드래그 실패:.*test native failure/)).toBeTruthy();
+      f.down('left'); f.move('right'); f.up('right');
+      await waitFor(() => expect(f.operationClient.startCopy).toHaveBeenCalledOnce());
+    });
+
+    it('removes pending gesture listeners on unmount', () => {
+      const f = setupDrag(); f.down('left'); f.move('right'); f.unmount(); f.up('right');
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+    });
   });
 
   it('imports external dropped files only when the OS path is exposed', async () => {

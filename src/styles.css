@@ -1815,3 +1815,35 @@ body[data-theme="highContrast"] {
   padding: 6px 10px;
   font-size: calc(var(--commander-font-size) * 0.82);
 }
+
+.file-drag-preview {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  user-select: none;
+  width: 320px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent, #308ed0);
+  background: var(--panel-bg, #17191c);
+  color: var(--text, #f2f5f8);
+  box-shadow: 0 4px 16px #0008;
+}
+
+.file-drag-preview > div {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.6;
+}
+
+.file-row {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Only the file gesture owns selection; inputs remain selectable afterwards. */
+html.is-file-dragging,
+html.is-file-dragging * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
