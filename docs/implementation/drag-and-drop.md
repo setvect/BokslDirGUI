@@ -40,8 +40,10 @@
 
 ## 검증 범위
 
-- `CommanderShell.test.tsx`: 양방향 복사/이동, 같은 패널 복귀, 마지막 move 없이 release, Shift 실시간 변경, 다중 선택 스냅샷, 같은 경로 차단, 작업 상태 재검증, Escape/blur/pointercancel/패널 밖, 중복 release, unmount, 네이티브 취소 및 실패 후 복구.
+- `CommanderShell.drag.test.tsx`: 양방향 복사/이동, 같은 패널 복귀, 마지막 move 없이 release, Shift 실시간 변경, 다중 선택 스냅샷, 같은 경로 차단, 작업 상태 재검증, Escape/blur/pointercancel/패널 밖, 중복 release, unmount, 네이티브 취소 및 실패 후 복구.
 - `nativeDropPosition.test.ts`: macOS 배율 1/1.5/2/3에서 좌표 보존과 기존 비-macOS 변환.
 - 독립 Chrome 154, viewport 1280×820, DPR 1/2: 실제 `mouse.down/move/up`, Shift key down/up으로 14개 시나리오 통과. 샘플 파일 목록과 기록용 작업 클라이언트로 대상 경로·횟수를 검사했다. 실제 사용자 파일은 변경하지 않았다.
 - 로컬 브라우저 결과와 화면: `temp/verification/drag/results.json`, `temp/verification/drag/live-shift.png`.
 - 실제 Tauri WebKit 창과 Finder/Chrome 간 OS 드래그는 macOS 자동 입력 권한이 없어 검증하지 못했다. 브라우저 테스트와 네이티브 E2E를 동일한 검증으로 취급하지 않는다.
+
+구조 분리 후 Shell 연결은 `useFileDrag.ts`, OS 어댑터는 `src/tauri/commanderClients.ts`, 공통 액션 요청은 `actionRequest.ts`가 담당한다. 포인터 세션과 대상 결정 정책은 유지한다.

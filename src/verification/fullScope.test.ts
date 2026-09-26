@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import parityMatrix from '../../docs/implementation/tui-parity-matrix.json';
 import { ACTIONS, ACTION_BY_ID, isActionAvailable, menuRootsFromRegistry } from '../actions/registry';
-import { BACKEND_IMPLEMENTED_COMMANDS, COMMANDS, isBackendImplementedCommand } from '../tauri/client';
-import { canTransitionOperation } from '../operations/operationStore';
+import { I18N_RESOURCES } from '../i18n-resources';
+import { canTransitionOperation } from '../operations/operationLifecycle';
 import { useOperationStore } from '../operations/operationStore';
-import { contextMenuActions } from '../ui/CommanderShell';
+import { BACKEND_IMPLEMENTED_COMMANDS, isBackendImplementedCommand } from '../tauri/client';
+import { COMMANDS } from '../tauri/commands';
 import { createActionContext } from '../ui/actionContext';
 import { isArchiveVirtualPath } from '../ui/archiveVirtual';
 import { SAMPLE_LISTINGS } from '../ui/commanderFixture';
-import { I18N_RESOURCES } from '../i18n-resources';
-import parityMatrix from '../../docs/implementation/tui-parity-matrix.json';
+import { contextMenuActions } from '../ui/menuModel';
 
 describe('full-scope verification harness', () => {
   it('keeps command-backed actions aligned with known Tauri command names', () => {

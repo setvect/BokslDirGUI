@@ -1,8 +1,12 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
 const read = (path) => readFileSync(join(root, path), 'utf8');
+const hasCommanderTestEvidence = (item) => {
+  const file = item.split(':')[0];
+  return /^src\/ui\/CommanderShell(?:\.[a-z]+)?\.test\.tsx$/.test(file) && existsSync(join(root, file));
+};
 
 const checks = [];
 const addCheck = (name, passed, detail) => checks.push({ name, passed, detail });
@@ -147,7 +151,7 @@ addCheck(
     && parityRowsById.get('open_menu')?.implementationStatus === 'implemented'
     && parityRowsById.get('open_menu')?.guiActionIds?.includes('menu.open')
     && parityRowsById.get('open_menu')?.tuiKeyboardBindings?.includes('F9')
-    && read('src/ui/CommanderShell.tsx').includes('handleTopMenuKeyDown')
+    && read('src/ui/menuModel.ts').includes('handleTopMenuKeyDown')
     && registry.includes("id: 'menu.open'"),
   'F9 menu may be implemented only when registry and shell keyboard state machine evidence exist',
 );
@@ -155,14 +159,14 @@ addCheck(
   'TUI parity matrix records copy as implemented only with Edit menu and direct operation evidence',
   (() => {
     const row = parityRowsById.get('copy');
-    const source = read('src/ui/CommanderShell.tsx');
+
     const store = read('src/operations/operationStore.ts');
     return row?.priority === 'P0'
       && row.implementationStatus === 'implemented'
       && rowHasMenuPath(row, 'Edit')
       && row.guiMenuPaths?.some((menuPath) => menuPath[0] === 'Edit')
-      && source.includes("if (actionId === 'file.copy')")
-      && source.includes('startLongRunningOperation(operationRequest)')
+      && read('src/ui/useCommanderActions.ts').includes("if (actionId === 'file.copy')")
+      && read('src/ui/useCommanderActions.ts').includes('startLongRunningOperation(operationRequest)')
       && store.includes('startLongRunningOperation');
   })(),
   'copy may be implemented only when it is on the TUI Edit menu and starts real operations without a preflight dialog',
@@ -171,15 +175,14 @@ addCheck(
   'TUI parity matrix records move as implemented only with Edit menu and explicit confirmation evidence',
   (() => {
     const row = parityRowsById.get('move');
-    const source = read('src/ui/CommanderShell.tsx');
-    const tests = read('src/ui/CommanderShell.test.tsx');
+
     return row?.priority === 'P0'
       && row.implementationStatus === 'implemented'
       && rowHasMenuPath(row, 'Edit')
       && row.guiMenuPaths?.some((menuPath) => menuPath[0] === 'Edit')
-      && source.includes("if (actionId === 'file.copy')")
-      && source.includes('openOperationDialog(operationRequest)')
-      && tests.includes('requires explicit confirmation before a move reaches the operation client');
+      && read('src/ui/useCommanderActions.ts').includes("if (actionId === 'file.copy')")
+      && read('src/ui/useCommanderActions.ts').includes('openOperationDialog(operationRequest)')
+      && read('src/ui/CommanderShell.operations.test.tsx').includes('requires explicit confirmation before a move reaches the operation client');
   })(),
   'move may be implemented only when it is on the TUI Edit menu and requires explicit confirmation before start_move',
 );
@@ -188,10 +191,10 @@ addCheck(
   ['move_up', 'move_down', 'go_parent', 'enter', 'page_up', 'page_down', 'toggle_sel', 'select_all', 'invert_selection', 'deselect'].every((id) => {
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
-      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'));
+      && row.evidence?.some((item) => hasCommanderTestEvidence(item));
   })
-    && read('src/ui/CommanderShell.test.tsx').includes('extends selection with shifted page and boundary movement keys')
-    && read('src/ui/CommanderShell.test.tsx').includes('applies selection all, invert, and clear shortcuts'),
+    && read('src/ui/CommanderShell.keyboard.test.tsx').includes('extends selection with shifted page and boundary movement keys')
+    && read('src/ui/CommanderShell.keyboard.test.tsx').includes('applies selection all, invert, and clear shortcuts'),
   'movement/selection rows may be implemented only after keyboard/default-suppression tests exist',
 );
 addCheck(
@@ -199,7 +202,7 @@ addCheck(
   ['theme_dark', 'theme_light', 'theme_contrast', 'language_en', 'language_ko', 'size_auto', 'size_bytes', 'sort_asc', 'sort_desc'].every((id) => {
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
-      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'))
+      && row.evidence?.some((item) => hasCommanderTestEvidence(item))
       && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
   }),
   'settings/theme/language/size and direct sort rows require direct menu actions plus runtime tests before completion',
@@ -209,15 +212,15 @@ addCheck(
   ['delete', 'perm_delete', 'file_info'].every((id) => {
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
-      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'))
+      && row.evidence?.some((item) => hasCommanderTestEvidence(item))
       && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
   })
     && parityRowsById.get('delete')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Delete')
     && parityRowsById.get('perm_delete')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Permanent Delete')
     && parityRowsById.get('file_info')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'View > File Info')
-    && read('src/ui/CommanderShell.test.tsx').includes('uses the focused concrete row for delete')
-    && read('src/ui/CommanderShell.test.tsx').includes('blocks delete on the virtual parent row')
-    && read('src/ui/CommanderShell.test.tsx').includes('requires typed confirmation before permanent delete'),
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('uses the focused concrete row for delete')
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('blocks delete on the virtual parent row')
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('requires typed confirmation before permanent delete'),
   'delete/permanent delete/file info require TUI menu paths, effective target fallback, virtual exclusion, confirmation, and metadata tests',
 );
 addCheck(
@@ -230,15 +233,15 @@ addCheck(
   ['open_default', 'open_terminal_editor', 'run_shell_command', 'editor_preset_vi', 'editor_preset_vim', 'editor_preset_nano', 'editor_preset_emacs'].every((id) => {
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
-      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx') || item.includes('registry.test.ts'))
+      && row.evidence?.some((item) => hasCommanderTestEvidence(item) || item.includes('registry.test.ts'))
       && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
   })
     && parityRowsById.get('open_default')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Open Default App')
     && parityRowsById.get('open_terminal_editor')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Open Terminal Editor')
     && parityRowsById.get('run_shell_command')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Run Shell Command')
-    && read('src/ui/CommanderShell.tsx').includes('settings.external.editorId')
-    && read('src/ui/CommanderShell.test.tsx').includes('opens files through default app and configured external editor command paths')
-    && read('src/ui/CommanderShell.test.tsx').includes('previews and then runs shell commands only after an enabled policy returns a confirm token'),
+    && read('src/ui/fileActionExecutors.ts').includes('settings.external.editorId')
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('opens files through default app and configured external editor command paths')
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('previews and then runs shell commands only after an enabled policy returns a confirm token'),
   'external open/editor/shell rows require File menu parity, persisted editor preset, shell preview/confirm/run, and tests',
 );
 addCheck(
@@ -246,18 +249,18 @@ addCheck(
   ['archive_compress', 'archive_extract', 'archive_extract_auto', 'archive_preview'].every((id) => {
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
-      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx'))
+      && row.evidence?.some((item) => hasCommanderTestEvidence(item))
       && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
   })
     && parityRowsById.get('archive_preview')?.guiActionIds?.includes('archive.list')
     && registry.includes("id: 'archive.extractAuto'")
     && registry.includes("id: 'archive.list'")
-    && read('src/ui/CommanderShell.tsx').includes('archiveAutoExtractFolderName')
-    && read('src/ui/CommanderShell.tsx').includes('archiveVirtualRootPath')
-    && read('src/ui/CommanderShell.test.tsx').includes('uses auto-extract to derive a target folder')
-    && read('src/ui/CommanderShell.test.tsx').includes('enters archives as virtual directories')
+    && read('src/ui/fileActionPlans.ts').includes('archiveAutoExtractFolderName')
+    && read('src/ui/archiveVirtual.ts').includes('archiveVirtualRootPath')
+    && read('src/ui/CommanderShell.archives.test.tsx').includes('uses auto-extract to derive a target folder')
+    && read('src/ui/CommanderShell.archives.test.tsx').includes('enters archives as virtual directories')
     && read('src/ui/archiveVirtual.test.ts').includes('archive.zip:/ paths')
-    && read('src-tauri/src/operation.rs').includes('archive_entry_is_unsafe'),
+    && read('src-tauri/src/operation/archive_ops.rs').includes('fn archive_entry_is_unsafe'),
   'archive rows require create/extract/auto/open-as-directory action mappings, target derivation, virtual-directory UI tests, and Rust unsafe-path defense',
 );
 addCheck(
@@ -265,14 +268,14 @@ addCheck(
   ['toggle_layout', 'tab_new', 'tab_close', 'help_keys', 'quit', 'toggle_icons', 'filter_start', 'filter_clear', 'mount_points', 'goto_path', 'tab_list', 'history_list', 'bookmark_add', 'bookmark_list', 'about'].every((id) => {
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
-      && row.evidence?.some((item) => item.includes('CommanderShell.test.tsx') || item.includes('registry.test.ts'))
+      && row.evidence?.some((item) => hasCommanderTestEvidence(item) || item.includes('registry.test.ts'))
       && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
   })
     && registry.includes("id: 'app.quit'")
     && registry.includes("id: 'settings.toggleIcons'")
-    && read('src/ui/CommanderShell.test.tsx').includes('uses an explicit Cmd+Q/File Quit policy')
-    && read('src/ui/CommanderShell.test.tsx').includes('opens path, location, tab, history, bookmark, help search, and about overlays')
-    && read('src/ui/CommanderShell.test.tsx').includes('applies typed filters and preserves them through refresh until clear'),
+    && read('src/ui/CommanderShell.clipboard.test.tsx').includes('uses an explicit Cmd+Q/File Quit policy')
+    && read('src/ui/CommanderShell.settings.test.tsx').includes('opens path, location, tab, history, bookmark, help search, and about overlays')
+    && read('src/ui/CommanderShell.navigation.test.tsx').includes('applies typed filters and preserves them through refresh until clear'),
   'remaining rows require real overlay/settings/menu/quit/filter tests before implemented status',
 );
 const matrixMappedGuiIds = new Set(
@@ -374,27 +377,28 @@ for (const decision of ['overwrite', 'skip', 'allOverwrite', 'allSkip', 'cancel'
 
 const commanderShell = read('src/ui/CommanderShell.tsx');
 const commanderOverlays = read('src/ui/CommanderOverlays.tsx');
+const commanderSurfaces = ['src/ui/CommanderShell.tsx', 'src/ui/FilePanel.tsx', 'src/ui/PanelHeader.tsx', 'src/ui/TopMenuBar.tsx', 'src/ui/PanelContextMenus.tsx', 'src/ui/StatusStrips.tsx'].map(read);
 for (const selector of ['file-panel', 'hotkey-strip', 'panel-zone', 'bottom-status', 'columnLayoutForPanelWidth', 'entry-row-kind-']) {
-  addCheck(`commander shell emits ${selector}`, commanderShell.includes(selector), 'TUI-faithful shell');
+  addCheck(`commander shell emits ${selector}`, read(({ 'file-panel': 'src/ui/FilePanel.tsx', 'hotkey-strip': 'src/ui/StatusStrips.tsx', 'bottom-status': 'src/ui/StatusStrips.tsx', 'columnLayoutForPanelWidth': 'src/ui/panelPresentation.ts', 'entry-row-kind-': 'src/ui/FilePanel.tsx' })[selector] ?? 'src/ui/CommanderShell.tsx').includes(selector), 'TUI-faithful shell');
 }
 for (const forbidden of ['persistent-sidebar', 'persistent-inspector', 'large-toolbar', 'Action preview', 'transient-overlay', 'overlay-host']) {
-  addCheck(`commander shell avoids ${forbidden}`, !commanderShell.includes(forbidden), 'No dashboard chrome');
+  addCheck(`commander shell avoids ${forbidden}`, !commanderSurfaces.some((source) => source.includes(forbidden)), 'No dashboard chrome');
 }
 for (const forbidden of ['MENU_ROOTS', 'ACTION_LABELS']) {
-  addCheck(`commander shell avoids local ${forbidden}`, !commanderShell.includes(forbidden), 'Menu/help surface is derived from the action registry');
+  addCheck(`commander shell avoids local ${forbidden}`, !commanderSurfaces.some((source) => source.includes(forbidden)), 'Menu/help surface is derived from the action registry');
 }
 for (const selector of ['menuRootsFromRegistry', 'hotkeyStripActionsFromRegistry', 'isActionAvailable']) {
-  addCheck(`commander shell uses registry selector ${selector}`, commanderShell.includes(selector), 'No parallel hardcoded action surface in shell');
+  addCheck(`commander shell uses registry selector ${selector}`, read(({ menuRootsFromRegistry: 'src/ui/TopMenuBar.tsx', hotkeyStripActionsFromRegistry: 'src/ui/hotkeyStripLayout.ts', isActionAvailable: 'src/ui/useCommanderKeyboard.ts' })[selector]).includes(selector), 'No parallel hardcoded action surface in shell');
 }
 for (const token of ['showCreated', 'showOwner', 'showPermissions', 'formatOwnerGroup']) {
-  addCheck(`commander shell supports responsive metadata token ${token}`, commanderShell.includes(token), 'File metadata columns must follow TUI width-responsive behavior');
+  addCheck(`commander shell supports responsive metadata token ${token}`, read('src/ui/FilePanel.tsx').includes(token), 'File metadata columns must follow TUI width-responsive behavior');
 }
 for (const token of ["document.addEventListener('keydown'", 'handleMovementKey', 'commanderKeyboardIsSuspended', 'aria-keyshortcuts', 'FOCUSABLE_ROW_TAB_INDEX = -1']) {
-  addCheck(`commander shell includes keyboard control ${token}`, commanderShell.includes(token), 'Keyboard-first commander control must override web-page defaults');
+  addCheck(`commander shell includes keyboard control ${token}`, read(token === 'FOCUSABLE_ROW_TAB_INDEX = -1' ? 'src/ui/FilePanel.tsx' : token === 'aria-keyshortcuts' ? 'src/ui/CommanderShell.tsx' : 'src/ui/useCommanderKeyboard.ts').includes(token), 'Keyboard-first commander control must override web-page defaults');
 }
 addCheck(
   'commander shell dispatches shortcuts through registry metadata',
-  commanderShell.includes('matchKeyboardShortcut') && registry.includes('keyboardBindings'),
+  read('src/ui/useCommanderKeyboard.ts').includes('matchKeyboardShortcut') && registry.includes('keyboardBindings'),
   'Keyboard shortcuts must stay derived from the action registry',
 );
 addCheck(
@@ -404,39 +408,39 @@ addCheck(
 );
 addCheck(
   'commander shell delegates hotkey display formatting to registry helper',
-  commanderShell.includes('shortcutLabelForAction') && !commanderShell.includes("defaultShortcut?.split('/')"),
+  read('src/ui/StatusStrips.tsx').includes('shortcutLabelForAction') && !read('src/ui/StatusStrips.tsx').includes("defaultShortcut?.split('/')"),
   'Hotkey strip must not parse display labels locally',
 );
 addCheck(
   'commander shell uses panel data-source seam instead of fixture listings',
-  commanderShell.includes('PanelDataSource') && !commanderShell.includes('SAMPLE_LISTINGS'),
+  commanderShell.includes('PanelDataSource') && !commanderShell.includes('SAMPLE_LISTINGS') && !read('src/ui/usePanelNavigation.ts').includes('SAMPLE_LISTINGS'),
   'Real listing UI must be provider-backed, not fixture-backed in core rendering',
 );
 addCheck(
   'commander shell wires panel navigation to listDir state flow',
-  commanderShell.includes('listPanel') && commanderShell.includes('historyBack') && commanderShell.includes('showHidden'),
+  commanderShell.includes('listPanel') && read('src/ui/usePanelNavigation.ts').includes('historyBack') && read('src/ui/usePanelNavigation.ts').includes('showHidden'),
   'Entry open/refresh/history/sort/hidden state must feed list_dir requests',
 );
 addCheck(
   'commander shell guards stale async panel navigation results',
-  commanderShell.includes('navigationRequestRef') && commanderShell.includes('isCurrentPanelRequest'),
+  read('src/ui/usePanelNavigation.ts').includes('navigationRequestRef') && read('src/ui/usePanelNavigation.ts').includes('isCurrentPanelRequest'),
   'Older list_dir responses must not overwrite newer panel state',
 );
 addCheck(
   'commander shell exposes real filter input path',
-  commanderShell.includes('FilterPrompt') && (commanderOverlays.includes('Filter pattern') || i18nResources.includes('filterPattern')) && commanderShell.includes("Object.hasOwn(options, 'filter')"),
+  commanderShell.includes('FilterPrompt') && (commanderOverlays.includes('Filter pattern') || i18nResources.includes('filterPattern')) && read('src/ui/usePanelNavigation.ts').includes("Object.hasOwn(options, 'filter')"),
   'filter.start/filter.clear must send explicit non-null/null filter values to list_dir',
 );
 addCheck(
   'commander shell wires safe mutation atomic executors',
-  commanderShell.includes('atomicExecutorForAction') && commanderShell.includes('mutationClient.createDir') && commanderShell.includes('mutationClient.renameEntry'),
+  read('src/ui/fileActionExecutors.ts').includes('atomicExecutorForAction') && read('src/ui/fileActionExecutors.ts').includes('mutationClient.createDir') && read('src/ui/fileActionExecutors.ts').includes('mutationClient.renameEntry'),
   'create_dir/rename_entry must execute through explicit atomic command adapters',
 );
 addCheck(
   'commander shell refreshes and focuses after safe mutation',
-  commanderShell.includes('onAtomicSuccess') && commanderShell.includes('currentPanel.path')
-    && read('src/ui/CommanderShell.test.tsx').includes('creates a directory through the connected atomic command path and refreshes focus')
-    && read('src/ui/CommanderShell.test.tsx').includes('renames the focused entry through the connected atomic command path and keeps row focus'),
+  read('src/ui/useCommanderActions.ts').includes('onAtomicSuccess') && read('src/ui/useCommanderActions.ts').includes('currentPanel.path')
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('creates a directory through the connected atomic command path and refreshes focus')
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('renames the focused entry through the connected atomic command path and keeps row focus'),
   'Safe mutation success must refresh the active panel and focus the changed row',
 );
 
@@ -454,83 +458,83 @@ for (const token of ['COMMANDER_SHORTCUTS_DISABLED_SELECTOR', 'commanderShortcut
 const operationStore = read('src/operations/operationStore.ts');
 const operationStoreTest = read('src/operations/operationStore.test.ts');
 for (const dialogKind of ['copy', 'move', 'trash', 'deletePermanent', 'rename', 'createDir', 'archiveCreate', 'archiveExtract', 'externalEditor', 'shellCommand']) {
-  addCheck(`operation dialog supports ${dialogKind}`, operationStore.includes(`'${dialogKind}'`), 'G005 dialog shell coverage');
+  addCheck(`operation dialog supports ${dialogKind}`, read('src/operations/dialogDraft.ts').includes(`'${dialogKind}'`), 'G005 dialog shell coverage');
 }
 addCheck('operation store uses backend stub policy boundary', operationStore.includes('backendExecutionStubbed'), 'Stub policy applies to safe and destructive file mutation shells');
 addCheck('operation store removed danger-only stub flag', !operationStore.includes('destructiveExecutionStubbed'), 'Stub policy must not hide safe mutation stubs');
-addCheck('operation store separates atomic command execution mode', operationStore.includes("'atomicCommand'") && operationStore.includes('dialogExecutionModeForDialog'), 'Atomic commands must not be queued as long-running progress');
-addCheck('operation store separates long-running operation execution mode', operationStore.includes("'longRunningOperation'") && operationStore.includes('LONG_RUNNING_DIALOGS'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
-addCheck('operation store validates safe mutation names', operationStore.includes('validateDialogInput') && operationStore.includes('errors.invalidName'), 'create_dir/rename_entry dialog names must be validated before Rust command execution');
-addCheck('operation store exposes atomic executor seam', operationStore.includes('AtomicCommandExecutor') && operationStore.includes('onAtomicSuccess'), 'Connected atomic commands must use request/response execution, not progress stubs');
-addCheck('operation store exposes long-running executor seam', operationStore.includes('LongRunningOperationExecutor') && operationStore.includes('applyOperationProgress') && operationStore.includes('applyOperationSummary'), 'copy/move/delete/trash must consume backend operation events instead of preview-only stubs');
+addCheck('operation store separates atomic command execution mode', operationStore.includes("'atomicCommand'") && read('src/operations/dialogDraft.ts').includes('dialogExecutionModeForDialog'), 'Atomic commands must not be queued as long-running progress');
+addCheck('operation store separates long-running operation execution mode', read('src/operations/dialogDraft.ts').includes("'longRunningOperation'") && read('src/operations/dialogDraft.ts').includes('LONG_RUNNING_DIALOGS'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
+addCheck('operation store validates safe mutation names', operationStore.includes('validateDialogInput') && read('src/operations/dialogDraft.ts').includes('errors.invalidName'), 'create_dir/rename_entry dialog names must be validated before Rust command execution');
+addCheck('operation store exposes atomic executor seam', read('src/operations/operationTypes.ts').includes('AtomicCommandExecutor') && operationStore.includes('onAtomicSuccess'), 'Connected atomic commands must use request/response execution, not progress stubs');
+addCheck('operation store exposes long-running executor seam', read('src/operations/operationTypes.ts').includes('LongRunningOperationExecutor') && read('src/operations/operationEvents.ts').includes('applyOperationProgress') && read('src/operations/operationEvents.ts').includes('applyOperationSummary'), 'copy/move/delete/trash must consume backend operation events instead of preview-only stubs');
 addCheck('operation store preserves active controller when dismissing long-running dialog', operationStore.includes('closeDialog: () => set((current) =>') && operationStore.includes('if (isOperationInFlight(current))'), 'closing a confirmed long-running dialog must not detach summary refresh/cancel/conflict callbacks');
 addCheck('operation store guards duplicate atomic submissions', operationStore.includes('atomicPending') && operationStore.includes('if (dialog.atomicPending)'), 'create_dir/rename_entry dialogs must not submit duplicate filesystem requests while pending');
 addCheck('operation store guards duplicate long-running submissions', operationStore.includes('operationPending') && operationStore.includes('isOperationInFlight(get())'), 'long-running operation dialogs must not submit duplicate or concurrent filesystem requests while pending');
 addCheck('operation store defers pending-start cancellation until real operation id', operationStore.includes('cancelRequestedBeforeStart') && operationStoreTest.includes('defers pending-start cancellation until the real backend operation id is known') && operationStoreTest.includes('defers confirmed-dialog pending-start cancellation until the real backend operation id is known'), 'pending synthetic operation ids must not be sent to backend cancel or detach the active controller');
-addCheck('operation store accepts real events while direct start uses pending alias', operationStore.includes('isPendingAliasForUnboundController') && operationStoreTest.includes('accepts real backend progress and summary while direct copy is still bound to a pending id'), 'fast backend events must not be dropped while frontend start promise still has a synthetic pending id');
+addCheck('operation store accepts real events while direct start uses pending alias', read('src/operations/operationEvents.ts').includes('isPendingAliasForUnboundController') && operationStoreTest.includes('accepts real backend progress and summary while direct copy is still bound to a pending id'), 'fast backend events must not be dropped while frontend start promise still has a synthetic pending id');
 addCheck('operation store preserves controller across atomic dialogs', operationStoreTest.includes('preserves an active operation controller when opening an atomic dialog'), 'opening properties/info dialogs during active operations must not detach summary/cancel/conflict callbacks');
-addCheck('operation store dismisses terminal status surface', operationStore.includes('isTerminalState(current.progress.state) ? null : current.progress') && operationStoreTest.includes('clears terminal progress when dismissing the operation summary'), 'summary dismiss must clear terminal progress so the non-modal status surface can close');
+addCheck('operation store dismisses terminal status surface', read('src/operations/operationEvents.ts').includes('isTerminalState(current.progress.state) ? null : current.progress') && operationStoreTest.includes('clears terminal progress when dismissing the operation summary'), 'summary dismiss must clear terminal progress so the non-modal status surface can close');
 for (const conflictState of ['lastConflictDecision', 'applyAllConflictDecision', 'allOverwrite', 'allSkip']) {
-  addCheck(`operation conflict model includes ${conflictState}`, operationStore.includes(conflictState), 'Conflict apply-all decisions are explicit');
+  addCheck(`operation conflict model includes ${conflictState}`, read('src/operations/operationTypes.ts').includes(conflictState), 'Conflict apply-all decisions are explicit');
 }
 addCheck(
   'operation store keeps local operation history',
-  operationStore.includes('operationHistory') && operationStore.includes('MAX_OPERATION_HISTORY') && operationStore.includes('appendOperationHistory'),
+  operationStore.includes('operationHistory') && read('src/operations/operationLifecycle.ts').includes('MAX_OPERATION_HISTORY') && read('src/operations/operationLifecycle.ts').includes('appendOperationHistory'),
   'destructive and long-running actions need a local audit/history trail',
 );
 
 const rustLib = read('src-tauri/src/lib.rs');
-const rustOperation = read('src-tauri/src/operation.rs');
-const rustBackend = `${rustLib}\n${rustOperation}`;
-const commanderShellTest = read('src/ui/CommanderShell.test.tsx');
+
+const rustBackend = read('src-tauri/src/commands.rs');
+
 const archiveVirtual = read('src/ui/archiveVirtual.ts');
 for (const command of ['list_dir', 'get_metadata', 'preview_file', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'reveal_in_manager', 'open_external_editor', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
-  addCheck(`rust handler includes ${command}`, rustBackend.includes(command), 'read-only command bridge');
+  addCheck(`rust handler includes ${command}`, rustBackend.includes(`fn ${command}(`) && rustLib.includes(`commands::${command}`), 'command handler and app registration');
 }
-addCheck('rust list_dir normalizes filter once', rustBackend.includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
-addCheck('rust safe mutation validates child names', rustBackend.includes('validate_child_name') && rustLib.includes('already_exists'), 'create_dir/rename_entry must reject invalid names and overwrites');
-addCheck('rust rename preserves source entry identity for symlinks', rustBackend.includes('rename_entry_renames_symlink_entry_not_target') && rustBackend.includes('fs::symlink_metadata(&source)'), 'rename_entry must rename the visible entry, not a symlink target');
-addCheck('rust rename uses no-replace abstraction', rustBackend.includes('rename_no_replace') && rustBackend.includes('RENAME_EXCL') && rustBackend.includes('RENAME_NOREPLACE'), 'rename_entry overwrite prevention must not depend only on check-then-rename');
-addCheck('rust operation service emits progress and summary events', rustBackend.includes('operation_progress') && rustBackend.includes('operation_summary') && rustBackend.includes('operation_conflict'), 'long-running operation state must be observable by the GUI');
-addCheck('rust operation service implements copy move delete trash policies', rustBackend.includes('start_copy') && rustBackend.includes('start_move') && rustBackend.includes('DeleteMode::Trash') && rustBackend.includes('PERMANENT_DELETE'), 'copy/move/delete/trash must be real backend commands with safety policies');
-addCheck('rust trash does not fall back to permanent delete', rustBackend.includes('trash::delete(source)') && rustBackend.includes('move_to_trash(target)'), 'trash failure must be recoverable and must not silently remove files permanently');
-addCheck('rust archive commands use safe external provider boundary', rustBackend.includes('archive_entry_is_unsafe') && rustBackend.includes('common_source_parent') && rustBackend.includes('start_archive_add') && rustBackend.includes('errors.archiveProviderUnavailable'), 'archive create/extract/add/list must avoid unsafe paths and absolute source entries');
+addCheck('rust list_dir normalizes filter once', read('src-tauri/src/navigation.rs').includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
+addCheck('rust safe mutation validates child names', read('src-tauri/src/mutation.rs').includes('validate_child_name') && read('src-tauri/src/mutation.rs').includes('already_exists'), 'create_dir/rename_entry must reject invalid names and overwrites');
+addCheck('rust rename preserves source entry identity for symlinks', read('src-tauri/src/tests.rs').includes('rename_entry_renames_symlink_entry_not_target') && read('src-tauri/src/mutation.rs').includes('fs::symlink_metadata(&source)'), 'rename_entry must rename the visible entry, not a symlink target');
+addCheck('rust rename uses no-replace abstraction', read('src-tauri/src/mutation.rs').includes('rename_no_replace') && read('src-tauri/src/mutation.rs').includes('RENAME_EXCL') && read('src-tauri/src/mutation.rs').includes('RENAME_NOREPLACE'), 'rename_entry overwrite prevention must not depend only on check-then-rename');
+addCheck('rust operation service emits progress and summary events', read('src-tauri/src/operation/runtime.rs').includes('operation_progress') && read('src-tauri/src/operation/runtime.rs').includes('operation_summary') && read('src-tauri/src/operation/runtime.rs').includes('operation_conflict'), 'long-running operation state must be observable by the GUI');
+addCheck('rust operation service implements copy move delete trash policies', rustBackend.includes('start_copy') && rustBackend.includes('start_move') && read('src-tauri/src/operation/delete.rs').includes('DeleteMode::Trash') && read('src-tauri/src/operation/runtime.rs').includes('PERMANENT_DELETE'), 'copy/move/delete/trash must be real backend commands with safety policies');
+addCheck('rust trash does not fall back to permanent delete', read('src-tauri/src/operation/delete.rs').includes('trash::delete(source)') && read('src-tauri/src/operation/delete.rs').includes('move_to_trash(target)'), 'trash failure must be recoverable and must not silently remove files permanently');
+addCheck('rust archive commands use safe external provider boundary', read('src-tauri/src/operation/archive_ops.rs').includes('archive_entry_is_unsafe') && read('src-tauri/src/operation/archive_ops.rs').includes('common_source_parent') && read('src-tauri/src/commands.rs').includes('start_archive_add') && read('src-tauri/src/archive.rs').includes('errors.archiveProviderUnavailable'), 'archive create/extract/add/list must avoid unsafe paths and absolute source entries');
 addCheck(
   'archive virtual directories enforce read-only mutations while preserving copy-out',
   registry.includes('activePathIsArchive')
     && registry.includes('canMutateFilesystem')
-    && commanderShell.includes('archiveReadOnly')
-    && commanderShellTest.includes('shows archive virtual directories as read-only'),
+    && read('src/ui/FilePanel.tsx').includes('archiveReadOnly')
+    && read('src/ui/CommanderShell.archives.test.tsx').includes('shows archive virtual directories as read-only'),
   'archive delete/rename/move/new-folder must be unavailable and the panel must explain the read-only policy',
 );
 addCheck(
   'archive providers cover every required format',
   ['tar\\.gz', 'tar\\.zst', 'tgz', 'tzst', 'zip', 'jar', 'war', 'tar', '7z'].every((token) => archiveVirtual.includes(token))
-    && rustBackend.includes('archive_required_formats_create_list_and_extract_round_trip'),
+    && read('src-tauri/src/tests.rs').includes('archive_required_formats_create_list_and_extract_round_trip'),
   'zip/tar/tar.gz/tgz/tar.zst/tzst/7z/jar/war require create/list/extract evidence',
 );
 addCheck(
   'archive password UI and backend keep secrets out of summaries',
   commanderShell.includes('ArchivePasswordPrompt')
-    && read('src/operations/OperationDialogHost.tsx').includes('type="password"')
-    && rustBackend.includes('archive_password_round_trip_and_unsafe_entry_guards')
-    && rustBackend.includes('archive_7z_password_and_large_listing_when_provider_is_available')
+    && read('src/operations/OperationInputs.tsx').includes('type="password"')
+    && read('src-tauri/src/tests.rs').includes('archive_password_round_trip_and_unsafe_entry_guards')
+    && read('src-tauri/src/tests.rs').includes('archive_7z_password_and_large_listing_when_provider_is_available')
     && i18nResources.includes('errors.archivePasswordRequired')
     && i18nResources.includes('errors.archivePasswordInvalid'),
   'zip/7z password input must be masked and password values must not appear in operation summaries',
 );
 addCheck(
   'archive listing is bounded and reports truncation',
-  rustBackend.includes('DEFAULT_ARCHIVE_LIST_LIMIT')
-    && rustBackend.includes('MAX_ARCHIVE_LIST_LIMIT')
-    && rustBackend.includes('archive_listing_limit_reports_truncation')
-    && commanderShell.includes('ARCHIVE_LIST_LIMIT')
-    && commanderShell.includes('partialArchive')
-    && commanderShellTest.includes('reports truncated listings'),
+  read('src-tauri/src/archive.rs').includes('DEFAULT_ARCHIVE_LIST_LIMIT')
+    && read('src-tauri/src/archive.rs').includes('MAX_ARCHIVE_LIST_LIMIT')
+    && read('src-tauri/src/tests.rs').includes('archive_listing_limit_reports_truncation')
+    && read('src/ui/commanderTypes.ts').includes('ARCHIVE_LIST_LIMIT')
+    && read('src/ui/FilePanel.tsx').includes('partialArchive')
+    && read('src/ui/CommanderShell.archives.test.tsx').includes('reports truncated listings'),
   'large zip/7z listings must use a bounded response and expose partial-list state',
 );
-addCheck('rust shell command is gated by settings and one-shot token', rustBackend.includes('ShellCommandPolicy') && rustBackend.includes('consume_token') && rustBackend.includes('used = true'), 'shell command must stay disabled by default and require a confirm token');
-addCheck('rust settings persist bookmarks and layout', rustBackend.includes('BOKSLDIRGUI_SETTINGS_PATH') && rustBackend.includes('validate_settings') && rustBackend.includes('layout.ratio'), 'settings must persist bookmark/layout GUI state safely');
+addCheck('rust shell command is gated by settings and one-shot token', read('src-tauri/src/contracts.rs').includes('ShellCommandPolicy') && read('src-tauri/src/shell_command.rs').includes('consume_token') && read('src-tauri/src/shell_command.rs').includes('used = true'), 'shell command must stay disabled by default and require a confirm token');
+addCheck('rust settings persist bookmarks and layout', read('src-tauri/src/settings_service.rs').includes('BOKSLDIRGUI_SETTINGS_PATH') && read('src-tauri/src/settings_service.rs').includes('validate_settings') && read('src-tauri/src/settings_service.rs').includes('layout.ratio'), 'settings must persist bookmark/layout GUI state safely');
 
 const tauriDefaultCapability = JSON.parse(read('src-tauri/capabilities/default.json'));
 const tauriDefaultPermissions = new Set(tauriDefaultCapability.permissions ?? []);

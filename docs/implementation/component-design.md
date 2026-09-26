@@ -71,16 +71,27 @@ App
 - operation이 시작된 뒤 사용자가 dialog를 닫아도 `activeOperationController`와 `progress`는 유지된다. 이후 backend summary/conflict/cancel event는 `OperationStatusSurface`에서 표시하고 panel refresh callback을 계속 실행한다.
 - backend가 실제 `operationId`를 반환하기 전 취소를 요청하면 synthetic pending id를 backend cancel에 보내지 않고, 실제 id가 확정된 즉시 cancel을 전달한다.
 
-## 4. 상태 store 분리
+## 4. 실제 상태 소유권과 실행 경계
 
-| Store | 포함 상태 | 비고 |
+2026-09-27 구조 리팩토링에서 초기 설계의 store별 분리 구상을 실제 갱신 단위에 맞춰 조정했다. 패널·탭·선택·히스토리는 함께 변경되므로 별도 store를 만들지 않는다. 위 트리는 UI 역할 구분이며 모든 노드가 별도의 컴포넌트나 store라는 의미는 아니다.
+
+| 소유자 | 포함 상태와 책임 | 연결 방식 |
 | --- | --- | --- |
-| `panelStore` | left/right current path, tabs, listing version, focused row | panel별 slice |
-| `selectionStore` | selected paths, anchor index, selection mode | keyboard/mouse 공통 |
-| `navigationStore` | history, editable path draft, drive/mount cache | panel-local + shared cache |
-| `actionStore` | action definitions, enabled/disabled state | registry는 static + selectors |
-| `operationStore` | queue, progress, conflict prompt, summary | Rust event 기반 |
-| `settingsStore` | theme, language, editor, display preferences | persisted |
+| `usePanelNavigation` | 좌우 경로·탭·목록·포커스·선택·히스토리, 요청 버전, 압축 목록/암호 캐시 | 탐색·탭 전환·선택·새로고침 의도별 메서드 |
+| `useCommanderSettings` | 표시 설정, 설정 로딩, 낙관적 갱신과 직렬 저장 큐 | 설정 patch와 레이아웃/확대 명령 |
+| `useCommanderActions` | registry 액션 실행, 미리보기, 압축 암호 재시도 | `ActionRequest`의 action ID·출발 패널·선택·대상 경로 |
+| `useFileClipboard` | 복사/잘라내기 원본 스냅샷, 붙여넣기 의도 | 공통 액션 실행에 요청 전달 |
+| `useCommanderKeyboard` | 문서 리스너, 최신 실행 참조, 시퀀스 타이머 정리 | registry 판정과 입력 소유권을 거쳐 공통 액션 호출 |
+| `useFileDrag` / `pointerFileDrag` | 내부 포인터 세션, 외부 드래그 연결과 리스너 해제 | 놓는 시점에 대상/작업 가능 여부 재검사 |
+| `operationStore` | 다이얼로그 초안, 진행·충돌·완료, 실제 작업 ID 연결 | 기존 공개 store API 유지, 내부 runtime/events 모듈에 상태 접근 주입 |
+| `CommanderShell` | 화면 배치, 메뉴·보조 창 표시, 컨트롤러 연결 | 화면에 필요한 상태와 의도별 콜백 전달 |
+
+- UI → 컨트롤러 → 클라이언트 → Rust command/service 방향으로 의존한다. 컨트롤러는 Shell을 import하지 않는다.
+- `FilePanel`, `PanelHeader`, `TopMenuBar`, `PanelContextMenus`, `StatusStrips`는 자체 파일 작업을 실행하지 않는다.
+- `panelPresentation`, `textLayout`, `selectionModel`, `directoryComparison`, `settingsModel`, `hotkeyStripLayout`은 독립 계산을 제공한다.
+- `OperationDialogHost`는 공통 프레임/포커스/이벤트 구독을 연결하고 `OperationInputs`, `OperationOverview`, `OperationResultView`, `ConflictResolutionView`는 표시와 의도별 콜백을 맡는다.
+- 컨트롤러 연결의 지연 getter는 렌더 중 나중에 만들어지는 콜백을 참조하기 위한 것이다. 최신 이벤트 실행 참조와 요청 버전은 해당 컨트롤러가 유지한다.
+- 추출 범위와 검증 증거는 [구조 리팩토링 기록](refactoring.md)을 참조한다.
 
 ## 5. 렌더링 규칙
 

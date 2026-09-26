@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedFor": "BokslDirGUI Phase 0 parity hard gate",
-  "updatedAt": "2026-06-17",
+  "updatedAt": "2026-09-27",
   "statusVocabulary": [
     "implemented",
     "partial",
@@ -171,8 +171,8 @@
       ],
       "guiMenuPaths": [],
       "evidence": [
-        "src/ui/CommanderShell.tsx: handleMovementKey",
-        "src/ui/CommanderShell.test.tsx: moves focused row and TUI vim-style movement shortcuts"
+        "src/ui/keyboardDispatch.ts: handleMovementKey",
+        "src/ui/CommanderShell.keyboard.test.tsx: moves focused row and TUI vim-style movement shortcuts"
       ],
       "notes": "ArrowUp/k/한글 입력 물리 KeyK 이동을 commander keyboard owner가 처리하며 브라우저 기본 동작을 막고 활성 패널 row focus를 유지한다.",
       "tuiId": "move_up",
@@ -198,8 +198,8 @@
       ],
       "guiMenuPaths": [],
       "evidence": [
-        "src/ui/CommanderShell.tsx: handleMovementKey",
-        "src/ui/CommanderShell.test.tsx: moves focused row and TUI vim-style movement shortcuts"
+        "src/ui/keyboardDispatch.ts: handleMovementKey",
+        "src/ui/CommanderShell.keyboard.test.tsx: moves focused row and TUI vim-style movement shortcuts"
       ],
       "notes": "ArrowDown/j/한글 입력 물리 KeyJ 이동을 commander keyboard owner가 처리하며 브라우저 기본 동작을 막고 활성 패널 row focus를 유지한다.",
       "tuiId": "move_down",
@@ -234,8 +234,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: nav.up Backspace/h binding",
-        "src/ui/CommanderShell.tsx: navigateUp",
-        "src/ui/CommanderShell.test.tsx: h alias for parent navigation"
+        "src/ui/usePanelNavigation.ts: navigateUp",
+        "src/ui/CommanderShell.navigation.test.tsx: h alias for parent navigation"
       ],
       "notes": "Backspace/h가 nav.up으로 parent 이동을 수행하며, h TUI alias와 브라우저 기본 focus/scroll 억제를 검증했다.",
       "tuiId": "go_parent",
@@ -266,8 +266,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: nav.enter Enter/l binding",
-        "src/ui/CommanderShell.tsx: openEntry",
-        "src/ui/CommanderShell.test.tsx: Enter and l open focused directory"
+        "src/ui/useCommanderActions.ts: openEntry",
+        "src/ui/CommanderShell.navigation.test.tsx: Enter and l open focused directory"
       ],
       "notes": "Enter/l이 nav.enter로 포커스 항목을 열며, 디렉터리는 패널 listing으로 진입하고 파일은 backend available 시 기본 앱 열기로 연결하고, browser preview에서는 status-gated 메시지로 차단한다.",
       "tuiId": "enter",
@@ -302,8 +302,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: nav.top gg binding",
-        "src/ui/CommanderShell.tsx: focusBoundaryEntry Home handling",
-        "src/ui/CommanderShell.test.tsx: Home/gg top movement"
+        "src/ui/usePanelNavigation.ts: focusBoundaryEntry Home handling",
+        "src/ui/CommanderShell.keyboard.test.tsx: Home/gg top movement"
       ],
       "notes": "gg/Home이 commander motion 경로로 첫 row에 이동하며 range selection에서도 가상 parent row는 선택하지 않는다.",
       "tuiId": "go_top",
@@ -334,8 +334,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: nav.bottom G binding",
-        "src/ui/CommanderShell.tsx: focusBoundaryEntry End handling",
-        "src/ui/CommanderShell.test.tsx: End/G bottom movement"
+        "src/ui/usePanelNavigation.ts: focusBoundaryEntry End handling",
+        "src/ui/CommanderShell.keyboard.test.tsx: End/G bottom movement"
       ],
       "notes": "G/End가 registry/motion 경로로 마지막 row에 이동하며 commander focus를 유지한다.",
       "tuiId": "go_bottom",
@@ -364,8 +364,8 @@
       ],
       "guiMenuPaths": [],
       "evidence": [
-        "src/ui/CommanderShell.tsx: handleMovementKey PageUp/Ctrl+U",
-        "src/ui/CommanderShell.test.tsx: shifted page and Korean physical Ctrl+U movement"
+        "src/ui/keyboardDispatch.ts: handleMovementKey PageUp/Ctrl+U",
+        "src/ui/CommanderShell.keyboard.test.tsx: shifted page and Korean physical Ctrl+U movement"
       ],
       "notes": "PageUp/Ctrl+U, 한글 입력 물리 KeyU, Shift+PageUp range selection을 검증했다.",
       "tuiId": "page_up",
@@ -390,8 +390,8 @@
       ],
       "guiMenuPaths": [],
       "evidence": [
-        "src/ui/CommanderShell.tsx: handleMovementKey PageDown/Ctrl+D",
-        "src/ui/CommanderShell.test.tsx: shifted page and Korean physical Ctrl+D movement"
+        "src/ui/keyboardDispatch.ts: handleMovementKey PageDown/Ctrl+D",
+        "src/ui/CommanderShell.keyboard.test.tsx: shifted page and Korean physical Ctrl+D movement"
       ],
       "notes": "PageDown/Ctrl+D, 한글 입력 물리 KeyD, Shift+PageDown range selection을 검증했다.",
       "tuiId": "page_down",
@@ -425,7 +425,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: panel.switchActive",
-        "src/ui/CommanderShell.test.tsx: Tab active panel behavior"
+        "src/ui/CommanderShell.keyboard.test.tsx: Tab active panel behavior"
       ],
       "notes": "웹 기본 focus 이동을 막는 commander keyboard owner가 유지되어야 한다.",
       "tuiId": "toggle_panel",
@@ -460,7 +460,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: layout.toggleSingleDual View/Toggle Layout",
-        "src/ui/CommanderShell.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help"
+        "src/ui/CommanderShell.settings.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help"
       ],
       "notes": "Ctrl+W와 View > Toggle Layout가 settings.layout.singlePanel을 저장하고 단일/듀얼 패널 표시를 즉시 반영한다.",
       "tuiId": "toggle_layout",
@@ -489,7 +489,7 @@
         ]
       ],
       "evidence": [
-        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
         "src/actions/registry.ts: tab.new tn"
       ],
       "notes": "tn으로 현재 패널 경로를 tab 목록에 추가하고 Tab List overlay에서 확인한다.",
@@ -519,7 +519,7 @@
         ]
       ],
       "evidence": [
-        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
         "src/actions/registry.ts: tab.close tx"
       ],
       "notes": "tx로 현재 패널 tab 목록의 마지막 항목을 닫고 Tab List overlay에서 제거 상태를 확인한다.",
@@ -565,13 +565,13 @@
       ],
       "evidence": [
         "src/actions/registry.ts: file.clipboardCopy Edit/Copy and file.copy Edit/Copy to Other Panel",
-        "src/ui/CommanderShell.tsx: direct startLongRunningOperation for file.copy",
+        "src/ui/useCommanderActions.ts: direct startLongRunningOperation for file.copy",
         "src/operations/operationStore.ts: startLongRunningOperation with non-modal progress/conflict controller",
-        "src/ui/CommanderShell.test.tsx: copy shortcut/focused fallback starts client without preflight dialog",
-        "src/ui/CommanderShell.test.tsx: archive virtual copy routes archive-to-normal through archive_extract and normal-to-archive through archive_add",
+        "src/ui/CommanderShell.operations.test.tsx: copy shortcut/focused fallback starts client without preflight dialog",
+        "src/ui/CommanderShell.archives.test.tsx: archive virtual copy routes archive-to-normal through archive_extract and normal-to-archive through archive_add",
         "src/operations/operationStore.test.ts: direct copy without dialog and conflict resolver wiring",
-        "src-tauri/src/lib.rs tests: start_copy_recursively_copies_files_and_directories plus zip/7z archive_add round trips, conflict policies, cancel safety",
-        "src/ui/CommanderShell.test.tsx: normal-to-normal, normal-to-archive, archive-to-normal, and Space multi-selection copy scenarios"
+        "src-tauri/src/tests.rs: start_copy_recursively_copies_files_and_directories plus zip/7z archive_add round trips, conflict policies, cancel safety",
+        "src/ui/CommanderShell.archives.test.tsx: normal-to-normal, normal-to-archive, archive-to-normal, and Space multi-selection copy scenarios"
       ],
       "notes": "선택이 없으면 포커스 항목을 대상으로 확인 다이얼로그 없이 즉시 시작한다. 일반→일반은 start_copy, 압축 내부→일반은 선택 entry 기반 archive_extract, 일반→압축 내부는 archive_add로 라우팅하며 공통 충돌/취소/패널 refresh 정책을 적용한다.",
       "tuiId": "copy",
@@ -622,11 +622,11 @@
       ],
       "evidence": [
         "src/actions/registry.ts: file.move Edit menu binding",
-        "src/ui/CommanderShell.tsx: file.move opens operation dialog while file.copy direct-starts",
-        "src/ui/CommanderShell.test.tsx: requires explicit confirmation before a move reaches the operation client",
-        "src/operations/operationStore.ts: active operation controller preserves progress/conflict/summary callbacks",
-        "src-tauri/src/lib.rs tests: start_move_renames_to_target_directory and same-directory overwrite no-op safety",
-        "src/ui/CommanderShell.test.tsx: Finder Option+Cmd+V and Windows Ctrl+X/Ctrl+V route through the move confirmation dialog"
+        "src/ui/useCommanderActions.ts: file.move opens operation dialog while file.copy direct-starts",
+        "src/ui/CommanderShell.operations.test.tsx: requires explicit confirmation before a move reaches the operation client",
+        "src/operations/operationEvents.ts: active operation controller preserves progress/conflict/summary callbacks",
+        "src-tauri/src/tests.rs: start_move_renames_to_target_directory and same-directory overwrite no-op safety",
+        "src/ui/CommanderShell.clipboard.test.tsx: Finder Option+Cmd+V and Windows Ctrl+X/Ctrl+V route through the move confirmation dialog"
       ],
       "notes": "TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation을 시작한다. 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리한다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다. macOS Cmd+C 후 Opt+Cmd+V와 Windows Ctrl+X 후 Ctrl+V도 동일한 이동 다이얼로그와 start_move 경로를 사용한다.",
       "tuiId": "move",
@@ -661,8 +661,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: external.openDefault File/Open Default App",
-        "src/ui/CommanderShell.test.tsx: opens files through default app and configured external editor command paths",
-        "src-tauri/src/lib.rs: open_default dry-run/recoverable error command boundary"
+        "src/ui/CommanderShell.operations.test.tsx: opens files through default app and configured external editor command paths",
+        "src-tauri/src/external.rs: open_default dry-run/recoverable error command boundary"
       ],
       "notes": "o/File > Open Default App가 선택 파일을 OS 기본 앱 command boundary로 전달하고, recoverable backend error는 dialog/status로 표시된다.",
       "tuiId": "open_default",
@@ -697,9 +697,9 @@
       ],
       "evidence": [
         "src/actions/registry.ts: external.openEditor File/Open Terminal Editor",
-        "src/ui/CommanderShell.tsx: openExternalEditor receives persisted settings.external.editorId",
-        "src/ui/CommanderShell.test.tsx: opens files through default app and configured external editor command paths",
-        "src-tauri/src/lib.rs: open_external_editor validates configured/explicit editor"
+        "src/ui/fileActionExecutors.ts: openExternalEditor receives persisted settings.external.editorId",
+        "src/ui/CommanderShell.operations.test.tsx: opens files through default app and configured external editor command paths",
+        "src-tauri/src/external.rs: open_external_editor validates configured/explicit editor"
       ],
       "notes": "e/File > Open Terminal Editor는 Settings Default Editor preset 또는 명시 editorId를 사용해 파일을 terminal editor로 연다.",
       "tuiId": "open_terminal_editor",
@@ -734,8 +734,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: external.runShellCommand File/Run Shell Command",
-        "src/ui/CommanderShell.test.tsx: previews and then runs shell commands only after an enabled policy returns a confirm token",
-        "src-tauri/src/lib.rs: prepare_shell_command/run_shell_command one-shot confirm token tests"
+        "src/ui/CommanderShell.operations.test.tsx: previews and then runs shell commands only after an enabled policy returns a confirm token",
+        "src-tauri/src/tests.rs: prepare_shell_command/run_shell_command one-shot confirm token tests"
       ],
       "notes": "기본 비활성 정책을 유지하되 TUI File > Run Shell Command 위치로 노출하고, enabled 설정에서 prepare preview와 confirmToken 후 run만 허용한다.",
       "tuiId": "run_shell_command",
@@ -775,9 +775,9 @@
       ],
       "evidence": [
         "src/actions/registry.ts: file.trash maps d/File > Delete to start_delete trash",
-        "src/ui/CommanderShell.test.tsx: focused-row trash delete, virtual parent exclusion, panel refresh on operation summary",
-        "src-tauri/src/operation.rs: start_delete DeleteMode::Trash without permanent fallback",
-        "src-tauri/src/lib.rs: start_delete_trash_moves_without_permanent_fallback and failure keeps source tests"
+        "src/ui/CommanderShell.operations.test.tsx: focused-row trash delete, virtual parent exclusion, panel refresh on operation summary",
+        "src-tauri/src/operation/delete.rs: start_delete DeleteMode::Trash without permanent fallback",
+        "src-tauri/src/tests.rs: start_delete_trash_moves_without_permanent_fallback and failure keeps source tests"
       ],
       "notes": "TUI Delete는 GUI에서 File > Delete/d로 노출하고 Rust trash mode로 실행한다. 선택이 없으면 포커스 concrete row를 대상으로 하며, 가상 parent는 제외하고 trash 실패 시 영구 삭제로 fallback하지 않는다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다.",
       "tuiId": "delete",
@@ -816,9 +816,9 @@
       ],
       "evidence": [
         "src/actions/registry.ts: file.deletePermanent maps Shift+D/Shift+Delete and File > Permanent Delete",
-        "src/ui/CommanderShell.test.tsx: typed PERMANENT_DELETE confirmation before operation client execution",
+        "src/ui/CommanderShell.operations.test.tsx: typed PERMANENT_DELETE confirmation before operation client execution",
         "src/operations/operationStore.test.ts: permanent delete defaults to cancellation until confirmation text is typed",
-        "src-tauri/src/lib.rs: start_delete_requires_confirm_token_for_permanent_delete and start_delete_permanently_removes_confirmed_targets"
+        "src-tauri/src/tests.rs: start_delete_requires_confirm_token_for_permanent_delete and start_delete_permanently_removes_confirmed_targets"
       ],
       "notes": "영구 삭제는 별도 File > Permanent Delete/D action이며 PERMANENT_DELETE 명시 입력 없이는 operation client/Rust confirm token으로 전달되지 않는다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다.",
       "tuiId": "perm_delete",
@@ -857,7 +857,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: file.mkdir",
-        "src-tauri/src/lib.rs: create_dir",
+        "src-tauri/src/mutation.rs: create_dir",
         "src/operations/operationStore.test.ts"
       ],
       "notes": "Rust child-name 검증과 atomic command 경로가 있다.",
@@ -897,7 +897,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: file.rename",
-        "src-tauri/src/lib.rs: rename_entry",
+        "src-tauri/src/mutation.rs: rename_entry",
         "src/operations/operationStore.test.ts"
       ],
       "notes": "no-replace Rust 경로를 유지해야 한다. 압축 가상 디렉터리에서는 읽기 전용 정책에 따라 비활성화된다.",
@@ -937,8 +937,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: file.properties is exposed at View > File Info with i shortcut",
-        "src/ui/CommanderShell.test.tsx: properties dialog calls getMetadata and displays metadata result",
-        "src-tauri/src/lib.rs: get_metadata returns normalized file metadata DTO"
+        "src/ui/CommanderShell.archives.test.tsx: opens properties and enters archives as virtual directories",
+        "src-tauri/src/navigation.rs: get_metadata returns normalized file metadata DTO"
       ],
       "notes": "TUI View > File Info 위치와 i shortcut에 맞췄고, GUI dialog title은 Properties로 metadata DTO를 표시한다.",
       "tuiId": "file_info",
@@ -973,10 +973,10 @@
       ],
       "evidence": [
         "src/actions/registry.ts: archive.create maps zc/File > Archive Compress",
-        "src/ui/CommanderShell.test.tsx: archive creation calls archiveCreate with selected sources and opposite-panel target archive",
-        "src-tauri/src/lib.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names",
-        "src-tauri/src/operation.rs: archive create uses common_source_parent and unsafe absolute source defense",
-        "src-tauri/src/lib.rs: archive_required_formats_create_list_and_extract_round_trip and zip/7z password round-trip tests",
+        "src/ui/CommanderShell.archives.test.tsx: starts archive creation through the connected operation client in the source panel directory",
+        "src-tauri/src/tests.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names",
+        "src-tauri/src/operation/archive_ops.rs: archive create uses common_source_parent and unsafe absolute source defense",
+        "src-tauri/src/tests.rs: archive_required_formats_create_list_and_extract_round_trip and zip/7z password round-trip tests",
         "src/operations/OperationDialogHost.test.tsx: archive password input is masked and absent from history"
       ],
       "notes": "zip/jar/war/tar/tar.gz/tgz/tar.zst/tzst/7z 생성을 지원한다. zip/7z 암호는 masked input으로 전달하고 operation summary/history/error에 남기지 않는다.",
@@ -1012,11 +1012,11 @@
       ],
       "evidence": [
         "src/actions/registry.ts: archive.extract maps zx/File > Archive Extract",
-        "src/ui/CommanderShell.tsx: archive.extract calls archiveExtract with targetDir and skip conflict policy",
-        "src/ui/CommanderShell.test.tsx: auto-extract path exercises archiveExtract client and panel refresh on summary",
-        "src-tauri/src/lib.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names and archive_operations_reject_passwords_and_unsafe_entries",
-        "src-tauri/src/lib.rs: required-format, zip/7z password, unsafe-path, and conflict-policy tests",
-        "src/ui/CommanderShell.test.tsx: archive-to-normal selected file/directory/multi-selection copy scenarios"
+        "src/ui/fileActionExecutors.ts: archive.extract calls archiveExtract with targetDir and skip conflict policy",
+        "src/ui/CommanderShell.archives.test.tsx: auto-extract path exercises archiveExtract client and panel refresh on summary",
+        "src-tauri/src/tests.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names and archive_operations_reject_passwords_and_unsafe_entries",
+        "src-tauri/src/tests.rs: required-format, zip/7z password, unsafe-path, and conflict-policy tests",
+        "src/ui/CommanderShell.archives.test.tsx: archive-to-normal selected file/directory/multi-selection copy scenarios"
       ],
       "notes": "필수 압축 형식의 전체/선택 항목 해제를 지원한다. zip/7z 암호, overwrite/skip/allOverwrite/allSkip/cancel, zip-slip/absolute path 차단을 Rust fixture로 검증한다.",
       "tuiId": "archive_extract",
@@ -1051,9 +1051,9 @@
       ],
       "evidence": [
         "src/actions/registry.ts: archive.extractAuto maps za/File > Archive Extract Auto",
-        "src/ui/CommanderShell.tsx: archiveAutoExtractFolderName derives target folder from archive basename",
-        "src/ui/CommanderShell.test.tsx: auto-extract derives release-bundle target folder and refreshes panels",
-        "src-tauri/src/operation.rs: archive_extract target normalization and unsafe entry defense"
+        "src/ui/fileActionPlans.ts: archiveAutoExtractFolderName derives target folder from archive basename",
+        "src/ui/CommanderShell.keyboard.test.tsx: auto-extract derives release-bundle target folder and refreshes panels",
+        "src-tauri/src/operation/archive_ops.rs: archive_extract target normalization and unsafe entry defense"
       ],
       "notes": "TUI za 자동 해제 parity를 추가했다. GUI는 archive basename(예: release-bundle.zip → release-bundle)으로 opposite panel 아래 target folder를 계산하고 같은 Rust archive_extract 경계를 사용한다.",
       "tuiId": "archive_extract_auto",
@@ -1088,12 +1088,12 @@
       ],
       "evidence": [
         "src/actions/registry.ts: archive.list maps Archive > Open Archive without opening a preview dialog",
-        "src/ui/CommanderShell.tsx: Enter on archive calls archiveList and replaces the panel with an archive virtual directory listing",
-        "src/ui/CommanderShell.test.tsx: opens properties and enters archives as virtual directories",
+        "src/ui/useCommanderActions.ts: Enter on archive calls archiveList and replaces the panel with an archive virtual directory listing",
+        "src/ui/CommanderShell.archives.test.tsx: opens properties and enters archives as virtual directories",
         "src/ui/archiveVirtual.test.ts: archive.zip:/ paths project flat archive entries into nested directory listings",
-        "src-tauri/src/lib.rs: archive_list and archive_7z_provider_lists_real_fixture_when_available",
-        "src/ui/CommanderShell.test.tsx: Enter archive, nested-folder Enter, Backspace parent, read-only marker, masked password prompt, and truncated listing scenarios",
-        "src-tauri/src/lib.rs: zip/7z large-listing limit and required-format listing tests"
+        "src-tauri/src/tests.rs: archive_list and archive_7z_provider_lists_real_fixture_when_available",
+        "src/ui/CommanderShell.archives.test.tsx: Enter archive, nested-folder Enter, Backspace parent, read-only marker, masked password prompt, and truncated listing scenarios",
+        "src-tauri/src/tests.rs: zip/7z large-listing limit and required-format listing tests"
       ],
       "notes": "필수 압축 형식을 archive.ext:/ 가상 디렉터리로 연다. 내부 패널은 copy-in/out만 허용하는 읽기 전용이며 move/delete/rename/create-dir을 비활성화한다. 기본 50,000개 목록 제한과 totalEntries/truncated 상태를 제공한다.",
       "tuiId": "archive_preview",
@@ -1130,8 +1130,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: selection.toggle Space binding",
-        "src/ui/CommanderShell.tsx: toggleFocusedSelection",
-        "src/ui/CommanderShell.test.tsx: Space toggle/virtual row/native control ownership"
+        "src/ui/usePanelNavigation.ts: toggleFocusedSelection",
+        "src/ui/CommanderShell.keyboard.test.tsx: Space toggle/virtual row/native control ownership"
       ],
       "notes": "Space가 포커스된 concrete row 선택을 토글하고 TUI처럼 다음 row로 이동한다. 가상 parent row와 native control keyboard owner 경계도 검증했다.",
       "tuiId": "toggle_sel",
@@ -1170,8 +1170,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: selection.invert v binding",
-        "src/ui/CommanderShell.tsx: invertSelection",
-        "src/ui/CommanderShell.test.tsx: selection all/invert/clear shortcuts"
+        "src/ui/usePanelNavigation.ts: invertSelection",
+        "src/ui/CommanderShell.keyboard.test.tsx: selection all/invert/clear shortcuts"
       ],
       "notes": "v가 활성 패널 concrete row 선택을 반전하며 가상 parent row는 선택하지 않는다.",
       "tuiId": "invert_selection",
@@ -1210,8 +1210,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: selection.all Ctrl+A binding",
-        "src/ui/CommanderShell.tsx: selectAllEntries",
-        "src/ui/CommanderShell.test.tsx: selection all/invert/clear shortcuts"
+        "src/ui/usePanelNavigation.ts: selectAllEntries",
+        "src/ui/CommanderShell.keyboard.test.tsx: selection all/invert/clear shortcuts"
       ],
       "notes": "Ctrl+A가 활성 패널 concrete row 전체를 선택하고 브라우저 select-all 기본 동작을 억제한다.",
       "tuiId": "select_all",
@@ -1250,8 +1250,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: selection.clear u binding",
-        "src/ui/CommanderShell.tsx: clearSelection",
-        "src/ui/CommanderShell.test.tsx: selection all/invert/clear shortcuts"
+        "src/ui/usePanelNavigation.ts: clearSelection",
+        "src/ui/CommanderShell.keyboard.test.tsx: selection all/invert/clear shortcuts"
       ],
       "notes": "u가 활성 패널 선택을 해제하며 commander keyboard ownership 경계를 공유한다.",
       "tuiId": "deselect",
@@ -1290,7 +1290,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: help.shortcuts Help/Keyboard Help",
-        "src/ui/CommanderShell.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help"
+        "src/ui/CommanderShell.settings.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help"
       ],
       "notes": "? 및 Help > Keyboard Help가 action registry 기반 shortcut help를 열어 실제 등록 action과 동기화된다.",
       "tuiId": "help_keys",
@@ -1329,7 +1329,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: nav.refresh",
-        "src/ui/CommanderShell.tsx: refreshPanel"
+        "src/ui/usePanelNavigation.ts: refreshPanel"
       ],
       "notes": "현재 panel data source 기반 refresh 경로가 있다.",
       "tuiId": "refresh",
@@ -1354,8 +1354,8 @@
       "guiMenuPaths": [],
       "evidence": [
         "src/actions/registry.ts: menu.open",
-        "src/ui/CommanderShell.tsx: handleTopMenuKeyDown",
-        "src/ui/CommanderShell.test.tsx: F9 menu keyboard tests"
+        "src/ui/menuModel.ts: handleTopMenuKeyDown",
+        "src/ui/CommanderShell.keyboard.test.tsx: F9 menu keyboard tests"
       ],
       "notes": "F9로 File root menu를 열고, Escape/F9 닫기, Left/Right root 이동, Up/Down item 이동, submenu 진입/실행을 처리한다.",
       "tuiId": "open_menu",
@@ -1394,7 +1394,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: app.quit File/Quit Cmd+Q, no bare q binding",
-        "src/ui/CommanderShell.test.tsx: uses an explicit Cmd+Q/File Quit policy instead of a bare q shortcut"
+        "src/ui/CommanderShell.clipboard.test.tsx: uses an explicit Cmd+Q/File Quit policy instead of a bare q shortcut"
       ],
       "notes": "일반 q는 파일명 타이핑 충돌 방지를 위해 사용하지 않고, File > Quit/Cmd+Q만 Tauri current window close 정책으로 연결한다.",
       "tuiId": "quit",
@@ -1430,8 +1430,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "Dark theme direct menu action saves settings.theme=dark and updates shell data-theme.",
       "tuiId": "theme_dark",
@@ -1464,8 +1464,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "Light theme direct menu action saves settings.theme=light and updates shell data-theme.",
       "tuiId": "theme_light",
@@ -1498,8 +1498,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "High Contrast direct menu action saves settings.theme=highContrast and updates shell data-theme.",
       "tuiId": "theme_contrast",
@@ -1532,8 +1532,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "English language direct menu action saves settings.language=en and updates shell data-language.",
       "tuiId": "language_en",
@@ -1566,8 +1566,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "Korean language direct menu action saves settings.language=ko and updates shell data-language.",
       "tuiId": "language_ko",
@@ -1598,9 +1598,9 @@
       ],
       "evidence": [
         "src/actions/registry.ts: settings.toggleIcons",
-        "src/ui/CommanderShell.tsx: settings.view.showIcons controls entry-icon rendering",
-        "src/ui/CommanderShell.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help",
-        "src-tauri/src/lib.rs: Settings.view.showIcons persistence"
+        "src/ui/EntryName.tsx: settings.view.showIcons controls entry-icon rendering",
+        "src/ui/CommanderShell.settings.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help",
+        "src-tauri/src/contracts.rs: Settings.view.showIcons persistence"
       ],
       "notes": "Settings > Toggle Icons가 settings.view.showIcons를 저장하고 파일 row icon 표시를 즉시 토글한다.",
       "tuiId": "toggle_icons",
@@ -1633,8 +1633,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: settings.editorVi",
-        "src/ui/CommanderShell.tsx: applyDirectSetting saves external.editorId=vi",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: applyDirectSetting saves external.editorId=vi",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "Settings > Default Editor > vi가 settings.external.editorId=vi로 저장된다.",
       "tuiId": "editor_preset_vi",
@@ -1667,8 +1667,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: settings.editorVim",
-        "src/ui/CommanderShell.tsx: applyDirectSetting saves external.editorId=vim",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: applyDirectSetting saves external.editorId=vim",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "Settings > Default Editor > vim이 settings.external.editorId=vim으로 저장되고 open terminal editor 경로에서 사용된다.",
       "tuiId": "editor_preset_vim",
@@ -1701,7 +1701,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: settings.editorNano",
-        "src/ui/CommanderShell.tsx: applyDirectSetting saves external.editorId=nano",
+        "src/ui/useCommanderSettings.ts: applyDirectSetting saves external.editorId=nano",
         "src/actions/registry.test.ts: editor preset menu path coverage"
       ],
       "notes": "Settings > Default Editor > nano가 settings.external.editorId=nano로 저장된다.",
@@ -1735,7 +1735,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: settings.editorEmacs",
-        "src/ui/CommanderShell.tsx: applyDirectSetting saves external.editorId=emacs",
+        "src/ui/useCommanderSettings.ts: applyDirectSetting saves external.editorId=emacs",
         "src/actions/registry.test.ts: editor preset menu path coverage"
       ],
       "notes": "Settings > Default Editor > emacs가 settings.external.editorId=emacs로 저장된다.",
@@ -1771,7 +1771,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: view.sortName",
-        "src/ui/CommanderShell.tsx: sort state"
+        "src/ui/usePanelNavigation.ts: sort state"
       ],
       "notes": "메뉴 그룹명만 다르다.",
       "tuiId": "sort_name",
@@ -1916,8 +1916,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderActions.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.navigation.test.tsx: passes sort, hidden, and refresh state through listDir"
       ],
       "notes": "Ascending sort direct menu action applies asc direction without relying on reverse toggle.",
       "tuiId": "sort_asc",
@@ -1952,8 +1952,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderActions.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.navigation.test.tsx: passes sort, hidden, and refresh state through listDir"
       ],
       "notes": "Descending sort direct menu action applies desc direction without relying on reverse toggle.",
       "tuiId": "sort_desc",
@@ -1990,8 +1990,8 @@
       ],
       "evidence": [
         "src/ui/CommanderShell.tsx: FilterPrompt and panel filter status/chip/highlight",
-        "src/ui/CommanderShell.test.tsx: applies typed filters and preserves them through refresh until clear",
-        "src/ui/CommanderShell.test.tsx: keeps filter indicators in sync from panel state while listDir is pending"
+        "src/ui/CommanderShell.navigation.test.tsx: applies typed filters and preserves them through refresh until clear",
+        "src/ui/CommanderShell.navigation.test.tsx: keeps filter indicators in sync from panel state while listDir is pending"
       ],
       "notes": "필터 입력은 list_dir filter로 전달되고 panel/status/chip 및 파일명 match highlight로 적용 상태를 표시한다.",
       "tuiId": "filter_start",
@@ -2025,8 +2025,8 @@
         ]
       ],
       "evidence": [
-        "src/ui/CommanderShell.tsx: filter.clear sends filter null to listPanel",
-        "src/ui/CommanderShell.test.tsx: applies typed filters and preserves them through refresh until clear"
+        "src/ui/useCommanderActions.ts: filter.clear sends filter null to listPanel",
+        "src/ui/CommanderShell.navigation.test.tsx: applies typed filters and preserves them through refresh until clear"
       ],
       "notes": "Clear Filter는 list_dir filter=null로 갱신하고 filter chip/status를 제거한다.",
       "tuiId": "filter_clear",
@@ -2059,7 +2059,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: view.toggleHidden",
-        "src/ui/CommanderShell.tsx: showHidden"
+        "src/ui/useCommanderActions.ts: showHidden"
       ],
       "notes": "숨김 토글 후 list_dir 갱신 경로가 있다.",
       "tuiId": "toggle_hidden",
@@ -2094,9 +2094,9 @@
       ],
       "evidence": [
         "src/actions/registry.ts: nav.locations View/Mount Points",
-        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
-        "src/ui/CommanderShell.test.tsx: ignores stale async location palette results",
-        "src-tauri/src/lib.rs: list_locations returns home/roots/recent/bookmarks"
+        "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.navigation.test.tsx: ignores stale async location palette results",
+        "src-tauri/src/navigation.rs: list_locations returns home/roots/recent/bookmarks"
       ],
       "notes": "gm/View > Mount Points는 list_locations 결과를 Locations overlay로 표시하고 stale async 응답을 무시한다.",
       "tuiId": "mount_points",
@@ -2131,8 +2131,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: nav.gotoPath View/Go To Path",
-        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
-        "src-tauri/src/lib.rs: goto_path/list_dir path validation"
+        "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src-tauri/src/navigation.rs: goto_path/list_dir path validation"
       ],
       "notes": "gp/View > Go To Path가 Path prompt를 열고 goto_path 결과 listing으로 패널을 이동한다.",
       "tuiId": "goto_path",
@@ -2161,7 +2161,7 @@
         ]
       ],
       "evidence": [
-        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
         "src/actions/registry.ts: tab.list tt"
       ],
       "notes": "tt는 현재 패널 tab overlay를 열고 tab_new/tab_close 결과를 확인할 수 있다.",
@@ -2256,8 +2256,8 @@
         ]
       ],
       "evidence": [
-        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
-        "src/ui/CommanderShell.test.tsx: keeps per-panel history and parent navigation on the listDir path"
+        "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.navigation.test.tsx: keeps per-panel history and parent navigation on the listDir path"
       ],
       "notes": "th/View > History List는 back/current/forward 경로를 overlay로 표시한다.",
       "tuiId": "history_list",
@@ -2288,8 +2288,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: bookmark.add Ctrl+B/tb+a View/Bookmark Add",
-        "src/ui/CommanderShell.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help",
-        "src-tauri/src/lib.rs: settings persist bookmarks and list_locations includes bookmarks"
+        "src/ui/CommanderShell.settings.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help",
+        "src-tauri/src/tests.rs: settings persist bookmarks and list_locations includes bookmarks"
       ],
       "notes": "Ctrl+B 및 tb+a가 현재 경로를 settings.bookmarks에 저장한다.",
       "tuiId": "bookmark_add",
@@ -2323,7 +2323,7 @@
         ]
       ],
       "evidence": [
-        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
         "src/actions/registry.ts: bookmark.list View/Bookmark List"
       ],
       "notes": "tb/View > Bookmark List는 저장된 bookmark overlay를 열고 선택 시 해당 경로로 이동한다.",
@@ -2359,8 +2359,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "Auto size direct menu action saves the human-readable size format and updates visible file size formatting.",
       "tuiId": "size_auto",
@@ -2393,8 +2393,8 @@
       ],
       "evidence": [
         "src/actions/registry.ts: direct Settings/View submenu action",
-        "src/ui/CommanderShell.tsx: direct setting/sort action handler",
-        "src/ui/CommanderShell.test.tsx: direct setting/session/menu action verification"
+        "src/ui/useCommanderSettings.ts: direct setting/sort action handler",
+        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
       ],
       "notes": "Bytes size direct menu action saves the byte size format and updates visible file size formatting.",
       "tuiId": "size_bytes",
@@ -2424,7 +2424,7 @@
         ]
       ],
       "evidence": [
-        "src/ui/CommanderShell.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
+        "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
         "src/ui/CommanderOverlays.tsx: AboutDialog BokslDirGUI"
       ],
       "notes": "Help > About이 BokslDirGUI 정체성/기술스택 설명 dialog를 연다.",

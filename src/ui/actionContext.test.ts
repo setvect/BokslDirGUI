@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ACTION_BY_ID, isActionAvailable, menuRootsFromRegistry } from '../actions/registry';
 import { createActionContext, filterEnabledActions, resolveActionTargets } from './actionContext';
 import { SAMPLE_LISTINGS } from './commanderFixture';
-import { contextMenuActions } from './CommanderShell';
+import { contextMenuActions } from './menuModel';
 
 describe('action context helpers', () => {
   it('marks virtual parent entries as navigation-only context menu targets', () => {

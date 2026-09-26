@@ -1,6 +1,6 @@
 import type { PanelId } from '../domain/types';
 import { ACTION_LABELS, HOTKEY_LABELS, MENU_SEGMENT_LABELS, type SupportedLanguage } from '../i18n-resources';
-import { COMMANDS, type TauriCommandName } from '../tauri/client';
+import { COMMANDS, type TauriCommandName } from '../tauri/commands';
 
 export type ActionCategory = 'navigation' | 'selection' | 'file' | 'archive' | 'view' | 'panel' | 'settings' | 'help';
 export type DangerLevel = 'none' | 'safe' | 'destructive' | 'irreversible';
@@ -243,7 +243,6 @@ export const actionMatchesContextScope = (action: AppAction, context: ActionCont
 export const isActionAvailable = (action: AppAction, context: ActionContext) =>
   action.isEnabled(context) && actionMatchesContextScope(action, context);
 
-
 export const menuSegmentLabel = (segment: string, language: SupportedLanguage = 'en') =>
   MENU_SEGMENT_LABELS[language][segment] ?? segment;
 
@@ -255,7 +254,6 @@ export const labelForAction = (action: AppAction, language: SupportedLanguage = 
 
 export const hotkeyLabelForAction = (action: AppAction, language: SupportedLanguage = 'en') =>
   HOTKEY_LABELS[language][action.id] ?? action.hotkeyLabel;
-
 
 export type FileShortcutPlatform = 'mac' | 'other';
 
@@ -294,8 +292,8 @@ export const shortcutLabelForAction = (action: AppAction, platform = fileShortcu
 
 export const shortcutHelpLabelForAction = (action: AppAction, platform = fileShortcutPlatform()) =>
   platformShortcutLabel(action, platform)
-    ?? action.keyboardBindings?.map((binding) => binding.replace(/\s+/g, '')).join('/')
-    ?? '';
+  ?? action.keyboardBindings?.map((binding) => binding.replace(/\s+/g, '')).join('/')
+  ?? '';
 
 export type KeyboardShortcutEvent = Pick<
   KeyboardEvent,

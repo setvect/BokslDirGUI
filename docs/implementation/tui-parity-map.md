@@ -40,7 +40,7 @@
 
 | 항목 | TUI 기준 | GUI 구현 기준 | 검증 |
 | --- | --- | --- | --- |
-| Space 선택 | focused concrete row 선택 토글 후 다음 row로 이동, `..`는 선택하지 않고 아래로 이동 | `selection.toggle`이 active panel focused row에 적용되고 focus를 clamp 이동한다 | `CommanderShell.test.tsx` Space 이동/virtual parent 회귀 |
+| Space 선택 | focused concrete row 선택 토글 후 다음 row로 이동, `..`는 선택하지 않고 아래로 이동 | `selection.toggle`이 active panel focused row에 적용되고 focus를 clamp 이동한다 | `CommanderShell.keyboard.test.tsx` Space 이동/virtual parent 회귀 |
 | 작업 대상 fallback | 명시 선택이 없으면 커서 위치 항목이 복사/이동/삭제/압축 대상 | `ActionContext.effectiveTargetCount`와 `effectiveSourceEntries`가 registry enablement와 dialog source를 일치시킨다 | `actionContext.test.ts`, copy dialog source 회귀 |
 | Commander focus 복귀 | non-modal navigation control 사용 후 다음 키 입력은 commander가 받음 | path/refresh/back/up 클릭 후 shell focus 복구, dialog/menu/input은 keyboard owner 유지 | path button click → Space 회귀 |
 | Zoom/density | 화면 배율 변경은 글자뿐 아니라 행 높이/상태줄/단축키줄/여백까지 같이 변하며 100→110→125→150 같은 preset을 사용 | `Settings.view.zoomStep`, preset scale, CSS scale variables, virtualizer row estimate가 같은 row height를 사용한다 | Cmd/Ctrl `+/-/0` preset/variable 및 settings 저장 회귀 |

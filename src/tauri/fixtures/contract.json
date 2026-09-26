@@ -1,0 +1,6 @@
+{
+  "entry": { "path": "/fixture/한글", "name": "한글", "kind": "directory", "symlinkTargetIsDirectory": null, "sizeBytes": null, "modifiedAt": null, "createdAt": null, "permissions": null, "owner": null, "group": null, "isHidden": false, "isVirtual": false },
+  "progress": { "operationId": "op-fixture", "kind": "archiveExtract", "state": "waitingForConflict", "totalFiles": null, "completedFiles": 2, "totalBytes": 1024, "completedBytes": 512, "currentPath": null, "bytesPerSecond": null, "etaSeconds": null, "recentErrorCount": 1 },
+  "error": { "code": "permission_denied", "messageKey": "errors.permissionDenied", "path": "/fixture/한글", "details": { "reason": "fixture" }, "recoverable": true },
+  "settings": { "schemaVersion": 1, "theme": "dark", "language": "ko", "sizeFormat": "binary", "external": { "editorId": null, "shellCommand": { "enabled": false } }, "bookmarks": [], "layout": { "singlePanel": false, "ratio": "50:50" }, "session": { "leftPath": null, "rightPath": null, "activePanel": "right" }, "view": { "zoomStep": 0, "density": "compact", "showIcons": true } }
+}

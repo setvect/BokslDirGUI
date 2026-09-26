@@ -124,3 +124,10 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - UI는 `invoke`를 직접 호출하지 않고 `src/tauri/client.ts`의 typed wrapper만 사용한다.
 - wrapper는 `Result<T, AppError>` 형태로 normalize한다.
 - i18n 문자열은 Rust가 완성 문장으로 보내지 않고 `messageKey`와 structured details를 보낸다.
+
+
+## 구조 리팩토링의 계약 보존
+
+2026-09-27 기준 `src-tauri/src/contracts.rs`가 DTO와 오류 타입을, `commands.rs`가 명령 핸들러를 소유한다. `lib.rs`에는 앱 초기화와 기존 이름의 command 등록을 유지한다. 서비스와 작업 엔진의 파일 분리는 command/event 이름, serde 필드/enum 값, 설정 JSON 형식을 변경하지 않는다.
+
+프론트엔드 명령 이름은 `src/tauri/commands.ts`, 호출과 이벤트 수신은 `client.ts`, 네이티브 드래그/창 어댑터는 `commanderClients.ts`가 담당한다. `client.ts`의 기존 명령 이름 export도 유지한다. 공통 직렬화 fixture는 `src/tauri/fixtures/contract.json`이며 `contract.test.ts`와 Rust `contract_tests.rs`에서 양쪽 형식을 검증한다.

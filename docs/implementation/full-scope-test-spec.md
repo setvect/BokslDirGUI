@@ -96,3 +96,15 @@
 - 7z provider가 없는 환경에서는 조건부 fixture를 건너뛰되, provider가 있는 CI/개발 환경에서 list/create/extract/password/대형 목록 게이트를 통과해야 배포 검증이 완료된다.
 - 플랫폼별 미검증 항목은 완료가 아니라 “지원 예정/검증 필요”로 남긴다.
 - destructive operation 테스트는 실제 사용자 파일이 아닌 temp fixture에서만 수행한다.
+
+
+## 6. 구조 리팩토링 이후 검증 위치
+
+- UI 회귀는 `src/ui/CommanderShell.{keyboard,navigation,settings,operations,archives,clipboard,drag}.test.tsx`와 기본 렌더링 테스트로 나눈다. 공통 준비 코드는 `src/ui/testing/`에 두며 제품 코드에서 import하지 않는다.
+- `src/ui/presentation.test.ts`는 Shell이나 브라우저 DOM을 불러오지 않고 열 너비·문자열 줄임·확대 단계·단축키 배치를 검증한다. 200,000항목 계산과 10,000행 가상화 회귀를 유지한다.
+- `src/verification/moduleBoundaries.test.ts`는 TypeScript의 타입 전용 import를 포함한 순환 의존, 순수 계산의 React/Tauri/store 의존, Rust의 명시적 import 의존을 검사한다.
+- `src/tauri/fixtures/contract.json`을 TypeScript 계약 테스트와 Rust `contract_tests.rs`가 함께 사용한다. camelCase, enum 값, null 필드, 오류 details와 설정 저장 형식의 대표 fixture를 유지한다.
+- 키보드 리스너의 StrictMode 재등록/해제와 닫힌 탭의 늦은 목록 응답을 별도 회귀 테스트로 고정한다.
+- `scripts/verify-full-scope.mjs`의 문자열 검사는 구현 위치·매핑 정합성만 증명한다. 기능 동작은 해당 테스트에서 검증한다. 구현 문자열을 전체 소스에서 합쳐 찾지 않고 담당 모듈을 지정한다.
+- TUI 매핑 evidence는 분리된 실제 테스트 경로를 가리켜야 한다. 기준선의 범위 검사 261개를 삭제하지 않는다.
+- 실제 Tauri WebKit 및 Finder/Chrome 연동은 별도의 수동 검증 항목이다. 브라우저/컴포넌트 테스트로 네이티브 연동 완료를 주장하지 않는다.

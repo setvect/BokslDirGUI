@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BACKEND_IMPLEMENTED_COMMANDS,
-  COMMANDS,
-  isBackendImplementedCommand,
-  isTauriRuntime,
-  normalizeInvokeError,
-  tauriClient,
-} from './client';
+import { BACKEND_IMPLEMENTED_COMMANDS, isBackendImplementedCommand, isTauriRuntime, normalizeInvokeError, tauriClient } from './client';
+import { COMMANDS } from './commands';
 
 describe('Tauri command names', () => {
   it('keeps shell command preparation and execution as separate backend commands', () => {

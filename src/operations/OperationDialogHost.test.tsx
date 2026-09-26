@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { act } from 'react';
 import userEvent from '@testing-library/user-event';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTION_BY_ID } from '../actions/registry';
 import type { FileEntry } from '../domain/types';
 import { tauriClient } from '../tauri/client';
-import { OperationDialogHost, splitOperationProgressPath } from './OperationDialogHost';
+import { OperationDialogHost } from './OperationDialogHost';
 import { useOperationStore } from './operationStore';
+import { splitOperationProgressPath } from './progressPresentation';
 
 const sampleEntry: FileEntry = {
   path: '/tmp/source.txt',
@@ -33,7 +34,7 @@ describe('OperationDialogHost', () => {
   });
 
   beforeEach(() => {
-    vi.spyOn(tauriClient, 'listenOperationEvents').mockResolvedValue(() => {});
+    vi.spyOn(tauriClient, 'listenOperationEvents').mockResolvedValue(() => { });
     useOperationStore.setState({
       dialog: null,
       progress: null,
@@ -297,7 +298,7 @@ describe('OperationDialogHost', () => {
     if (!action) {
       throw new Error('file.mkdir action is required');
     }
-    const atomicExecutor = vi.fn(() => new Promise<{ ok: true; data: FileEntry }>(() => {}));
+    const atomicExecutor = vi.fn(() => new Promise<{ ok: true; data: FileEntry }>(() => { }));
     useOperationStore.getState().openDialog({
       action,
       panelId: 'right',
@@ -795,7 +796,7 @@ describe('OperationDialogHost', () => {
       sources: [sampleEntry],
       targetDir: null,
       workingDir: '/tmp',
-      atomicExecutor: vi.fn(() => new Promise<{ ok: true; data: unknown }>(() => {})),
+      atomicExecutor: vi.fn(() => new Promise<{ ok: true; data: unknown }>(() => { })),
     });
 
     render(<OperationDialogHost />);

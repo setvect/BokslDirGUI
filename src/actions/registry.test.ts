@@ -1,25 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { COMMANDS } from '../tauri/commands';
 import {
   ACTIONS,
   ACTION_BY_ID,
   actionForKeyboardShortcut,
   actionVisibleOnPlatform,
   actionsForMenu,
-  fileShortcutPlatform,
   ariaKeyShortcutsFromRegistry,
+  fileShortcutPlatform,
   isActionAvailable,
   keyboardBindingCollisions,
   labelForAction,
+  matchKeyboardShortcut,
   menuRootAcceleratorFromRegistry,
   menuRootLabelFromRegistry,
-  matchKeyboardShortcut,
   menuRootsFromRegistry,
   shortcutHelpLabelForAction,
   shortcutLabelForAction,
   type ActionContext,
   type ActionId,
 } from './registry';
-import { COMMANDS } from '../tauri/client';
 
 const requiredActionIds: ActionId[] = [
   'menu.open',
