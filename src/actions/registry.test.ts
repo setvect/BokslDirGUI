@@ -108,6 +108,11 @@ describe('action registry', () => {
     expect(ACTION_BY_ID.get('settings.editorEmacs')?.menuPath).toEqual(['Settings', 'Default Editor', 'emacs']);
   });
 
+  it('does not expose the retired current-path bookmark delete menu', () => {
+    expect(ACTION_BY_ID.get('bookmark.delete')?.menuPath).toBeUndefined();
+    expect(ACTIONS.some((action) => action.menuPath?.join('/') === 'Go/Bookmark/Delete')).toBe(false);
+  });
+
   it('marks irreversible permanent delete distinctly from trash', () => {
     expect(ACTION_BY_ID.get('file.trash')?.dangerLevel).toBe('destructive');
     expect(ACTION_BY_ID.get('file.deletePermanent')?.dangerLevel).toBe('irreversible');

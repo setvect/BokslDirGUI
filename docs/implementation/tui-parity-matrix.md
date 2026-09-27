@@ -56,7 +56,7 @@
 - `layout.ratio70Left`: GUI dual-panel 비율 직접 조정 확장
 - `layout.ratio70Right`: GUI dual-panel 비율 직접 조정 확장
 - `bookmark.rename`: GUI 북마크 관리 확장
-- `bookmark.delete`: GUI 북마크 관리 확장
+- `bookmark.delete`: 북마크 목록의 지정 항목 삭제·설정 저장 확장, 현재 경로 기준 삭제 메뉴 미노출
 - `help.search`: GUI 도움말 검색 확장
 - `view.reverseSort`: GUI convenience toggle retained alongside TUI direct ascending/descending sort actions
 

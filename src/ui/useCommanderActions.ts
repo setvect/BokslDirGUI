@@ -75,7 +75,6 @@ interface CommanderActionsDependencies {
   readonly addBookmark: (panelId: PanelId) => void;
   readonly openBookmarkList: (panelId: PanelId) => void;
   readonly renameBookmarkForPanel: (panelId: PanelId) => void;
-  readonly deleteBookmarkForPanel: (panelId: PanelId) => void;
   readonly applyLayout: (patch: Partial<Settings["layout"]>, message: string) => void;
   readonly applyDirectSetting: (actionId: ActionId) => boolean;
   readonly setHelpDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -401,11 +400,6 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     if (actionId === 'bookmark.rename') {
       dependencies.renameBookmarkForPanel(panelOverride);
-      return;
-    }
-
-    if (actionId === 'bookmark.delete') {
-      dependencies.deleteBookmarkForPanel(panelOverride);
       return;
     }
 

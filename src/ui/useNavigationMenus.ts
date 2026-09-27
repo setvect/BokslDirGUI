@@ -20,7 +20,8 @@ interface NavigationMenusDependencies {
   readonly closeTab: (panelId: PanelId, index: number) => void;
   readonly panelState: PanelStateById;
   readonly settings: Settings;
-  readonly saveSettingsPatch: (patch: Partial<Settings>, successMessage: string | null, options?: { silent?: boolean; }) => Promise<void>;
+  readonly settingsRef: RefObject<Settings>;
+  readonly saveSettingsPatch: (patch: Partial<Settings>, successMessage: string | null, options?: { silent?: boolean; onSaveFailureRollback?: () => void; }) => Promise<void>;
   readonly statusText: CommanderStatusText;
   readonly setStatusMessage: Dispatch<SetStateAction<string | null>>;
   readonly navigationText: CommanderNavigationText;
@@ -75,12 +76,21 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
     void dependencies.saveSettingsPatch({ bookmarks: next }, dependencies.statusText.bookmarkRenamed(label));
   };
 
-  const deleteBookmarkForPanel = (panelId: PanelId) => {
-    const panel = dependencies.panelState[panelId];
-    const bookmarks = Array.isArray(dependencies.settings.bookmarks) ? dependencies.settings.bookmarks : [];
+  const deleteNavigationBookmark = (state: NavigationListState, item: NavigationListItem) => {
+    if (state.kind !== 'bookmarks') return;
+    const bookmarks = Array.isArray(dependencies.settingsRef.current.bookmarks) ? dependencies.settingsRef.current.bookmarks : [];
+    const bookmark = bookmarks.find((candidate) => candidate.id === item.id);
+    if (!bookmark) return;
+    setNavigationList((current) => current?.kind === 'bookmarks'
+      ? { ...current, items: current.items.filter((candidate) => candidate.id !== item.id) }
+      : current);
     void dependencies.saveSettingsPatch({
-      bookmarks: bookmarks.filter((bookmark) => bookmark.path !== panel.path),
-    }, dependencies.statusText.bookmarkDeleted(shortenPath(panel.path)));
+      bookmarks: bookmarks.filter((candidate) => candidate.id !== item.id),
+    }, dependencies.statusText.bookmarkDeleted(bookmark.label), {
+      onSaveFailureRollback: () => setNavigationList((current) => current?.kind === 'bookmarks'
+        ? { ...current, items: bookmarkItems(dependencies.settingsRef.current.bookmarks) }
+        : current),
+    });
   };
 
   const openBookmarkList = (panelId: PanelId) => {
@@ -89,12 +99,7 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
       kind: 'bookmarks',
       panelId,
       title: dependencies.navigationText.bookmarksTitle,
-      items: bookmarks.map((bookmark) => ({
-        id: bookmark.id,
-        label: bookmark.label,
-        path: bookmark.path,
-        group: 'bookmark',
-      })),
+      items: bookmarkItems(bookmarks),
     });
     dependencies.setStatusMessage(null);
   };
@@ -169,7 +174,7 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
     [navigationList, dependencies.panelTabs, dependencies.activeTab, dependencies.panelState, dependencies.panelStateRef],
   );
 
-  return { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, deleteBookmarkForPanel, setBookmarkRenameRequest, locationsRequestRef, setNavigationList, bookmarkRenameRequest, applyBookmarkRename, navigationList: visibleNavigationList, chooseNavigationItem, closeNavigationTab };
+  return { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, setBookmarkRenameRequest, locationsRequestRef, setNavigationList, bookmarkRenameRequest, applyBookmarkRename, navigationList: visibleNavigationList, chooseNavigationItem, closeNavigationTab, deleteNavigationBookmark };
 }
 
 function tabItemsForPanel(dependencies: NavigationMenusDependencies, panelId: PanelId): NavigationListItem[] {
@@ -186,5 +191,14 @@ function tabListItems(paths: string[], activeIndex: number): NavigationListItem[
     label: `${index + 1}. ${shortenPath(path)}`,
     path,
     group: index === activeIndex ? 'active tab' : 'tab',
+  }));
+}
+
+function bookmarkItems(bookmarks: Settings['bookmarks']): NavigationListItem[] {
+  return bookmarks.map((bookmark) => ({
+    id: bookmark.id,
+    label: bookmark.label,
+    path: bookmark.path,
+    group: 'bookmark',
   }));
 }

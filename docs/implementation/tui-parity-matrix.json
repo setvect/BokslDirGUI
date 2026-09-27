@@ -123,7 +123,7 @@
     },
     {
       "guiActionId": "bookmark.delete",
-      "reason": "GUI 북마크 관리 확장"
+      "reason": "북마크 목록의 지정 항목 삭제·설정 저장 확장"
     },
     {
       "guiActionId": "help.search",

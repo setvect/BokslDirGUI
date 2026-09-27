@@ -25,6 +25,8 @@ export function useCommanderSettings(runtime: CommanderSettingsDependencies) {
 
   const settingsRef = useRef(settings);
 
+  const persistedSettingsRef = useRef(settings);
+
   settingsRef.current = settings;
 
   const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -33,7 +35,7 @@ export function useCommanderSettings(runtime: CommanderSettingsDependencies) {
 
   const [settingsLoaded, setSettingsLoaded] = useState(() => !runtime.mutationClient.loadSettings);
 
-  const saveSettingsPatch = async (patch: Partial<Settings>, successMessage: string | null, options: { silent?: boolean } = {}) => {
+  const saveSettingsPatch = async (patch: Partial<Settings>, successMessage: string | null, options: { silent?: boolean; onSaveFailureRollback?: () => void } = {}) => {
     const nextSettings = mergeSettings(settingsRef.current, patch);
     settingsRef.current = nextSettings;
     setSettings(nextSettings);
@@ -43,11 +45,17 @@ export function useCommanderSettings(runtime: CommanderSettingsDependencies) {
     const save = async () => {
       const result = await runtime.mutationClient.saveSettings!({ patch });
       if (!result.ok) {
+        if (options.onSaveFailureRollback && version === settingsSaveVersionRef.current) {
+          settingsRef.current = persistedSettingsRef.current;
+          setSettings(persistedSettingsRef.current);
+          options.onSaveFailureRollback();
+        }
         runtime.setStatusMessage(runtime.statusText.settingsSaveFailed(formatUserErrorMessage(settingsRef.current.language, result.error)));
         return;
       }
+      const saved = normalizeSettings(result.data);
+      persistedSettingsRef.current = saved;
       if (version === settingsSaveVersionRef.current) {
-        const saved = normalizeSettings(result.data);
         settingsRef.current = saved;
         setSettings(saved);
       }
@@ -132,6 +140,7 @@ export function useCommanderSettings(runtime: CommanderSettingsDependencies) {
       if (disposed) return;
       if (result.ok) {
         const loaded = normalizeSettings(result.data);
+        persistedSettingsRef.current = loaded;
         setSettings(loaded);
         runtime.setActivePanel(loaded.session.activePanel);
 

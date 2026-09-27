@@ -363,6 +363,12 @@ const requiredActionIds = [
 for (const actionId of requiredActionIds) {
   addCheck(`action registry includes ${actionId}`, registry.includes(`id: '${actionId}'`), 'docs/implementation/full-scope-test-spec.md §3.6');
 }
+addCheck('bookmark deletion is list-scoped and old menu is absent',
+  registry.includes("id: 'bookmark.delete'")
+    && !registry.includes("menuPath: ['Go', 'Bookmark', 'Delete']")
+    && read('src/ui/useNavigationMenus.ts').includes('deleteNavigationBookmark')
+    && read('src/ui/CommanderOverlays.tsx').includes('onDeleteBookmark'),
+  'bookmark list deletion and settings persistence');
 
 const domainTypes = read('src/domain/types.ts');
 for (const field of ['owner: string | null', 'group: string | null', 'permissions: string | null']) {

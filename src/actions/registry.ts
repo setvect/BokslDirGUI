@@ -134,7 +134,7 @@ export const ACTIONS = [
   action({ id: 'bookmark.add', category: 'navigation', shortcutLabel: 'Ctrl+B', keyboardBindings: ['Ctrl+B'], menuPath: ['View', 'Bookmark Add'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'bookmark.list', category: 'navigation', shortcutLabel: 'tb', keyboardBindings: ['t b'], menuPath: ['View', 'Bookmark List'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'bookmark.rename', category: 'navigation', menuPath: ['Go', 'Bookmark', 'Rename'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
-  action({ id: 'bookmark.delete', category: 'navigation', menuPath: ['Go', 'Bookmark', 'Delete'], dangerLevel: 'destructive', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
+  action({ id: 'bookmark.delete', category: 'navigation', displayLabel: 'Delete Bookmark', dangerLevel: 'destructive', command: COMMANDS.saveSettings, runPath: 'bookmark list → save_settings' }),
   action({ id: 'settings.themeDark', category: 'settings', menuPath: ['Settings', 'Theme', 'Dark'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.themeLight', category: 'settings', menuPath: ['Settings', 'Theme', 'Light'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.themeHighContrast', category: 'settings', menuPath: ['Settings', 'Theme', 'High Contrast'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),

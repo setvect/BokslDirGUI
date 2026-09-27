@@ -104,6 +104,7 @@ describe('CommanderShell settings', () => {
     }
     fireEvent.mouseEnter(bookmarkTrigger);
     const bookmarkMenu = await screen.findByRole('menu', { name: '북마크 submenu' });
+    expect(within(bookmarkMenu).queryByRole('menuitem', { name: '삭제' })).toBeNull();
     await user.click(within(bookmarkMenu).getByRole('menuitem', { name: '이름 변경' }));
 
     const input = await screen.findByLabelText('북마크 이름');
@@ -121,6 +122,143 @@ describe('CommanderShell settings', () => {
     }));
     expect(screen.getByLabelText('활성 패널 상태').textContent).toContain('북마크 이름 변경: 프로젝트 📦');
     expect(document.body.textContent).not.toContain('renamed');
+  });
+
+  it('deletes bookmarks from the list by ID while keeping the dialog and panel path', async () => {
+    const user = userEvent.setup();
+    const bookmarks = [
+      { id: 'first', label: '첫째', path: '/tmp/bookmark-first' },
+      { id: 'second', label: '둘째', path: '/tmp/bookmark-second' },
+    ];
+    const baseSettings = {
+      schemaVersion: 1,
+      theme: 'dark' as const,
+      language: 'ko' as const,
+      sizeFormat: 'binary' as const,
+      external: { editorId: null, shellCommand: { enabled: false } },
+      bookmarks,
+      layout: { singlePanel: false, ratio: '50:50' as const },
+      session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+      view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+    };
+    const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
+      ok: true as const,
+      data: { ...baseSettings, ...patch },
+    }));
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      loadSettings: vi.fn(async () => ({ ok: true as const, data: baseSettings })),
+      saveSettings,
+    };
+    renderCommander(createFixturePanelDataSource(), mutationClient);
+    await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
+
+    await user.keyboard('tb');
+    const dialog = await screen.findByRole('dialog', { name: '북마크' });
+    const originalPath = document.querySelector('.file-panel.is-active .path-input')?.textContent;
+    await user.click(within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/bookmark-first' }));
+
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: { bookmarks: [bookmarks[1]] },
+    }));
+    expect(screen.getByRole('dialog', { name: '북마크' })).toBe(dialog);
+    expect(dialog.querySelectorAll('.navigation-path-choice')).toHaveLength(1);
+    expect(document.activeElement).toBe(dialog.querySelector('.navigation-path-choice'));
+    expect(document.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(originalPath);
+
+    await user.keyboard('{Backspace}');
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      patch: { bookmarks: [] },
+    }));
+    expect(dialog.querySelectorAll('.navigation-path-choice')).toHaveLength(0);
+    expect(within(dialog).getByText('표시할 항목이 없습니다.')).toBeTruthy();
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: '닫기' }));
+    expect(document.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(originalPath);
+  });
+
+  it('restores a bookmark in the open list when deleting it fails to save', async () => {
+    const user = userEvent.setup();
+    const bookmark = { id: 'keep', label: '보존', path: '/tmp/bookmark-keep' };
+    const settings: import('../domain/types').Settings = {
+      schemaVersion: 1,
+      theme: 'dark',
+      language: 'ko',
+      sizeFormat: 'binary',
+      external: { editorId: null, shellCommand: { enabled: false } },
+      bookmarks: [bookmark],
+      layout: { singlePanel: false, ratio: '50:50' },
+      session: { leftPath: null, rightPath: null, activePanel: 'right' },
+      view: { zoomStep: 0, density: 'compact', showIcons: true },
+    };
+    const saveSettings = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'save_failed', messageKey: 'errors.settingsSaveFailed', path: null, details: {}, retryable: true, recoverable: true },
+    }));
+    const loadSettings = vi.fn(async () => ({ ok: true as const, data: settings }));
+    renderCommander(createFixturePanelDataSource(), {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      loadSettings,
+      saveSettings,
+    });
+    await waitFor(() => expect(loadSettings).toHaveBeenCalled());
+    await user.keyboard('tb');
+    const dialog = await screen.findByRole('dialog', { name: '북마크' });
+    await user.click(within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/bookmark-keep' }));
+
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { bookmarks: [] } }));
+    expect(await screen.findByText('설정 저장 실패: 설정 저장에 실패했습니다.')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/bookmark-keep' })).toBeTruthy();
+    expect(within(dialog).queryByText('표시할 항목이 없습니다.')).toBeNull();
+  });
+
+  it('restores all bookmarks after consecutive delete saves fail', async () => {
+    const user = userEvent.setup();
+    const bookmarks = [
+      { id: 'first', label: '첫째', path: '/tmp/first' },
+      { id: 'second', label: '둘째', path: '/tmp/second' },
+    ];
+    const settings: import('../domain/types').Settings = {
+      schemaVersion: 1,
+      theme: 'dark',
+      language: 'ko',
+      sizeFormat: 'binary',
+      external: { editorId: null, shellCommand: { enabled: false } },
+      bookmarks,
+      layout: { singlePanel: false, ratio: '50:50' },
+      session: { leftPath: null, rightPath: null, activePanel: 'right' },
+      view: { zoomStep: 0, density: 'compact', showIcons: true },
+    };
+    const releaseSaves: Array<() => void> = [];
+    const saveSettings = vi.fn(async () => {
+      await new Promise<void>((resolve) => releaseSaves.push(resolve));
+      return {
+        ok: false as const,
+        error: { code: 'save_failed', messageKey: 'errors.settingsSaveFailed', path: null, details: {}, retryable: true, recoverable: true },
+      };
+    });
+    const loadSettings = vi.fn(async () => ({ ok: true as const, data: settings }));
+    renderCommander(createFixturePanelDataSource(), {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      loadSettings,
+      saveSettings,
+    });
+    await waitFor(() => expect(loadSettings).toHaveBeenCalled());
+    await user.keyboard('tb');
+    const dialog = await screen.findByRole('dialog', { name: '북마크' });
+    await user.click(within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/first' }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(1));
+    await user.click(within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/second' }));
+    expect(dialog.querySelectorAll('.navigation-path-choice')).toHaveLength(0);
+
+    releaseSaves[0]();
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(2));
+    releaseSaves[1]();
+    await waitFor(() => expect(dialog.querySelectorAll('.navigation-path-choice')).toHaveLength(2));
+    expect(within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/first' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: '북마크 삭제 2: /tmp/second' })).toBeTruthy();
   });
 
   it('navigates the tab list with arrows and pages, selects with Enter, and closes individual tabs', async () => {

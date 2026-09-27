@@ -322,6 +322,7 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'history.list': '히스토리 목록',
     'bookmark.add': '북마크 추가',
     'bookmark.list': '북마크 목록',
+    'bookmark.delete': '북마크 삭제',
     'external.runShellCommand': '쉘 명령',
     'help.shortcuts': '단축키 도움말',
     'help.search': '검색',
@@ -376,6 +377,7 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'history.list': 'History List',
     'bookmark.add': 'Bookmark Add',
     'bookmark.list': 'Bookmark List',
+    'bookmark.delete': 'Delete Bookmark',
     'external.runShellCommand': 'Shell Command',
     'help.shortcuts': 'Keyboard Help',
     'help.search': 'Search',
@@ -578,7 +580,7 @@ export interface CommanderStatusText {
   settingsSaveFailed(error: string): string;
   bookmarkAdded(label: string): string;
   bookmarkRenamed(path: string): string;
-  bookmarkDeleted(path: string): string;
+  bookmarkDeleted(label: string): string;
   bookmarkNotFound: string;
   themeChanged(theme: string): string;
   languageChanged(language: string): string;
@@ -641,7 +643,7 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     settingsSaveFailed: (error) => `설정 저장 실패: ${error}`,
     bookmarkAdded: (label) => `북마크 추가: ${label}`,
     bookmarkRenamed: (path) => `북마크 이름 변경: ${path}`,
-    bookmarkDeleted: (path) => `북마크 삭제: ${path}`,
+    bookmarkDeleted: (label) => `북마크 삭제: ${label}`,
     bookmarkNotFound: '현재 위치에 등록된 북마크가 없습니다.',
     themeChanged: (theme) => `테마 · ${theme === 'dark' ? '다크' : theme === 'light' ? '라이트' : '고대비'}`,
     languageChanged: (language) => `언어 · ${language === 'ko' ? '한국어' : '영어'}`,
@@ -702,7 +704,7 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     settingsSaveFailed: (error) => `Settings save failed: ${error}`,
     bookmarkAdded: (label) => `Bookmark added: ${label}`,
     bookmarkRenamed: (path) => `Bookmark renamed: ${path}`,
-    bookmarkDeleted: (path) => `Bookmark deleted: ${path}`,
+    bookmarkDeleted: (label) => `Bookmark deleted: ${label}`,
     bookmarkNotFound: 'There is no bookmark for the current location.',
     themeChanged: (theme) => `Theme · ${theme === 'dark' ? 'Dark' : theme === 'light' ? 'Light' : 'High Contrast'}`,
     languageChanged: (language) => `Language · ${language === 'ko' ? 'Korean' : 'English'}`,
@@ -882,6 +884,8 @@ export const OVERLAY_TEXT = {
     cancel: '취소',
     close: '닫기',
     closeTab: '탭 닫기',
+    deleteBookmark: '북마크 삭제',
+    delete: '삭제',
     move: '이동',
     quickView: '빠른 보기',
     previewLoading: '미리보기를 불러오는 중…',
@@ -918,6 +922,8 @@ export const OVERLAY_TEXT = {
     cancel: 'Cancel',
     close: 'Close',
     closeTab: 'Close tab',
+    deleteBookmark: 'Delete bookmark',
+    delete: 'Delete',
     move: 'Go',
     quickView: 'Quick View',
     previewLoading: 'Loading preview…',

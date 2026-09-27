@@ -127,11 +127,12 @@ export function CommanderShell({
     get saveSettingsPatch() { return saveSettingsPatch; },
     get settingsLoaded() { return settingsLoaded; },
   });
-  const { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, deleteBookmarkForPanel, setBookmarkRenameRequest, locationsRequestRef, setNavigationList, bookmarkRenameRequest, applyBookmarkRename, navigationList, chooseNavigationItem, closeNavigationTab } = useNavigationMenus({
+  const { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, setBookmarkRenameRequest, locationsRequestRef, setNavigationList, bookmarkRenameRequest, applyBookmarkRename, navigationList, chooseNavigationItem, closeNavigationTab, deleteNavigationBookmark } = useNavigationMenus({
     activateTab,
     closeTab,
     get panelState() { return panelState; },
     get settings() { return settings; },
+    get settingsRef() { return settingsRef; },
     get saveSettingsPatch() { return saveSettingsPatch; },
     get statusText() { return statusText; },
     get setStatusMessage() { return setStatusMessage; },
@@ -181,7 +182,6 @@ export function CommanderShell({
     get addBookmark() { return addBookmark; },
     get openBookmarkList() { return openBookmarkList; },
     get renameBookmarkForPanel() { return renameBookmarkForPanel; },
-    get deleteBookmarkForPanel() { return deleteBookmarkForPanel; },
     get applyLayout() { return applyLayout; },
     get applyDirectSetting() { return applyDirectSetting; },
     get setHelpDialogOpen() { return setHelpDialogOpen; },
@@ -507,6 +507,7 @@ export function CommanderShell({
           state={navigationList}
           onChoose={(item) => chooseNavigationItem(navigationList, item)}
           onCloseTab={(item) => closeNavigationTab(navigationList, item)}
+          onDeleteBookmark={(item) => deleteNavigationBookmark(navigationList, item)}
           onClose={closeOverlay}
         />
       ) : null}

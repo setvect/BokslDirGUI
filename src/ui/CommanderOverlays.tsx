@@ -308,15 +308,17 @@ export function AboutDialog({ language, onClose }: { language: SupportedLanguage
   );
 }
 
-export function NavigationListDialog({ language, state, onChoose, onCloseTab, onClose }: {
+export function NavigationListDialog({ language, state, onChoose, onCloseTab, onDeleteBookmark, onClose }: {
   language: SupportedLanguage;
   state: NavigationListState;
   onChoose(item: NavigationListItem): void;
   onCloseTab(item: NavigationListItem): void;
+  onDeleteBookmark(item: NavigationListItem): void;
   onClose(): void;
 }) {
   const text = OVERLAY_TEXT[language];
   const initialFocusRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const isPathList = state.kind !== 'locations';
   return (
     <CommanderOverlayDialog
@@ -336,8 +338,10 @@ export function NavigationListDialog({ language, state, onChoose, onCloseTab, on
             language={language}
             state={state}
             initialFocusRef={initialFocusRef}
+            closeButtonRef={closeButtonRef}
             onChoose={onChoose}
             onCloseTab={onCloseTab}
+            onDeleteBookmark={onDeleteBookmark}
           />
         ) : (
           <div className="navigation-list" role="list">
@@ -357,19 +361,21 @@ export function NavigationListDialog({ language, state, onChoose, onCloseTab, on
           </div>
         )}
         <div className="filter-actions">
-          <button type="button" onClick={onClose}>{text.close}</button>
+          <button ref={closeButtonRef} type="button" onClick={onClose}>{text.close}</button>
         </div>
       </div>
     </CommanderOverlayDialog>
   );
 }
 
-function PathNavigationListContent({ language, state, initialFocusRef, onChoose, onCloseTab }: {
+function PathNavigationListContent({ language, state, initialFocusRef, closeButtonRef, onChoose, onCloseTab, onDeleteBookmark }: {
   language: SupportedLanguage;
   state: NavigationListState;
   initialFocusRef: RefObject<HTMLButtonElement | null>;
+  closeButtonRef: RefObject<HTMLButtonElement | null>;
   onChoose(item: NavigationListItem): void;
   onCloseTab(item: NavigationListItem): void;
+  onDeleteBookmark(item: NavigationListItem): void;
 }) {
   const text = OVERLAY_TEXT[language];
   const listRef = useRef<HTMLDivElement>(null);
@@ -377,7 +383,10 @@ function PathNavigationListContent({ language, state, initialFocusRef, onChoose,
   const focusedIndexRef = useRef(Math.max(0, state.items.findIndex((item) => item.group === 'active tab' || item.group === 'current')));
 
   useEffect(() => {
-    if (state.items.length === 0) return;
+    if (state.items.length === 0) {
+      closeButtonRef.current?.focus({ preventScroll: true });
+      return;
+    }
     const nextIndex = Math.min(focusedIndexRef.current, state.items.length - 1);
     focusedIndexRef.current = nextIndex;
     itemRefs.current[nextIndex]?.focus({ preventScroll: true });
@@ -412,14 +421,20 @@ function PathNavigationListContent({ language, state, initialFocusRef, onChoose,
       return;
     }
 
-    if (event.key === 'Enter' && !(event.target instanceof HTMLElement && event.target.closest('.navigation-tab-close'))) {
+    if (event.key === 'Enter' && !(event.target instanceof HTMLElement && event.target.closest('.navigation-path-remove'))) {
       event.preventDefault();
       event.stopPropagation();
       onChoose(state.items[index]);
-    } else if (state.kind === 'tabs' && (event.key === 'Delete' || event.key === 'Backspace') && state.items.length > 1) {
-      event.preventDefault();
-      event.stopPropagation();
-      onCloseTab(state.items[index]);
+    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (state.kind === 'tabs' && state.items.length > 1) {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseTab(state.items[index]);
+      } else if (state.kind === 'bookmarks') {
+        event.preventDefault();
+        event.stopPropagation();
+        onDeleteBookmark(state.items[index]);
+      }
     }
   };
 
@@ -448,15 +463,15 @@ function PathNavigationListContent({ language, state, initialFocusRef, onChoose,
               </span>
               <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
             </button>
-            {state.kind === 'tabs' ? <button
+            {state.kind === 'tabs' || state.kind === 'bookmarks' ? <button
               type="button"
-              className="navigation-tab-close"
-              aria-label={text.closeTab + ' ' + (index + 1) + ': ' + item.path}
-              title={text.closeTab}
-              disabled={state.items.length <= 1}
+              className={'navigation-path-remove' + (state.kind === 'tabs' ? ' navigation-tab-close' : '')}
+              aria-label={(state.kind === 'tabs' ? text.closeTab : text.deleteBookmark) + ' ' + (index + 1) + ': ' + item.path}
+              title={state.kind === 'tabs' ? text.closeTab : text.deleteBookmark}
+              disabled={state.kind === 'tabs' && state.items.length <= 1}
               onFocus={() => { focusedIndexRef.current = index; }}
-              onClick={() => onCloseTab(item)}
-            >{text.close}</button> : null}
+              onClick={() => state.kind === 'tabs' ? onCloseTab(item) : onDeleteBookmark(item)}
+            >{state.kind === 'tabs' ? text.close : text.delete}</button> : null}
           </div>
         );
       })}

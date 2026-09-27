@@ -28,7 +28,8 @@
 - 유효하지 않은 시작 경로는 앱 종료가 아니라 panel error/fallback으로 처리
 - 각 패널은 독립 경로, 탭, 정렬, 필터, 선택, 스크롤 유지
 - 탭 생성/닫기/전환이 동작하고 마지막 탭은 닫히지 않음
-- `nav.back`/`nav.forward`/`history.list`와 `bookmark.add`/`bookmark.list`/`bookmark.rename`/`bookmark.delete`: 패널별 히스토리 back/forward 목록과 북마크 추가/이름 변경/삭제/중복 방지가 동작
+- `nav.back`/`nav.forward`/`history.list`와 `bookmark.add`/`bookmark.list`/`bookmark.rename`: 패널별 히스토리 back/forward 목록과 북마크 추가/이름 변경/중복 방지 검증
+- 북마크 삭제: 현재 경로 기준 메뉴 미노출, 목록의 지정 항목 ID 기준 삭제·설정 저장·포커스 유지·마지막 항목 처리·저장 실패 시 복원 검증
 - Enter/double click으로 폴더 진입, Backspace/up으로 상위 이동
 - 뒤로/앞으로/refresh/주소 입력/drive quick access가 동작
 - `layout.toggleSingleDual` 및 `layout.ratio50`/`layout.ratio70Left`/`layout.ratio70Right`: single-panel/dual-panel 전환과 50:50/70:30/30:70 panel ratio가 상태 손실 없이 동작

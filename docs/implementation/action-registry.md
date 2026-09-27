@@ -94,7 +94,7 @@ interface AppAction {
 | `bookmark.add` | navigation | Ctrl+B | View/Bookmark Add | safe | save_settings |
 | `bookmark.list` | navigation | tb | View/Bookmark List | none | UI state |
 | `bookmark.rename` | navigation | none | Go/Bookmark/Rename | safe | save_settings |
-| `bookmark.delete` | navigation | none | Go/Bookmark/Delete | destructive | save_settings |
+| `bookmark.delete` | navigation | none | 목록 항목의 삭제 버튼 | destructive | bookmark list → save_settings |
 | `archive.list` | archive | Enter on archive | Archive/Open Archive | safe | archive_list 기반 가상 디렉터리 진입 |
 | `external.runShellCommand` | file | : | File/Run Shell Command | destructive | ShellCommandDialog → prepare_shell_command → run_shell_command |
 | `help.shortcuts` | help | ? | Help/Keyboard Help | none | dialog |

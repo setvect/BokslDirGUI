@@ -8,12 +8,14 @@ import './testing/commanderTestSetup';
 function renderNavigationList(state: NavigationListState) {
   const onChoose = vi.fn();
   const onCloseTab = vi.fn();
+  const onDeleteBookmark = vi.fn();
   render(
     <NavigationListDialog
       language="ko"
       state={state}
       onChoose={onChoose}
       onCloseTab={onCloseTab}
+      onDeleteBookmark={onDeleteBookmark}
       onClose={vi.fn()}
     />,
   );
@@ -25,7 +27,7 @@ function renderNavigationList(state: NavigationListState) {
   for (const choice of choices) {
     Object.defineProperty(choice, 'offsetHeight', { configurable: true, value: 40 });
   }
-  return { dialog, choices, onChoose, onCloseTab };
+  return { dialog, choices, onChoose, onCloseTab, onDeleteBookmark };
 }
 
 describe('navigation list dialogs', () => {
@@ -41,7 +43,7 @@ describe('navigation list dialogs', () => {
         { id: 'third', label: '/Users/boksl/backup', path: '/Users/boksl/backup', group: 'bookmark' },
       ],
     };
-    const { dialog, choices, onChoose, onCloseTab } = renderNavigationList(state);
+    const { dialog, choices, onChoose, onCloseTab, onDeleteBookmark } = renderNavigationList(state);
 
     expect(dialog.classList.contains('navigation-path-dialog')).toBe(true);
     expect(choices).toHaveLength(3);
@@ -61,6 +63,33 @@ describe('navigation list dialogs', () => {
     await user.keyboard('{Enter}');
     expect(onChoose).toHaveBeenCalledWith(state.items[0]);
     expect(onCloseTab).not.toHaveBeenCalled();
+    expect(onDeleteBookmark).not.toHaveBeenCalled();
+  });
+
+  it('deletes the chosen bookmark by button or Delete without navigating', async () => {
+    const user = userEvent.setup();
+    const state: NavigationListState = {
+      kind: 'bookmarks',
+      panelId: 'right',
+      title: '북마크',
+      items: [
+        { id: 'first', label: '첫째', path: '/tmp/first', group: 'bookmark' },
+        { id: 'second', label: '둘째', path: '/tmp/second', group: 'bookmark' },
+      ],
+    };
+    const { dialog, choices, onChoose, onDeleteBookmark } = renderNavigationList(state);
+
+    const deleteFirst = within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/first' });
+    deleteFirst.focus();
+    await user.keyboard('{Enter}');
+    expect(onDeleteBookmark).toHaveBeenCalledWith(state.items[0]);
+    expect(onChoose).not.toHaveBeenCalled();
+
+    onDeleteBookmark.mockClear();
+    choices[1].focus();
+    await user.keyboard('{Delete}');
+    expect(onDeleteBookmark).toHaveBeenCalledWith(state.items[1]);
+    expect(onChoose).not.toHaveBeenCalled();
   });
 
   it('starts on the current history entry and chooses another path with arrows and pages', async () => {
@@ -82,6 +111,7 @@ describe('navigation list dialogs', () => {
     expect(within(choices[1]).getByText(state.items[1].path)).toBeTruthy();
     expect(choices[1].title).toBe(state.items[1].path);
     expect(dialog.querySelector('code')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /북마크 삭제/ })).toBeNull();
     expect(document.activeElement).toBe(choices[1]);
 
     await user.keyboard('{ArrowUp}');
