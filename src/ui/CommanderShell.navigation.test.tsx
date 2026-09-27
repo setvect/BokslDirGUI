@@ -126,7 +126,7 @@ describe('CommanderShell navigation', () => {
         initialSelectedPaths={{ right: [] }}
       />,
     );
-    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+    const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
     const activeTable = container.querySelector<HTMLElement>('.file-panel.is-active [role="table"]');
 
     expect(activeTable?.getAttribute('aria-rowcount')).toBe('10000');
@@ -152,7 +152,7 @@ describe('CommanderShell navigation', () => {
     expect(activePanelLabel(document.body)).toContain('generic-array-6de08afde610f112');
     await waitFor(() => expect(focusedRowText(container)).toContain('README.md'));
     expect(
-      screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant'),
+      screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant'),
     ).toBe('commander-row-right-1');
     expect(listDirSpy).toHaveBeenCalledWith(expect.objectContaining({
       panelId: 'right',
@@ -210,7 +210,7 @@ describe('CommanderShell navigation', () => {
 
     await waitFor(() => expect(activePanelLabel(container)).toContain(parentPath));
     expect(focusedRowText(container)).toContain('build');
-    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-1');
+    expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-1');
     expect(focusedRow(container)?.className).not.toContain('is-selected');
     expect(focusedRow(container)?.textContent).not.toContain('deps');
     expect(childPath).toBe(`${parentPath}/build`);

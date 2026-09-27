@@ -393,7 +393,10 @@ describe('CommanderShell settings', () => {
 
     await user.click(screen.getByRole('button', { name: '도움말(H)' }));
     await user.click(await screen.findByRole('menuitem', { name: /^정보/ }));
-    expect(await screen.findByRole('dialog', { name: 'BokslDirGUI' })).toBeTruthy();
+    const aboutDialog = await screen.findByRole('dialog', { name: '복슬Dir 0.1.0' });
+    expect(within(aboutDialog).getByRole('img', { name: '복슬Dir 강아지 마스코트' })).toBeTruthy();
+    expect(within(aboutDialog).getByText('파일 정리가 한결 가벼워지는 두 칸짜리 파일 관리자예요.')).toBeTruthy();
+    expect(within(aboutDialog).queryByText(/^목표:/)).toBeNull();
   });
 
   it('scales font, density variables, and persists zoom settings with Cmd/Ctrl +/-/0', async () => {
@@ -412,7 +415,7 @@ describe('CommanderShell settings', () => {
       },
     }));
     renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
-    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+    const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
     const beforeRowHeight = shell.style.getPropertyValue('--row-height');
 
     fireEvent.keyDown(document, { key: '=', metaKey: true });
@@ -449,7 +452,7 @@ describe('CommanderShell settings', () => {
       return { ok: true as const, data: savedSettings };
     });
     renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
-    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+    const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
     const toggleIconsItem = await screen.findByRole('menuitem', { name: /아이콘 전환/ });

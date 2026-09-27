@@ -1,4 +1,4 @@
-export const APP_NAME = 'BokslDirGUI';
+export const APP_NAME = '복슬Dir';
 
 export const FOUNDATION_DOCUMENTS = [
   'docs/implementation/README.md',

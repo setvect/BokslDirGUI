@@ -17,7 +17,8 @@ describe('CommanderShell rendering', () => {
   it('renders a TUI-faithful dual-panel commander canvas', () => {
     const { container } = renderCommander();
 
-    expect(screen.getByText('[복슬Dir]')).toBeTruthy();
+    expect(screen.queryByText('[복슬Dir]')).toBeNull();
+    expect(screen.getByRole('button', { name: '파일(F)' })).toBeTruthy();
     expect(screen.getByLabelText('dual file panels')).toBeTruthy();
     expect(screen.getAllByRole('table')).toHaveLength(2);
     expect(screen.getByText('Architecture.md')).toBeTruthy();

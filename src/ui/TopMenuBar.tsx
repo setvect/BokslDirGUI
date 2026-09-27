@@ -5,9 +5,6 @@ import {
   type AppAction
 } from '../actions/registry';
 import type { Settings } from '../domain/types';
-import {
-  COMMANDER_UI_TEXT
-} from '../i18n-resources';
 import { useCommanderKeyboardBoundaryProps } from './keyboardOwnership';
 import { MenuNode, TopMenuState, menuNodesForRoot, menuShortcutLabel } from './menuModel';
 import { formatLocalClock, useLocalClock } from './useLocalClock';
@@ -31,7 +28,6 @@ export function TopMenuBar({ language, settings, context, state, onOpenRoot, onC
 
   return (
     <header className="top-menu" aria-label="application menu">
-      <div className="brand" aria-label="application name">{COMMANDER_UI_TEXT[language].brand}</div>
       <nav className="menu-list" aria-label="primary actions">
         {roots.map((root, rootIndex) => {
           const isActiveRoot = state?.rootIndex === rootIndex;

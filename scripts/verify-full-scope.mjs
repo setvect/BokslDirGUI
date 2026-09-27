@@ -566,6 +566,17 @@ addCheck(
 );
 
 const tauriConf = JSON.parse(read('src-tauri/tauri.conf.json'));
+const cargoVersion = read('src-tauri/Cargo.toml').match(/^version = "([^"]+)"/m)?.[1];
+const packageLock = JSON.parse(read('package-lock.json'));
+addCheck(
+  'app version matches npm, Tauri, Rust, and lockfile declarations',
+  Boolean(packageJson.version)
+    && packageJson.version === tauriConf.version
+    && packageJson.version === cargoVersion
+    && packageJson.version === packageLock.version
+    && packageJson.version === packageLock.packages?.['']?.version,
+  `npm=${packageJson.version}, tauri=${tauriConf.version}, rust=${cargoVersion}, lock=${packageLock.version}`,
+);
 addCheck(
   'tauri config uses explicit CSP',
   typeof tauriConf.app?.security?.csp === 'string' && tauriConf.app.security.csp.length > 0,

@@ -17,7 +17,7 @@ describe('CommanderShell keyboard', () => {
   it('uses Tab as active-panel switching instead of DOM focus traversal', async () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
-    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+    const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
 
     shell.focus();
     expect(activePanelLabel(container)).toContain('right panel');
@@ -77,12 +77,12 @@ describe('CommanderShell keyboard', () => {
 
     await user.keyboard('{Home}');
     expect(
-      screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant'),
+      screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant'),
     ).toBe('commander-row-right-0');
 
     await user.keyboard('{End}');
     expect(
-      screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant'),
+      screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant'),
     ).toBe('commander-row-right-32');
   });
 
@@ -278,24 +278,24 @@ describe('CommanderShell keyboard', () => {
     expect(focusedRowText(container)).toContain('generic-array-6de08afde610f112');
 
     fireEvent.keyDown(document, { key: 'ㅕ', code: 'KeyU', ctrlKey: true });
-    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
+    expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
 
     fireEvent.keyDown(document, { key: 'ㅇ', code: 'KeyD', ctrlKey: true });
-    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-12');
+    expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-12');
 
     fireEvent.keyDown(document, { key: 'ArrowDown', shiftKey: true });
     expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length).toBeGreaterThanOrEqual(2);
 
     await user.keyboard('gg');
-    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
+    expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
 
     fireEvent.keyDown(document, { key: 'G', shiftKey: true });
-    expect(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-32');
+    expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-32');
   });
 
   it('extends selection with shifted page and boundary movement keys', async () => {
     const { container } = renderCommander();
-    const shell = screen.getByRole('application', { name: 'BokslDirGUI file commander shell' });
+    const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
 
     fireEvent.keyDown(document, { key: 'PageDown', shiftKey: true });
     expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-21');
@@ -552,7 +552,7 @@ describe('CommanderShell keyboard', () => {
       throw new Error('refresh button is required');
     }
     await user.click(refreshButton);
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('application', { name: 'BokslDirGUI file commander shell' })));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('application', { name: '복슬Dir file commander shell' })));
 
     await user.keyboard('{Space}');
     expect(focusedRowText(container)).toContain('generic-array-7534a23a150ae5e7');

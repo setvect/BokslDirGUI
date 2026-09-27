@@ -1,8 +1,10 @@
+import { APP_NAME } from './foundation';
+
 export type SupportedLanguage = 'ko' | 'en';
 
 export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> = {
   ko: {
-    'app.name': 'BokslDirGUI',
+    'app.name': APP_NAME,
     'errors.notFound': '대상을 찾을 수 없습니다.',
     'errors.specialFileCopyUnsupported': '소켓이나 장치 같은 특수 파일은 복사하거나 이동할 수 없습니다.',
     'errors.specialFileCopySkipped': '복사할 수 없는 특수 파일은 복사에서 제외했습니다.',
@@ -40,7 +42,7 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'external.dryRun': '외부 앱 실행을 확인했습니다.',
   },
   en: {
-    'app.name': 'BokslDirGUI',
+    'app.name': APP_NAME,
     'errors.notFound': 'The target was not found.',
     'errors.specialFileCopyUnsupported': 'Special files such as sockets or devices cannot be copied or moved.',
     'errors.specialFileCopySkipped': 'An unsupported special file was omitted from the copy.',
@@ -493,7 +495,6 @@ export const COMMANDER_UI_TEXT = {
     up: '상위 폴더',
     refresh: '새로고침',
     gotoPath: '경로 이동',
-    brand: '[복슬Dir]',
     partialArchive: '일부만 표시됨',
     archiveReadOnly: '압축 내부 읽기 전용',
     dropCopy: '여기에 복사',
@@ -527,7 +528,6 @@ export const COMMANDER_UI_TEXT = {
     up: 'Up',
     refresh: 'Refresh',
     gotoPath: 'Go to path',
-    brand: '[복슬Dir]',
     partialArchive: 'PARTIAL LIST',
     archiveReadOnly: 'ARCHIVE READ-ONLY',
     dropCopy: 'Copy here',
@@ -877,8 +877,9 @@ export const OVERLAY_TEXT = {
     bookmarkName: '북마크 이름',
     save: '저장',
     noSearchResults: '검색 결과가 없습니다.',
-    aboutLine1: '키보드 중심 듀얼 패널 파일 커맨더입니다.',
-    aboutLine2: '목표: 기존 터미널 BokslDir의 조작감과 기능을 GUI 환경에서도 자연스럽게 유지합니다.',
+    aboutLine1: '파일 정리가 한결 가벼워지는 두 칸짜리 파일 관리자예요.',
+    aboutLine2: '키보드로 빠르게, 마우스로 편하게 파일을 찾고 옮겨보세요.',
+    aboutMascotAlt: '복슬Dir 강아지 마스코트',
     emptyList: '표시할 항목이 없습니다.',
     goToPath: '경로 이동',
     path: '경로',
@@ -915,8 +916,9 @@ export const OVERLAY_TEXT = {
     bookmarkName: 'Bookmark name',
     save: 'Save',
     noSearchResults: 'No results.',
-    aboutLine1: 'A keyboard-first dual-panel file commander.',
-    aboutLine2: 'Goal: preserve the feel and function of the terminal BokslDir in a GUI environment.',
+    aboutLine1: 'A friendly two-panel space for finding and organizing your files.',
+    aboutLine2: 'Move quickly with the keyboard or use your mouse to work your way.',
+    aboutMascotAlt: '복슬Dir dog mascot',
     emptyList: 'No items to show.',
     goToPath: 'Go to Path',
     path: 'Path',

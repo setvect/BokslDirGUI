@@ -1,4 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
+import appPackage from '../../package.json';
+import aboutMascot from '../assets/about-mascot.png';
+import { APP_NAME } from '../foundation';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { ACTIONS, actionVisibleOnPlatform, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
 import type { FilePreview, PanelId } from '../domain/types';
@@ -296,10 +299,15 @@ function HelpSearchResult({
 export function AboutDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
   const text = OVERLAY_TEXT[language];
   return (
-    <CommanderOverlayDialog owner="about-dialog" title="BokslDirGUI" ariaLabel="about BokslDirGUI" onClose={onClose} className="about-dialog">
+    <CommanderOverlayDialog owner="about-dialog" title={`${APP_NAME} ${appPackage.version}`} ariaLabel={`${APP_NAME} information`} onClose={onClose} className="about-dialog">
       <div className="filter-form">
-        <p>{text.aboutLine1}</p>
-        <p>{text.aboutLine2}</p>
+        <div className="about-content">
+          <img className="about-mascot" src={aboutMascot} alt={text.aboutMascotAlt} />
+          <div className="about-copy">
+            <p>{text.aboutLine1}</p>
+            <p>{text.aboutLine2}</p>
+          </div>
+        </div>
         <div className="filter-actions">
           <button type="button" onClick={onClose}>{text.close}</button>
         </div>

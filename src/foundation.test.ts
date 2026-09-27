@@ -4,7 +4,7 @@ import { I18N_RESOURCES, translateMessageKey } from './i18n-resources';
 
 describe('BokslDirGUI foundation contract', () => {
   it('names the Tauri app and implementation source of truth', () => {
-    expect(APP_NAME).toBe('BokslDirGUI');
+    expect(APP_NAME).toBe('복슬Dir');
     expect(IMPLEMENTATION_BOUNDARY.runtime).toBe('tauri-react-rust');
     expect(IMPLEMENTATION_BOUNDARY.sourceOfTruth).toBe('docs/implementation');
   });

@@ -7,6 +7,7 @@ import {
   menuRootsFromRegistry
 } from '../actions/registry';
 import type { PanelId } from '../domain/types';
+import { APP_NAME } from '../foundation';
 import {
   COMMANDER_NAVIGATION_TEXT,
   COMMANDER_STATUS_TEXT,
@@ -331,7 +332,7 @@ export function CommanderShell({
       data-theme={settings.theme}
       data-language={settings.language}
       data-size-format={settings.sizeFormat}
-      aria-label="BokslDirGUI file commander shell"
+      aria-label={`${APP_NAME} file commander shell`}
       aria-activedescendant={activeRowDomId}
       aria-keyshortcuts={`${ariaKeyShortcuts} ArrowUp ArrowDown PageUp PageDown Home End`}
     >

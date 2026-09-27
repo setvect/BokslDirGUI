@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "BokslDirGUI",
+  "productName": "복슬Dir",
   "mainBinaryName": "BokslDirGUI",
   "version": "0.1.0",
   "identifier": "com.boksldir.gui",
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "BokslDirGUI",
+        "title": "복슬Dir",
         "width": 1280,
         "height": 820,
         "minWidth": 1080,
@@ -26,7 +26,7 @@
       },
       {
         "label": "drop-overlay",
-        "title": "BokslDirGUI file drop overlay",
+        "title": "복슬Dir file drop overlay",
         "url": "drop-overlay.html",
         "width": 1,
         "height": 1,
