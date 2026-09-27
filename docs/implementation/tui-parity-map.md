@@ -2,16 +2,16 @@
 
 ## 1. 목적
 
-기존 TUI 기반 BokslDir 기능을 GUI 구현 단위로 매핑해, 첫 구현이 축소 범위가 아니라 **기존 TUI 기능 동등성**을 만족하도록 한다.
+- 기존 TUI 기반 BokslDir 기능을 GUI 구현 단위로 매핑해, 첫 구현이 축소 범위가 아니라 **기존 TUI 기능 동등성** 충족
 
 ## 2. 매핑 원칙
 
 | 원칙 | 설명 |
 | --- | --- |
-| TUI 정체성 유지 | 좌/우 패널, 활성 패널, 반대 패널 대상 작업, 하단 hotkey strip을 유지한다. |
-| GUI 접근성 추가 | 기존 단축키 기능은 메뉴/컨텍스트 메뉴/마우스 흐름에서도 접근 가능해야 한다. |
-| 안전 경계 강화 | 파일 변경 작업은 Rust command/service를 통해서만 실행한다. |
-| 보조 기능은 기본 패널을 침범하지 않음 | 사이드바/미리보기/작업 큐는 overlay/collapsed/command-invoked 방식 우선. |
+| TUI 정체성 유지 | 좌/우 패널, 활성 패널, 반대 패널 대상 작업, 하단 hotkey strip 유지 |
+| GUI 접근성 추가 | 기존 단축키 기능은 메뉴/컨텍스트 메뉴/마우스 흐름에서도 접근 가능해야 함 |
+| 안전 경계 강화 | 파일 변경 작업은 Rust command/service를 통해서만 실행 |
+| 보조 기능은 기본 패널을 침범하지 않음 | 사이드바/미리보기/작업 큐는 overlay/collapsed/command-invoked 방식 우선 |
 
 ## 3. 기능 매핑
 
@@ -40,11 +40,11 @@
 
 | 항목 | TUI 기준 | GUI 구현 기준 | 검증 |
 | --- | --- | --- | --- |
-| Space 선택 | focused concrete row 선택 토글 후 다음 row로 이동, `..`는 선택하지 않고 아래로 이동 | `selection.toggle`이 active panel focused row에 적용되고 focus를 clamp 이동한다 | `CommanderShell.keyboard.test.tsx` Space 이동/virtual parent 회귀 |
-| 작업 대상 fallback | 명시 선택이 없으면 커서 위치 항목이 복사/이동/삭제/압축 대상 | `ActionContext.effectiveTargetCount`와 `effectiveSourceEntries`가 registry enablement와 dialog source를 일치시킨다 | `actionContext.test.ts`, copy dialog source 회귀 |
+| Space 선택 | focused concrete row 선택 토글 후 다음 row로 이동, `..`는 선택하지 않고 아래로 이동 | `selection.toggle`이 active panel focused row에 적용되고 focus를 clamp 이동 | `CommanderShell.keyboard.test.tsx` Space 이동/virtual parent 회귀 |
+| 작업 대상 fallback | 명시 선택이 없으면 커서 위치 항목이 복사/이동/삭제/압축 대상 | `ActionContext.effectiveTargetCount`와 `effectiveSourceEntries`가 registry enablement와 dialog source의 일치 보장 | `actionContext.test.ts`, copy dialog source 회귀 |
 | Commander focus 복귀 | non-modal navigation control 사용 후 다음 키 입력은 commander가 받음 | path/refresh/back/up 클릭 후 shell focus 복구, dialog/menu/input은 keyboard owner 유지 | path button click → Space 회귀 |
-| Zoom/density | 화면 배율 변경은 글자뿐 아니라 행 높이/상태줄/단축키줄/여백까지 같이 변하며 100→110→125→150 같은 preset을 사용 | `Settings.view.zoomStep`, preset scale, CSS scale variables, virtualizer row estimate가 같은 row height를 사용한다 | Cmd/Ctrl `+/-/0` preset/variable 및 settings 저장 회귀 |
-| 확대 시 컬럼 가독성 | 표시되는 size/date/permission/owner는 잘리지 않고, 공간 부족 시 낮은 우선순위 컬럼부터 숨김. dual-panel에서는 metadata보다 파일명 폭을 우선 보존 | scale/data-aware `columnLayoutForPanelWidth`, panel-level shared grid template, Unicode-safe name middle ellipsis | 150% 확대 컬럼 policy, header/body 정렬, metadata cell no ellipsis, filename suffix 보존 회귀 |
+| Zoom/density | 화면 배율 변경은 글자뿐 아니라 행 높이/상태줄/단축키줄/여백까지 같이 변하며 100→110→125→150 같은 preset 사용 | `Settings.view.zoomStep`, preset scale, CSS scale variables, virtualizer row estimate가 같은 row height 사용 | Cmd/Ctrl `+/-/0` preset/variable 및 settings 저장 회귀 |
+| 확대 시 컬럼 가독성 | 표시되는 size/date/permission/owner는 잘리지 않고, 공간 부족 시 낮은 우선순위 컬럼부터 숨김; dual-panel에서는 metadata보다 파일명 폭을 우선 보존 | scale/data-aware `columnLayoutForPanelWidth`, panel-level shared grid template, Unicode-safe name middle ellipsis | 150% 확대 컬럼 policy, header/body 정렬, metadata cell no ellipsis, filename suffix 보존 회귀 |
 | GUI hover 정보 | TUI 기본 목록을 해치지 않고 GUI hover/focus로 상세 파일 정보를 보조 표시 | row `title`/ARIA tooltip text | 전체 이름/경로/종류/크기/수정일/권한/소유자 tooltip 회귀 |
 | Filter 가시성 | filter pattern이 panel/status에 보이고 목록 맥락에서 인지됨 | header filter chip, panel/bottom status `Filter: ...`, filename substring highlight 표시 | filter apply/clear DOM 회귀 |
 
@@ -61,4 +61,4 @@
 
 ## 5. 완료 판정
 
-기능 동등성 완료는 모든 Must 기능이 GUI 경로와 키보드 경로에서 동작하고, 파일 변경 작업이 상태 머신과 테스트 명세의 안전 조건을 통과했을 때만 선언한다.
+- 기능 동등성 완료는 모든 Must 기능이 GUI 경로와 키보드 경로에서 동작하고, 파일 변경 작업이 상태 머신과 테스트 명세의 안전 조건을 통과했을 때만 선언

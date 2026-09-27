@@ -2,7 +2,7 @@
 
 - 작성일: 2026-06-13
 - 개정일: 2026-06-13
-- 목적: BokslDirGUI의 요구사항, 아키텍처, 구현 설계 문서를 한 곳에서 탐색할 수 있도록 정리한다.
+- 목적: BokslDirGUI의 요구사항, 아키텍처, 구현 설계 문서를 한 곳에서 탐색할 수 있도록 정리
 - 기준: **기존 TUI BokslDir 기능 동등성 + GUI 전환 필수 기능**
 - 비목표: 축소 범위 구현, 기존 Rust 로직 재사용 강제, 구현 코드 작성
 
@@ -33,22 +33,24 @@
 
 ## 2. 권장 읽기 순서
 
-1. [`requirements/README.md`](requirements/README.md)에서 제품 목표와 우선순위를 확인한다.
-2. [`architecture/BokslDirGUI_tauri_react_rust_architecture.md`](architecture/BokslDirGUI_tauri_react_rust_architecture.md)에서 선택된 기술 구조를 확인한다.
-3. [`implementation/README.md`](implementation/README.md)에서 구현 설계 문서 묶음과 착수 순서를 확인한다.
-4. 구현 전에는 [`implementation/design-consistency-report.md`](implementation/design-consistency-report.md)와 [`implementation/full-scope-test-spec.md`](implementation/full-scope-test-spec.md)를 완료 게이트로 사용한다.
+1. [`requirements/README.md`](requirements/README.md)에서 제품 목표와 우선순위 확인
+2. [`architecture/BokslDirGUI_tauri_react_rust_architecture.md`](architecture/BokslDirGUI_tauri_react_rust_architecture.md)에서 선택된 기술 구조 확인
+3. [`implementation/README.md`](implementation/README.md)에서 구현 설계 문서 묶음과 착수 순서 확인
+4. 구현 전에는 [`implementation/design-consistency-report.md`](implementation/design-consistency-report.md)와 [`implementation/full-scope-test-spec.md`](implementation/full-scope-test-spec.md)를 완료 게이트로 사용
 
 ## 3. 공통 원칙
 
-- 기본 목표는 축소 범위가 아니라 **기존 TUI 기능 동등성**이다.
-- GUI 전환으로 추가되는 마우스, 컨텍스트 메뉴, 드래그 앤 드롭, 다이얼로그, OS 연동은 기능 동등성을 해치지 않는 방식으로 포함한다.
-- 기본 화면은 faithful TUI commander identity를 유지한다.
-- 파일 시스템 변경 작업은 Rust command/service 계층에서 검증하고 실행한다.
-- 메뉴, 단축키, 컨텍스트 메뉴, 도움말은 같은 action registry를 참조한다.
-- 설계 문서 변경 시 관련 요구사항, API, 컴포넌트, 테스트 명세, 정합성 보고서를 함께 갱신한다.
+- 기본 목표는 축소 범위가 아니라 **기존 TUI 기능 동등성**
+- GUI 전환으로 추가되는 마우스, 컨텍스트 메뉴, 드래그 앤 드롭, 다이얼로그, OS 연동은 기능 동등성을 해치지 않는 방식으로 포함
+- 기본 화면은 faithful TUI commander identity 유지
+- 파일 시스템 변경 작업은 Rust command/service 계층에서 검증하고 실행
+- 메뉴, 단축키, 컨텍스트 메뉴, 도움말은 같은 action registry 참조
+- 설계 문서 변경 시 관련 요구사항, API, 컴포넌트, 테스트 명세, 정합성 보고서를 함께 갱신
 
 ## 4. 목업/프로토타입 참고
 
-현재 GUI 방향 검증용 클릭 목업은 [`mockups/clickable-prototype`](../mockups/clickable-prototype/README.md)에 있다. 이 목업은 TUI 파일 커맨더 정체성을 GUI로 옮기는 방향을 확인하기 위한 참고 산출물이며, 실제 파일 시스템 작업이나 생산 코드 구조로 재사용하는 것을 전제하지 않는다.
+- 현재 GUI 방향 검증용 클릭 목업은 [`mockups/clickable-prototype`](../mockups/clickable-prototype/README.md)에 있음
+- 이 목업은 TUI 파일 커맨더 정체성을 GUI로 옮기는 방향을 확인하기 위한 참고 산출물이며, 실제 파일 시스템 작업이나 생산 코드 구조로 재사용하는 것을 전제하지 않음
 
-구현 설계에서 화면 밀도, 듀얼 패널 우선순위, 하단 hotkey strip, overlay 기반 메뉴/다이얼로그 흐름을 판단할 때 참고한다. 단, 최종 구현 계약은 `docs/implementation/`의 API, 컴포넌트, 상태 머신, 테스트 명세를 우선한다.
+- 구현 설계에서 화면 밀도, 듀얼 패널 우선순위, 하단 hotkey strip, overlay 기반 메뉴/다이얼로그 흐름을 판단할 때 참고
+- 단, 최종 구현 계약은 `docs/implementation/`의 API, 컴포넌트, 상태 머신, 테스트 명세를 우선

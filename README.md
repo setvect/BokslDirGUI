@@ -1,9 +1,10 @@
 # BokslDirGUI
 
-BokslDirGUI는 기존 터미널 기반 BokslDir의 파일 커맨더 경험을 GUI 데스크톱 앱으로 옮기는 프로젝트입니다.
-현재 구현은 **Tauri 2 + React + TypeScript + Rust** 기반이며, TUI 느낌의 듀얼 패널 파일 매니저 UI, action registry, read-only Rust 파일 탐색 command, 파일 작업 dialog/state shell, 검증 harness를 포함합니다.
+- BokslDirGUI는 기존 터미널 기반 BokslDir의 파일 커맨더 경험을 GUI 데스크톱 앱으로 옮기는 프로젝트
+- 현재 구현은 **Tauri 2 + React + TypeScript + Rust** 기반이며, TUI 느낌의 듀얼 패널 파일 매니저 UI, action registry, read-only Rust 파일 탐색 command, 파일 작업 dialog/state shell, 검증 harness 포함
 
-> 현재 단계에서는 실제 파일 변경 작업(copy/move/delete 등)은 안전하게 stub 처리되어 있습니다. Rust backend에는 read-only 탐색 command 중심으로 연결되어 있습니다.
+> - 현재 단계에서는 실제 파일 변경 작업(copy/move/delete 등)은 안전하게 stub 처리되어 있음
+> - Rust backend에는 read-only 탐색 command 중심으로 연결되어 있음
 
 ## 필요 환경
 
@@ -12,7 +13,7 @@ BokslDirGUI는 기존 터미널 기반 BokslDir의 파일 커맨더 경험을 GU
 - Rust toolchain
 - Tauri 개발에 필요한 OS별 시스템 의존성
 
-macOS 기준으로는 보통 Rust와 Xcode Command Line Tools가 필요합니다.
+- macOS 기준으로는 보통 Rust와 Xcode Command Line Tools가 필요
 
 ## 설치
 
@@ -28,7 +29,7 @@ npm install
 npm run dev
 ```
 
-출력된 주소, 예: `http://127.0.0.1:5173/` 로 브라우저에서 확인합니다.
+- 출력된 주소, 예: `http://127.0.0.1:5173/` 로 브라우저에서 확인
 
 ### Tauri 데스크톱 앱으로 실행
 
@@ -42,7 +43,7 @@ npm run tauri:dev
 npm run build
 ```
 
-Tauri 앱 패키징이 필요하면:
+- Tauri 앱 패키징이 필요하면:
 
 ```bash
 npm run tauri:build
@@ -50,13 +51,13 @@ npm run tauri:build
 
 ## 검증
 
-전체 검증:
+- 전체 검증:
 
 ```bash
 npm run verify
 ```
 
-주요 개별 명령:
+- 주요 개별 명령:
 
 ```bash
 npm run typecheck   # TypeScript 타입 체크

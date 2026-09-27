@@ -4,9 +4,9 @@
 - 기준: **기존 TUI BokslDir 기능 동등성 + GUI 전환 필수 기능**
 - 비목표: 축소 범위 구현, 기존 Rust 로직 재사용 강제, 구현 코드 작성
 
-2026-09-25 전체 소스 검토와 수정·잔여 항목은 [코드 리뷰 보고서](code-review-2026-09-25.md)를 참조한다.
+- 2026-09-25 전체 소스 검토와 수정·잔여 항목은 [코드 리뷰 보고서](code-review-2026-09-25.md) 참조
 
-2026-09-27 구조 분리와 검증 기록은 [전체 구조 리팩토링](refactoring.md)을 참조한다.
+- 2026-09-27 구조 분리와 검증 기록은 [전체 구조 리팩토링](refactoring.md) 참조
 
 ## 문서 목록
 
@@ -29,34 +29,34 @@
 
 ## 구현 착수 순서 권장
 
-1. `tui-parity-map.md`로 기능 범위를 확인하고, `tui-parity-matrix.json`으로 TUI action/menu/key 누락 여부를 기계 검증한다.
-2. `action-registry.md`와 `tauri-command-api.md`로 UI와 Rust 경계를 고정한다.
-3. `component-design.md`로 화면을 분해한다.
-4. `file-operation-state-machine.md`로 파일 변경 작업 안전성을 잠근다.
-5. `full-scope-test-spec.md`를 구현 완료 게이트로 사용한다.
+1. `tui-parity-map.md`로 기능 범위를 확인하고, `tui-parity-matrix.json`으로 TUI action/menu/key 누락 여부를 기계 검증
+2. `action-registry.md`와 `tauri-command-api.md`로 UI와 Rust 경계를 고정
+3. `component-design.md`로 화면을 분해
+4. `file-operation-state-machine.md`로 파일 변경 작업 안전성을 확정
+5. `full-scope-test-spec.md` 구현 완료 게이트로 사용
 
 ## 공통 용어
 
-- **기존 TUI 기능 동등성**: 기존 BokslDir TUI에서 제공하던 탐색, 선택, 파일 작업, 압축, 북마크/히스토리, 설정/도움말 등 핵심 기능을 GUI에서도 제공하는 기준.
-- **GUI 전환 필수 기능**: 마우스, 컨텍스트 메뉴, 다이얼로그, 드래그 앤 드롭, 시스템 파일 관리자/기본 앱 연동처럼 GUI 앱에서 자연스럽게 요구되는 기능.
-- **후속 검토 기능**: 기존 구현 근거가 약하거나 위험도가 높아 별도 설계/PoC 후 도입할 기능.
+- **기존 TUI 기능 동등성**: 기존 BokslDir TUI에서 제공하던 탐색, 선택, 파일 작업, 압축, 북마크/히스토리, 설정/도움말 등 핵심 기능을 GUI에서도 제공하는 기준
+- **GUI 전환 필수 기능**: 마우스, 컨텍스트 메뉴, 다이얼로그, 드래그 앤 드롭, 시스템 파일 관리자/기본 앱 연동처럼 GUI 앱에서 자연스럽게 요구되는 기능
+- **후속 검토 기능**: 기존 구현 근거가 약하거나 위험도가 높아 별도 설계/PoC 후 도입할 기능
 
 ## 주요 불변 조건
 
-- 기본 화면은 faithful TUI commander identity를 유지한다.
-- 파일 시스템 변경은 Rust command/service 계층에서 검증하고 실행한다.
-- 메뉴, 단축키, 컨텍스트 메뉴, 도움말은 같은 action registry를 참조한다.
-- 모든 장시간 작업은 진행률, 취소, 오류 요약을 제공한다.
-- 7z는 기준 기능 범위에 포함하지만 provider PoC/fixture 통과 전 완료로 보지 않는다.
+- 기본 화면은 faithful TUI commander identity 유지
+- 파일 시스템 변경은 Rust command/service 계층에서 검증하고 실행
+- 메뉴, 단축키, 컨텍스트 메뉴, 도움말은 같은 action registry 참조
+- 모든 장시간 작업은 진행률, 취소, 오류 요약 제공
+- 7z는 기준 기능 범위에 포함하지만 provider PoC/fixture 통과 전 완료로 보지 않음
 
 ## 정합성 게이트
 
-공개 문서로 동기화하기 전 다음을 통과해야 한다.
+- 공개 문서로 동기화하기 전 다음 통과 필수
 
-- 금지된 축소 범위 표현 없음.
-- 기준 기능별 action ID, command/store path, component owner, test assertion 연결.
-- `ConflictDecision` 명칭 통일.
-- 외부 shell command는 기본 비활성/명시 확인 정책 포함.
+- 금지된 축소 범위 표현 없음
+- 기준 기능별 action ID, command/store path, component owner, test assertion 연결
+- `ConflictDecision` 명칭 통일
+- 외부 shell command는 기본 비활성/명시 확인 정책 포함
 
-- 공개 반영 전 `design-consistency-report.md`의 machine-check checklist를 통과해야 한다.
+- 공개 반영 전 `design-consistency-report.md`의 machine-check checklist 통과 필수
 - 최종 검증일: 2026-06-13

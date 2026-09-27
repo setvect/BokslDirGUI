@@ -33,12 +33,12 @@
 
 | 잠재 충돌 | 원인 | 해소 방식 |
 | --- | --- | --- |
-| GUI 확장 기능이 기본 화면을 복잡하게 만들 수 있음 | sidebar/preview/queue 요구 | 기본 persistent가 아니라 overlay/collapsed로 제한 |
+| GUI 확장 기능으로 기본 화면 복잡화 가능 | sidebar/preview/queue 요구 | 기본 persistent가 아니라 overlay/collapsed로 제한 |
 | 7z는 기준 기능이지만 provider 성숙도 리스크가 있음 | sevenz-rust2 검증 필요 | 기준 기능-검증 게이트로 분류, 실패 시 fallback ADR |
 | 외부 에디터/명령 실행은 TUI 기능이지만 보안 위험 | 외부 process 실행 | 기본 비활성/명시 확인/설정 기반 실행, shell command는 backend 발급 TTL/one-shot `confirmToken` 재검증 |
 | 키보드 단축키와 텍스트 입력 충돌 | single-key shortcut | text input/edit mode에서 단축키 비활성 |
 | 메뉴/컨텍스트/도움말 중복 정의 위험 | UI 경로가 많음 | action registry를 단일 source of truth로 지정 |
-| conflict decision 명칭 drift | API/state/test가 각각 all/applyAll을 다르게 표현할 수 있음 | `ConflictDecision = overwrite | skip | allOverwrite | allSkip | cancel`로 통일 |
+| conflict decision 명칭 drift | API/state/test가 각각 all/applyAll을 다르게 표현 가능 | `ConflictDecision = overwrite | skip | allOverwrite | allSkip | cancel`로 통일 |
 | 외부 에디터 action 누락 | API/parity에는 있으나 action registry에서 빠질 수 있음 | `external.openEditor`를 action registry에 추가하고 `open_external_editor`에 연결 |
 
 ## 4. Action Coverage Matrix
@@ -57,26 +57,29 @@
 
 ## 5. 누락 점검
 
-- TUI parity map의 기준 기능은 full-scope-baseline에 모두 반영됨.
-- full-scope-baseline의 파일 작업은 command API와 state machine에 반영됨.
-- component-design의 OperationDialog/ArchiveDialog/ContextMenuLayer/ExternalOpenDialog는 command API 또는 action registry와 연결됨.
-- test spec은 각 설계 문서의 불변 조건을 검증 항목으로 포함함.
+- TUI parity map의 기준 기능은 full-scope-baseline에 모두 반영됨
+- full-scope-baseline의 파일 작업은 command API와 state machine에 반영됨
+- component-design의 OperationDialog/ArchiveDialog/ContextMenuLayer/ExternalOpenDialog는 command API 또는 action registry와 연결됨
+- test spec은 각 설계 문서의 불변 조건을 검증 항목으로 포함함
 
 ## 6. 공개 문서 동기화 승인 기준
 
-- Architect와 Critic이 순차 승인한 뒤에만 `.omx/plans` 초안을 `docs/design`/`docs/implementation`으로 복사한다.
-- 공개 반영 전 금지 표현, README 링크, action-command-component-test coverage, `ConflictDecision` enum 통일을 재검사한다.
-- 공개 문서에는 RALPLAN draft 상태가 아닌 approved 상태와 최종 검증일을 반영한다.
+- Architect와 Critic이 순차 승인한 뒤에만 `.omx/plans` 초안을 `docs/design`/`docs/implementation`으로 복사
+- 공개 반영 전 금지 표현, README 링크, action-command-component-test coverage, `ConflictDecision` enum 통일을 재검사
+- 공개 문서에는 RALPLAN draft 상태가 아닌 approved 상태와 최종 검증일 반영
 
 ## 7. Machine-check Checklist
 
-공개 문서 동기화 전 다음 자동/수동 체크를 수행한다.
+- 공개 문서 동기화 전 다음 자동/수동 체크 수행
 
-- action registry 밖에서 참조된 action ID가 registry에 존재하는지 검사한다.
-- command API 표 밖에서 참조된 command name이 command table에 존재하는지 검사한다.
-- component-design 밖에서 참조된 component owner가 컴포넌트 트리에 존재하는지 검사한다.
-- `prepare_shell_command` → `run_shell_command` shell 실행 흐름과 `confirmToken` 보안 조건이 API/test/report에서 같은 이름으로 연결되는지 검사한다.
+- action registry 밖에서 참조된 action ID가 registry에 존재하는지 검사
+- command API 표 밖에서 참조된 command name이 command table에 존재하는지 검사
+- component-design 밖에서 참조된 component owner가 컴포넌트 트리에 존재하는지 검사
+- `prepare_shell_command` → `run_shell_command` shell 실행 흐름과 `confirmToken` 보안 조건이 API/test/report에서 같은 이름으로 연결되는지 검사
 
 ## 8. 결론
 
-Architect 1차 검토에서 발견된 외부 에디터 action 누락, conflict decision 명칭 불일치, 테스트 범위 누락을 반영했다. Critic 1차 검토에서 발견된 parity-critical action coverage와 외부 shell command 누락도 반영했다. 현재 설계 문서 세트에는 확인된 상충 내용이 없다. 남은 리스크는 구현 전 추가 read-only audit로 기존 BokslDir 소스의 세부 기능을 재확인해야 한다는 점과, 7z provider가 fixture gate를 통과해야 한다는 점이다.
+- Architect 1차 검토에서 발견된 외부 에디터 action 누락, conflict decision 명칭 불일치, 테스트 범위 누락 반영 완료
+- Critic 1차 검토에서 발견된 parity-critical action coverage와 외부 shell command 누락도 반영 완료
+- 현재 설계 문서 세트에는 확인된 상충 내용이 없음
+- 남은 리스크는 구현 전 추가 read-only audit로 기존 BokslDir 소스의 세부 기능을 재확인해야 한다는 점과, 7z provider가 fixture gate를 통과해야 한다는 점

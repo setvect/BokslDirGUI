@@ -2,11 +2,11 @@
 
 ## 1. 목적
 
-복사, 이동, 삭제, 휴지통, 압축 생성/해제/내부 추가 같은 데이터 변경 작업을 안전하고 테스트 가능하게 만든다.
+- 복사, 이동, 삭제, 휴지통, 압축 생성/해제/내부 추가 같은 데이터 변경 작업의 안전성·테스트 가능성 확보
 
 ## 2. 공통 상태
 
-공통 충돌 결정 enum은 command API와 동일하게 고정한다.
+- 공통 충돌 결정 enum은 command API와 동일하게 고정
 
 ```ts
 type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel';
@@ -44,42 +44,50 @@ idle
 
 ## 4. 작업별 정책
 
-현재는 **단일 활성 작업**만 허용한다. 진행 중 새 파일 작업은 `operation_busy`로 차단해 충돌 결정, 취소, 완료 후 패널 새로고침의 순서를 결정적으로 유지한다. `queued`는 작업 접수 직후 UI가 즉시 만드는 상태이지만 실제 다중 작업 큐를 의미하지 않는다.
+- 현재는 **단일 활성 작업**만 허용
+- 진행 중 새 파일 작업은 `operation_busy`로 차단해 충돌 결정, 취소, 완료 후 패널 새로고침의 순서를 결정적으로 유지
+- `queued`는 작업 접수 직후 UI가 즉시 만드는 상태이지만 실제 다중 작업 큐를 의미하지 않음
 
 ### 4.1 Copy
 
-- target은 반대 패널 경로를 기본 제안한다.
-- 자기 자신 내부 복사를 validation에서 차단한다.
-- symlink 정책은 copy mode에 명시하고 UI에 표시한다.
-- 충돌 시 `overwrite`, `skip`, `allOverwrite`, `allSkip`, `cancel`을 지원한다.
-- 재귀 복사 중 Unix 소켓은 복사 대상에서 제외 수만 기록하고 나머지 항목을 계속 복사한다. 소켓 제외만으로는 실패 메시지를 띄우지 않는다. 장치·FIFO 등 다른 특수 파일은 경로별 오류를 남기고 일부 실패로 표시한다.
+- target은 반대 패널 경로를 기본 제안
+- 자기 자신 내부 복사를 validation에서 차단
+- symlink 정책은 copy mode에 명시하고 UI에 표시
+- 충돌 시 `overwrite`, `skip`, `allOverwrite`, `allSkip`, `cancel` 지원
+- 재귀 복사 중 Unix 소켓은 복사 대상에서 제외 수만 기록하고 나머지 항목을 계속 복사
+- 소켓 제외만으로는 실패 메시지를 띄우지 않음
+- 장치·FIFO 등 다른 특수 파일은 경로별 오류를 남기고 일부 실패로 표시
 
 ### 4.2 Move
 
-- 같은 filesystem이면 rename 우선.
-- 실패하거나 cross-device면 copy 후 source delete fallback.
-- fallback 중 실패하면 partial result를 summary에 표시한다.
-- 이동 원본에 소켓·장치 등 특수 파일이 있으면 사전 검사에서 거부한다. 일부만 복사한 뒤 원본을 삭제하지 않는다.
+- 같은 filesystem이면 rename 우선
+- 실패하거나 cross-device면 copy 후 source delete fallback
+- fallback 중 실패하면 partial result를 summary에 표시
+- 이동 원본에 소켓·장치 등 특수 파일이 있으면 사전 검사에서 거부
+- 일부만 복사한 뒤 원본을 삭제하지 않음
 
 ### 4.3 Delete/Trash
 
-- 휴지통과 영구 삭제는 별도 action.
-- 영구 삭제는 기본 버튼을 cancel로 둔다.
-- 휴지통 실패 시 영구 삭제로 자동 전환하지 않는다.
+- 휴지통과 영구 삭제는 별도 action
+- 영구 삭제는 기본 버튼을 cancel로 배치
+- 휴지통 실패 시 영구 삭제로 자동 전환하지 않음
 
 ### 4.4 Archive List/Create/Extract/Add
 
-- zip/jar/war, tar/tar.gz/tgz/tar.zst/tzst, 7z 형식별 provider를 분리한다.
-- 압축 가상 디렉터리는 읽기 전용이며 내부 delete/rename/move/create-dir은 action 단계에서 차단한다.
-- `archive_list`는 기본 50,000개(최대 200,000개)로 응답을 제한하고 `totalEntries`/`truncated`를 반환한다.
-- extract는 모든 entry path를 target directory 아래로 normalize한 후 쓰기 시작한다.
-- zip/7z password는 masked UI로 입력받고 log/event/history/error details에 남기지 않는다. jar/war/tar 계열에 암호를 요청하면 typed unsupported 오류를 반환한다.
-- 7z는 `archive-7z` fixture gate를 통과해야 완료로 본다.
-- 압축 생성 중에는 provider의 출력에서 처리량을 읽어 `operation_progress`를 갱신한다. ZIP/JAR/WAR는 처리한 항목·원본 바이트와 대용량 파일의 진행 점을 사용하고, 7z는 provider 백분율로 바이트·항목 수를 추정한다. 압축 파일 게시가 끝난 뒤에만 완료 상태를 보낸다.
-- 일반 패널에서 압축 가상 디렉터리로 복사하면 `file.copy` UX를 유지하되 backend 실행은 `archive_add`로 라우팅한다.
-- archive add는 source를 안전한 staging 경로에 구성한 뒤 provider에 상대 경로만 넘긴다.
-- 같은 archive entry가 있으면 `overwrite`, `skip`, `allOverwrite`, `allSkip`, `cancel`을 적용하고 overwrite는 기존 entry subtree를 제거한 뒤 추가한다.
-- 성공, 실패, 취소 요약 후 source/target panel을 모두 refresh하여 부분 결과도 즉시 반영한다.
+- zip/jar/war, tar/tar.gz/tgz/tar.zst/tzst, 7z 형식별 provider 분리
+- 압축 가상 디렉터리는 읽기 전용이며 내부 delete/rename/move/create-dir은 action 단계에서 차단
+- `archive_list`는 기본 50,000개(최대 200,000개)로 응답을 제한하고 `totalEntries`/`truncated`를 반환
+- extract는 모든 entry path를 target directory 아래로 normalize한 후 쓰기 시작
+- zip/7z password는 masked UI로 입력받고 log/event/history/error details에 남기지 않음
+- jar/war/tar 계열에 암호를 요청하면 typed unsupported 오류를 반환
+- 7z는 `archive-7z` fixture gate를 통과해야 완료로 판단
+- 압축 생성 중에는 provider의 출력에서 처리량을 읽어 `operation_progress` 갱신
+- ZIP/JAR/WAR는 처리한 항목·원본 바이트와 대용량 파일의 진행 점을 사용하고, 7z는 provider 백분율로 바이트·항목 수를 추정
+- 압축 파일 게시가 끝난 뒤에만 완료 상태 전달
+- 일반 패널에서 압축 가상 디렉터리로 복사하면 `file.copy` UX를 유지하되 backend 실행은 `archive_add`로 라우팅
+- archive add는 source를 안전한 staging 경로에 구성한 뒤 provider에 상대 경로만 전달
+- 같은 archive entry가 있으면 `overwrite`, `skip`, `allOverwrite`, `allSkip`, `cancel`을 적용하고 overwrite는 기존 entry subtree를 제거한 뒤 추가
+- 성공, 실패, 취소 요약 후 source/target panel을 모두 refresh하여 부분 결과도 즉시 반영
 
 ## 5. ConflictPrompt
 
@@ -93,35 +101,43 @@ idle
 
 ## 6. Progress event
 
-- 전체 파일 수, 완료 파일 수.
-- 전체 바이트, 완료 바이트.
-- 현재 파일명/경로.
-- 속도, ETA.
-- 최근 오류 개수.
-- operation state.
+- 전체 파일 수, 완료 파일 수
+- 전체 바이트, 완료 바이트
+- 현재 파일명/경로
+- 속도, ETA
+- 최근 오류 개수
+- operation state
 
 ## 7. 패널 refresh 정책
 
-- 작업 성공/부분 성공 후 관련 source/target panel listing version을 invalidate한다.
-- refresh 실패는 작업 성공을 되돌리지 않고 panel error로 표시한다.
-- 취소/실패 후 임시 파일/디렉토리 정리를 시도하고 결과를 summary에 포함한다.
+- 작업 성공/부분 성공 후 관련 source/target panel listing version을 invalidate
+- refresh 실패는 작업 성공을 되돌리지 않고 panel error로 표시
+- 취소/실패 후 임시 파일/디렉토리 정리를 시도하고 결과를 summary에 포함
 
 ## 8. 테스트 기준
 
-- validation은 위험 경로를 실제 I/O 전에 차단한다.
-- `allOverwrite`와 `allSkip` 결정은 이후 같은 작업의 충돌에 일관 적용된다.
-- cancel은 안전 지점에서 멈추고 partial result를 요약한다.
-- zip-slip fixture는 target 밖 쓰기를 실패시킨다.
-- 일부 실패는 앱 상태를 손상시키지 않는다.
+- validation은 위험 경로를 실제 I/O 전에 차단
+- `allOverwrite`와 `allSkip` 결정은 이후 같은 작업의 충돌에 일관 적용
+- cancel은 안전 지점에서 멈추고 partial result를 요약
+- zip-slip fixture는 target 밖 쓰기를 실패 처리
+- 일부 실패는 앱 상태를 손상시키지 않음
 
 
 ## 9. 2026-09-25 리뷰 반영
 
-- 덮어쓰기는 완성된 작업 사본을 게시하며 기존 대상은 게시 성공 전까지 백업으로 보존한다. 복원 경합 시 백업을 제거하지 않고 오류 상세에 복구 경로를 남긴다.
-- 파일 복사 중 실패/취소는 해당 불완전 파일을 제거하며 권한을 보존한다. 재귀 복사의 Unix 소켓은 오류 없이 제외하고 다른 특수 파일은 경로별 오류를 남기며, 이동·압축 생성의 특수 파일은 사전 검사에서 거부한다.
-- 압축 생성/추가는 provider가 원본 대상을 직접 변경하지 않고 작업 사본을 완성한 뒤 게시한다. 압축 해제의 skip은 성공 수에 포함하지 않는다.
-- 휴지통은 `trash` 라이브러리의 OS 구현을 사용한다. macOS에서는 Finder 자동화 권한이 필요 없는 NSFileManager 방식을 선택한다. 휴지통 실패 시 영구 삭제로 fallback하지 않고 원본을 유지하며 OS 오류를 표시한다. 테스트 override는 테스트 빌드에서만 허용한다.
-- 재귀 스캔과 영구 삭제는 항목별 취소를 확인하고 부분 처리 수를 유지한다.
-- 완료 시 양쪽 패널의 **현재 경로**를 background refresh한다. 사용자가 시작한 탐색·현재 활성 패널·모달 입력 포커스를 작업 완료 때문에 변경하지 않는다.
-- 지연된 시작 ACK/atomic 응답은 자신이 시작된 controller/dialog에만 적용한다. 취소/충돌 명령 실패는 재시도할 수 있게 UI 상태를 복구한다.
-- OS별 미검증 및 남은 설계 차이는 [전체 리뷰 보고서](code-review-2026-09-25.md)에 별도로 추적한다.
+- 덮어쓰기는 완성된 작업 사본을 게시하며 기존 대상은 게시 성공 전까지 백업으로 보존
+- 복원 경합 시 백업을 제거하지 않고 오류 상세에 복구 경로 기록
+- 파일 복사 중 실패/취소는 해당 불완전 파일을 제거하며 권한 보존
+- 재귀 복사의 Unix 소켓은 오류 없이 제외하고 다른 특수 파일은 경로별 오류를 남기며, 이동·압축 생성의 특수 파일은 사전 검사에서 거부
+- 압축 생성/추가는 provider가 원본 대상을 직접 변경하지 않고 작업 사본을 완성한 뒤 게시
+- 압축 해제의 skip은 성공 수에 포함하지 않음
+- 휴지통은 `trash` 라이브러리의 OS 구현 사용
+- macOS에서는 Finder 자동화 권한이 필요 없는 NSFileManager 방식 선택
+- 휴지통 실패 시 영구 삭제로 fallback하지 않고 원본을 유지하며 OS 오류 표시
+- 테스트 override는 테스트 빌드에서만 허용
+- 재귀 스캔과 영구 삭제는 항목별 취소를 확인하고 부분 처리 수 유지
+- 완료 시 양쪽 패널의 **현재 경로**를 background refresh
+- 사용자가 시작한 탐색·현재 활성 패널·모달 입력 포커스 작업 완료 때문에 변경하지 않음
+- 지연된 시작 ACK/atomic 응답은 자신이 시작된 controller/dialog에만 적용
+- 취소/충돌 명령 실패는 재시도할 수 있게 UI 상태를 복구
+- OS별 미검증 및 남은 설계 차이는 [전체 리뷰 보고서](code-review-2026-09-25.md)에 별도로 추적

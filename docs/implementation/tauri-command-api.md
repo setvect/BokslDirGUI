@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-React/TypeScript UI와 Rust/Tauri backend 사이의 command, event, DTO 계약을 정의한다.
+- React/TypeScript UI와 Rust/Tauri backend 사이의 command, event, DTO 계약 정의
 
 ## 2. 공통 DTO
 
@@ -18,10 +18,10 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
-| `path` | string | 절대 경로. UI 표시 전 escaping 필요 |
+| `path` | string | 절대 경로; UI 표시 전 escaping 필요 |
 | `name` | string | 파일명 |
 | `kind` | EntryKind | 타입 |
-| `symlinkTargetIsDirectory` | boolean/null | 링크 대상이 디렉터리면 true, 다른 종류면 false, 끊겼거나 확인할 수 없으면 null. 일반 항목은 null |
+| `symlinkTargetIsDirectory` | boolean/null | 링크 대상이 디렉터리면 true, 다른 종류면 false, 끊겼거나 확인할 수 없으면 null; 일반 항목은 null |
 | `sizeBytes` | number/null | 알 수 없으면 null |
 | `modifiedAt` | string/null | ISO timestamp |
 | `createdAt` | string/null | 플랫폼별 가능 시 |
@@ -33,15 +33,17 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 ### 2.2 FileMetadata / DirectoryStats
 
-파일 정보 응답은 FileEntry 필드에 절대 경로, 확장자, MIME 종류, 읽기 전용 여부와 directoryStats를 더한다. 일반 파일의 directoryStats는 null이다.
+- 파일 정보 응답은 FileEntry 필드에 절대 경로, 확장자, MIME 종류, 읽기 전용 여부와 directoryStats를 추가
+- 일반 파일의 directoryStats는 null
 
 | directoryStats 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | totalFileBytes | number | 선택 폴더 아래 일반 파일의 논리적 크기 합계(byte) |
-| fileCount | number | 하위 일반 파일 수. 숨김 파일 포함 |
+| fileCount | number | 하위 일반 파일 수; 숨김 파일 포함 |
 | directoryCount | number | 선택 폴더 자신을 제외한 하위 실제 폴더 수 |
 
-하위 폴더까지 별도 작업 스레드에서 순회하되 심볼릭 링크를 따라가지 않고 링크·소켓 등 특수 파일은 집계에서 제외한다. 접근 오류가 나면 불완전한 합계를 반환하지 않고 get_metadata 오류를 반환한다.
+- 하위 폴더까지 별도 작업 스레드에서 순회하되 심볼릭 링크를 따라가지 않고 링크·소켓 등 특수 파일은 집계에서 제외
+- 접근 오류가 나면 불완전한 합계를 반환하지 않고 get_metadata 오류를 반환
 
 ### 2.3 AppError
 
@@ -69,7 +71,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | --- | --- | --- | --- |
 | `list_dir` | `{ panelId, path, showHidden, sort, filter }` | `DirectoryListing` | 읽기 전용 |
 | `get_metadata` | `{ path }` | `FileMetadata` | 속성/preview; 폴더는 내부 파일 크기·파일 수·하위 폴더 수를 조회 시 계산 |
-| `watch_path` | `{ panelId, path }` | `WatchAck` | 현재: 경로 검증/version ACK. 실제 변경 이벤트 구독은 미구현 |
+| `watch_path` | `{ panelId, path }` | `WatchAck` | 현재: 경로 검증/version ACK; 실제 변경 이벤트 구독은 미구현 |
 | `goto_path` | `{ panelId, path }` | `DirectoryListing` | 주소 입력/북마크/히스토리 이동 |
 | `list_locations` | `{}` | `LocationList` | 홈/드라이브/마운트 quick access |
 | `create_dir` | `{ parent, name }` | `FileEntry` | 이름 검증 |
@@ -105,29 +107,39 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 ## 5. 안전 규칙
 
-- 모든 path는 Rust에서 canonicalize/normalize한다.
-- `..` virtual entry는 파일 작업 대상이 될 수 없다.
-- copy/move는 자기 자신 내부 대상, 중복 대상, 권한 오류를 선검증한다.
-- archive extract는 target directory 밖 쓰기를 차단한다.
-- archive add는 `targetInnerDir`와 생성할 entry를 정규화하고 절대 경로, `..`, NUL을 차단한다. 같은 이름은 공통 conflict decision으로만 덮어쓴다.
-- 압축 가상 경로는 읽기 전용이다. delete/rename/move/create-dir command에 압축 내부 경로를 전달하지 않으며 action registry에서도 선차단한다.
-- 지원 형식은 zip, tar, tar.gz/tgz, tar.zst/tzst, 7z, jar, war다. jar/war는 zip provider, tar 계열은 tar provider를 사용한다.
-- `archive_list.limit`는 1~200,000 범위로 제한하며 생략 시 50,000을 사용한다. 잘린 응답은 `truncated=true`와 원본 `totalEntries`를 반환한다.
-- password는 event/log/details에 남기지 않는다.
-- `run_shell_command`는 설정 키 `external.shellCommand.enabled === true`일 때만 활성화하고, shell interpolation을 피하기 위해 command/args를 분리하며, workingDir은 활성 패널 경로로 검증한다.
-- `preview_file(path, maxBytes?)`는 일반 파일만 읽고 텍스트는 최대 1 MiB, 이미지는 8 MiB로 제한한다. 미지원 형식과 제한 초과 이미지는 command 오류가 아니라 `unsupported`/`tooLarge` 결과로 반환하며 파일을 실행하지 않는다.
-- `confirmToken`은 Rust backend가 `prepare_shell_command`에서 발급하는 짧은 TTL/one-shot token으로 정의하며, `run_shell_command` 실행 시 backend가 token, workingDir, command fingerprint를 재검증한다. renderer가 임의 문자열로 확인을 우회할 수 없어야 한다.
-- renderer 권한은 command invocation에 필요한 범위로 제한한다.
+- 모든 path는 Rust에서 canonicalize/normalize
+- `..` virtual entry는 파일 작업 대상이 될 수 없음
+- copy/move는 자기 자신 내부 대상, 중복 대상, 권한 오류를 선검증
+- archive extract는 target directory 밖 쓰기 차단
+- archive add는 `targetInnerDir`와 생성할 entry를 정규화하고 절대 경로, `..`, NUL 차단
+- 같은 이름은 공통 conflict decision으로만 덮어쓰기
+- 압축 가상 경로는 읽기 전용
+- delete/rename/move/create-dir command에 압축 내부 경로를 전달하지 않으며 action registry에서도 선차단
+- 지원 형식은 zip, tar, tar.gz/tgz, tar.zst/tzst, 7z, jar, war
+- jar/war는 zip provider, tar 계열은 tar provider 사용
+- `archive_list.limit`는 1~200,000 범위로 제한하며 생략 시 50,000 사용
+- 잘린 응답은 `truncated=true`와 원본 `totalEntries`를 반환
+- password는 event/log/details에 남기지 않음
+- `run_shell_command`는 설정 키 `external.shellCommand.enabled === true`일 때만 활성화하고, shell interpolation을 피하기 위해 command/args를 분리하며, workingDir은 활성 패널 경로로 검증
+- `preview_file(path, maxBytes?)`는 일반 파일만 읽고 텍스트는 최대 1 MiB, 이미지는 8 MiB로 제한
+- 미지원 형식과 제한 초과 이미지는 command 오류가 아니라 `unsupported`/`tooLarge` 결과로 반환하며 파일을 실행하지 않음
+- `confirmToken`은 Rust backend가 `prepare_shell_command`에서 발급하는 짧은 TTL/one-shot token으로 정의하며, `run_shell_command` 실행 시 backend가 token, workingDir, command fingerprint를 재검증
+- renderer의 임의 문자열을 통한 확인 우회 차단 필수
+- renderer 권한은 command invocation에 필요한 범위로 제한
 
 ## 6. TypeScript wrapper 규칙
 
-- UI는 `invoke`를 직접 호출하지 않고 `src/tauri/client.ts`의 typed wrapper만 사용한다.
-- wrapper는 `Result<T, AppError>` 형태로 normalize한다.
-- i18n 문자열은 Rust가 완성 문장으로 보내지 않고 `messageKey`와 structured details를 보낸다.
+- UI는 `invoke`를 직접 호출하지 않고 `src/tauri/client.ts`의 typed wrapper만 사용
+- wrapper는 `Result<T, AppError>` 형태로 normalize
+- i18n 문자열은 Rust가 완성 문장으로 보내지 않고 `messageKey`와 structured details 전달
 
 
 ## 구조 리팩토링의 계약 보존
 
-2026-09-27 기준 `src-tauri/src/contracts.rs`가 DTO와 오류 타입을, `commands.rs`가 명령 핸들러를 소유한다. `lib.rs`에는 앱 초기화와 기존 이름의 command 등록을 유지한다. 서비스와 작업 엔진의 파일 분리는 command/event 이름, serde 필드/enum 값, 설정 JSON 형식을 변경하지 않는다.
+- 2026-09-27 기준 `src-tauri/src/contracts.rs`가 DTO와 오류 타입을, `commands.rs`가 명령 핸들러를 소유
+- `lib.rs`에는 앱 초기화와 기존 이름의 command 등록 유지
+- 서비스와 작업 엔진의 파일 분리는 command/event 이름, serde 필드/enum 값, 설정 JSON 형식을 변경하지 않음
 
-프론트엔드 명령 이름은 `src/tauri/commands.ts`, 호출과 이벤트 수신은 `client.ts`, 네이티브 드래그/창 어댑터는 `commanderClients.ts`가 담당한다. `client.ts`의 기존 명령 이름 export도 유지한다. 공통 직렬화 fixture는 `src/tauri/fixtures/contract.json`이며 `contract.test.ts`와 Rust `contract_tests.rs`에서 양쪽 형식을 검증한다.
+- 프론트엔드 명령 이름은 `src/tauri/commands.ts`, 호출과 이벤트 수신은 `client.ts`, 네이티브 드래그/창 어댑터는 `commanderClients.ts`가 담당
+- `client.ts`의 기존 명령 이름 export도 유지
+- 공통 직렬화 fixture는 `src/tauri/fixtures/contract.json`이며 `contract.test.ts`와 Rust `contract_tests.rs`에서 양쪽 형식 검증
