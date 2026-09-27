@@ -32,6 +32,59 @@ describe('CommanderShell rendering', () => {
     expect(container.querySelector<HTMLElement>('.file-table')?.style.getPropertyValue('--file-grid-template')).toContain('minmax(0, 1fr)');
   });
 
+  it.each(['.panel-path', '.path-input'])('keeps text selection started in %s inside that path', (selector) => {
+    const { container } = renderCommander();
+    const panel = container.querySelector<HTMLElement>('.file-panel.is-active');
+    const path = panel?.querySelector<HTMLElement>(selector);
+    const table = panel?.querySelector<HTMLElement>('.file-table');
+    const pathText = path?.lastChild;
+    const selection = window.getSelection();
+    if (!panel || !path || !table || !pathText || !selection) throw new Error('path selection fixture is required');
+
+    try {
+      selection.setBaseAndExtent(pathText, 2, table, 1);
+      document.dispatchEvent(new Event('selectionchange'));
+
+      expect(selection.anchorNode).toBe(pathText);
+      expect(selection.anchorOffset).toBe(2);
+      expect(selection.focusNode).toBe(pathText);
+      expect(selection.focusOffset).toBe(pathText.textContent?.length);
+
+      selection.setBaseAndExtent(pathText, 2, panel, 3);
+      document.dispatchEvent(new Event('selectionchange'));
+      expect(selection.focusNode).toBe(pathText);
+      expect(selection.focusOffset).toBe(pathText.textContent?.length);
+
+      selection.setBaseAndExtent(pathText, 2, pathText, 5);
+      document.dispatchEvent(new Event('selectionchange'));
+      expect(selection.focusNode).toBe(pathText);
+      expect(selection.focusOffset).toBe(5);
+    } finally {
+      selection.removeAllRanges();
+    }
+  });
+
+  it('stops a backward path selection at the beginning of the path', () => {
+    const { container } = renderCommander();
+    const panel = container.querySelector<HTMLElement>('.file-panel.is-active');
+    const pathText = panel?.querySelector('.path-input')?.firstChild;
+    const headerText = panel?.querySelector('.panel-path')?.firstChild;
+    const selection = window.getSelection();
+    if (!pathText || !headerText || !selection) throw new Error('path selection fixture is required');
+
+    try {
+      selection.setBaseAndExtent(pathText, 4, headerText, 0);
+      document.dispatchEvent(new Event('selectionchange'));
+
+      expect(selection.anchorNode).toBe(pathText);
+      expect(selection.anchorOffset).toBe(4);
+      expect(selection.focusNode).toBe(pathText);
+      expect(selection.focusOffset).toBe(0);
+    } finally {
+      selection.removeAllRanges();
+    }
+  });
+
   it('applies file-type color classes to whole rows instead of only file names', () => {
     const { container } = renderCommander();
     const rows = [...container.querySelectorAll<HTMLElement>('.file-row')];

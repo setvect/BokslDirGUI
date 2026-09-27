@@ -411,6 +411,8 @@ button {
   display: grid;
   grid-template-rows: calc(30px * var(--commander-scale)) minmax(0, 1fr);
   min-height: 0;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .file-table-row {

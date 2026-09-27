@@ -200,6 +200,36 @@ export function FilePanel({
     }
   }, [panel.focusedIndex, rows.length, virtualizer]);
 
+  useEffect(() => {
+    const panelElement = panelRef.current;
+    if (!panelElement) return;
+
+    const keepPathSelectionInsidePath = () => {
+      const selection = window.getSelection();
+      if (!selection?.anchorNode || !selection.focusNode || selection.isCollapsed) return;
+
+      const pathElement = [...panelElement.querySelectorAll<HTMLElement>('.panel-path, .path-input')]
+        .find((element) => element.contains(selection.anchorNode));
+      if (!pathElement || pathElement.contains(selection.focusNode)) return;
+
+      const pathRange = document.createRange();
+      pathRange.selectNodeContents(pathElement);
+      const focusBeforePath = pathRange.comparePoint(selection.focusNode, selection.focusOffset) < 0;
+      const boundaryText = focusBeforePath ? pathElement.firstChild : pathElement.lastChild;
+      if (!boundaryText || boundaryText.nodeType !== Node.TEXT_NODE) return;
+
+      selection.setBaseAndExtent(
+        selection.anchorNode,
+        selection.anchorOffset,
+        boundaryText,
+        focusBeforePath ? 0 : (boundaryText.textContent?.length ?? 0),
+      );
+    };
+
+    document.addEventListener('selectionchange', keepPathSelectionInsidePath);
+    return () => document.removeEventListener('selectionchange', keepPathSelectionInsidePath);
+  }, []);
+
   return (
     <section
       ref={panelRef}
