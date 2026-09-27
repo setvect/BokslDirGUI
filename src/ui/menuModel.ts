@@ -334,6 +334,8 @@ const BLANK_CONTEXT_ACTION_IDS = new Set<ActionId>([
   'file.clipboardMovePaste',
   'nav.refresh',
   'nav.gotoPath',
+  'external.openCurrentInFinder',
+  'external.openCurrentInTerminal',
   'filter.start',
   'filter.clear',
   'view.sortName',

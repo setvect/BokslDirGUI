@@ -61,6 +61,8 @@ interface AppAction {
 | `archive.create` | archive | zc | File/Archive Compress | safe | archive_create |
 | `external.openDefault` | file | o | File/Open Default App | safe | open_default |
 | `external.reveal` | file | none | File/Reveal | safe | reveal_in_manager |
+| `external.openCurrentInFinder` | navigation | none | Go/Open Current Folder in Finder | safe | open_current_in_finder |
+| `external.openCurrentInTerminal` | navigation | none | Go/Open Terminal Here | safe | open_current_in_terminal |
 | `external.openEditor` | file | e | File/Open Terminal Editor | safe | open_external_editor |
 | `settings.themeDark` | settings | none | Settings/Theme/Dark | none | save_settings |
 | `settings.themeLight` | settings | none | Settings/Theme/Light | none | save_settings |

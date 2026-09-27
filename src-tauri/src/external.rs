@@ -16,6 +16,51 @@ pub(crate) fn reveal_in_manager(path: &str) -> CommandResult<ActionResult> {
     run_open_command(&path, true, None)
 }
 
+pub(crate) fn open_current_in_finder(path: &str) -> CommandResult<ActionResult> {
+    open_directory_in_app(path, "com.apple.finder")
+}
+
+pub(crate) fn open_current_in_terminal(path: &str) -> CommandResult<ActionResult> {
+    open_directory_in_app(path, "com.apple.Terminal")
+}
+
+fn open_directory_in_app(path: &str, bundle_id: &str) -> CommandResult<ActionResult> {
+    let path = navigation::canonical_existing_path(path)?;
+    if !path.is_dir() {
+        return Err(AppError::new(
+            "not_directory",
+            "errors.notDirectory",
+            Some(&path),
+            true,
+        ));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if env::var_os("BOKSLDIRGUI_EXTERNAL_DRY_RUN").is_none() {
+            Command::new("open")
+                .arg("-b")
+                .arg(bundle_id)
+                .arg(&path)
+                .spawn()
+                .map_err(|error| map_io_error(error, Some(&path)))?;
+        }
+        Ok(ActionResult {
+            ok: true,
+            message_key: None,
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = bundle_id;
+        Err(AppError::new(
+            "unsupported",
+            "errors.commandNotImplemented",
+            Some(&path),
+            true,
+        ))
+    }
+}
+
 pub(crate) fn open_external_editor(
     path: &str,
     editor_id: Option<&str>,

@@ -85,6 +85,8 @@ export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.archiveAdd,
   COMMANDS.openDefault,
   COMMANDS.revealInManager,
+  COMMANDS.openCurrentInFinder,
+  COMMANDS.openCurrentInTerminal,
   COMMANDS.openExternalEditor,
   COMMANDS.prepareShellCommand,
   COMMANDS.runShellCommand,
@@ -190,6 +192,8 @@ export const tauriClient = {
     invokeCommand<OperationStarted>(COMMANDS.archiveAdd, input),
   openDefault: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openDefault, input),
   revealInManager: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.revealInManager, input),
+  openCurrentInFinder: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openCurrentInFinder, input),
+  openCurrentInTerminal: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openCurrentInTerminal, input),
   openExternalEditor: (input: { path: string; editorId?: string }) =>
     invokeCommand<ActionResult>(COMMANDS.openExternalEditor, input),
   prepareShellCommand: (input: { workingDir: string; command: string; args?: string[] }) =>

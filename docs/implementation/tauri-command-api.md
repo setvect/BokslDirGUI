@@ -87,6 +87,8 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `archive_add` | `{ sources, archivePath, targetInnerDir, policy }` | `OperationStarted` | 일반 파일/폴더를 zip/jar/war/7z 내부 경로에 추가; unsafe 내부 경로 차단 |
 | `open_default` | `{ path }` | `ActionResult` | OS 기본 앱 |
 | `reveal_in_manager` | `{ path }` | `ActionResult` | Finder/Explorer 등 |
+| `open_current_in_finder` | `{ path }` | `ActionResult` | macOS 현재 패널 디렉터리를 Finder에서 열기; 실제 디렉터리 검증 |
+| `open_current_in_terminal` | `{ path }` | `ActionResult` | macOS 현재 패널 디렉터리에서 Terminal 열기; 실제 디렉터리 검증 |
 | `open_external_editor` | `{ path, editorId? }` | `ActionResult` | 명시 확인/설정 기반 |
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
 | `run_shell_command` | `{ workingDir, command, args?, confirmToken }` | `ShellCommandResult` | `confirmToken`/fingerprint 재검증 후 실행, stdout/stderr/exitCode 반환 |

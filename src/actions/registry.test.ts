@@ -64,6 +64,8 @@ const requiredActionIds: ActionId[] = [
   'archive.list',
   'app.quit',
   'external.openDefault',
+  'external.openCurrentInFinder',
+  'external.openCurrentInTerminal',
   'external.openEditor',
   'external.runShellCommand',
   'help.search',
@@ -92,6 +94,8 @@ describe('action registry', () => {
   it('keeps external integration and editor preset menu paths aligned with TUI parity rows', () => {
     expect(ACTION_BY_ID.get('external.openDefault')?.menuPath).toEqual(['File', 'Open Default App']);
     expect(ACTION_BY_ID.get('external.openEditor')?.menuPath).toEqual(['File', 'Open Terminal Editor']);
+    expect(ACTION_BY_ID.get('external.openCurrentInFinder')?.menuPath).toEqual(['Go', 'Open Current Folder in Finder']);
+    expect(ACTION_BY_ID.get('external.openCurrentInTerminal')?.menuPath).toEqual(['Go', 'Open Terminal Here']);
     expect(ACTION_BY_ID.get('external.runShellCommand')?.menuPath).toEqual(['File', 'Run Shell Command']);
     expect(ACTION_BY_ID.get('app.quit')?.menuPath).toEqual(['File', 'Quit']);
     expect(ACTION_BY_ID.get('nav.gotoPath')?.menuPath).toEqual(['View', 'Go To Path']);
@@ -158,6 +162,22 @@ describe('action registry', () => {
     }
   });
 
+  it('offers current-directory app actions only for real macOS directories', () => {
+    const context: ActionContext = {
+      activePanel: 'right', focusedEntryKind: null, selectedCount: 0,
+      hasConcreteFocus: false, effectiveTargetCount: 0, platform: 'mac',
+      hasOppositePanel: true, shellCommandEnabled: false, operationBusy: false,
+      backendAvailable: true, activePathIsArchive: false,
+    };
+    for (const id of ['external.openCurrentInFinder', 'external.openCurrentInTerminal']) {
+      const action = ACTION_BY_ID.get(id)!;
+      expect(action.isEnabled(context)).toBe(true);
+      expect(action.isEnabled({ ...context, activePathIsArchive: true })).toBe(false);
+      expect(action.isEnabled({ ...context, platform: 'other' })).toBe(false);
+      expect(action.isEnabled({ ...context, backendAvailable: false })).toBe(false);
+    }
+  });
+
   it('applies contextScopes before action-specific enablement', () => {
     const archiveOpen = ACTION_BY_ID.get('archive.list');
     if (!archiveOpen) {
@@ -213,6 +233,9 @@ describe('action registry', () => {
     expect(shortcutHelpLabelForAction(paste, 'other')).toBe('Ctrl+V');
     expect(actionVisibleOnPlatform(cut, 'mac')).toBe(false);
     expect(actionVisibleOnPlatform(moveHere, 'other')).toBe(false);
+    expect(actionsForMenu('Go', 'mac').some((action) => action.id === 'external.openCurrentInFinder')).toBe(true);
+    expect(actionsForMenu('Go', 'other').some((action) => action.id === 'external.openCurrentInFinder')).toBe(false);
+    expect(actionsForMenu('Go', 'other').some((action) => action.id === 'external.openCurrentInTerminal')).toBe(false);
     expect(actionsForMenu('Edit', 'mac').some((action) => action.id === 'file.clipboardMovePaste')).toBe(true);
     expect(actionsForMenu('Edit', 'other').some((action) => action.id === 'file.clipboardCut')).toBe(true);
   });

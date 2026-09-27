@@ -41,6 +41,8 @@ describe('Tauri command names', () => {
       'archive_add',
       'open_default',
       'reveal_in_manager',
+      'open_current_in_finder',
+      'open_current_in_terminal',
       'open_external_editor',
       'prepare_shell_command',
       'run_shell_command',

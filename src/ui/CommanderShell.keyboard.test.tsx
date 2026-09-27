@@ -584,6 +584,26 @@ describe('CommanderShell keyboard', () => {
     expect(activePanelLabel(document.body)).toContain('generic-array-6de08afde610f112');
   });
 
+  it('opens Finder and Terminal at the panel where the action was invoked', async () => {
+    const user = userEvent.setup();
+    const openCurrentInFinder = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: null } }));
+    const openCurrentInTerminal = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: null } }));
+    const { container } = renderCommander(createFixturePanelDataSource(), {
+      createDir: vi.fn(), renameEntry: vi.fn(), openCurrentInFinder, openCurrentInTerminal,
+    });
+    const activeBlankArea = () => container.querySelector<HTMLElement>('.file-panel.is-active .file-table-scroll')!;
+
+    fireEvent.contextMenu(activeBlankArea());
+    await user.click(await screen.findByRole('menuitem', { name: '현재 폴더를 Finder에서 열기' }));
+    await waitFor(() => expect(openCurrentInFinder).toHaveBeenCalledWith({ path: SAMPLE_LISTINGS.right.path }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await user.keyboard('{Tab}');
+    fireEvent.contextMenu(activeBlankArea());
+    await user.click(await screen.findByRole('menuitem', { name: '현재 폴더에서 터미널 열기' }));
+    await waitFor(() => expect(openCurrentInTerminal).toHaveBeenCalledWith({ path: SAMPLE_LISTINGS.left.path }));
+  });
+
   it('opens a blank-area context menu for panel-scope actions', async () => {
     const user = userEvent.setup();
     const createDir = vi.fn(async () => ({

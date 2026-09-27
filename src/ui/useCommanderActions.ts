@@ -210,6 +210,24 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     if (actionId === 'file.clipboardPaste' || actionId === 'file.clipboardMovePaste') { pasteClipboard(actionId, panelOverride); return; }
 
+    if (actionId === 'external.openCurrentInFinder' || actionId === 'external.openCurrentInTerminal') {
+      const openDirectory = actionId === 'external.openCurrentInFinder'
+        ? dependencies.mutationClient.openCurrentInFinder
+        : dependencies.mutationClient.openCurrentInTerminal;
+      const label = labelForAction(action, dependencies.settings.language);
+      if (!dependencies.runtimeBackendAvailable || isArchiveVirtualPath(panel.path) || !openDirectory) {
+        dependencies.setStatusMessage(dependencies.statusText.unavailableInContext(label));
+        return;
+      }
+      const path = panel.path;
+      void openDirectory({ path }).then((result) => {
+        dependencies.setStatusMessage(result.ok
+          ? dependencies.statusText.operationDone(label)
+          : `${label}: ${formatUserErrorMessage(dependencies.settings.language, result.error)}`);
+      });
+      return;
+    }
+
     if (actionId === 'panel.swapPaths') { dependencies.swapPanelPaths(panelOverride); return; }
 
     if (actionId === 'panel.copyPathToOther') {

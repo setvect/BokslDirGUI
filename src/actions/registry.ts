@@ -113,6 +113,8 @@ export const ACTIONS = [
   action({ id: 'archive.create', category: 'archive', displayLabel: 'Archive Compress', hotkeyLabel: 'Archive', shortcutLabel: 'zc', keyboardBindings: ['z c'], menuPath: ['File', 'Archive Compress'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.archiveCreate, runPath: 'archive_create', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'external.openDefault', category: 'file', displayLabel: 'Open Default App', shortcutLabel: 'o', keyboardBindings: ['o'], menuPath: ['File', 'Open Default App'], contextScopes: ['file'], dangerLevel: 'safe', command: COMMANDS.openDefault, runPath: 'open_default', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
   action({ id: 'external.reveal', category: 'file', displayLabel: 'Reveal', menuPath: ['File', 'Reveal'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.revealInManager, runPath: 'reveal_in_manager', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
+  action({ id: 'external.openCurrentInFinder', category: 'navigation', displayLabel: 'Open Current Folder in Finder', menuPath: ['Go', 'Open Current Folder in Finder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInFinder, runPath: 'open_current_in_finder', isEnabled: (c) => c.platform === 'mac' && !c.activePathIsArchive && canInvokeBackend(c) }),
+  action({ id: 'external.openCurrentInTerminal', category: 'navigation', displayLabel: 'Open Terminal Here', menuPath: ['Go', 'Open Terminal Here'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInTerminal, runPath: 'open_current_in_terminal', isEnabled: (c) => c.platform === 'mac' && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'external.openEditor', category: 'file', displayLabel: 'Open Terminal Editor', shortcutLabel: 'e', keyboardBindings: ['e'], menuPath: ['File', 'Open Terminal Editor'], contextScopes: ['file'], dangerLevel: 'safe', command: COMMANDS.openExternalEditor, runPath: 'open_external_editor', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
   action({ id: 'view.sortName', category: 'view', shortcutLabel: 'sn', keyboardBindings: ['s n'], menuPath: ['View', 'Sort', 'Name'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortSize', category: 'view', shortcutLabel: 'ss', keyboardBindings: ['s s'], menuPath: ['View', 'Sort', 'Size'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
@@ -261,7 +263,9 @@ export const fileShortcutPlatform = (userAgent = typeof navigator === 'undefined
   /Windows|Linux/i.test(userAgent) ? 'other' : 'mac';
 
 export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortcutPlatform()) =>
-  action.id !== (platform === 'mac' ? 'file.clipboardCut' : 'file.clipboardMovePaste');
+  platform === 'mac'
+    ? action.id !== 'file.clipboardCut'
+    : !['file.clipboardMovePaste', 'external.openCurrentInFinder', 'external.openCurrentInTerminal'].includes(action.id);
 
 export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform()) =>
   ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform));

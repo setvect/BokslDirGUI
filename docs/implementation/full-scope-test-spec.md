@@ -65,6 +65,7 @@
 
 - `external.openDefault` action은 `open_default` command로 연결되며 OS 기본 앱 열기를 시도하고 실패 시 사용자 메시지 표시
 - `external.reveal` action은 `reveal_in_manager` command로 연결되며 Finder/Explorer/파일 관리자에서 위치 표시를 시도하고 OS별 실패 처리
+- `external.openCurrentInFinder`/`external.openCurrentInTerminal` action은 macOS에서 현재 패널의 실제 디렉터리를 전달하고, 파일·없는 경로·압축 내부 경로는 거부
 - `external.openEditor` action은 `open_external_editor` command로 연결되며, 설정된 편집기 또는 명시 선택을 사용하고 실행 전 확인/실패/종료 코드 메시지 제공
 - `external.runShellCommand` action의 검증 항목
   - `prepare_shell_command` → `run_shell_command` command 연결

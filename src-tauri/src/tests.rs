@@ -1,8 +1,9 @@
 use crate::archive;
 use crate::commands::{
     archive_list, create_dir, get_metadata, health_check, list_dir, list_locations, load_settings,
-    open_default, open_external_editor, prepare_shell_command, preview_file, rename_entry,
-    reveal_in_manager, run_shell_command, save_settings, watch_path,
+    open_current_in_finder, open_current_in_terminal, open_default, open_external_editor,
+    prepare_shell_command, preview_file, rename_entry, reveal_in_manager, run_shell_command,
+    save_settings, watch_path,
 };
 use crate::contracts::{
     ConflictDecision, DeleteMode, DirectoryStats, EntryKind, OperationKind, OperationState,
@@ -922,6 +923,24 @@ fn external_open_commands_support_dry_run_and_editor_policy() {
     let revealed = reveal_in_manager(source.to_string_lossy().into_owned())
         .expect("dry-run reveal should succeed");
     assert!(revealed.ok);
+
+    #[cfg(target_os = "macos")]
+    {
+        for open_directory in [open_current_in_finder, open_current_in_terminal] {
+            let opened = open_directory(fixture.root.to_string_lossy().into_owned())
+                .expect("dry-run current directory open should succeed");
+            assert!(opened.ok);
+        }
+    }
+    for open_directory in [open_current_in_finder, open_current_in_terminal] {
+        let file_error = open_directory(source.to_string_lossy().into_owned())
+            .expect_err("a file must not be opened as the current directory");
+        assert_eq!(file_error.code, "not_directory");
+        let missing_error =
+            open_directory(fixture.root.join("missing").to_string_lossy().into_owned())
+                .expect_err("a missing current directory must fail");
+        assert_eq!(missing_error.code, "not_found");
+    }
 
     let missing_editor = open_external_editor(source.to_string_lossy().into_owned(), None)
         .expect_err("external editor requires configured editor");

@@ -729,6 +729,14 @@ button {
   box-shadow: var(--shadow-popover);
 }
 
+.menu-popover,
+.menu-submenu,
+.context-menu {
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .menu-popover {
   position: absolute;
   top: calc(100% + 1px);

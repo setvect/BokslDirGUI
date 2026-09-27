@@ -192,6 +192,16 @@ pub(crate) fn reveal_in_manager(path: String) -> CommandResult<ActionResult> {
 }
 
 #[tauri::command]
+pub(crate) fn open_current_in_finder(path: String) -> CommandResult<ActionResult> {
+    external::open_current_in_finder(&path)
+}
+
+#[tauri::command]
+pub(crate) fn open_current_in_terminal(path: String) -> CommandResult<ActionResult> {
+    external::open_current_in_terminal(&path)
+}
+
+#[tauri::command]
 pub(crate) fn open_external_editor(
     path: String,
     editor_id: Option<String>,

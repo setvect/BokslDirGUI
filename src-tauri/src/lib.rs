@@ -48,6 +48,8 @@ pub fn run() {
             commands::archive_add,
             commands::open_default,
             commands::reveal_in_manager,
+            commands::open_current_in_finder,
+            commands::open_current_in_terminal,
             commands::open_external_editor,
             commands::prepare_shell_command,
             commands::run_shell_command,

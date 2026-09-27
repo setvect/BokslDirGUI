@@ -106,6 +106,14 @@
       "reason": "GUI 전환 필수 기능: 시스템 파일 관리자에서 위치 표시"
     },
     {
+      "guiActionId": "external.openCurrentInFinder",
+      "reason": "macOS 현재 패널 디렉터리를 Finder에서 열기"
+    },
+    {
+      "guiActionId": "external.openCurrentInTerminal",
+      "reason": "macOS 현재 패널 디렉터리에서 Terminal 열기"
+    },
+    {
       "guiActionId": "layout.ratio50",
       "reason": "GUI dual-panel 비율 직접 조정 확장"
     },
