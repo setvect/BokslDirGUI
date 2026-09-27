@@ -840,7 +840,7 @@ button {
   transform: translateX(-50%);
 }
 
-.navigation-tab-dialog {
+.navigation-path-dialog {
   width: min(820px, calc(100vw - 32px));
 }
 
@@ -1239,11 +1239,11 @@ button {
   text-align: left;
 }
 
-.navigation-tab-list {
+.navigation-path-list {
   min-width: 0;
 }
 
-.navigation-tab-row {
+.navigation-path-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
@@ -1251,7 +1251,7 @@ button {
   background: var(--nav-item-bg);
 }
 
-.navigation-tab-choice {
+.navigation-path-choice {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -1266,14 +1266,26 @@ button {
   text-align: left;
 }
 
-.navigation-tab-path {
+.navigation-path-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.navigation-path-label,
+.navigation-path-value {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.navigation-tab-choice small {
+.navigation-path-value.is-secondary {
+  color: var(--cyan);
+  font-size: 0.85em;
+}
+
+.navigation-path-choice small {
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1289,13 +1301,13 @@ button {
   white-space: nowrap;
 }
 
-.navigation-tab-row:focus-within,
-.navigation-tab-row:hover {
+.navigation-path-row:focus-within,
+.navigation-path-row:hover {
   border-color: var(--cyan);
   background: var(--blue-dim);
 }
 
-.navigation-tab-choice:focus-visible,
+.navigation-path-choice:focus-visible,
 .navigation-tab-close:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: -2px;

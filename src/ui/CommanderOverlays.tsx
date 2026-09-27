@@ -11,6 +11,7 @@ import {
 } from '../i18n-resources';
 import type { PanelNavigationState } from './panelState';
 import { useCommanderKeyboardBoundaryProps, type CommanderKeyboardOwner } from './keyboardOwnership';
+import { shortenPath } from './textLayout';
 
 export interface NavigationListItem {
   id: string;
@@ -315,25 +316,26 @@ export function NavigationListDialog({ language, state, onChoose, onCloseTab, on
   onClose(): void;
 }) {
   const text = OVERLAY_TEXT[language];
-  const activeTabFocusRef = useRef<HTMLButtonElement>(null);
+  const initialFocusRef = useRef<HTMLButtonElement>(null);
+  const isPathList = state.kind !== 'locations';
   return (
     <CommanderOverlayDialog
       owner={`navigation-list-${state.kind}`}
       title={state.title}
       ariaLabel={state.title}
       onClose={onClose}
-      className={state.kind === 'tabs' ? 'navigation-list-dialog navigation-tab-dialog' : 'navigation-list-dialog'}
-      onOpenAutoFocus={state.kind === 'tabs' ? (event) => {
+      className={isPathList ? 'navigation-list-dialog navigation-path-dialog' : 'navigation-list-dialog'}
+      onOpenAutoFocus={isPathList && state.items.length > 0 ? (event) => {
         event.preventDefault();
-        activeTabFocusRef.current?.focus({ preventScroll: true });
+        initialFocusRef.current?.focus({ preventScroll: true });
       } : undefined}
     >
       <div className="filter-form">
-        {state.kind === 'tabs' ? (
-          <TabListContent
+        {isPathList ? (
+          <PathNavigationListContent
             language={language}
             state={state}
-            initialFocusRef={activeTabFocusRef}
+            initialFocusRef={initialFocusRef}
             onChoose={onChoose}
             onCloseTab={onCloseTab}
           />
@@ -362,7 +364,7 @@ export function NavigationListDialog({ language, state, onChoose, onCloseTab, on
   );
 }
 
-function TabListContent({ language, state, initialFocusRef, onChoose, onCloseTab }: {
+function PathNavigationListContent({ language, state, initialFocusRef, onChoose, onCloseTab }: {
   language: SupportedLanguage;
   state: NavigationListState;
   initialFocusRef: RefObject<HTMLButtonElement | null>;
@@ -372,7 +374,7 @@ function TabListContent({ language, state, initialFocusRef, onChoose, onCloseTab
   const text = OVERLAY_TEXT[language];
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const focusedIndexRef = useRef(Math.max(0, state.items.findIndex((item) => item.group === 'active tab')));
+  const focusedIndexRef = useRef(Math.max(0, state.items.findIndex((item) => item.group === 'active tab' || item.group === 'current')));
 
   useEffect(() => {
     if (state.items.length === 0) return;
@@ -414,7 +416,7 @@ function TabListContent({ language, state, initialFocusRef, onChoose, onCloseTab
       event.preventDefault();
       event.stopPropagation();
       onChoose(state.items[index]);
-    } else if ((event.key === 'Delete' || event.key === 'Backspace') && state.items.length > 1) {
+    } else if (state.kind === 'tabs' && (event.key === 'Delete' || event.key === 'Backspace') && state.items.length > 1) {
       event.preventDefault();
       event.stopPropagation();
       onCloseTab(state.items[index]);
@@ -422,36 +424,42 @@ function TabListContent({ language, state, initialFocusRef, onChoose, onCloseTab
   };
 
   return (
-    <div className="navigation-list navigation-tab-list" role="list" ref={listRef} onKeyDown={handleKeyDown}>
-      {state.items.map((item, index) => (
-        <div className="navigation-tab-row" role="listitem" key={item.id}>
-          <button
-            type="button"
-            className="navigation-tab-choice"
-            aria-current={item.group === 'active tab' ? 'true' : undefined}
-            title={item.path}
-            ref={(element) => {
-              itemRefs.current[index] = element;
-              if (item.group === 'active tab') initialFocusRef.current = element;
-            }}
-            onFocus={() => { focusedIndexRef.current = index; }}
-            onClick={() => onChoose(item)}
-          >
-            <span className="navigation-tab-index">{index + 1}.</span>
-            <span className="navigation-tab-path">{item.path}</span>
-            <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
-          </button>
-          <button
-            type="button"
-            className="navigation-tab-close"
-            aria-label={`${text.closeTab} ${index + 1}: ${item.path}`}
-            title={text.closeTab}
-            disabled={state.items.length <= 1}
-            onFocus={() => { focusedIndexRef.current = index; }}
-            onClick={() => onCloseTab(item)}
-          >{text.close}</button>
-        </div>
-      ))}
+    <div className={'navigation-list navigation-path-list' + (state.kind === 'tabs' ? ' navigation-tab-list' : '')} role="list" ref={listRef} onKeyDown={handleKeyDown}>
+      {state.items.map((item, index) => {
+        const hasCustomLabel = state.kind === 'bookmarks' && item.label !== item.path && item.label !== shortenPath(item.path);
+        return (
+          <div className="navigation-path-row" role="listitem" key={item.id}>
+            <button
+              type="button"
+              className={'navigation-path-choice' + (state.kind === 'tabs' ? ' navigation-tab-choice' : '')}
+              aria-current={item.group === 'active tab' || item.group === 'current' ? 'true' : undefined}
+              title={item.path}
+              ref={(element) => {
+                itemRefs.current[index] = element;
+                if (index === focusedIndexRef.current) initialFocusRef.current = element;
+              }}
+              onFocus={() => { focusedIndexRef.current = index; }}
+              onClick={() => onChoose(item)}
+            >
+              <span className="navigation-path-index">{index + 1}.</span>
+              <span className="navigation-path-main">
+                {hasCustomLabel ? <span className="navigation-path-label">{item.label}</span> : null}
+                <span className={'navigation-path-value' + (state.kind === 'tabs' ? ' navigation-tab-path' : '') + (hasCustomLabel ? ' is-secondary' : '')}>{item.path}</span>
+              </span>
+              <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
+            </button>
+            {state.kind === 'tabs' ? <button
+              type="button"
+              className="navigation-tab-close"
+              aria-label={text.closeTab + ' ' + (index + 1) + ': ' + item.path}
+              title={text.closeTab}
+              disabled={state.items.length <= 1}
+              onFocus={() => { focusedIndexRef.current = index; }}
+              onClick={() => onCloseTab(item)}
+            >{text.close}</button> : null}
+          </div>
+        );
+      })}
       {state.items.length === 0 ? <p className="dialog-empty">{text.emptyList}</p> : null}
     </div>
   );
