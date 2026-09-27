@@ -570,13 +570,22 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
 
   };
 
-  const closeTab = (panelId: PanelId) => {
-    const panel = panelState[panelId];
+  const closeTab = (panelId: PanelId, tabIndex = activeTab[panelId]) => {
+    const tabs = panelTabs[panelId];
+    if (tabs.length <= 1 || tabIndex < 0 || tabIndex >= tabs.length) return;
 
-    if (panelTabs[panelId].length <= 1) return;
+    const remaining = tabs.filter((_, index) => index !== tabIndex);
+    if (tabIndex !== activeTab[panelId]) {
+      setPanelTabs((current) => ({ ...current, [panelId]: remaining }));
+      if (tabIndex < activeTab[panelId]) {
+        setActiveTab((current) => ({ ...current, [panelId]: current[panelId] - 1 }));
+      }
+      runtime.setStatusMessage(runtime.statusText.tabClosed(panelIdLabel(panelId, runtime.settings.language)));
+      return;
+    }
+
     beginPanelRequest(panelId);
-    const remaining = panelTabs[panelId].filter((_, index) => index !== activeTab[panelId]);
-    const nextIndex = Math.min(activeTab[panelId], remaining.length - 1);
+    const nextIndex = Math.min(tabIndex, remaining.length - 1);
     const restored = reassignPanelState({ ...remaining[nextIndex], loading: false }, panelId);
     setPanelTabs((current) => ({ ...current, [panelId]: remaining }));
     setActiveTab((current) => ({ ...current, [panelId]: nextIndex }));
@@ -585,8 +594,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     runtime.setDirectoryComparison(null);
     if (!isArchiveVirtualPath(restored.path)) persistSessionPaths(panelId, restored.path);
     runtime.setStatusMessage(runtime.statusText.tabClosed(panelIdLabel(panelId, runtime.settings.language)));
-    return;
-
   };
 
   const swapPanelPaths = (panelId: PanelId) => {

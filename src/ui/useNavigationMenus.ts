@@ -1,5 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { PanelId, Settings } from '../domain/types';
 import type { CommanderNavigationText, CommanderStatusText } from '../i18n-resources';
 import {
@@ -17,6 +17,7 @@ import { shortenPath } from './textLayout';
 
 interface NavigationMenusDependencies {
   readonly activateTab: (panelId: PanelId, index: number) => void;
+  readonly closeTab: (panelId: PanelId, index: number) => void;
   readonly panelState: PanelStateById;
   readonly settings: Settings;
   readonly saveSettingsPatch: (patch: Partial<Settings>, successMessage: string | null, options?: { silent?: boolean; }) => Promise<void>;
@@ -120,13 +121,7 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
       kind: 'tabs',
       panelId,
       title: dependencies.navigationText.tabsTitle(panelIdLabel(panelId, dependencies.settings.language)),
-      items: dependencies.panelTabs[panelId].map((tab, index) => {
-        const path = index === dependencies.activeTab[panelId] ? dependencies.panelStateRef.current[panelId].path : tab.path;
-        return {
-          id: `tab-${index}`, label: `${index + 1}. ${shortenPath(path)}`, path,
-          group: index === dependencies.activeTab[panelId] ? 'active tab' : 'tab'
-        };
-      }),
+      items: tabItemsForPanel(dependencies, panelId),
     });
     dependencies.setStatusMessage(null);
   };
@@ -160,5 +155,36 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
     }
     void dependencies.gotoPanelPath(state.panelId, item.path);
   };
-  return { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, deleteBookmarkForPanel, setBookmarkRenameRequest, locationsRequestRef, setNavigationList, bookmarkRenameRequest, applyBookmarkRename, navigationList, chooseNavigationItem };
+
+  const closeNavigationTab = (state: NavigationListState, item: NavigationListItem) => {
+    if (state.kind !== 'tabs' || state.items.length <= 1) return;
+    const index = state.items.findIndex((candidate) => candidate.id === item.id);
+    if (index >= 0) dependencies.closeTab(state.panelId, index);
+  };
+
+  const visibleNavigationList = useMemo(
+    () => navigationList?.kind === 'tabs'
+      ? { ...navigationList, items: tabItemsForPanel(dependencies, navigationList.panelId) }
+      : navigationList,
+    [navigationList, dependencies.panelTabs, dependencies.activeTab, dependencies.panelState, dependencies.panelStateRef],
+  );
+
+  return { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, deleteBookmarkForPanel, setBookmarkRenameRequest, locationsRequestRef, setNavigationList, bookmarkRenameRequest, applyBookmarkRename, navigationList: visibleNavigationList, chooseNavigationItem, closeNavigationTab };
+}
+
+function tabItemsForPanel(dependencies: NavigationMenusDependencies, panelId: PanelId): NavigationListItem[] {
+  const activeIndex = dependencies.activeTab[panelId];
+  const paths = dependencies.panelTabs[panelId].map((tab, index) =>
+    index === activeIndex ? dependencies.panelStateRef.current[panelId].path : tab.path,
+  );
+  return tabListItems(paths, activeIndex);
+}
+
+function tabListItems(paths: string[], activeIndex: number): NavigationListItem[] {
+  return paths.map((path, index) => ({
+    id: `tab-${index}`,
+    label: `${index + 1}. ${shortenPath(path)}`,
+    path,
+    group: index === activeIndex ? 'active tab' : 'tab',
+  }));
 }

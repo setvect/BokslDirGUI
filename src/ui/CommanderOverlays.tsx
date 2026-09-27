@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { ACTIONS, actionVisibleOnPlatform, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
 import type { FilePreview, PanelId } from '../domain/types';
 import {
@@ -307,36 +307,153 @@ export function AboutDialog({ language, onClose }: { language: SupportedLanguage
   );
 }
 
-export function NavigationListDialog({ language, state, onChoose, onClose }: {
+export function NavigationListDialog({ language, state, onChoose, onCloseTab, onClose }: {
   language: SupportedLanguage;
   state: NavigationListState;
   onChoose(item: NavigationListItem): void;
+  onCloseTab(item: NavigationListItem): void;
   onClose(): void;
 }) {
   const text = OVERLAY_TEXT[language];
+  const activeTabFocusRef = useRef<HTMLButtonElement>(null);
   return (
-    <CommanderOverlayDialog owner={`navigation-list-${state.kind}`} title={state.title} ariaLabel={state.title} onClose={onClose} className="navigation-list-dialog">
+    <CommanderOverlayDialog
+      owner={`navigation-list-${state.kind}`}
+      title={state.title}
+      ariaLabel={state.title}
+      onClose={onClose}
+      className={state.kind === 'tabs' ? 'navigation-list-dialog navigation-tab-dialog' : 'navigation-list-dialog'}
+      onOpenAutoFocus={state.kind === 'tabs' ? (event) => {
+        event.preventDefault();
+        activeTabFocusRef.current?.focus({ preventScroll: true });
+      } : undefined}
+    >
       <div className="filter-form">
-        <div className="navigation-list" role="list">
-          {state.items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="navigation-list-item"
-              onClick={() => onChoose(item)}
-            >
-              <span>{item.label}</span>
-              <code>{item.path}</code>
-              <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
-            </button>
-          ))}
-          {state.items.length === 0 ? <p className="dialog-empty">{text.emptyList}</p> : null}
-        </div>
+        {state.kind === 'tabs' ? (
+          <TabListContent
+            language={language}
+            state={state}
+            initialFocusRef={activeTabFocusRef}
+            onChoose={onChoose}
+            onCloseTab={onCloseTab}
+          />
+        ) : (
+          <div className="navigation-list" role="list">
+            {state.items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="navigation-list-item"
+                onClick={() => onChoose(item)}
+              >
+                <span>{item.label}</span>
+                <code>{item.path}</code>
+                <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
+              </button>
+            ))}
+            {state.items.length === 0 ? <p className="dialog-empty">{text.emptyList}</p> : null}
+          </div>
+        )}
         <div className="filter-actions">
           <button type="button" onClick={onClose}>{text.close}</button>
         </div>
       </div>
     </CommanderOverlayDialog>
+  );
+}
+
+function TabListContent({ language, state, initialFocusRef, onChoose, onCloseTab }: {
+  language: SupportedLanguage;
+  state: NavigationListState;
+  initialFocusRef: RefObject<HTMLButtonElement | null>;
+  onChoose(item: NavigationListItem): void;
+  onCloseTab(item: NavigationListItem): void;
+}) {
+  const text = OVERLAY_TEXT[language];
+  const listRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const focusedIndexRef = useRef(Math.max(0, state.items.findIndex((item) => item.group === 'active tab')));
+
+  useEffect(() => {
+    if (state.items.length === 0) return;
+    const nextIndex = Math.min(focusedIndexRef.current, state.items.length - 1);
+    focusedIndexRef.current = nextIndex;
+    itemRefs.current[nextIndex]?.focus({ preventScroll: true });
+  }, [state.items.length]);
+
+  const focusItem = (index: number) => {
+    const nextIndex = Math.max(0, Math.min(index, state.items.length - 1));
+    focusedIndexRef.current = nextIndex;
+    const item = itemRefs.current[nextIndex];
+    item?.focus({ preventScroll: true });
+    item?.scrollIntoView?.({ block: 'nearest' });
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || state.items.length === 0) return;
+    const focusedButtonIndex = itemRefs.current.findIndex((item) => item === document.activeElement);
+    const index = focusedButtonIndex >= 0 ? focusedButtonIndex : focusedIndexRef.current;
+    const rowHeight = itemRefs.current[index]?.offsetHeight || 40;
+    const pageSize = Math.max(1, Math.floor((listRef.current?.clientHeight || rowHeight) / rowHeight));
+    const targetIndex = {
+      ArrowDown: index + 1,
+      ArrowUp: index - 1,
+      PageDown: index + pageSize,
+      PageUp: index - pageSize,
+      Home: 0,
+      End: state.items.length - 1,
+    }[event.key];
+    if (targetIndex !== undefined) {
+      event.preventDefault();
+      event.stopPropagation();
+      focusItem(targetIndex);
+      return;
+    }
+
+    if (event.key === 'Enter' && !(event.target instanceof HTMLElement && event.target.closest('.navigation-tab-close'))) {
+      event.preventDefault();
+      event.stopPropagation();
+      onChoose(state.items[index]);
+    } else if ((event.key === 'Delete' || event.key === 'Backspace') && state.items.length > 1) {
+      event.preventDefault();
+      event.stopPropagation();
+      onCloseTab(state.items[index]);
+    }
+  };
+
+  return (
+    <div className="navigation-list navigation-tab-list" role="list" ref={listRef} onKeyDown={handleKeyDown}>
+      {state.items.map((item, index) => (
+        <div className="navigation-tab-row" role="listitem" key={item.id}>
+          <button
+            type="button"
+            className="navigation-tab-choice"
+            aria-current={item.group === 'active tab' ? 'true' : undefined}
+            title={item.path}
+            ref={(element) => {
+              itemRefs.current[index] = element;
+              if (item.group === 'active tab') initialFocusRef.current = element;
+            }}
+            onFocus={() => { focusedIndexRef.current = index; }}
+            onClick={() => onChoose(item)}
+          >
+            <span className="navigation-tab-index">{index + 1}.</span>
+            <span className="navigation-tab-path">{item.path}</span>
+            <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
+          </button>
+          <button
+            type="button"
+            className="navigation-tab-close"
+            aria-label={`${text.closeTab} ${index + 1}: ${item.path}`}
+            title={text.closeTab}
+            disabled={state.items.length <= 1}
+            onFocus={() => { focusedIndexRef.current = index; }}
+            onClick={() => onCloseTab(item)}
+          >{text.close}</button>
+        </div>
+      ))}
+      {state.items.length === 0 ? <p className="dialog-empty">{text.emptyList}</p> : null}
+    </div>
   );
 }
 

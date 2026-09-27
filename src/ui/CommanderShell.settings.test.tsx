@@ -123,6 +123,81 @@ describe('CommanderShell settings', () => {
     expect(document.body.textContent).not.toContain('renamed');
   });
 
+  it('navigates the tab list with arrows and pages, selects with Enter, and closes individual tabs', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+
+    const goToPath = async (path: string) => {
+      await user.keyboard('gp');
+      const input = await screen.findByLabelText('경로');
+      await user.clear(input);
+      await user.type(input, path);
+      await user.click(screen.getByRole('button', { name: '이동' }));
+    };
+
+    await user.keyboard('tn');
+    await goToPath('/tmp/tab-two');
+    await user.keyboard('tn');
+    await goToPath('/tmp/tab-three');
+    await user.keyboard('tt');
+
+    const dialog = await screen.findByRole('dialog', { name: '오른쪽 탭' });
+    const choices = [...dialog.querySelectorAll<HTMLButtonElement>('.navigation-tab-choice')];
+    expect(choices).toHaveLength(3);
+    expect(dialog.querySelectorAll('.navigation-tab-path')).toHaveLength(3);
+    expect(dialog.querySelector('code')).toBeNull();
+    expect(choices[2].getAttribute('title')).toBe('/tmp/tab-three');
+    expect(document.activeElement).toBe(choices[2]);
+    const list = dialog.querySelector<HTMLElement>('.navigation-tab-list');
+    if (!list) throw new Error('tab list is required');
+    Object.defineProperty(list, 'clientHeight', { configurable: true, value: 80 });
+    for (const choice of choices) {
+      Object.defineProperty(choice, 'offsetHeight', { configurable: true, value: 40 });
+    }
+
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement).toBe(choices[1]);
+    await user.keyboard('{PageUp}');
+    expect(document.activeElement).toBe(choices[0]);
+    await user.keyboard('{PageDown}');
+    expect(document.activeElement).toBe(choices[2]);
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement).toBe(choices[1]);
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('dialog', { name: '오른쪽 탭' })).toBeNull();
+    expect(document.querySelector('.file-panel.is-active .path-input')?.textContent).toBe('/tmp/tab-two');
+
+    await user.keyboard('tt');
+    const reopened = await screen.findByRole('dialog', { name: '오른쪽 탭' });
+    expect(reopened.querySelectorAll('.navigation-tab-choice')).toHaveLength(3);
+    await user.click(within(reopened).getByRole('button', { name: /탭 닫기 1:/ }));
+    expect(reopened.querySelectorAll('.navigation-tab-choice')).toHaveLength(2);
+    expect(document.querySelector('.file-panel.is-active .path-input')?.textContent).toBe('/tmp/tab-two');
+
+    await user.keyboard('{Delete}');
+    expect(reopened.querySelectorAll('.navigation-tab-choice')).toHaveLength(1);
+    expect(document.querySelector('.file-panel.is-active .path-input')?.textContent).toBe('/tmp/tab-three');
+    expect(within(reopened).getByRole('button', { name: /탭 닫기 1:/ }).hasAttribute('disabled')).toBe(true);
+    await user.keyboard('{Delete}');
+    expect(reopened.querySelectorAll('.navigation-tab-choice')).toHaveLength(1);
+  });
+
+  it('uses Enter on a tab close button to close that tab without leaving the list', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+    await user.keyboard('tn');
+    await user.keyboard('tt');
+
+    const dialog = await screen.findByRole('dialog', { name: '오른쪽 탭' });
+    const closeFirstTab = within(dialog).getByRole('button', { name: /탭 닫기 1:/ });
+    closeFirstTab.focus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('dialog', { name: '오른쪽 탭' })).toBe(dialog);
+    expect(dialog.querySelectorAll('.navigation-tab-choice')).toHaveLength(1);
+    expect(within(dialog).getByRole('button', { name: /탭 닫기 1:/ }).hasAttribute('disabled')).toBe(true);
+  });
+
   it('opens path, location, tab, history, bookmark, help search, and about overlays', async () => {
     const user = userEvent.setup();
     renderCommander();

@@ -822,6 +822,10 @@ button {
   transform: translateX(-50%);
 }
 
+.navigation-tab-dialog {
+  width: min(820px, calc(100vw - 32px));
+}
+
 .overlay-title {
   margin: 0 0 10px;
   color: var(--overlay-title-text);
@@ -1215,6 +1219,73 @@ button {
   color: var(--text);
   padding: 4px 8px;
   text-align: left;
+}
+
+.navigation-tab-list {
+  min-width: 0;
+}
+
+.navigation-tab-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  border: 1px solid var(--nav-item-border);
+  background: var(--nav-item-bg);
+}
+
+.navigation-tab-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 5px 8px;
+  font: inherit;
+  text-align: left;
+}
+
+.navigation-tab-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation-tab-choice small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.navigation-tab-close {
+  min-width: 54px;
+  border: 0;
+  border-left: 1px solid var(--nav-item-border);
+  background: transparent;
+  color: var(--muted);
+  padding: 0 8px;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.navigation-tab-row:focus-within,
+.navigation-tab-row:hover {
+  border-color: var(--cyan);
+  background: var(--blue-dim);
+}
+
+.navigation-tab-choice:focus-visible,
+.navigation-tab-close:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
+.navigation-tab-close:disabled {
+  color: var(--menu-disabled-text);
+  cursor: default;
 }
 
 .navigation-list-item:hover,
