@@ -306,8 +306,7 @@ button {
 }
 
 .panel-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  display: flex;
   align-items: center;
   gap: 12px;
   height: var(--panel-header-height);
@@ -331,9 +330,18 @@ button {
 }
 
 .panel-path {
+  flex: 1 1 0;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.panel-header-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
 }
 
 .panel-marker {
@@ -352,11 +360,21 @@ button {
   color: var(--cyan);
 }
 
-
 .panel-loading {
   color: var(--green);
   font-size: calc(12px * var(--commander-scale));
   letter-spacing: 0.08em;
+  visibility: hidden;
+}
+
+.panel-loading.is-loading {
+  animation: show-panel-loading 0s 180ms forwards;
+}
+
+@keyframes show-panel-loading {
+  to {
+    visibility: visible;
+  }
 }
 
 .path-controls button:disabled {

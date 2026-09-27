@@ -32,9 +32,11 @@ export function PanelHeader({
           {labels.filter.toUpperCase()} {panel.filter} ×
         </button>
       ) : null}
-      <span className="panel-tabs">{labels.tabs} {tabCount}</span>
-      <span className={`panel-marker ${active ? 'active' : ''}`}>{active ? labels.active : labels.passive}</span>
-      {panel.loading ? <span className="panel-loading">{labels.loading}</span> : null}
+      <span className="panel-header-status">
+        <span className={`panel-loading${panel.loading ? ' is-loading' : ''}`} aria-hidden={!panel.loading}>{labels.loading}</span>
+        <span className="panel-tabs">{labels.tabs} {tabCount}</span>
+        <span className={`panel-marker ${active ? 'active' : ''}`}>{active ? labels.active : labels.passive}</span>
+      </span>
     </header>
   );
 }
