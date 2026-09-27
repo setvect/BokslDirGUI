@@ -2277,8 +2277,7 @@
         "bookmark.add"
       ],
       "guiShortcutLabels": [
-        "Ctrl+B",
-        "tb+a"
+        "Ctrl+B"
       ],
       "guiMenuPaths": [
         [
@@ -2287,11 +2286,11 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: bookmark.add Ctrl+B/tb+a View/Bookmark Add",
+        "src/actions/registry.ts: bookmark.add Ctrl+B View/Bookmark Add",
         "src/ui/CommanderShell.settings.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help",
         "src-tauri/src/tests.rs: settings persist bookmarks and list_locations includes bookmarks"
       ],
-      "notes": "Ctrl+B 및 tb+a가 현재 경로를 settings.bookmarks에 저장한다.",
+      "notes": "Ctrl+B가 현재 경로를 settings.bookmarks에 저장한다.",
       "tuiId": "bookmark_add",
       "tuiLabel": "Add bookmark",
       "tuiCategory": "Navigation",

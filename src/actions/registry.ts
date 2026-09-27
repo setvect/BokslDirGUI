@@ -131,7 +131,7 @@ export const ACTIONS = [
   action({ id: 'layout.ratio70Left', category: 'view', menuPath: ['View', 'Panel Ratio', '70:30'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'layout.ratio70Right', category: 'view', menuPath: ['View', 'Panel Ratio', '30:70'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'history.list', category: 'navigation', shortcutLabel: 'th', keyboardBindings: ['t h'], menuPath: ['View', 'History List'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'bookmark.add', category: 'navigation', shortcutLabel: 'Ctrl+B/tb+a', keyboardBindings: ['Ctrl+B', 't b a'], menuPath: ['View', 'Bookmark Add'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
+  action({ id: 'bookmark.add', category: 'navigation', shortcutLabel: 'Ctrl+B', keyboardBindings: ['Ctrl+B'], menuPath: ['View', 'Bookmark Add'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'bookmark.list', category: 'navigation', shortcutLabel: 'tb', keyboardBindings: ['t b'], menuPath: ['View', 'Bookmark List'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'bookmark.rename', category: 'navigation', menuPath: ['Go', 'Bookmark', 'Rename'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'bookmark.delete', category: 'navigation', menuPath: ['Go', 'Bookmark', 'Delete'], dangerLevel: 'destructive', command: COMMANDS.saveSettings, runPath: 'save_settings' }),

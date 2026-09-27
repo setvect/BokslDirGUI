@@ -123,7 +123,7 @@
 | `history_back` | Alt+Left | - | `nav.back` | implemented | P1 | 히스토리 state와 list_dir 재요청 경로가 있음 |
 | `history_forward` | Alt+Right | - | `nav.forward` | implemented | P1 | history_back과 동일 |
 | `history_list` | th | View > History List | `history.list` | implemented | P1 | th/View > History List는 back/current/forward 경로를 overlay로 표시 |
-| `bookmark_add` | Ctrl+B | - | `bookmark.add` | implemented | P1 | Ctrl+B 및 tb+a가 현재 경로를 settings.bookmarks에 저장 |
+| `bookmark_add` | Ctrl+B | - | `bookmark.add` | implemented | P1 | Ctrl+B가 현재 경로를 settings.bookmarks에 저장 |
 | `bookmark_list` | tb | View > Bookmark List | `bookmark.list` | implemented | P1 | tb/View > Bookmark List는 저장된 bookmark overlay를 열고 선택 시 해당 경로로 이동 |
 | `size_auto` | - | View > Size Format > Auto | `settings.sizeAuto` | implemented | P0 | Auto size direct menu action saves the human-readable size format and updates visible file size formatting |
 | `size_bytes` | - | View > Size Format > Bytes | `settings.sizeBytes` | implemented | P0 | Bytes size direct menu action saves the byte size format and updates visible file size formatting |

@@ -91,7 +91,7 @@ interface AppAction {
 | `layout.ratio70Left` | view | none | View/Panel Ratio/70:30 | none | UI state |
 | `layout.ratio70Right` | view | none | View/Panel Ratio/30:70 | none | UI state |
 | `history.list` | navigation | th | View/History List | none | UI state |
-| `bookmark.add` | navigation | Ctrl+B/tb+a | View/Bookmark Add | safe | save_settings |
+| `bookmark.add` | navigation | Ctrl+B | View/Bookmark Add | safe | save_settings |
 | `bookmark.list` | navigation | tb | View/Bookmark List | none | UI state |
 | `bookmark.rename` | navigation | none | Go/Bookmark/Rename | safe | save_settings |
 | `bookmark.delete` | navigation | none | Go/Bookmark/Delete | destructive | save_settings |

@@ -329,16 +329,13 @@ describe('CommanderShell keyboard', () => {
     expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')]).toHaveLength(0);
   });
 
-  it('dispatches longer overlapping sequence shortcuts before the shorter timeout action', async () => {
+  it('opens the bookmark list immediately when tb is pressed', async () => {
     const user = userEvent.setup();
     renderCommander();
 
-    await user.keyboard('tba');
+    await user.keyboard('tb');
 
-    await waitFor(() => {
-      expect(screen.queryByText('Bookmarks · UI state')).toBeNull();
-    });
-    expect(screen.queryByText('Bookmarks · UI state')).toBeNull();
+    expect(screen.getByRole('dialog', { name: '북마크' })).toBeTruthy();
   });
 
   it('does not dispatch a pending sequence timeout after a keyboard owner appears', async () => {

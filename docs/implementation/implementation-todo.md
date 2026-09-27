@@ -75,7 +75,7 @@
 - [x] action registry 기반 단축키 dispatch 구현
 - [x] 한글 IME 입력 상태에서도 물리 키 기준 단축키 dispatch
 - [x] display-only `shortcutLabel`과 executable `keyboardBindings` 분리
-- [x] prefix sequence shortcut 처리(`t b` vs `t b a`)와 timeout disambiguation 구현
+- [x] 연속 단축키의 접두 입력 처리와 timeout disambiguation 구현
 - [x] 입력 필드, 다이얼로그, 메뉴, 컨텍스트 메뉴, native control의 keyboard ownership 보호
 - [x] ref-counted keyboard owner boundary helper 구현
 - [x] `Cmd/Ctrl +`, `Cmd/Ctrl -`, `Cmd/Ctrl 0`로 글자/행 높이/여백/status/hotkey strip을 함께 조정하고 `Settings.view.zoomStep`으로 저장

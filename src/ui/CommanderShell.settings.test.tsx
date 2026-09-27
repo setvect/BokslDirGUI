@@ -29,7 +29,7 @@ describe('CommanderShell settings', () => {
     }));
     renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
 
-    await user.keyboard('tba');
+    await user.keyboard('{Control>}b{/Control}');
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
       patch: expect.objectContaining({
         bookmarks: expect.arrayContaining([expect.objectContaining({ path: SAMPLE_LISTINGS.right.path })]),
@@ -60,7 +60,7 @@ describe('CommanderShell settings', () => {
     expect(within(shortcutDialog).getByText('반대 패널로 복사')).toBeTruthy();
     expect(within(shortcutDialog).getByText('y/F5')).toBeTruthy();
     expect(within(shortcutDialog).getByText('Shift+D/Shift+Delete')).toBeTruthy();
-    expect(within(shortcutDialog).getByText('Ctrl+B/tb+a')).toBeTruthy();
+    expect(within(shortcutDialog).getByText('Ctrl+B')).toBeTruthy();
     expect(within(shortcutDialog).queryByText('file.copy')).toBeNull();
   });
 
@@ -237,7 +237,7 @@ describe('CommanderShell settings', () => {
     expect(within(historyDialog).queryByText('current')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
-    await user.keyboard('tba');
+    await user.keyboard('{Control>}b{/Control}');
     await user.keyboard('tb');
     expect(await screen.findByRole('dialog', { name: '북마크' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '닫기' }));

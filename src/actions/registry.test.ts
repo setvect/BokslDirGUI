@@ -265,14 +265,14 @@ describe('action registry', () => {
     expect(keyboardBindingCollisions()).toEqual([]);
   });
 
-  it('keeps prefix sequence shortcuts reachable with timeout disambiguation metadata', () => {
+  it('opens the bookmark list as soon as the tb sequence is complete', () => {
     const pendingTab = matchKeyboardShortcut(key('t'));
     expect(pendingTab.status).toBe('pending');
 
-    const pendingBookmark = matchKeyboardShortcut(key('b'), pendingTab.sequence);
-    expect(pendingBookmark.status).toBe('pending');
-    expect(pendingBookmark.action?.id).toBe('bookmark.list');
-    expect(actionForKeyboardShortcut(key('a'), pendingBookmark.sequence)?.id).toBe('bookmark.add');
+    const bookmarkList = matchKeyboardShortcut(key('b'), pendingTab.sequence);
+    expect(bookmarkList.status).toBe('matched');
+    expect(bookmarkList.action?.id).toBe('bookmark.list');
+    expect(ACTION_BY_ID.get('bookmark.add')?.keyboardBindings).toEqual(['Ctrl+B']);
   });
 
   it('keeps hotkey strip shortcut formatting behind a registry helper', () => {
@@ -281,7 +281,7 @@ describe('action registry', () => {
     expect(shortcutLabelForAction(ACTION_BY_ID.get('archive.list')!)).toBe('Enter on archive');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('file.copy')!)).toBe('y/F5');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('file.deletePermanent')!)).toBe('Shift+D/Shift+Delete');
-    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('bookmark.add')!)).toBe('Ctrl+B/tb+a');
+    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('bookmark.add')!)).toBe('Ctrl+B');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('help.search')!)).toBe('');
   });
 });
