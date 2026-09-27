@@ -1,12 +1,10 @@
 import type {
   ArchiveListing,
   FileMetadata,
-  ShellCommandPreview,
   ShellCommandResult
 } from '../domain/types';
 import {
   METADATA_KIND_LABELS,
-  translateUserMessageKey,
   type OperationDialogText,
   type SupportedLanguage
 } from '../i18n-resources';
@@ -71,9 +69,6 @@ export function OperationResultView({
       </div>
     );
   }
-  if (isShellCommandPreview(value)) {
-    return <p>{value.policy.enabled ? text.shellCommandReady : translateUserMessageKey(language, value.policy.reasonKey)}</p>;
-  }
   if (isShellCommandResult(value)) {
     return (
       <div className="operation-result-stack">
@@ -118,12 +113,6 @@ const isArchiveListing = (value: unknown): value is ArchiveListing =>
   typeof value.archivePath === 'string' &&
   Array.isArray(value.entries) &&
   typeof value.encrypted === 'boolean';
-
-export const isShellCommandPreview = (value: unknown): value is ShellCommandPreview =>
-  isRecord(value) &&
-  typeof value.confirmToken === 'string' &&
-  isRecord(value.policy) &&
-  typeof value.policy.enabled === 'boolean';
 
 const isShellCommandResult = (value: unknown): value is ShellCommandResult =>
   isRecord(value) &&

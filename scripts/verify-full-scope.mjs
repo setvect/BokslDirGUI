@@ -241,8 +241,8 @@ addCheck(
     && parityRowsById.get('run_shell_command')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Run Shell Command')
     && read('src/ui/fileActionExecutors.ts').includes('settings.external.editorId')
     && read('src/ui/CommanderShell.operations.test.tsx').includes('opens files through default app and configured external editor command paths')
-    && read('src/ui/CommanderShell.operations.test.tsx').includes('previews and then runs shell commands only after an enabled policy returns a confirm token'),
-  'external open/editor/shell rows require File menu parity, persisted editor preset, shell preview/confirm/run, and tests',
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('runs an enabled shell command directly from the input dialog'),
+  'external open/editor/shell rows require File menu parity, persisted editor preset, direct shell execution, and tests',
 );
 addCheck(
   'TUI parity matrix records archive rows as implemented only with virtual-directory and backend evidence',
@@ -594,7 +594,7 @@ for (const token of ['TauriResult', 'BACKEND_IMPLEMENTED_COMMANDS', 'unsupported
 }
 addCheck('tauri client marks safe mutation handlers implemented', tauriClient.includes('COMMANDS.createDir') && tauriClient.includes('COMMANDS.renameEntry'), 'create_dir/rename_entry frontend capability must match Rust handler registration');
 addCheck('tauri client marks long-running operation handlers implemented', tauriClient.includes('COMMANDS.startCopy') && tauriClient.includes('COMMANDS.startMove') && tauriClient.includes('COMMANDS.startDelete') && tauriClient.includes('listenOperationEvents'), 'copy/move/delete/trash frontend capability must match Rust handler registration and event stream');
-addCheck('tauri client marks archive/external/shell/settings implemented', tauriClient.includes('COMMANDS.archiveCreate') && tauriClient.includes('COMMANDS.archiveAdd') && tauriClient.includes('COMMANDS.openDefault') && tauriClient.includes('COMMANDS.prepareShellCommand') && tauriClient.includes('COMMANDS.saveSettings'), 'remaining command wrappers must match Rust handler registration');
+addCheck('tauri client marks archive/external/shell/settings implemented', tauriClient.includes('COMMANDS.archiveCreate') && tauriClient.includes('COMMANDS.archiveAdd') && tauriClient.includes('COMMANDS.openDefault') && tauriClient.includes('COMMANDS.runShellCommand') && tauriClient.includes('COMMANDS.saveSettings'), 'remaining command wrappers must match Rust handler registration');
 
 const panelState = read('src/ui/panelState.ts');
 const panelDataSource = read('src/ui/panelDataSource.ts');
@@ -616,7 +616,7 @@ for (const token of ['createActionContext', 'filterEnabledActions', 'blocksVirtu
 }
 
 const fullScopeTest = read('src/verification/fullScope.test.ts');
-for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.archiveAdd', 'COMMANDS.prepareShellCommand', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.list']) {
+for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.archiveAdd', 'COMMANDS.runShellCommand', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.list']) {
   addCheck(`full-scope test covers ${token}`, fullScopeTest.includes(token), 'Semantic verification beyond static smoke');
 }
 

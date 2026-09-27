@@ -91,7 +91,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `open_current_in_terminal` | `{ path }` | `ActionResult` | macOS 현재 패널 디렉터리에서 Terminal 열기; 실제 디렉터리 검증 |
 | `open_external_editor` | `{ path, editorId? }` | `ActionResult` | 명시 확인/설정 기반 |
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
-| `run_shell_command` | `{ workingDir, command, args?, confirmToken }` | `ShellCommandResult` | `confirmToken`/fingerprint 재검증 후 실행, stdout/stderr/exitCode 반환 |
+| `run_shell_command` | `{ workingDir, command, args?, confirmToken? }` | `ShellCommandResult` | 설정·작업 디렉터리 검증 후 즉시 실행, stdout/stderr/exitCode 반환; 기존 토큰 전달 시 검증 유지 |
 | `load_settings` | `{}` | `Settings` | schema version 포함 |
 | `save_settings` | `{ patch }` | `Settings` | 원자적 저장 고려 |
 
@@ -125,8 +125,8 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - `run_shell_command`는 설정 키 `external.shellCommand.enabled === true`일 때만 활성화하고, shell interpolation을 피하기 위해 command/args를 분리하며, workingDir은 활성 패널 경로로 검증
 - `preview_file(path, maxBytes?)`는 일반 파일만 읽고 텍스트는 최대 1 MiB, 이미지는 8 MiB로 제한
 - 미지원 형식과 제한 초과 이미지는 command 오류가 아니라 `unsupported`/`tooLarge` 결과로 반환하며 파일을 실행하지 않음
-- `confirmToken`은 Rust backend가 `prepare_shell_command`에서 발급하는 짧은 TTL/one-shot token으로 정의하며, `run_shell_command` 실행 시 backend가 token, workingDir, command fingerprint를 재검증
-- renderer의 임의 문자열을 통한 확인 우회 차단 필수
+- `prepare_shell_command`와 `confirmToken`은 기존 호출 호환용; GUI는 토큰 없이 `run_shell_command`를 직접 호출
+- 토큰을 전달한 기존 호출은 backend가 작업 디렉터리/명령 fingerprint와 TTL/one-shot 조건을 검증; 무효·만료 시 `invalid_token`/`errors.shellConfirmationInvalid` 반환
 - renderer 권한은 command invocation에 필요한 범위로 제한
 
 ## 6. TypeScript wrapper 규칙

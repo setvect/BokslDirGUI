@@ -98,7 +98,7 @@ interface AppAction {
 | `bookmark.rename` | navigation | none | Go/Bookmark/Rename | safe | save_settings |
 | `bookmark.delete` | navigation | none | 목록 항목의 삭제 버튼 | destructive | bookmark list → save_settings |
 | `archive.list` | archive | Enter on archive | Archive/Open Archive | safe | archive_list 기반 가상 디렉터리 진입 |
-| `external.runShellCommand` | file | : | File/Run Shell Command | destructive | ShellCommandDialog → prepare_shell_command → run_shell_command |
+| `external.runShellCommand` | file | : | File/Run Shell Command | destructive | ShellCommandDialog → run_shell_command |
 | `help.shortcuts` | help | ? | Help/Keyboard Help | none | dialog |
 | `help.search` | help | none | Help/Search | none | UI state |
 | `help.about` | help | none | Help/About | none | dialog |
@@ -109,14 +109,14 @@ interface AppAction {
 - action enablement는 메뉴/컨텍스트 메뉴/hotkey strip/help에서 같은 selector 사용
 - hotkey strip은 action registry의 우선순위 목록을 사용하되 화면 폭과 확대 배율에 따라 표시 개수를 동적으로 조정
 - 좁은 화면에서는 핵심 조작만 남기고, 넓은 화면에서는 추가 action hint를 더 노출
-- destructive/irreversible action은 command 실행 전 dialog 정책을 반드시 수행
+- destructive/irreversible action은 command 실행 전 dialog 정책을 수행; 활성화된 셸 명령은 명령 입력 후 추가 확인 없이 실행
 - 압축 가상 디렉터리는 **읽기 전용 패널**
 - `file.copy`는 압축 내부→일반 디렉터리 추출 및 일반 디렉터리→압축 내부 추가로 허용하지만, `file.move`, `file.trash`, `file.deletePermanent`, `file.rename`, `file.mkdir`는 action registry에서 비활성화
 - 패널 상태줄은 `압축 내부 읽기 전용`을 표시해 비활성화 이유 설명
 - 압축 내부 직접 삭제/이름 변경/이동은 provider별 재작성 방식과 원자성 차이로 인해 지원하지 않음
 - 사용자는 복사/추출 후 일반 파일 시스템에서 변경하고 필요하면 새 압축 파일 생성
-- `external.runShellCommand`는 `ShellCommandDialog`의 preview/confirm 단계를 거쳐 backend `prepare_shell_command` → `run_shell_command` 순서로 실행
-- 기본 비활성 또는 명시 확인 정책을 거치며, 작업 디렉토리/명령/종료 코드/표준 오류를 사용자에게 표시
+- `external.runShellCommand`는 `ShellCommandDialog`에서 명령 입력 후 backend `run_shell_command`를 직접 호출
+- 기본 비활성 설정을 유지하며 작업 디렉터리/명령/종료 코드/표준 오류를 사용자에게 표시
 
 ## 5. Shortcut rules
 

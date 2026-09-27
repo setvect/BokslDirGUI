@@ -223,13 +223,13 @@ pub(crate) fn run_shell_command(
     working_dir: String,
     command: String,
     args: Option<Vec<String>>,
-    confirm_token: String,
+    confirm_token: Option<String>,
 ) -> CommandResult<ShellCommandResult> {
     shell_command::run_shell_command(
         &working_dir,
         &command,
         args.unwrap_or_default(),
-        &confirm_token,
+        confirm_token.as_deref(),
     )
 }
 

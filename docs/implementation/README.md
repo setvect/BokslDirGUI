@@ -56,7 +56,7 @@
 - 금지된 축소 범위 표현 없음
 - 기준 기능별 action ID, command/store path, component owner, test assertion 연결
 - `ConflictDecision` 명칭 통일
-- 외부 shell command는 기본 비활성/명시 확인 정책 포함
+- 외부 shell command는 기본 비활성 설정을 유지하며 입력 후 바로 실행
 
 - 공개 반영 전 `design-consistency-report.md`의 machine-check checklist 통과 필수
 - 최종 검증일: 2026-06-13

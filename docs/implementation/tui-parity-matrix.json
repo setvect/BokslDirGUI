@@ -742,10 +742,10 @@
       ],
       "evidence": [
         "src/actions/registry.ts: external.runShellCommand File/Run Shell Command",
-        "src/ui/CommanderShell.operations.test.tsx: previews and then runs shell commands only after an enabled policy returns a confirm token",
-        "src-tauri/src/tests.rs: prepare_shell_command/run_shell_command one-shot confirm token tests"
+        "src/ui/CommanderShell.operations.test.tsx: runs an enabled shell command directly from the input dialog",
+        "src-tauri/src/tests.rs: run_shell_command direct execution and disabled-setting tests"
       ],
-      "notes": "기본 비활성 정책을 유지하되 TUI File > Run Shell Command 위치로 노출하고, enabled 설정에서 prepare preview와 confirmToken 후 run만 허용한다.",
+      "notes": "기본 비활성 정책을 유지하되 TUI File > Run Shell Command 위치로 노출하고, enabled 설정에서 명령 입력 후 바로 실행한다.",
       "tuiId": "run_shell_command",
       "tuiLabel": "Run shell command",
       "tuiCategory": "FileOperation",

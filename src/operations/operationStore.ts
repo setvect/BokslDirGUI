@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ActionId } from '../actions/registry';
-import { buildDialogDraft, dialogKindForAction, disabledShellPreview, isLongRunningDialog, isShellCommandPreviewResult, operationKindForDialog, validateDialogInput } from './dialogDraft';
+import { buildDialogDraft, dialogKindForAction, isLongRunningDialog, operationKindForDialog, validateDialogInput } from './dialogDraft';
 import { createOperationEventActions } from './operationEvents';
 import { appError, isOperationInFlight } from './operationLifecycle';
 import { executeLongRunningDialog } from './operationRuntime';
@@ -108,12 +108,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         ...dialog,
         inputValue: value,
         validationErrorKey: validateDialogInput(dialog.dialogKind, value, dialog.requiredConfirmationPhrase),
-        ...(dialog.dialogKind === 'shellCommand'
-          ? {
-            shellPreview: disabledShellPreview(dialog.targetDir ?? ''),
-            atomicResult: null,
-          }
-          : null),
+        ...(dialog.dialogKind === 'shellCommand' ? { atomicResult: null } : null),
       },
       lastError: null,
     });
@@ -173,24 +168,6 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         return;
       }
 
-      const shellPreviewResult = isShellCommandPreviewResult(result.data) ? result.data : null;
-      if (dialog.dialogKind === 'shellCommand' && shellPreviewResult) {
-        set((current) => ({
-          dialog: current.dialog
-            ? {
-              ...current.dialog,
-              atomicPending: false,
-              shellPreview: shellPreviewResult,
-              atomicResult: shellPreviewResult,
-            }
-            : null,
-          progress: isOperationInFlight(current) ? current.progress : null,
-          conflictPrompt: isOperationInFlight(current) ? current.conflictPrompt : null,
-          summary: isOperationInFlight(current) ? current.summary : null,
-          lastError: null,
-        }));
-        return;
-      }
       if (dialog.dialogKind === 'properties' || dialog.dialogKind === 'shellCommand') {
         set((current) => ({
           dialog: current.dialog

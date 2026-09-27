@@ -7,8 +7,7 @@ import type {
   OperationProgress,
   OperationStarted,
   OperationSummary,
-  PanelId,
-  ShellCommandPreview
+  PanelId
 } from '../domain/types';
 
 export type DialogKind =
@@ -39,7 +38,6 @@ export interface OperationDialogDraft {
   defaultDecision: ConflictDecision;
   backendExecutionStubbed: boolean;
   backendExecutionStubReasonKey: string | null;
-  shellPreview: ShellCommandPreview | null;
   atomicResult: unknown | null;
   inputValue: string;
   secretValue: string;

@@ -9,7 +9,6 @@ import {
   type OperationDialogText,
   type SupportedLanguage
 } from '../i18n-resources';
-import { isShellCommandPreview } from './OperationResultView';
 import { type OperationDialogDraft } from './operationTypes';
 
 const DIALOG_BUTTON_SELECTOR = 'button:not(:disabled):not([aria-disabled="true"])';
@@ -55,12 +54,8 @@ export const operationDialogDescription = (dialog: OperationDialogDraft, languag
   return OPERATION_DIALOG_DESCRIPTIONS[language][dialog.dialogKind](formatItemCount(language, count));
 };
 
-const operationDialogPrimaryLabel = (dialog: OperationDialogDraft, atomicResult: unknown, language: SupportedLanguage) => {
-  if (hasRunnableShellPreview(dialog, atomicResult)) {
-    return OPERATION_DIALOG_PRIMARY_LABELS[language].runShellAfterConfirm;
-  }
-  return OPERATION_DIALOG_PRIMARY_LABELS[language][dialog.dialogKind];
-};
+const operationDialogPrimaryLabel = (dialog: OperationDialogDraft, language: SupportedLanguage) =>
+  OPERATION_DIALOG_PRIMARY_LABELS[language][dialog.dialogKind];
 
 export const operationDialogInputLabel = (dialogKind: OperationDialogKind, language: SupportedLanguage) =>
   OPERATION_DIALOG_INPUT_LABELS[language][dialogKind] ?? null;
@@ -109,7 +104,7 @@ export const operationDialogActions = ({
     },
     {
       key: 'confirm',
-      label: dialog.atomicPending || dialog.operationPending ? text.running : operationDialogPrimaryLabel(dialog, atomicResult, language),
+      label: dialog.atomicPending || dialog.operationPending ? text.running : operationDialogPrimaryLabel(dialog, language),
       className: `dialog-button primary${isDangerousDialog(dialog) ? ' danger' : ''}`,
       disabled: primaryDisabled,
       autoFocus: primaryShouldOwnFocus,
@@ -118,12 +113,7 @@ export const operationDialogActions = ({
   ];
 };
 
-const shouldShowCloseOnlyAction = (dialog: OperationDialogDraft, atomicResult: unknown) => {
-  if (!atomicResult) {
-    return false;
-  }
-  return !hasRunnableShellPreview(dialog, atomicResult);
-};
+const shouldShowCloseOnlyAction = (_dialog: OperationDialogDraft, atomicResult: unknown) => Boolean(atomicResult);
 
 export const shouldFocusOperationInput = (inputLabel: string | null, dialog: OperationDialogDraft, atomicResult: unknown) =>
   Boolean(inputLabel && !shouldShowCloseOnlyAction(dialog, atomicResult));
@@ -138,7 +128,6 @@ export const dialogFocusSignature = (
   dialog.sources.map((source) => source.path).join('|'),
   dialog.targetDir ?? '',
   atomicResult ? 'result' : 'draft',
-  isShellCommandPreview(atomicResult) ? atomicResult.confirmToken : '',
 ].join('\u0000');
 
 const shouldFocusCancelAction = (inputLabel: string | null, dialog: OperationDialogDraft, atomicResult: unknown) => {
@@ -150,12 +139,6 @@ const shouldFocusCancelAction = (inputLabel: string | null, dialog: OperationDia
   }
   return isDangerousDialog(dialog);
 };
-
-const hasRunnableShellPreview = (dialog: OperationDialogDraft, atomicResult: unknown) =>
-  dialog.dialogKind === 'shellCommand' &&
-  isShellCommandPreview(atomicResult) &&
-  atomicResult.policy.enabled === true &&
-  atomicResult.confirmToken !== 'disabled';
 
 const isDangerousDialog = (dialog: OperationDialogDraft) =>
   dialog.dialogKind === 'deletePermanent' ||

@@ -84,10 +84,9 @@ describe('action registry', () => {
     }
   });
 
-  it('routes shell command through preview before execution', () => {
+  it('routes shell command directly to execution', () => {
     const action = ACTION_BY_ID.get('external.runShellCommand');
-    expect(action?.command).toBe(COMMANDS.prepareShellCommand);
-    expect(action?.runPath).toContain('prepare_shell_command');
+    expect(action?.command).toBe(COMMANDS.runShellCommand);
     expect(action?.runPath).toContain('run_shell_command');
   });
 

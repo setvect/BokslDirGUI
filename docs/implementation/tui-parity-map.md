@@ -31,7 +31,7 @@
 | 압축/해제/가상 탐색 | archive list/extract/create dialog와 읽기 전용 가상 패널 | `ArchiveDialog`, `FilePanel` | `archive_list`, `archive_extract`, `archive_create`, `archive_add` | zip/jar/war/tar/tgz/tzst/7z fixture, zip/7z 암호, 목록 제한, zip-slip 방지 |
 | 북마크/히스토리 | compact 위치 overlay, panel history | `BookmarkDialog`, `HistoryPopover` | `load_settings`, `save_settings` | 재시작 후 복원, 중복 방지 |
 | 기본 앱/외부 편집기 | open/reveal/editor action | `ContextMenuLayer`, `ExternalOpenDialog` | `open_default`, `reveal_in_manager`, `open_external_editor` | OS별 실패 메시지 |
-| 외부 shell command | 현재 경로에서 명시 확인 후 command 실행 | `ShellCommandDialog` | `prepare_shell_command` → `run_shell_command` | 기본 비활성/확인/종료 코드/오류 표시 |
+| 외부 shell command | 현재 경로에서 입력한 command 즉시 실행 | `ShellCommandDialog` | `run_shell_command` | 기본 비활성 설정/종료 코드/오류 표시 |
 | 정렬/필터/보기 설정 | sort/filter/hidden/size format/theme/language | `TopMenuBar`, `FileTable`, `SettingsDialog` | `list_dir`, `save_settings` | action registry coverage 검사 |
 | 도움말/단축키 | action registry 기반 help | `HelpDialog` | none | action registry와 help 내용 일치 |
 | 설정/테마/i18n | settings dialog, runtime apply | `SettingsDialog` | `load_settings`, `save_settings` | 테마/언어 저장/복원 |

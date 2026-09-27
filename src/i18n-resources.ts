@@ -22,6 +22,7 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.tauriInvokeFailed': '앱 명령 실행에 실패했습니다.',
     'errors.confirmationRequired': '표시된 확인 문구를 정확히 입력하세요.',
     'errors.shellCommandDisabled': '쉘 명령 실행은 기본 비활성입니다.',
+    'errors.shellConfirmationInvalid': '셸 명령 실행 확인이 만료되었거나 유효하지 않습니다. 다시 실행 확인을 눌러주세요.',
     'errors.invalidShellCommand': '실행할 쉘 명령을 입력해야 합니다.',
     'errors.externalEditorNotConfigured': '외부 편집기가 설정되지 않았습니다.',
     'errors.previewNotFile': '파일만 미리 볼 수 있습니다.',
@@ -60,6 +61,7 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.tauriInvokeFailed': 'The app command failed.',
     'errors.confirmationRequired': 'Type the displayed confirmation phrase exactly.',
     'errors.shellCommandDisabled': 'Shell command execution is disabled by default.',
+    'errors.shellConfirmationInvalid': 'Shell command confirmation expired or is invalid. Confirm the command again.',
     'errors.invalidShellCommand': 'Enter a shell command to run.',
     'errors.externalEditorNotConfigured': 'No external editor is configured.',
     'errors.previewNotFile': 'Only files can be previewed.',
@@ -963,7 +965,6 @@ export const OPERATION_DIALOG_TEXT = {
     currentLocation: '현재 위치',
     irreversibleHint: '영구 삭제 후에는 되돌릴 수 없습니다.',
     shellCommand: '쉘 명령',
-    shellCommandReady: '실행 전 확인이 완료되었습니다. 확인 후 실행할 수 있습니다.',
     result: '결과',
     resultComplete: '작업이 완료되었습니다.',
     fileInfo: '파일 정보',
@@ -1010,7 +1011,6 @@ export const OPERATION_DIALOG_TEXT = {
     currentLocation: 'Current location',
     irreversibleHint: 'Permanent deletion cannot be undone.',
     shellCommand: 'Shell command',
-    shellCommandReady: 'The command is ready to run after confirmation.',
     result: 'Result',
     resultComplete: 'The operation completed.',
     fileInfo: 'File information',
@@ -1102,7 +1102,7 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     externalOpenDefault: () => '선택한 항목을 기본 앱으로 엽니다.',
     externalReveal: () => '선택한 항목의 위치를 파일 관리자에서 엽니다.',
     externalEditor: () => '선택한 항목을 터미널 편집기로 엽니다.',
-    shellCommand: () => '현재 폴더에서 실행할 명령을 확인합니다. 설정에서 허용된 경우에만 실행됩니다.',
+    shellCommand: () => '현재 폴더에서 명령을 실행합니다. 설정에서 허용된 경우에만 사용할 수 있습니다.',
     properties: () => '선택한 항목의 정보를 확인합니다.',
   },
   en: {
@@ -1117,7 +1117,7 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     externalOpenDefault: () => 'Open the selected item with the default app.',
     externalReveal: () => 'Reveal the selected item in the file manager.',
     externalEditor: () => 'Open the selected item in the terminal editor.',
-    shellCommand: () => 'Review the command to run in the current folder. It only runs when enabled in settings.',
+    shellCommand: () => 'Run a command in the current folder when shell commands are enabled in settings.',
     properties: () => 'Show information for the selected item.',
   },
 };
@@ -1136,8 +1136,7 @@ export const OPERATION_DIALOG_PRIMARY_LABELS = {
     externalOpenDefault: '기본 앱으로 열기',
     externalReveal: '파일 위치 열기',
     externalEditor: '편집기로 열기',
-    shellCommand: '실행 확인',
-    runShellAfterConfirm: '확인 후 실행',
+    shellCommand: '실행',
   },
   en: {
     copy: 'Copy',
@@ -1152,10 +1151,9 @@ export const OPERATION_DIALOG_PRIMARY_LABELS = {
     externalOpenDefault: 'Open',
     externalReveal: 'Reveal',
     externalEditor: 'Open Editor',
-    shellCommand: 'Confirm Run',
-    runShellAfterConfirm: 'Run after Confirming',
+    shellCommand: 'Run',
   },
-} as const satisfies Record<SupportedLanguage, Record<OperationDialogKind | 'runShellAfterConfirm', string>>;
+} as const satisfies Record<SupportedLanguage, Record<OperationDialogKind, string>>;
 
 export const OPERATION_DIALOG_INPUT_LABELS: Record<SupportedLanguage, Partial<Record<OperationDialogKind, string>>> = {
   ko: {

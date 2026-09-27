@@ -80,7 +80,7 @@
 | `move` | x | Edit > Move | `file.move` | implemented | P0 | TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation 시작; 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리 |
 | `open_default` | o | File > Open Default App | `external.openDefault` | implemented | P1 | o/File > Open Default App가 선택 파일을 OS 기본 앱 command boundary로 전달하고, recoverable backend error는 dialog/status로 표시 |
 | `open_terminal_editor` | e | File > Open Terminal Editor | `external.openEditor` | implemented | P1 | e/File > Open Terminal Editor는 Settings Default Editor preset 또는 명시 editorId를 사용해 파일을 terminal editor로 열기 |
-| `run_shell_command` | : | File > Run Shell Command | `external.runShellCommand` | implemented | P1 | 기본 비활성 정책을 유지하되 TUI File > Run Shell Command 위치로 노출하고, enabled 설정에서 prepare preview와 confirmToken 후 run만 허용 |
+| `run_shell_command` | : | File > Run Shell Command | `external.runShellCommand` | implemented | P1 | 기본 비활성 정책을 유지하되 TUI File > Run Shell Command 위치로 노출하고, enabled 설정에서 입력 후 바로 실행 |
 | `delete` | d | File > Delete | `file.trash` | implemented | P1 | TUI Delete는 GUI에서 File > Delete/d로 노출하고 Rust trash mode로 실행; 선택이 없으면 포커스 concrete row를 대상으로 하며, 가상 parent는 제외하고 trash 실패 시 영구 삭제로 fallback하지 않음 |
 | `perm_delete` | D | File > Permanent Delete | `file.deletePermanent` | implemented | P1 | 영구 삭제는 별도 File > Permanent Delete/D action이며 PERMANENT_DELETE 명시 입력 없이는 operation client/Rust confirm token으로 전달되지 않음 |
 | `new_dir` | a | File > New Directory | `file.mkdir` | implemented | P1 | Rust child-name 검증과 atomic command 경로가 있음 |

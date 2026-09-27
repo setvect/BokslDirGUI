@@ -48,15 +48,5 @@ export function OperationInputs({ dialog, dialogInputLabel, dialogInputRef, lang
         />
       </label>
     ) : null}
-    {dialog.shellPreview ? (
-      <div className="operation-section operation-shell-preview">
-        <h3>{text.shellCommand}</h3>
-        <p>
-          {dialog.shellPreview.policy.enabled
-            ? text.shellCommandReady
-            : translateUserMessageKey(language, dialog.shellPreview.policy.reasonKey)}
-        </p>
-      </div>
-    ) : null}
   </>;
 }

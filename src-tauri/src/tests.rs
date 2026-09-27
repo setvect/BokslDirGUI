@@ -832,6 +832,14 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
     .expect("disabled shell preview should be returned");
     assert!(!disabled.policy.enabled);
     assert_eq!(disabled.confirm_token, "disabled");
+    let denied = run_shell_command(
+        fixture.root.to_string_lossy().into_owned(),
+        "echo".to_string(),
+        Some(vec!["blocked".to_string()]),
+        None,
+    )
+    .expect_err("direct shell command must respect the disabled setting");
+    assert_eq!(denied.code, "disabled");
 
     save_settings(serde_json::json!({
         "external": { "shellCommand": { "enabled": true } }
@@ -844,11 +852,20 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
     )
     .expect("enabled shell preview should issue token");
     assert!(preview.policy.enabled);
+    let direct = run_shell_command(
+        fixture.root.to_string_lossy().into_owned(),
+        "echo".to_string(),
+        Some(vec!["direct".to_string()]),
+        None,
+    )
+    .expect("enabled shell command should run without a confirmation token");
+    assert_eq!(direct.exit_code, Some(0));
+    assert_eq!(direct.stdout.trim(), "direct");
     let result = run_shell_command(
         fixture.root.to_string_lossy().into_owned(),
         "echo".to_string(),
         Some(vec!["hello".to_string()]),
-        preview.confirm_token.clone(),
+        Some(preview.confirm_token.clone()),
     )
     .expect("tokenized shell command should run");
     assert_eq!(result.exit_code, Some(0));
@@ -858,7 +875,7 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
         fixture.root.to_string_lossy().into_owned(),
         "echo".to_string(),
         Some(vec!["hello".to_string()]),
-        preview.confirm_token,
+        Some(preview.confirm_token),
     )
     .expect_err("shell confirm token must be one-shot");
     env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
@@ -892,14 +909,14 @@ fn shell_command_confirm_token_expires_after_ttl() {
         fixture.root.to_string_lossy().into_owned(),
         "echo".to_string(),
         Some(vec!["expired".to_string()]),
-        preview.confirm_token,
+        Some(preview.confirm_token),
     )
     .expect_err("expired shell confirm token must be rejected");
 
     shell_command::reset_clock_for_test();
     env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
     assert_eq!(expired.code, "invalid_token");
-    assert_eq!(expired.message_key, "errors.confirmationRequired");
+    assert_eq!(expired.message_key, "errors.shellConfirmationInvalid");
     assert!(expired
         .details
         .and_then(|details| details.get("expiresAt").cloned())

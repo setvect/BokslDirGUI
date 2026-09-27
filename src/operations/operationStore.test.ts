@@ -185,10 +185,10 @@ describe('operation store', () => {
     expect(useOperationStore.getState().dialog).toBeNull();
   });
 
-  it('keeps shell command disabled and validates command text before preview', () => {
+  it('validates shell command text before direct execution', () => {
     openAction('external.runShellCommand');
     const dialog = useOperationStore.getState().dialog;
-    expect(dialog?.shellPreview?.policy.enabled).toBe(false);
+    expect(dialog?.atomicResult).toBeNull();
 
     useOperationStore.getState().confirmDialog();
     expect(useOperationStore.getState().summary).toBeNull();

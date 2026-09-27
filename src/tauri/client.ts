@@ -198,7 +198,7 @@ export const tauriClient = {
     invokeCommand<ActionResult>(COMMANDS.openExternalEditor, input),
   prepareShellCommand: (input: { workingDir: string; command: string; args?: string[] }) =>
     invokeCommand<ShellCommandPreview>(COMMANDS.prepareShellCommand, input),
-  runShellCommand: (input: { workingDir: string; command: string; args?: string[]; confirmToken: string }) =>
+  runShellCommand: (input: { workingDir: string; command: string; args?: string[]; confirmToken?: string }) =>
     invokeCommand<ShellCommandResult>(COMMANDS.runShellCommand, input),
   loadSettings: () => invokeCommand<Settings>(COMMANDS.loadSettings),
   saveSettings: (input: { patch: Partial<Settings> }) => invokeCommand<Settings>(COMMANDS.saveSettings, input),

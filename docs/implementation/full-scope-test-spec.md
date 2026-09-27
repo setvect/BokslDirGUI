@@ -68,10 +68,9 @@
 - `external.openCurrentInFinder`/`external.openCurrentInTerminal` action은 macOS에서 현재 패널의 실제 디렉터리를 전달하고, 파일·없는 경로·압축 내부 경로는 거부
 - `external.openEditor` action은 `open_external_editor` command로 연결되며, 설정된 편집기 또는 명시 선택을 사용하고 실행 전 확인/실패/종료 코드 메시지 제공
 - `external.runShellCommand` action의 검증 항목
-  - `prepare_shell_command` → `run_shell_command` command 연결
-  - disabled by default 정책(`external.shellCommand.enabled`), explicit confirmation
-  - workingDir 검증, confirmToken TTL/one-shot/fingerprint 재검증
-  - exitCode/stdout/stderr 표시
+  - `run_shell_command` command 직접 연결
+  - disabled by default 정책(`external.shellCommand.enabled`) 및 workingDir 검증
+  - 입력 후 추가 확인 없이 실행, exitCode/stdout/stderr 표시
 
 ### 3.6 GUI/UX
 

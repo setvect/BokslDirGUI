@@ -92,7 +92,7 @@ pub(crate) fn run_shell_command(
     working_dir: &str,
     command: &str,
     args: Vec<String>,
-    confirm_token: &str,
+    confirm_token: Option<&str>,
 ) -> CommandResult<ShellCommandResult> {
     let settings = settings_service::load_settings()?;
     if !settings.external.shell_command.enabled {
@@ -113,7 +113,9 @@ pub(crate) fn run_shell_command(
         ));
     }
     let fingerprint = fingerprint(&working_dir, command, &args)?;
-    consume_token(confirm_token, &fingerprint)?;
+    if let Some(confirm_token) = confirm_token {
+        consume_token(confirm_token, &fingerprint)?;
+    }
     let output = Command::new(command)
         .args(&args)
         .current_dir(&working_dir)
@@ -134,16 +136,19 @@ fn consume_token(token: &str, fingerprint: &str) -> CommandResult<()> {
     let Some(stored) = registry.get_mut(token) else {
         return Err(AppError::new(
             "invalid_token",
-            "errors.confirmationRequired",
+            "errors.shellConfirmationInvalid",
             None,
             true,
         ));
     };
     if stored.used || stored.expires_at < shell_now_instant() || stored.fingerprint != fingerprint {
-        return Err(
-            AppError::new("invalid_token", "errors.confirmationRequired", None, true)
-                .with_detail("expiresAt", stored.expires_at_text.clone()),
-        );
+        return Err(AppError::new(
+            "invalid_token",
+            "errors.shellConfirmationInvalid",
+            None,
+            true,
+        )
+        .with_detail("expiresAt", stored.expires_at_text.clone()));
     }
     stored.used = true;
     Ok(())

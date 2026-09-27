@@ -609,7 +609,7 @@ describe('CommanderShell operations', () => {
     }));
   });
 
-  it('previews and then runs shell commands only after an enabled policy returns a confirm token', async () => {
+  it('runs an enabled shell command directly from the input dialog', async () => {
     const user = userEvent.setup();
     const mutationClient = {
       createDir: vi.fn(),
@@ -628,16 +628,7 @@ describe('CommanderShell operations', () => {
           view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
         },
       })),
-      prepareShellCommand: vi.fn(async () => ({
-        ok: true as const,
-        data: {
-          confirmToken: 'confirm-shell-token',
-          expiresAt: '2026-06-17T23:00:00+09:00',
-          fingerprint: 'shell-fingerprint',
-          requiresConfirmation: true as const,
-          policy: { enabled: true, reasonKey: null },
-        },
-      })),
+      prepareShellCommand: vi.fn(),
       runShellCommand: vi.fn(async () => ({
         ok: true as const,
         data: {
@@ -654,23 +645,15 @@ describe('CommanderShell operations', () => {
     await user.keyboard(':');
     const input = await screen.findByLabelText('실행할 명령');
     await user.type(input, 'echo hello');
-    await user.click(screen.getByRole('button', { name: '실행 확인' }));
+    expect(screen.queryByRole('button', { name: '실행 확인' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: '실행' }));
 
-    await waitFor(() => expect(mutationClient.prepareShellCommand).toHaveBeenCalledWith({
-      workingDir: SAMPLE_LISTINGS.right.path,
-      command: 'echo',
-      args: ['hello'],
-    }));
-    expect(screen.queryByText(/shell-fingerprint/)).toBeNull();
-    expect(screen.getAllByText(/실행 전 확인이 완료되었습니다/).length).toBeGreaterThan(0);
-
-    await user.click(screen.getByRole('button', { name: '확인 후 실행' }));
     await waitFor(() => expect(mutationClient.runShellCommand).toHaveBeenCalledWith({
       workingDir: SAMPLE_LISTINGS.right.path,
       command: 'echo',
       args: ['hello'],
-      confirmToken: 'confirm-shell-token',
     }));
+    expect(mutationClient.prepareShellCommand).not.toHaveBeenCalled();
     expect(screen.getByText(/hello/)).toBeTruthy();
   });
 

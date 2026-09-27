@@ -57,19 +57,11 @@ export const atomicExecutorForAction = (
           },
         };
       }
-      if (dialog.shellPreview?.policy.enabled && dialog.shellPreview.confirmToken !== 'disabled') {
-        return mutationClient.runShellCommand ? mutationClient.runShellCommand({
-          workingDir: dialog.targetDir ?? '',
-          command: parsed.command,
-          args: parsed.args,
-          confirmToken: dialog.shellPreview.confirmToken,
-        }) : unsupportedClientResult('run_shell_command', dialog.targetDir);
-      }
-      return mutationClient.prepareShellCommand ? mutationClient.prepareShellCommand({
+      return mutationClient.runShellCommand ? mutationClient.runShellCommand({
         workingDir: dialog.targetDir ?? '',
         command: parsed.command,
         args: parsed.args,
-      }) : unsupportedClientResult('prepare_shell_command', dialog.targetDir);
+      }) : unsupportedClientResult('run_shell_command', dialog.targetDir);
     };
   }
   return undefined;

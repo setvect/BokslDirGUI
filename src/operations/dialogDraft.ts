@@ -1,8 +1,5 @@
 import type { ActionId } from '../actions/registry';
-import type {
-  OperationKind,
-  ShellCommandPreview
-} from '../domain/types';
+import type { OperationKind } from '../domain/types';
 import { AtomicCommandDialogKind, DialogExecutionMode, DialogKind, LongRunningDialogKind, OpenDialogRequest, OperationDialogDraft } from './operationTypes';
 
 let nextDialogId = 0;
@@ -29,7 +26,6 @@ export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
 
 export const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): OperationDialogDraft => {
   const isPermanentDelete = dialogKind === 'deletePermanent';
-  const isShell = dialogKind === 'shellCommand';
   const backendExecutionStubbed = isBackendExecutionStubbed(dialogKind, request);
   const inputValue = initialInputValueForDialog(dialogKind, request);
   const requiredConfirmationPhrase = requiredConfirmationPhraseForDialog(dialogKind, request);
@@ -46,7 +42,6 @@ export const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequ
     backendExecutionStubReasonKey: backendExecutionStubbed
       ? 'operations.backendExecution.stubbedUntilCommandWiring'
       : null,
-    shellPreview: isShell ? disabledShellPreview(request.workingDir) : null,
     atomicResult: null,
     inputValue,
     secretValue: '',
@@ -215,25 +210,4 @@ export const operationKindForDialog = (dialogKind: LongRunningDialogKind): Opera
     archiveExtract: 'archiveExtract',
   };
   return mapping[dialogKind];
-};
-
-export const disabledShellPreview = (workingDir: string): ShellCommandPreview => ({
-  confirmToken: 'disabled',
-  expiresAt: new Date(0).toISOString(),
-  fingerprint: `disabled:${workingDir}`,
-  requiresConfirmation: true,
-  policy: {
-    enabled: false,
-    reasonKey: 'settings.external.shellCommand.disabledByDefault',
-  },
-});
-
-export const isShellCommandPreviewResult = (value: unknown): value is ShellCommandPreview => {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const candidate = value as Partial<ShellCommandPreview>;
-  return typeof candidate.confirmToken === 'string'
-    && typeof candidate.fingerprint === 'string'
-    && Boolean(candidate.policy);
 };

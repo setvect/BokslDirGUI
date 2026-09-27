@@ -61,7 +61,7 @@ App
 | `CommandPalette` | action registry 검색/실행, Help 검색과 동일 ID 사용 | action registry | registry 밖 임의 command 실행 |
 | `BottomStatusStrip` | 파일/선택/활성 패널 상태와 짧은 transient status를 한 줄로 표시 | panel/action state | 조작을 막는 팝업 표시 |
 | `HotkeyStrip` | 화면 폭/확대 배율에 따라 우선순위 action hint를 가능한 만큼 표시 | action registry + measured width | 실제 action source 중복, 고정 개수 표시 |
-| `ShellCommandDialog` | 현재 경로 기준 shell command preview/confirm/result 표시, backend `prepare_shell_command` → `run_shell_command` 호출 흐름 소유 | action/operation/settings state | 확인 없이 명령 실행 |
+| `ShellCommandDialog` | 현재 경로 기준 shell command 입력/result 표시, backend `run_shell_command` 직접 호출 흐름 소유 | action/operation/settings state | 설정 비활성 상태에서 명령 실행 |
 | `HelpDialog` | action registry 기반 도움말/검색/About | action registry | 하드코딩 단축키 목록 |
 
 
