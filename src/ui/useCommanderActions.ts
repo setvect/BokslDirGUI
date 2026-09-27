@@ -41,7 +41,7 @@ interface CommanderActionsDependencies {
   readonly setActivePanel: Dispatch<SetStateAction<PanelId>>;
   readonly navigateUp: (panelId: PanelId) => void;
   readonly panelState: PanelStateById;
-  readonly listPanel: (panelId: PanelId, path: string, options?: ListPanelOptions) => Promise<void>;
+  readonly listPanel: (panelId: PanelId, path: string, options?: ListPanelOptions) => Promise<AppError | null | undefined>;
   readonly setStatusMessage: Dispatch<SetStateAction<string | null>>;
   readonly statusText: CommanderStatusText;
   readonly mutationClient: SafeMutationClient;

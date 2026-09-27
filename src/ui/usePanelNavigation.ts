@@ -29,6 +29,7 @@ import {
   parentNavigationEntryOf,
   parentPathOf,
   replacePanelListing,
+  restorePanelAfterFailedNavigation,
   type PanelNavigationState,
   type PanelStateById
 } from './panelState';
@@ -155,7 +156,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     navigationRequestRef.current[panelId] === requestId;
 
   const listPanel = async (panelId: PanelId, path: string, options: ListPanelOptions = {}) => {
-    runtime.setDirectoryComparison(null);
     const requestId = beginPanelRequest(panelId);
     const requestPanel = panelStateRef.current[panelId];
     const sort = options.sort ?? requestPanel.sort;
@@ -177,18 +177,24 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       ? await listArchiveVirtualPanel(panelId, path, showHidden, sort, filter, options.forceArchiveReload)
       : await runtime.dataSource.listDir({ panelId, path, showHidden, sort, filter });
     if (!isCurrentPanelRequest(panelId, requestId)) {
-      return;
+      return undefined;
     }
     if (!result.ok) {
       setPanelState((current) => ({
         ...current,
-        [panelId]: markPanelError(current[panelId], result.error),
+        [panelId]: {
+          ...restorePanelAfterFailedNavigation(current[panelId]),
+          sort: requestPanel.sort,
+          filter: requestPanel.filter,
+          showHidden: requestPanel.showHidden,
+        },
       }));
       runtime.setStatusMessage(runtime.statusText.listFailed(formatUserErrorMessage(runtime.settings.language, result.error)));
       if (!options.background && !commanderKeyboardHasOwner()) runtime.shellRef.current?.focus({ preventScroll: true });
-      return;
+      return result.error;
     }
 
+    runtime.setDirectoryComparison(null);
     setPanelState((current) => ({
       ...current,
       [panelId]: {
@@ -209,24 +215,24 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       persistSessionPaths(panelId, result.data.path);
     }
     if (!options.background && !commanderKeyboardHasOwner()) runtime.shellRef.current?.focus({ preventScroll: true });
+    return null;
   };
 
   const gotoPanelPath = async (panelId: PanelId, path: string) => {
     if (isArchiveVirtualPath(path)) {
-      await listPanel(panelId, path, { pushHistory: true, focusFallback: 'first-concrete' });
-      return;
+      return listPanel(panelId, path, { pushHistory: true, focusFallback: 'first-concrete' });
     }
     const requestId = beginPanelRequest(panelId);
     setActivePanel(panelId);
     setPanelState((current) => ({ ...current, [panelId]: markPanelLoading(current[panelId]) }));
     const result = await runtime.dataSource.gotoPath({ panelId, path });
     if (!isCurrentPanelRequest(panelId, requestId)) {
-      return;
+      return undefined;
     }
     if (!result.ok) {
-      setPanelState((current) => ({ ...current, [panelId]: markPanelError(current[panelId], result.error) }));
+      setPanelState((current) => ({ ...current, [panelId]: restorePanelAfterFailedNavigation(current[panelId]) }));
       runtime.setStatusMessage(runtime.statusText.gotoFailed(formatUserErrorMessage(runtime.settings.language, result.error)));
-      return;
+      return result.error;
     }
     setPanelState((current) => ({
       ...current,
@@ -239,7 +245,13 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       },
     }));
     runtime.setStatusMessage(runtime.statusText.gotoCompleted(result.data.path));
-    runtime.shellRef.current?.focus({ preventScroll: true });
+    if (!commanderKeyboardHasOwner()) runtime.shellRef.current?.focus({ preventScroll: true });
+    return null;
+  };
+
+  const cancelPanelNavigation = (panelId: PanelId) => {
+    beginPanelRequest(panelId);
+    setPanelState((current) => ({ ...current, [panelId]: restorePanelAfterFailedNavigation(current[panelId]) }));
   };
 
   const listArchiveVirtualPanel = async (
@@ -648,5 +660,5 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     selectionAnchorRef.current[panelId] = null;
     setPanelState((current) => ({ ...current, [panelId]: { ...current[panelId], selectedPaths: [] } }));
   };
-  return { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordsRef, recordFocusedRow, selectEntry, archiveListingsRef };
+  return { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordsRef, recordFocusedRow, selectEntry, archiveListingsRef };
 }

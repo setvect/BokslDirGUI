@@ -9,7 +9,8 @@ import {
 import type { PanelId } from '../domain/types';
 import {
   COMMANDER_NAVIGATION_TEXT,
-  COMMANDER_STATUS_TEXT
+  COMMANDER_STATUS_TEXT,
+  translateUserMessageKey
 } from '../i18n-resources';
 import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { isOperationInFlight } from '../operations/operationLifecycle';
@@ -110,7 +111,7 @@ export function CommanderShell({
     get setActivePanel() { return setActivePanel; },
   });
 
-  const { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordsRef, recordFocusedRow, selectEntry, archiveListingsRef } = usePanelNavigation({
+  const { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordsRef, recordFocusedRow, selectEntry, archiveListingsRef } = usePanelNavigation({
     get dataSource() { return dataSource; },
     get initialFocusIndex() { return initialFocusIndex; },
     get initialSelectedPaths() { return initialSelectedPaths; },
@@ -256,17 +257,9 @@ export function CommanderShell({
     shellRef.current?.focus({ preventScroll: true });
   };
 
-  const applyGotoPath = (panelId: PanelId, pathValue: string) => {
-    const path = pathValue.trim();
-    setPathPromptPanel(null);
-    setBookmarkRenameRequest(null);
-    setArchivePasswordRequest(null);
-    pendingArchiveCopyRef.current = null;
-    if (!path) {
-      shellRef.current?.focus({ preventScroll: true });
-      return;
-    }
-    void gotoPanelPath(panelId, path);
+  const applyGotoPath = async (panelId: PanelId, pathValue: string) => {
+    const error = await gotoPanelPath(panelId, pathValue.trim());
+    return error ? translateUserMessageKey(settings.language, error.messageKey) : error;
   };
 
   const closeOverlay = () => {
@@ -459,7 +452,11 @@ export function CommanderShell({
           language={settings.language}
           panel={panelState[pathPromptPanel]}
           onApply={(pathValue) => applyGotoPath(pathPromptPanel, pathValue)}
-          onCancel={closeOverlay}
+          onCompleted={closeOverlay}
+          onCancel={(pending) => {
+            if (pending) cancelPanelNavigation(pathPromptPanel);
+            closeOverlay();
+          }}
         />
       ) : null}
       {bookmarkRenameRequest ? (

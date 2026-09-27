@@ -128,6 +128,12 @@ export const markPanelLoading = (current: PanelNavigationState): PanelNavigation
   error: null,
 });
 
+export const restorePanelAfterFailedNavigation = (current: PanelNavigationState): PanelNavigationState => ({
+  ...current,
+  loading: false,
+  error: null,
+});
+
 export const markPanelError = (current: PanelNavigationState, error: AppError): PanelNavigationState => ({
   ...current,
   loading: false,

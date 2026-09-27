@@ -15,6 +15,102 @@ import { activePanelLabel, emptyListings, focusedRow, focusedRowText, mockedPane
 
 describe('CommanderShell navigation', () => {
 
+  it('keeps an invalid path in the prompt and leaves the panel listing unchanged until a valid path succeeds', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    const previousPath = SAMPLE_LISTINGS.right.path;
+    dataSource.gotoPath = vi.fn(async (input) => input.path === '/missing/directory'
+      ? { ok: false as const, error: { code: 'not_found', messageKey: 'errors.notFound', path: input.path, details: null, recoverable: true } }
+      : { ok: true as const, data: createDirectoryListing(input.panelId, input.path, [testEntry(input.path, 'arrived.txt')]) });
+    const { container } = renderCommander(dataSource);
+
+    await user.keyboard('gp');
+    const input = screen.getByRole('textbox', { name: '경로' });
+    await user.clear(input);
+    await user.click(screen.getByRole('button', { name: '이동' }));
+    expect(screen.getByRole('alert').textContent).toBe('경로를 입력하세요.');
+    await user.type(input, '/missing/directory');
+    expect(screen.queryByRole('alert')).toBeNull();
+    await user.click(screen.getByRole('button', { name: '이동' }));
+
+    const dialog = await screen.findByRole('dialog', { name: '경로 이동' });
+    expect(within(dialog).getByRole('alert').textContent).toBe('대상을 찾을 수 없습니다.');
+    expect(input).toHaveProperty('value', '/missing/directory');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(activePanelLabel(container)).toContain(previousPath);
+    expect(container.querySelector('.file-panel.is-active .file-table-message')).toBeNull();
+    expect(container.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(previousPath);
+
+    await user.clear(input);
+    await user.type(input, '/tmp/valid-directory');
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: '이동' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '경로 이동' })).toBeNull());
+    expect(activePanelLabel(container)).toContain('/tmp/valid-directory');
+    expect(screen.getByText('arrived.txt')).toBeTruthy();
+  });
+
+  it('keeps the current rows visible when opening a directory fails', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    dataSource.listDir = vi.fn(async (input) => ({
+      ok: false as const,
+      error: { code: 'not_found', messageKey: 'errors.notFound', path: input.path, details: null, recoverable: true },
+    }));
+    const { container } = renderCommander(dataSource);
+    const previousPath = SAMPLE_LISTINGS.right.path;
+    const focusedBefore = focusedRowText(container);
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByLabelText('활성 패널 상태').textContent).toContain('목록 읽기 실패'));
+    expect(activePanelLabel(container)).toContain(previousPath);
+    expect(focusedRowText(container)).toBe(focusedBefore);
+    expect(container.querySelector('.file-panel.is-active .file-table-message')).toBeNull();
+  });
+
+  it('restores the previous filter when loading a filtered listing fails', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    dataSource.listDir = vi.fn(async (input) => ({
+      ok: false as const,
+      error: { code: 'not_found', messageKey: 'errors.notFound', path: input.path, details: null, recoverable: true },
+    }));
+    const { container } = renderCommander(dataSource);
+    const focusedBefore = focusedRowText(container);
+
+    await user.keyboard('/');
+    await user.type(screen.getByRole('textbox', { name: '필터 패턴' }), 'missing');
+    await user.click(screen.getByRole('button', { name: '필터 적용' }));
+
+    await waitFor(() => expect(screen.getByLabelText('활성 패널 상태').textContent).toContain('목록 읽기 실패'));
+    expect(container.querySelector('.file-panel.is-active .filter-chip')).toBeNull();
+    expect(container.querySelector('.file-panel.is-active .panel-filter-status')).toBeNull();
+    expect(focusedRowText(container)).toBe(focusedBefore);
+  });
+
+  it('ignores a pending path result after the prompt is cancelled', async () => {
+    const user = userEvent.setup();
+    let finish!: (result: Awaited<ReturnType<PanelDataSource['gotoPath']>>) => void;
+    const dataSource = createFixturePanelDataSource();
+    dataSource.gotoPath = vi.fn(() => new Promise<Awaited<ReturnType<PanelDataSource['gotoPath']>>>((resolve) => { finish = resolve; }));
+    const { container } = renderCommander(dataSource);
+    const previousPath = SAMPLE_LISTINGS.right.path;
+
+    await user.keyboard('gp');
+    const input = screen.getByRole('textbox', { name: '경로' });
+    await user.clear(input);
+    await user.type(input, '/tmp/late-directory');
+    await user.click(screen.getByRole('button', { name: '이동' }));
+    expect(screen.getByRole('button', { name: '이동' }).hasAttribute('disabled')).toBe(true);
+    await user.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByRole('dialog', { name: '경로 이동' })).toBeNull();
+
+    await act(async () => { finish({ ok: true, data: createDirectoryListing('right', '/tmp/late-directory') }); });
+    expect(activePanelLabel(container)).toContain(previousPath);
+    expect(container.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(previousPath);
+  });
+
   it('virtualizes a 10,000-entry directory while preserving End-key navigation', async () => {
     const entries = Array.from({ length: 10_000 }, (_, index) =>
       testEntry('/large', `entry-${String(index).padStart(5, '0')}.txt`),

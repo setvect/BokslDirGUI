@@ -457,47 +457,78 @@ function TabListContent({ language, state, initialFocusRef, onChoose, onCloseTab
   );
 }
 
-export function PathPrompt({ language, panel, onApply, onCancel }: {
+export function PathPrompt({ language, panel, onApply, onCompleted, onCancel }: {
   language: SupportedLanguage;
   panel: PanelNavigationState;
-  onApply(pathValue: string): void;
-  onCancel(): void;
+  onApply(pathValue: string): Promise<string | null | undefined>;
+  onCompleted(): void;
+  onCancel(pending: boolean): void;
 }) {
   const text = OVERLAY_TEXT[language];
   const inputRef = useRef<HTMLInputElement>(null);
+  const requestRef = useRef(0);
   const [value, setValue] = useState(panel.path);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     inputRef.current?.focus({ preventScroll: true });
     inputRef.current?.select();
+    return () => { requestRef.current += 1; };
   }, []);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onApply(value);
+    if (pending) return;
+    if (!value.trim()) {
+      setError(text.pathRequired);
+      inputRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    const requestId = ++requestRef.current;
+    setPending(true);
+    setError(null);
+    const result = await onApply(value);
+    if (requestId !== requestRef.current) return;
+    setPending(false);
+    if (result === null) {
+      onCompleted();
+    } else if (result !== undefined) {
+      setError(result);
+      inputRef.current?.focus({ preventScroll: true });
+    }
   };
 
+  const cancel = () => onCancel(pending);
+
   return (
-    <CommanderOverlayDialog owner="path-prompt" title={text.goToPath} ariaLabel={text.goToPath} onClose={onCancel}>
-      <form className="filter-form" onSubmit={handleSubmit}>
+    <CommanderOverlayDialog owner="path-prompt" title={text.goToPath} ariaLabel={text.goToPath} onClose={cancel}>
+      <form className="filter-form" onSubmit={(event) => { void handleSubmit(event); }}>
         <label>
           <span>{text.goToPath} · {PANEL_ID_LABELS[language][panel.listing.panelId]}</span>
           <input
             ref={inputRef}
             aria-label={text.path}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'path-prompt-error' : undefined}
             value={value}
-            onChange={(event) => setValue(event.currentTarget.value)}
+            disabled={pending}
+            onChange={(event) => {
+              setValue(event.currentTarget.value);
+              setError(null);
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.preventDefault();
-                onCancel();
+                cancel();
               }
             }}
           />
         </label>
+        {error ? <p id="path-prompt-error" className="operation-error" role="alert">{error}</p> : null}
         <div className="filter-actions">
-          <button type="button" onClick={onCancel}>{text.cancel}</button>
-          <button type="submit" className="primary">{text.move}</button>
+          <button type="button" onClick={cancel}>{text.cancel}</button>
+          <button type="submit" className="primary" disabled={pending}>{text.move}</button>
         </div>
       </form>
     </CommanderOverlayDialog>

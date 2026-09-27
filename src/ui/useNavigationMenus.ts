@@ -1,6 +1,6 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useMemo, useRef, useState } from 'react';
-import type { PanelId, Settings } from '../domain/types';
+import type { AppError, PanelId, Settings } from '../domain/types';
 import type { CommanderNavigationText, CommanderStatusText } from '../i18n-resources';
 import {
   formatUserErrorMessage
@@ -28,7 +28,7 @@ interface NavigationMenusDependencies {
   readonly activeTab: Record<PanelId, number>;
   readonly panelStateRef: RefObject<PanelStateById>;
   readonly dataSource: PanelDataSource;
-  readonly gotoPanelPath: (panelId: PanelId, path: string) => Promise<void>;
+  readonly gotoPanelPath: (panelId: PanelId, path: string) => Promise<AppError | null | undefined>;
 }
 export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
 
