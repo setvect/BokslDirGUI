@@ -4,13 +4,13 @@ import {
 import type { ExecuteAction } from './actionRequest';
 import { ZoomCommand } from './settingsModel';
 
-const KEYBOARD_PAGE_STEP = 12;
 export const KEYBOARD_SEQUENCE_TIMEOUT_MS = 900;
 
 export interface KeyboardRuntime {
   context: ActionContext;
   operationDialogOpen: boolean;
   moveFocusedEntry(delta: number, extendSelection?: boolean): void;
+  moveFocusedPage(direction: -1 | 1, extendSelection?: boolean): void;
   focusBoundaryEntry(boundary: 'first' | 'last', extendSelection?: boolean): void;
   handleAction: ExecuteAction;
   handleZoom(command: ZoomCommand): void;
@@ -46,6 +46,7 @@ export const handleZoomKey = (
 
 interface MovementHandlers {
   moveFocusedEntry(delta: number, extendSelection?: boolean): void;
+  moveFocusedPage(direction: -1 | 1, extendSelection?: boolean): void;
   focusBoundaryEntry(boundary: 'first' | 'last', extendSelection?: boolean): void;
 }
 
@@ -54,8 +55,8 @@ export const handleMovementKey = (event: KeyboardEvent, handlers: MovementHandle
   const keyHandlers: Partial<Record<string, () => void>> = {
     ArrowUp: () => handlers.moveFocusedEntry(-1, extendSelection),
     ArrowDown: () => handlers.moveFocusedEntry(1, extendSelection),
-    PageUp: () => handlers.moveFocusedEntry(-KEYBOARD_PAGE_STEP, extendSelection),
-    PageDown: () => handlers.moveFocusedEntry(KEYBOARD_PAGE_STEP, extendSelection),
+    PageUp: () => handlers.moveFocusedPage(-1, extendSelection),
+    PageDown: () => handlers.moveFocusedPage(1, extendSelection),
     Home: () => handlers.focusBoundaryEntry('first', extendSelection),
     End: () => handlers.focusBoundaryEntry('last', extendSelection),
   };
@@ -65,10 +66,10 @@ export const handleMovementKey = (event: KeyboardEvent, handlers: MovementHandle
     ?? (vimLikeKey === 'j' ? () => handlers.moveFocusedEntry(1, false) : undefined)
     ?? (vimLikeKey === 'k' ? () => handlers.moveFocusedEntry(-1, false) : undefined)
     ?? ((event.ctrlKey || event.metaKey) && physicalKey === 'u'
-      ? () => handlers.moveFocusedEntry(-KEYBOARD_PAGE_STEP, extendSelection)
+      ? () => handlers.moveFocusedPage(-1, extendSelection)
       : undefined)
     ?? ((event.ctrlKey || event.metaKey) && physicalKey === 'd'
-      ? () => handlers.moveFocusedEntry(KEYBOARD_PAGE_STEP, extendSelection)
+      ? () => handlers.moveFocusedPage(1, extendSelection)
       : undefined);
   if (!handler) {
     return false;

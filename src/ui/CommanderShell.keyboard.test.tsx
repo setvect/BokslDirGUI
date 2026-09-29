@@ -9,8 +9,22 @@ import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './
 import { CommanderShell } from './CommanderShell';
 import { commanderKeyboardOwners } from './keyboardOwnership';
 import { createFixturePanelDataSource } from './panelDataSource';
+import { createDirectoryListing } from './panelState';
 import './testing/commanderTestSetup';
 import { activePanelLabel, commanderElement, focusedRow, focusedRowText, KeyboardOwnerProbe, renderCommander, rowByText, testEntry } from './testing/commanderTestSupport';
+
+const measureFileList = (container: HTMLElement, panelId: 'left' | 'right', visibleRows: number) => {
+  const shell = container.querySelector<HTMLElement>('.commander-shell')!;
+  const rowHeight = () => Number.parseFloat(shell.style.getPropertyValue('--row-height'));
+  const list = container.querySelector<HTMLElement>(`[data-panel-id="${panelId}"] .file-table-scroll`)!;
+  let height = rowHeight() * visibleRows;
+  Object.defineProperties(list, {
+    clientHeight: { configurable: true, get: () => height },
+    scrollHeight: { configurable: true, get: () => Number.parseFloat(list.querySelector<HTMLElement>('.file-table-virtual-space')?.style.height ?? '0') },
+    scrollTo: { configurable: true, value: vi.fn(({ top }: ScrollToOptions) => { list.scrollTop = top ?? 0; }) },
+  });
+  return { list, rowHeight, resize: (nextHeight: number) => { height = nextHeight; } };
+};
 
 describe('CommanderShell keyboard', () => {
 
@@ -262,6 +276,7 @@ describe('CommanderShell keyboard', () => {
   it('supports TUI vim-style movement and range selection shortcuts', async () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
+    measureFileList(container, 'right', 14);
 
     expect(focusedRowText(container)).toContain('generic-array-6de08afde610f112');
 
@@ -281,7 +296,7 @@ describe('CommanderShell keyboard', () => {
     expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
 
     fireEvent.keyDown(document, { key: 'ㅇ', code: 'KeyD', ctrlKey: true });
-    expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-12');
+    expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-13');
 
     fireEvent.keyDown(document, { key: 'ArrowDown', shiftKey: true });
     expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length).toBeGreaterThanOrEqual(2);
@@ -293,16 +308,117 @@ describe('CommanderShell keyboard', () => {
     expect(screen.getByRole('application', { name: '복슬Dir file commander shell' }).getAttribute('aria-activedescendant')).toBe('commander-row-right-32');
   });
 
+  it('moves the cursor and viewport by the visible page with one overlapping row', () => {
+    const { container } = renderCommander();
+    const { list, rowHeight } = measureFileList(container, 'right', 21);
+    const shell = container.querySelector('.commander-shell')!;
+    fireEvent.keyDown(document, { key: 'Home' });
+
+    fireEvent.keyDown(document, { key: 'PageDown' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-20');
+    // The cursor stays at the top until the viewport reaches the end of the list.
+    expect(list.scrollTop).toBe(12 * rowHeight());
+
+    fireEvent.keyDown(document, { key: 'PageDown' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-32');
+    expect(list.scrollTop).toBe(12 * rowHeight());
+    fireEvent.keyDown(document, { key: 'PageDown' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-32');
+
+    fireEvent.keyDown(document, { key: 'PageUp' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-12');
+    fireEvent.keyDown(document, { key: 'PageUp' });
+    fireEvent.keyDown(document, { key: 'PageUp' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-0');
+    expect(list.scrollTop).toBe(0);
+  });
+
+  it('renders the focused row after paging beyond the initial virtual range', async () => {
+    const heightSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('file-table-scroll') ? 504 : 0;
+    });
+    const widthSpy = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(640);
+    const listing = createDirectoryListing('right', '/paging', Array.from({ length: 100 }, (_, i) => testEntry('/paging', `file-${i}.txt`)));
+    const source = createFixturePanelDataSource({ left: SAMPLE_LISTINGS.left, right: listing });
+    const { container, unmount } = renderCommander(source);
+    const { list, rowHeight } = measureFileList(container, 'right', 21);
+    const shell = container.querySelector('.commander-shell')!;
+    try {
+      fireEvent.keyDown(document, { key: 'Home' });
+      fireEvent.scroll(list);
+      expect(document.getElementById('commander-row-right-40')).toBeNull();
+      for (const index of [20, 40, 60]) {
+        fireEvent.keyDown(document, { key: 'PageDown' });
+        fireEvent.scroll(list);
+        await waitFor(() => expect(document.getElementById(`commander-row-right-${index}`)?.getAttribute('aria-current')).toBe('true'));
+        expect(shell.getAttribute('aria-activedescendant')).toBe(`commander-row-right-${index}`);
+        expect(list.scrollTop).toBe(index * rowHeight());
+      }
+      fireEvent.keyDown(document, { key: 'PageUp' });
+      fireEvent.scroll(list);
+      await waitFor(() => expect(document.getElementById('commander-row-right-40')?.getAttribute('aria-current')).toBe('true'));
+      expect(list.scrollTop).toBe(40 * rowHeight());
+    } finally {
+      unmount();
+      heightSpy.mockRestore();
+      widthSpy.mockRestore();
+    }
+  });
+
+  it('keeps the cursor at the same viewport position and reads resized height on each page key', () => {
+    const { container } = renderCommander();
+    const { list, rowHeight, resize } = measureFileList(container, 'right', 8);
+    const shell = container.querySelector('.commander-shell')!;
+    // Initial focus is row 9, positioned two rows below the viewport top.
+    list.scrollTop = 7 * rowHeight();
+    fireEvent.keyDown(document, { key: 'PageDown' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-16');
+    expect(list.scrollTop).toBe(14 * rowHeight());
+
+    resize(5.5 * rowHeight());
+    fireEvent.keyDown(document, { key: 'PageDown' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-20');
+    expect(list.scrollTop).toBe(18 * rowHeight());
+    fireEvent.keyDown(document, { key: 'PageUp' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-16');
+    expect(list.scrollTop).toBe(14 * rowHeight());
+  });
+
+  it('uses only the active panel viewport and recalculates page size after zoom', () => {
+    const { container } = renderCommander();
+    const right = measureFileList(container, 'right', 21);
+    const left = measureFileList(container, 'left', 5);
+    const shell = container.querySelector('.commander-shell')!;
+    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.keyDown(document, { key: 'Home' });
+    fireEvent.keyDown(document, { key: 'PageDown' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-left-4');
+    expect(right.list.scrollTop).toBe(0);
+    const leftScrollTop = left.list.scrollTop;
+
+    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.keyDown(document, { key: 'Home' });
+    fireEvent.keyDown(document, { key: '+', ctrlKey: true });
+    const expectedStep = Math.floor(right.list.clientHeight / right.rowHeight()) - 1;
+    expect(expectedStep).toBeLessThan(20);
+    fireEvent.keyDown(document, { key: 'PageDown' });
+    expect(shell.getAttribute('aria-activedescendant')).toBe(`commander-row-right-${expectedStep}`);
+    expect(left.list.scrollTop).toBe(leftScrollTop);
+  });
+
   it('extends selection with shifted page and boundary movement keys', async () => {
     const { container } = renderCommander();
+    const { list, rowHeight } = measureFileList(container, 'right', 14);
     const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
 
     fireEvent.keyDown(document, { key: 'PageDown', shiftKey: true });
-    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-21');
+    expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-22');
+    expect(list.scrollTop).toBe(13 * rowHeight());
     expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length).toBeGreaterThanOrEqual(11);
 
     fireEvent.keyDown(document, { key: 'PageUp', shiftKey: true });
     expect(shell.getAttribute('aria-activedescendant')).toBe('commander-row-right-9');
+    expect(list.scrollTop).toBe(0);
     expect([...container.querySelectorAll('.file-panel.is-active .file-row.is-selected')].length).toBeGreaterThanOrEqual(1);
 
     fireEvent.keyDown(document, { key: 'End', shiftKey: true });

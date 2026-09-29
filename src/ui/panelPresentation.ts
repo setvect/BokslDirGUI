@@ -210,3 +210,27 @@ export const fileEntryTooltip = (entry: FileEntry, language: Settings['language'
     `${text.owner}: ${formatOwnerGroup(entry)}`,
   ].join('\n');
 };
+
+
+export const pageMovementForViewport = ({
+  direction, focusedIndex, rowCount, rowHeight, viewportHeight, scrollTop,
+}: {
+  direction: -1 | 1;
+  focusedIndex: number;
+  rowCount: number;
+  rowHeight: number;
+  viewportHeight: number;
+  scrollTop: number;
+}): { focusedIndex: number; scrollTop: number } | null => {
+  if (rowCount === 0 || rowHeight <= 0 || viewportHeight <= 0) return null;
+
+  const step = Math.max(1, Math.floor(viewportHeight / rowHeight) - 1);
+  const nextIndex = Math.max(0, Math.min(rowCount - 1, focusedIndex + direction * step));
+  // Keep the cursor at its viewport position; recover off-screen focus at the nearest edge.
+  const cursorOffset = Math.max(0, Math.min(viewportHeight - rowHeight, focusedIndex * rowHeight - scrollTop));
+  const maxScrollTop = Math.max(0, rowCount * rowHeight - viewportHeight);
+  return {
+    focusedIndex: nextIndex,
+    scrollTop: Math.max(0, Math.min(maxScrollTop, nextIndex * rowHeight - cursorOffset)),
+  };
+};

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { hotkeyStripActionsForWidth } from './hotkeyStripLayout';
-import { columnLayoutForPanelWidth } from './panelPresentation';
+import { columnLayoutForPanelWidth, pageMovementForViewport } from './panelPresentation';
 import { zoomPercentForStep, zoomScaleForStep } from './settingsModel';
 import { testEntry } from './testing/fileEntryFixture';
 import { splitMiddleEllipsisParts } from './textLayout';
@@ -94,4 +94,23 @@ it('uses predictable preset zoom scales and keeps filename suffixes for middle e
   } finally {
     Object.defineProperty(Intl, 'Segmenter', { configurable: true, writable: true, value: originalSegmenter });
   }
+});
+
+
+it('pages by visible rows minus one and preserves the cursor position inside the viewport', () => {
+  const view = { direction: 1 as const, focusedIndex: 4, rowCount: 100, rowHeight: 25, viewportHeight: 525, scrollTop: 0 };
+  expect(pageMovementForViewport(view)).toEqual({ focusedIndex: 24, scrollTop: 500 });
+  expect(pageMovementForViewport({ ...view, direction: -1, focusedIndex: 24, scrollTop: 500 })).toEqual({ focusedIndex: 4, scrollTop: 0 });
+  expect(pageMovementForViewport({ ...view, rowHeight: 50 })).toEqual({ focusedIndex: 13, scrollTop: 450 });
+  expect(pageMovementForViewport({ ...view, viewportHeight: 249 })).toEqual({ focusedIndex: 12, scrollTop: 200 });
+});
+
+it('clamps page focus and scrolling at list boundaries and supports tiny or empty lists', () => {
+  const view = { direction: 1 as const, focusedIndex: 28, rowCount: 30, rowHeight: 25, viewportHeight: 250, scrollTop: 500 };
+  expect(pageMovementForViewport(view)).toEqual({ focusedIndex: 29, scrollTop: 500 });
+  expect(pageMovementForViewport({ ...view, direction: -1, focusedIndex: 2, scrollTop: 0 })).toEqual({ focusedIndex: 0, scrollTop: 0 });
+  expect(pageMovementForViewport({ ...view, rowCount: 3, focusedIndex: 0, scrollTop: 0 })).toEqual({ focusedIndex: 2, scrollTop: 0 });
+  expect(pageMovementForViewport({ ...view, focusedIndex: 0, viewportHeight: 20, scrollTop: 0 })).toEqual({ focusedIndex: 1, scrollTop: 25 });
+  expect(pageMovementForViewport({ ...view, rowCount: 0 })).toBeNull();
+  expect(pageMovementForViewport({ ...view, viewportHeight: 0 })).toBeNull();
 });

@@ -36,7 +36,7 @@ import {
 import { ArchivePasswordRequest } from './commanderTypes';
 import { DirectoryComparison } from './directoryComparison';
 import { archiveCopyExecutorForPlan } from './fileActionExecutors';
-import { FilePanel } from './FilePanel';
+import { FilePanel, type FilePanelHandle } from './FilePanel';
 import { entryIcon } from './format';
 import { TopMenuState } from './menuModel';
 import { createTauriPanelDataSource, type PanelDataSource } from './panelDataSource';
@@ -84,6 +84,8 @@ export function CommanderShell({
   const operationDialogOpen = useOperationStore((state) => Boolean(state.dialog));
   const operationBusy = useOperationStore(isOperationInFlight);
   const shellRef = useRef<HTMLElement>(null);
+  const leftPanelRef = useRef<FilePanelHandle>(null);
+  const rightPanelRef = useRef<FilePanelHandle>(null);
   const shortcutSequenceRef = useRef<readonly string[]>([]);
   const shortcutSequenceTimeoutRef = useRef<number | null>(null);
 
@@ -307,6 +309,10 @@ export function CommanderShell({
     get context() { return context; },
     get operationDialogOpen() { return operationDialogOpen; },
     get moveFocusedEntry() { return moveFocusedEntry; },
+    moveFocusedPage: (direction, extendSelection) => {
+      const panelRef = activePanel === 'left' ? leftPanelRef : rightPanelRef;
+      panelRef.current?.moveFocusedPage(direction, extendSelection);
+    },
     get focusBoundaryEntry() { return focusBoundaryEntry; },
     get handleAction() { return handleAction; },
     get applyZoom() { return applyZoom; },
@@ -359,6 +365,8 @@ export function CommanderShell({
         aria-label="dual file panels"
       >
         <FilePanel
+          ref={leftPanelRef}
+          onFocusEntry={(index, extendSelection) => focusEntry('left', index, extendSelection)}
           panel={panelState.left}
           comparisonByPath={directoryComparison?.byPanel.left ?? null}
           active={activePanel === 'left'}
@@ -390,6 +398,8 @@ export function CommanderShell({
           onPanelDrop={(event) => handlePanelDrop(event, 'left')}
         />
         <FilePanel
+          ref={rightPanelRef}
+          onFocusEntry={(index, extendSelection) => focusEntry('right', index, extendSelection)}
           panel={panelState.right}
           comparisonByPath={directoryComparison?.byPanel.right ?? null}
           active={activePanel === 'right'}

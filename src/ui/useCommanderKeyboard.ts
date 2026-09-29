@@ -23,6 +23,7 @@ interface CommanderKeyboardDependencies {
   readonly context: ActionContext;
   readonly operationDialogOpen: boolean;
   readonly moveFocusedEntry: (delta: number, extendSelection?: boolean) => void;
+  readonly moveFocusedPage: (direction: -1 | 1, extendSelection?: boolean) => void;
   readonly focusBoundaryEntry: (boundary: "first" | "last", extendSelection?: boolean) => void;
   readonly handleAction: ExecuteAction;
   readonly applyZoom: (command: ZoomCommand) => void;
@@ -61,6 +62,7 @@ export function useCommanderKeyboard(dependencies: CommanderKeyboardDependencies
     context: dependencies.context,
     operationDialogOpen: dependencies.operationDialogOpen,
     moveFocusedEntry: dependencies.moveFocusedEntry,
+    moveFocusedPage: dependencies.moveFocusedPage,
     focusBoundaryEntry: dependencies.focusBoundaryEntry,
     handleAction: dependencies.handleAction,
     handleZoom: dependencies.applyZoom,
@@ -186,6 +188,7 @@ export function useCommanderKeyboard(dependencies: CommanderKeyboardDependencies
 
       const handledByMovement = handleMovementKey(event, {
         moveFocusedEntry: runtime.moveFocusedEntry,
+        moveFocusedPage: runtime.moveFocusedPage,
         focusBoundaryEntry: runtime.focusBoundaryEntry,
       });
       if (handledByMovement) {

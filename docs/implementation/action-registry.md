@@ -121,6 +121,9 @@ interface AppAction {
 ## 5. Shortcut rules
 
 - 기존 TUI 단축키를 우선 제공하고 GUI 표준 단축키를 병행 가능
+- 파일 패널의 Page Up/Down 및 Ctrl/Cmd+U/D: 표시 가능한 행 수에서 1행을 뺀 만큼 커서·스크롤 동시 이동, 최소 1행 이동
+- 페이지 이동 시 커서의 화면 내 세로 위치 유지, 목록 처음·끝에서 이동 제한, Shift 조합 시 범위 선택 확장
+- 페이지 이동량 계산 시 활성 패널의 현재 높이·확대 배율 반영
 - single key shortcut은 text input/edit mode에서는 비활성화
 - sequence shortcut은 timeout 후 초기화
 - 사용자 커스터마이징은 후속 가능하지만, 충돌 검증 없이는 저장하지 않음

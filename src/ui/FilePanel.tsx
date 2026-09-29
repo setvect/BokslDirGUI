@@ -6,7 +6,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, type Ref, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   type AppAction
 } from '../actions/registry';
@@ -23,7 +23,7 @@ import { MiddleEllipsisEntryName } from './EntryName';
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
 import { BlankContextMenuContent, EntryContextMenuContent } from './PanelContextMenus';
 import { PanelHeader, PathControls } from './PanelHeader';
-import { columnLayoutForPanelWidth, fileEntryAccessibleLabel, fileEntryTooltip, metadataColumnWidthsForEntries, rowDomId, sortMarker } from './panelPresentation';
+import { columnLayoutForPanelWidth, fileEntryAccessibleLabel, fileEntryTooltip, metadataColumnWidthsForEntries, pageMovementForViewport, rowDomId, sortMarker } from './panelPresentation';
 import {
   type PanelNavigationState
 } from './panelState';
@@ -32,7 +32,13 @@ import { useElementWidth } from './useElementWidth';
 
 const FOCUSABLE_ROW_TAB_INDEX = -1;
 
+export interface FilePanelHandle {
+  moveFocusedPage(direction: -1 | 1, extendSelection?: boolean): void;
+}
+
 interface FilePanelProps {
+  ref?: Ref<FilePanelHandle>;
+  onFocusEntry(index: number, extendSelection: boolean): void;
   panel: PanelNavigationState;
   comparisonByPath: Record<string, DirectoryComparisonState> | null;
   active: boolean;
@@ -65,6 +71,8 @@ interface FilePanelProps {
 }
 
 export function FilePanel({
+  ref,
+  onFocusEntry,
   panel,
   comparisonByPath,
   active,
@@ -194,8 +202,35 @@ export function FilePanel({
     virtualizer.measure();
   }, [rowHeightPx, virtualizer]);
 
-  useEffect(() => {
-    if (rows.length > 0) {
+  const pendingPageScroll = useRef<{ focusedIndex: number; scrollTop: number } | null>(null);
+  useImperativeHandle(ref, () => ({
+    moveFocusedPage(direction, extendSelection = false) {
+      const scrollElement = scrollRef.current;
+      if (!scrollElement) return;
+      const movement = pageMovementForViewport({
+        direction,
+        focusedIndex: panel.focusedIndex,
+        rowCount: rows.length,
+        rowHeight: rowHeightPx,
+        viewportHeight: scrollElement.clientHeight,
+        scrollTop: scrollElement.scrollTop,
+      });
+      if (!movement) return;
+      if (movement.focusedIndex === panel.focusedIndex) {
+        virtualizer.scrollToOffset(movement.scrollTop);
+      } else {
+        pendingPageScroll.current = movement;
+      }
+      onFocusEntry(movement.focusedIndex, extendSelection);
+    },
+  }));
+
+  useLayoutEffect(() => {
+    const pageScroll = pendingPageScroll.current;
+    pendingPageScroll.current = null;
+    if (pageScroll?.focusedIndex === panel.focusedIndex) {
+      virtualizer.scrollToOffset(pageScroll.scrollTop);
+    } else if (rows.length > 0) {
       virtualizer.scrollToIndex(panel.focusedIndex, { align: 'auto' });
     }
   }, [panel.focusedIndex, rows.length, virtualizer]);
