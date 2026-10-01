@@ -107,7 +107,6 @@ export const viewMetricsForSettings = (view: Settings['view']) => {
     fontSizePx: Math.round(BASE_FONT_SIZE_PX * scale),
     rowHeightPx: Math.round(BASE_ROW_HEIGHT_PX * scale),
     topMenuHeightPx: Math.round(31 * scale),
-    panelHeaderHeightPx: Math.round(25 * scale),
     pathControlHeightPx: Math.round(30 * scale),
     statusHeightPx: Math.round(27 * scale),
     hotkeyStripHeightPx: Math.round(29 * scale),

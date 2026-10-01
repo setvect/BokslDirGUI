@@ -22,7 +22,7 @@ import { DirectoryComparisonState, directoryComparisonLabel } from './directoryC
 import { MiddleEllipsisEntryName } from './EntryName';
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
 import { BlankContextMenuContent, EntryContextMenuContent } from './PanelContextMenus';
-import { PanelHeader, PathControls } from './PanelHeader';
+import { PanelHeader } from './PanelHeader';
 import { columnLayoutForPanelWidth, fileEntryAccessibleLabel, fileEntryTooltip, metadataColumnWidthsForEntries, pageMovementForViewport, rowDomId, sortMarker } from './panelPresentation';
 import {
   type PanelNavigationState
@@ -64,7 +64,6 @@ interface FilePanelProps {
   onNavigateBack(): void;
   onNavigateForward(): void;
   onNavigateUp(): void;
-  onRefresh(): void;
   onGotoPath(): void;
   onClearFilter(): void;
   onRestoreFocus(): void;
@@ -98,7 +97,6 @@ export function FilePanel({
   onNavigateBack,
   onNavigateForward,
   onNavigateUp,
-  onRefresh,
   onGotoPath,
   onClearFilter,
   onRestoreFocus,
@@ -243,7 +241,7 @@ export function FilePanel({
       const selection = window.getSelection();
       if (!selection?.anchorNode || !selection.focusNode || selection.isCollapsed) return;
 
-      const pathElement = [...panelElement.querySelectorAll<HTMLElement>('.panel-path, .path-input')]
+      const pathElement = [...panelElement.querySelectorAll<HTMLElement>('.path-input')]
         .find((element) => element.contains(selection.anchorNode));
       if (!pathElement || pathElement.contains(selection.focusNode)) return;
 
@@ -289,14 +287,14 @@ export function FilePanel({
                 : labels.dropBlocked}
         </span>
       ) : null}
-      <PanelHeader panel={panel} active={active} tabCount={tabCount} language={language} onClearFilter={onClearFilter} />
-      <PathControls
+      <PanelHeader
         panel={panel}
+        tabCount={tabCount}
+        onClearFilter={onClearFilter}
         language={language}
         onNavigateBack={onNavigateBack}
         onNavigateForward={onNavigateForward}
         onNavigateUp={onNavigateUp}
-        onRefresh={onRefresh}
         onGotoPath={onGotoPath}
         onRestoreFocus={onRestoreFocus}
       />

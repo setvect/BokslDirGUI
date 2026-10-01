@@ -102,3 +102,18 @@ export const commanderKeyboardIsSuspended = (target: EventTarget | null) => {
 
   return elementOwnsTextKeyboard(target) || elementOwnsNativeKeyboardActivation(target);
 };
+
+export const pathSelectionOwnsCopyShortcut = (event: KeyboardEvent, shell: HTMLElement | null) => {
+  if (!shell || event.key.toLowerCase() !== 'c' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) {
+    return false;
+  }
+
+  const selection = shell.ownerDocument.getSelection();
+  if (!selection?.anchorNode || !selection.focusNode || selection.isCollapsed || !selection.toString()) {
+    return false;
+  }
+
+  const anchorElement = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode.parentElement;
+  const pathElement = anchorElement?.closest('.path-input');
+  return Boolean(pathElement && shell.contains(pathElement) && pathElement.contains(selection.focusNode));
+};

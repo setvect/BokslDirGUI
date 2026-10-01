@@ -221,7 +221,6 @@ export function CommanderShell({
     '--commander-font-size': `${viewMetrics.fontSizePx}px`,
     '--row-height': `${viewMetrics.rowHeightPx}px`,
     '--top-menu-height': `${viewMetrics.topMenuHeightPx}px`,
-    '--panel-header-height': `${viewMetrics.panelHeaderHeightPx}px`,
     '--path-control-height': `${viewMetrics.pathControlHeightPx}px`,
     '--status-height': `${viewMetrics.statusHeightPx}px`,
     '--hotkey-strip-height': `${viewMetrics.hotkeyStripHeightPx}px`,
@@ -387,7 +386,6 @@ export function CommanderShell({
           onNavigateBack={() => navigateBack('left')}
           onNavigateForward={() => navigateForward('left')}
           onNavigateUp={() => navigateUp('left')}
-          onRefresh={() => refreshPanel('left')}
           onGotoPath={() => setPathPromptPanel('left')}
           onClearFilter={() => handleAction({ actionId: (ACTION_BY_ID.get('filter.clear')!).id, panelId: 'left' })}
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
@@ -420,7 +418,6 @@ export function CommanderShell({
           onNavigateBack={() => navigateBack('right')}
           onNavigateForward={() => navigateForward('right')}
           onNavigateUp={() => navigateUp('right')}
-          onRefresh={() => refreshPanel('right')}
           onGotoPath={() => setPathPromptPanel('right')}
           onClearFilter={() => handleAction({ actionId: (ACTION_BY_ID.get('filter.clear')!).id, panelId: 'right' })}
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}

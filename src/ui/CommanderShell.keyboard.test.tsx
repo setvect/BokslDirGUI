@@ -648,12 +648,8 @@ describe('CommanderShell keyboard', () => {
   it('does not capture Space from focused native buttons inside the shell', async () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
-    const refreshButton = screen.getByLabelText('오른쪽 탐색 컨트롤').querySelectorAll('button')[3];
-
-    if (!refreshButton) {
-      throw new Error('refresh button is required');
-    }
-    refreshButton.focus();
+    const gotoButton = within(screen.getByLabelText('오른쪽 탐색 컨트롤')).getByRole('button', { name: '경로 이동' });
+    gotoButton.focus();
     await user.keyboard('{Space}');
 
     expect(focusedRow(container)?.className).toContain('is-selected');
@@ -662,16 +658,15 @@ describe('CommanderShell keyboard', () => {
   it('returns keyboard ownership to the commander after non-modal path button clicks', async () => {
     const user = userEvent.setup();
     const { container } = renderCommander();
-    const refreshButton = screen.getByLabelText('오른쪽 탐색 컨트롤').querySelectorAll('button')[3];
-
-    if (!refreshButton) {
-      throw new Error('refresh button is required');
-    }
-    await user.click(refreshButton);
+    const upButton = within(screen.getByLabelText('오른쪽 탐색 컨트롤')).getByRole('button', { name: '상위 폴더' });
+    await user.click(upButton);
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('application', { name: '복슬Dir file commander shell' })));
 
+    await user.keyboard('{ArrowDown}');
+    const focusedText = focusedRowText(container);
     await user.keyboard('{Space}');
-    expect(focusedRowText(container)).toContain('generic-array-7534a23a150ae5e7');
+    expect(focusedRowText(container)).toBe(focusedText);
+    expect(focusedRow(container)?.className).toContain('is-selected');
   });
 
   it('opens the right-clicked row from the context menu instead of the previous focused row', async () => {

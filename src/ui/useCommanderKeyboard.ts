@@ -11,7 +11,7 @@ import type { PanelId, Settings } from '../domain/types';
 import type { CommanderStatusText } from '../i18n-resources';
 import type { ExecuteAction } from './actionRequest';
 import { KEYBOARD_SEQUENCE_TIMEOUT_MS, KeyboardRuntime, handleMovementKey, handleZoomKey } from './keyboardDispatch';
-import { commanderKeyboardIsSuspended, commanderKeyboardOwners } from './keyboardOwnership';
+import { commanderKeyboardIsSuspended, commanderKeyboardOwners, pathSelectionOwnsCopyShortcut } from './keyboardOwnership';
 import { TopMenuKeyboardRuntime, TopMenuState, handleTopMenuKeyDown } from './menuModel';
 import { rowDomId } from './panelPresentation';
 import type { PanelStateById } from './panelState';
@@ -163,6 +163,11 @@ export function useCommanderKeyboard(dependencies: CommanderKeyboardDependencies
         if (topMenuOpen) {
           dependencies.setTopMenuState(null);
         }
+        clearShortcutSequence();
+        return;
+      }
+
+      if (pathSelectionOwnsCopyShortcut(event, dependencies.shellRef.current)) {
         clearShortcutSequence();
         return;
       }

@@ -7,20 +7,27 @@ import { createDirectoryListing, createPanelStateFromListing } from './panelStat
 describe('PanelHeader', () => {
   it('keeps the right-side status layout stable while a directory loads', () => {
     const panel = createPanelStateFromListing(createDirectoryListing('right', '/tmp/project'));
-    const props = { active: true, tabCount: 2, language: 'ko' as const, onClearFilter: () => {} };
+    const props = {
+      tabCount: 2,
+      language: 'ko' as const,
+      onClearFilter: () => {},
+      onNavigateBack: () => {},
+      onNavigateForward: () => {},
+      onNavigateUp: () => {},
+      onGotoPath: () => {},
+      onRestoreFocus: () => {},
+    };
     const { container, rerender } = render(<PanelHeader panel={panel} {...props} />);
     const status = container.querySelector('.panel-header-status');
     const tabs = container.querySelector('.panel-tabs');
-    const marker = container.querySelector('.panel-marker');
     const loading = container.querySelector('.panel-loading');
 
-    expect(status?.children).toHaveLength(3);
+    expect(status?.children).toHaveLength(2);
     expect(loading?.getAttribute('aria-hidden')).toBe('true');
 
     rerender(<PanelHeader panel={{ ...panel, loading: true }} {...props} />);
     expect(container.querySelector('.panel-header-status')).toBe(status);
     expect(container.querySelector('.panel-tabs')).toBe(tabs);
-    expect(container.querySelector('.panel-marker')).toBe(marker);
     expect(container.querySelector('.panel-loading')).toBe(loading);
     expect(loading?.getAttribute('aria-hidden')).toBe('false');
     expect(loading?.classList.contains('is-loading')).toBe(true);

@@ -33,10 +33,10 @@ describe('CommanderShell rendering', () => {
     expect(container.querySelector<HTMLElement>('.file-table')?.style.getPropertyValue('--file-grid-template')).toContain('minmax(0, 1fr)');
   });
 
-  it.each(['.panel-path', '.path-input'])('keeps text selection started in %s inside that path', (selector) => {
+  it('keeps text selection started in the navigation path inside that path', () => {
     const { container } = renderCommander();
     const panel = container.querySelector<HTMLElement>('.file-panel.is-active');
-    const path = panel?.querySelector<HTMLElement>(selector);
+    const path = panel?.querySelector<HTMLElement>('.path-input');
     const table = panel?.querySelector<HTMLElement>('.file-table');
     const pathText = path?.lastChild;
     const selection = window.getSelection();
@@ -69,7 +69,7 @@ describe('CommanderShell rendering', () => {
     const { container } = renderCommander();
     const panel = container.querySelector<HTMLElement>('.file-panel.is-active');
     const pathText = panel?.querySelector('.path-input')?.firstChild;
-    const headerText = panel?.querySelector('.panel-path')?.firstChild;
+    const headerText = panel?.querySelector('.path-controls > button')?.firstChild;
     const selection = window.getSelection();
     if (!pathText || !headerText || !selection) throw new Error('path selection fixture is required');
 

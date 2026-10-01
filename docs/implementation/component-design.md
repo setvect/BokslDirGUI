@@ -18,7 +18,6 @@ App
          ├─ DualPanelLayout
          │  ├─ FilePanel(left)
          │  │  ├─ PanelHeader
-         │  │  ├─ PathControls
          │  │  ├─ TabStrip
          │  │  └─ FileTable
          │  └─ FilePanel(right)
@@ -48,8 +47,7 @@ App
 | `TopMenuBar` | File/Edit/View/Go/Archive/Settings/Help | action registry | 독자 메뉴 정의 |
 | `DualPanelLayout` | panel ratio, splitter, single/dual mode | layout store | 패널 내부 상태 소유 |
 | `FilePanel` | panel-local state binding | panel store | global operation state 소유 |
-| `PanelHeader` | compact path chip, active marker, sort/filter indicators | panel/navigation state | bulky breadcrumb bar |
-| `PathControls` | back/forward/up/refresh/address edit/drive overlay | navigation store | persistent sidebar 강제 |
+| `PanelHeader` | 뒤로·앞으로·상위·경로 이동 버튼, 현재 경로·필터 해제·로딩·탭 개수를 한 줄에 표시 | panel/navigation state | 별도 빈 제목줄 예약, 중복 경로·활성 상태 레이블 표시 |
 | `FileTable` | virtualized rows, selection, keyboard row navigation | listing/selection state | 전체 DOM row 렌더링 |
 | `OperationDialog` | move/delete/archive/external 등 명시 확인이 필요한 action의 preflight/confirm shell | operation store | Rust validation 우회 |
 | `ContextMenuLayer` | row/blank/context menu | action registry | 메뉴별 별도 handler |
