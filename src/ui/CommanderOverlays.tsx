@@ -697,7 +697,7 @@ export function BookmarkRenamePrompt({ language, initialValue, onApply, onCancel
   );
 }
 
-function CommanderOverlayDialog({
+export function CommanderOverlayDialog({
   owner,
   title,
   ariaLabel,

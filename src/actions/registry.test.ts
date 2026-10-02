@@ -310,6 +310,8 @@ describe('action registry', () => {
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('file.deletePermanent')!)).toBe('Shift+D/Shift+Delete');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('bookmark.add')!)).toBe('Ctrl+B');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('help.search')!)).toBe('');
+    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('external.openWith')!)).toBe('');
+    expect(actionForKeyboardShortcut(key('.'))?.id).toBe('view.toggleHidden');
   });
 });
 

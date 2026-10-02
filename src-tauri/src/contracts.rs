@@ -141,6 +141,14 @@ pub(crate) struct ArchiveListing {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct OpenWithApp {
+    pub(crate) path: String,
+    pub(crate) name: String,
+    pub(crate) is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ActionResult {
     pub(crate) ok: bool,
     pub(crate) message_key: Option<String>,

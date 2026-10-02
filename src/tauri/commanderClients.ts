@@ -51,6 +51,8 @@ export interface SafeMutationClient {
   getMetadata?(input: { path: string }): ReturnType<typeof tauriClient.getMetadata>;
   previewFile?(input: { path: string; maxBytes?: number }): ReturnType<typeof tauriClient.previewFile>;
   archiveList?(input: { archivePath: string; password?: string; limit?: number }): ReturnType<typeof tauriClient.archiveList>;
+  listOpenWithApps?(input: { path: string }): ReturnType<typeof tauriClient.listOpenWithApps>;
+  openWithApp?(input: { path: string; applicationPath: string }): ReturnType<typeof tauriClient.openWithApp>;
   openDefault?(input: { path: string }): ReturnType<typeof tauriClient.openDefault>;
   revealInManager?(input: { path: string }): ReturnType<typeof tauriClient.revealInManager>;
   openCurrentInFinder?(input: { path: string }): ReturnType<typeof tauriClient.openCurrentInFinder>;

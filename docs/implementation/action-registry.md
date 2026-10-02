@@ -32,6 +32,7 @@ interface AppAction {
 | `panel.copyPathToOther` | panel | tp | View/Copy Path to Other Panel | safe | UI state + list_dir |
 | `panel.compareDirectories` | panel | tc | View/Compare Directories | none | UI state |
 | `nav.enter` | navigation | Enter/l | File/Open | safe | list_dir/open_default |
+| `external.openWith` | file | 없음 | File/Open With… | safe | macOS 단일 파일의 `list_open_with_apps` 조회 후 `open_with_app` 실행 |
 | `nav.up` | navigation | Backspace/h | Go/Up | safe | list_dir |
 | `nav.back` | navigation | Alt+Left | Go/Back | safe | list_dir |
 | `nav.forward` | navigation | Alt+Right | Go/Forward | safe | list_dir |

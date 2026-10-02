@@ -19,6 +19,8 @@ export const COMMANDS = {
   archiveExtract: 'archive_extract',
   archiveAdd: 'archive_add',
   openDefault: 'open_default',
+  listOpenWithApps: 'list_open_with_apps',
+  openWithApp: 'open_with_app',
   revealInManager: 'reveal_in_manager',
   openCurrentInFinder: 'open_current_in_finder',
   openCurrentInTerminal: 'open_current_in_terminal',

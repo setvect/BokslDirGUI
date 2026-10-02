@@ -40,6 +40,8 @@ describe('Tauri command names', () => {
       'archive_extract',
       'archive_add',
       'open_default',
+      'list_open_with_apps',
+      'open_with_app',
       'reveal_in_manager',
       'open_current_in_finder',
       'open_current_in_terminal',

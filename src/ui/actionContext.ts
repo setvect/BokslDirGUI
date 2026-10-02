@@ -143,6 +143,7 @@ const SOURCE_REQUIRED_ACTIONS = new Set<ActionId>([
   'archive.extractAuto',
   'archive.create',
   'external.openDefault',
+  'external.openWith',
   'external.reveal',
   'external.openEditor',
 ]);

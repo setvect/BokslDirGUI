@@ -5,6 +5,18 @@ import { SAMPLE_LISTINGS } from './commanderFixture';
 import { contextMenuActions } from './menuModel';
 
 describe('action context helpers', () => {
+  it('limits Open With to one local file on macOS with an available backend', () => {
+    const file = SAMPLE_LISTINGS.left.entries.find((entry) => entry.kind === 'file')!;
+    const action = ACTION_BY_ID.get('external.openWith')!;
+    const context = createActionContext({ activePanel: 'left', focusedEntry: file, selectedCount: 0,
+      hasOppositePanel: true, shellCommandEnabled: false, operationBusy: false, platform: 'mac' });
+    expect(isActionAvailable(action, context)).toBe(true);
+    for (const patch of [
+      { platform: 'other' as const }, { effectiveTargetCount: 2 }, { activePathIsArchive: true },
+      { backendAvailable: false }, { focusedEntryKind: 'directory' as const }, { effectiveTargetCount: 0 },
+    ]) expect(isActionAvailable(action, { ...context, ...patch })).toBe(false);
+  });
+
   it('marks virtual parent entries as navigation-only context menu targets', () => {
     const virtualParent = SAMPLE_LISTINGS.left.entries[0];
     const context = createActionContext({

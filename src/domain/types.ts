@@ -160,6 +160,12 @@ export interface ArchiveListing {
   truncated: boolean;
 }
 
+export interface OpenWithApp {
+  path: string;
+  name: string;
+  isDefault: boolean;
+}
+
 export interface ActionResult {
   ok: boolean;
   messageKey: string | null;

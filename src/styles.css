@@ -851,6 +851,24 @@ button {
   transform: translateX(-50%);
 }
 
+.open-with-dialog {
+  top: 32px;
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+
+.open-with-target,
+.open-with-app > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.open-with-target { margin: 0; }
+.open-with-list { max-height: 45vh; }
+.open-with-list .open-with-app { grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 8px; }
+.open-with-app small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .navigation-path-dialog {
   width: min(820px, calc(100vw - 32px));
 }

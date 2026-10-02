@@ -18,6 +18,7 @@ export type CommanderKeyboardOwner =
   | 'archive-password'
   | 'bookmark-rename'
   | 'quick-preview'
+  | 'open-with'
   | 'shortcut-help'
   | 'help-search'
   | 'about-dialog'

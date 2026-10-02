@@ -2,6 +2,7 @@ import { invoke, isTauri, type InvokeArgs } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type {
   ActionResult,
+  OpenWithApp,
   AppError,
   ArchiveListing,
   CancelAck,
@@ -84,6 +85,8 @@ export const BACKEND_IMPLEMENTED_COMMANDS = [
   COMMANDS.archiveExtract,
   COMMANDS.archiveAdd,
   COMMANDS.openDefault,
+  COMMANDS.listOpenWithApps,
+  COMMANDS.openWithApp,
   COMMANDS.revealInManager,
   COMMANDS.openCurrentInFinder,
   COMMANDS.openCurrentInTerminal,
@@ -191,6 +194,8 @@ export const tauriClient = {
   archiveAdd: (input: { sources: string[]; archivePath: string; targetInnerDir: string; policy: ConflictDecision }) =>
     invokeCommand<OperationStarted>(COMMANDS.archiveAdd, input),
   openDefault: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openDefault, input),
+  listOpenWithApps: (input: { path: string }) => invokeCommand<OpenWithApp[]>(COMMANDS.listOpenWithApps, input),
+  openWithApp: (input: { path: string; applicationPath: string }) => invokeCommand<ActionResult>(COMMANDS.openWithApp, input),
   revealInManager: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.revealInManager, input),
   openCurrentInFinder: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openCurrentInFinder, input),
   openCurrentInTerminal: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openCurrentInTerminal, input),

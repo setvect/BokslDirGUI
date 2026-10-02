@@ -81,6 +81,7 @@ export const ACTIONS = [
   action({ id: 'panel.copyPathToOther', category: 'panel', displayLabel: 'Copy Path to Other Panel', shortcutLabel: 'tp', keyboardBindings: ['t p'], menuPath: ['View', 'Copy Path to Other Panel'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'UI state + list_dir', isEnabled: (c) => c.hasOppositePanel && !c.operationBusy }),
   action({ id: 'panel.compareDirectories', category: 'panel', displayLabel: 'Compare Directories', shortcutLabel: 'tc', keyboardBindings: ['t c'], menuPath: ['View', 'Compare Directories'], dangerLevel: 'none', runPath: 'UI state', isEnabled: (c) => c.hasOppositePanel && !c.operationBusy }),
   action({ id: 'nav.enter', category: 'navigation', displayLabel: 'Open', shortcutLabel: 'Enter/l', keyboardBindings: ['Enter', 'l'], menuPath: ['File', 'Open'], contextScopes: ['file', 'directory', 'archive'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir/open_default', isEnabled: hasFocus }),
+  action({ id: 'external.openWith', category: 'file', displayLabel: 'Open With…', menuPath: ['File', 'Open With…'], contextScopes: ['file', 'archive'], dangerLevel: 'safe', command: COMMANDS.listOpenWithApps, runPath: 'list_open_with_apps/open_with_app', isEnabled: (c) => c.platform === 'mac' && c.effectiveTargetCount === 1 && (c.focusedEntryKind === 'file' || c.focusedEntryKind === 'archive') && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'nav.up', category: 'navigation', shortcutLabel: 'Backspace/h', keyboardBindings: ['Backspace', 'h'], menuPath: ['Go', 'Up'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.back', category: 'navigation', shortcutLabel: 'Alt+Left', keyboardBindings: ['Alt+ArrowLeft'], menuPath: ['Go', 'Back'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.forward', category: 'navigation', shortcutLabel: 'Alt+Right', keyboardBindings: ['Alt+ArrowRight'], menuPath: ['Go', 'Forward'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
@@ -265,7 +266,7 @@ export const fileShortcutPlatform = (userAgent = typeof navigator === 'undefined
 export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortcutPlatform()) =>
   platform === 'mac'
     ? action.id !== 'file.clipboardCut'
-    : !['file.clipboardMovePaste', 'external.openCurrentInFinder', 'external.openCurrentInTerminal'].includes(action.id);
+    : !['file.clipboardMovePaste', 'external.openCurrentInFinder', 'external.openCurrentInTerminal', 'external.openWith'].includes(action.id);
 
 export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform()) =>
   ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform));

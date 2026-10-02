@@ -2,7 +2,7 @@ use crate::archive;
 use crate::contracts::{
     ActionResult, AppError, ArchiveListing, CancelAck, CommandResult, ConflictAck,
     ConflictDecision, DeleteMode, DirectoryListing, FileEntry, FileMetadata, FilePreview,
-    LocationList, OperationStarted, PanelId, Settings, ShellCommandPreview, ShellCommandResult,
+    LocationList, OpenWithApp, OperationStarted, PanelId, Settings, ShellCommandPreview, ShellCommandResult,
     SortSpec, WatchAck,
 };
 use crate::external;
@@ -184,6 +184,16 @@ pub(crate) fn archive_add(
 #[tauri::command]
 pub(crate) fn open_default(path: String) -> CommandResult<ActionResult> {
     external::open_default(&path)
+}
+
+#[tauri::command]
+pub(crate) async fn list_open_with_apps(path: String) -> CommandResult<Vec<OpenWithApp>> {
+    crate::open_with::list_apps(&path)
+}
+
+#[tauri::command]
+pub(crate) async fn open_with_app(path: String, application_path: String) -> CommandResult<ActionResult> {
+    crate::open_with::open(&path, &application_path)
 }
 
 #[tauri::command]

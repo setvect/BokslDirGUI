@@ -5,6 +5,7 @@ mod archive;
 mod commands;
 mod contracts;
 mod external;
+mod open_with;
 mod filesystem;
 mod mutation;
 mod navigation;
@@ -47,6 +48,8 @@ pub fn run() {
             commands::archive_extract,
             commands::archive_add,
             commands::open_default,
+            commands::list_open_with_apps,
+            commands::open_with_app,
             commands::reveal_in_manager,
             commands::open_current_in_finder,
             commands::open_current_in_terminal,

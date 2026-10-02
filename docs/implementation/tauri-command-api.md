@@ -89,6 +89,8 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `reveal_in_manager` | `{ path }` | `ActionResult` | Finder/Explorer 등 |
 | `open_current_in_finder` | `{ path }` | `ActionResult` | macOS 현재 패널 디렉터리를 Finder에서 열기; 실제 디렉터리 검증 |
 | `open_current_in_terminal` | `{ path }` | `ActionResult` | macOS 현재 패널 디렉터리에서 Terminal 열기; 실제 디렉터리 검증 |
+| `list_open_with_apps` | `{ path }` | `OpenWithApp[]` | macOS NSWorkspace의 파일 연결 앱 조회, 기본 앱 우선 정렬 |
+| `open_with_app` | `{ path, applicationPath }` | `ActionResult` | 파일·앱 재검증 후 선택 앱으로 열기, 기본 연결 유지 |
 | `open_external_editor` | `{ path, editorId? }` | `ActionResult` | 명시 확인/설정 기반 |
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
 | `run_shell_command` | `{ workingDir, command, args?, confirmToken? }` | `ShellCommandResult` | 설정·작업 디렉터리 검증 후 즉시 실행, stdout/stderr/exitCode 반환; 기존 토큰 전달 시 검증 유지 |
@@ -145,3 +147,15 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - 프론트엔드 명령 이름은 `src/tauri/commands.ts`, 호출과 이벤트 수신은 `client.ts`, 네이티브 드래그/창 어댑터는 `commanderClients.ts`가 담당
 - `client.ts`의 기존 명령 이름 export도 유지
 - 공통 직렬화 fixture는 `src/tauri/fixtures/contract.json`이며 `contract.test.ts`와 Rust `contract_tests.rs`에서 양쪽 형식 검증
+
+## 다음으로 열기 계약
+
+- `OpenWithApp`: `{ path: string, name: string, isDefault: boolean }`
+- 대상: macOS 일반 파일 시스템의 단일 파일, 압축 파일 자체 포함
+- 폴더·압축 내부 가상 경로·여러 파일 선택 제외, 다른 OS에서는 액션 숨김 및 명령의 unsupported 오류 반환
+- [Apple NSWorkspace API](https://developer.apple.com/documentation/appkit/nsworkspace/urlforapplication(toopen:)-7qkzf) 기준 `NSWorkspace.URLsForApplicationsToOpenURL` 조회와 `URLForApplicationToOpenURL` 기본 앱 표시
+- 선택 앱 경로의 정규화와 실행 직전 연결 앱 목록 재검증 필수
+- `/usr/bin/open -a`에 앱·파일 절대 경로를 개별 인자로 전달, 셸 해석 없음
+- 종료 상태 실패 시 `errors.externalCommandFailed`, 연결 앱 불일치 시 `errors.openWithAppUnavailable` 반환
+- Tauri 전이 의존성으로 사용 중인 `objc2`, `objc2-app-kit`, `objc2-foundation`의 macOS 전용 직접 의존성 명시
+- 의존성 목적: 외부 스크립트나 앱 이름 하드코딩 없이 OS 연결 앱 조회, 현재 잠금 버전 재사용

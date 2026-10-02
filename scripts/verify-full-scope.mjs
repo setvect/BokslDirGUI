@@ -496,7 +496,7 @@ const rustLib = read('src-tauri/src/lib.rs');
 const rustBackend = read('src-tauri/src/commands.rs');
 
 const archiveVirtual = read('src/ui/archiveVirtual.ts');
-for (const command of ['list_dir', 'get_metadata', 'preview_file', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'reveal_in_manager', 'open_current_in_finder', 'open_current_in_terminal', 'open_external_editor', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
+for (const command of ['list_dir', 'get_metadata', 'preview_file', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'list_open_with_apps', 'open_with_app', 'reveal_in_manager', 'open_current_in_finder', 'open_current_in_terminal', 'open_external_editor', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
   addCheck(`rust handler includes ${command}`, rustBackend.includes(`fn ${command}(`) && rustLib.includes(`commands::${command}`), 'command handler and app registration');
 }
 addCheck('rust list_dir normalizes filter once', read('src-tauri/src/navigation.rs').includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');

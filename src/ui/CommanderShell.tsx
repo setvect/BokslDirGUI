@@ -47,6 +47,7 @@ import {
 import { clampNumber, viewMetricsForSettings } from './settingsModel';
 import { BottomStatusStrip, HotkeyStrip } from './StatusStrips';
 import { TopMenuBar } from './TopMenuBar';
+import { OpenWithDialog } from './OpenWithDialog';
 import { useCommanderActions } from './useCommanderActions';
 import { useCommanderKeyboard } from './useCommanderKeyboard';
 import { useCommanderSettings } from './useCommanderSettings';
@@ -146,7 +147,7 @@ export function CommanderShell({
     get dataSource() { return dataSource; },
     get gotoPanelPath() { return gotoPanelPath; },
   });
-  const { handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, openEntry, quickPreview } = useCommanderActions({
+  const { openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, openEntry, quickPreview } = useCommanderActions({
     clearCompletedSelection,
     get setActivePanel() { return setActivePanel; },
     get navigateUp() { return navigateUp; },
@@ -274,6 +275,7 @@ export function CommanderShell({
     setHelpSearchOpen(false);
     setAboutDialogOpen(false);
     setQuickPreview(null);
+    setOpenWithEntry(null);
     shellRef.current?.focus({ preventScroll: true });
   };
 
@@ -499,6 +501,15 @@ export function CommanderShell({
             void listPanel(request.panelId, request.virtualPath, { preserveSelection: true });
           }}
           onCancel={closeOverlay}
+        />
+      ) : null}
+      {openWithEntry ? (
+        <OpenWithDialog
+          key={openWithEntry.path}
+          entry={openWithEntry}
+          language={settings.language}
+          client={mutationClient}
+          onClose={closeOverlay}
         />
       ) : null}
       {quickPreview ? (

@@ -87,7 +87,7 @@ export function EntryContextMenuContent({ language, entry, listing, selectedPath
           onSelect={() => onOpenAction(action, contextSources)}
         >
           <span>{labelForAction(action, language)}</span>
-          <kbd>{shortcutLabelForAction(action)}</kbd>
+          {shortcutHelpLabelForAction(action) ? <kbd>{shortcutLabelForAction(action)}</kbd> : null}
         </ContextMenu.Item>
       ))}
     </ContextMenu.Content>

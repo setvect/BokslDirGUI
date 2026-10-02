@@ -91,6 +91,7 @@ interface CommanderActionsDependencies {
 export function useCommanderActions(dependencies: CommanderActionsDependencies) {
 
   const previewRequestRef = useRef(0);
+  const [openWithEntry, setOpenWithEntry] = useState<FileEntry | null>(null);
 
   const { fileClipboard, captureClipboard, pasteClipboard, completeClipboardMove } = useFileClipboard({
     get settings() { return dependencies.settings; },
@@ -209,6 +210,17 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     if (actionId === 'file.clipboardCopy' || actionId === 'file.clipboardCut') { captureClipboard(action, sources, panelOverride, panelListing); return; }
 
     if (actionId === 'file.clipboardPaste' || actionId === 'file.clipboardMovePaste') { pasteClipboard(actionId, panelOverride); return; }
+
+    if (actionId === 'external.openWith') {
+      const entry = sources[0];
+      if (!dependencies.runtimeBackendAvailable || !dependencies.mutationClient.listOpenWithApps || !dependencies.mutationClient.openWithApp
+        || sources.length !== 1 || !entry || entry.kind === 'directory' || entry.symlinkTargetIsDirectory === true || isArchiveVirtualPath(entry.path)) {
+        dependencies.setStatusMessage(dependencies.statusText.unavailableInContext(labelForAction(action, dependencies.settings.language)));
+        return;
+      }
+      setOpenWithEntry(entry);
+      return;
+    }
 
     if (actionId === 'external.openCurrentInFinder' || actionId === 'external.openCurrentInTerminal') {
       const openDirectory = actionId === 'external.openCurrentInFinder'
@@ -578,5 +590,5 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     dependencies.setStatusMessage(dependencies.statusText.actionReady(labelForAction(action, dependencies.settings.language)));
   };
-  return { handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, openEntry, quickPreview };
+  return { openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, openEntry, quickPreview };
 }
