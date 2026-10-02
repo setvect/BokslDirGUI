@@ -66,35 +66,8 @@ export const isTauriRuntime = () => {
   return isTauri() || typeof runtimeGlobal.__TAURI_INTERNALS__?.invoke === 'function';
 };
 
-export const BACKEND_IMPLEMENTED_COMMANDS = [
-  COMMANDS.listDir,
-  COMMANDS.getMetadata,
-  COMMANDS.previewFile,
-  COMMANDS.watchPath,
-  COMMANDS.gotoPath,
-  COMMANDS.listLocations,
-  COMMANDS.createDir,
-  COMMANDS.renameEntry,
-  COMMANDS.startCopy,
-  COMMANDS.startMove,
-  COMMANDS.startDelete,
-  COMMANDS.cancelOperation,
-  COMMANDS.resolveConflict,
-  COMMANDS.archiveList,
-  COMMANDS.archiveCreate,
-  COMMANDS.archiveExtract,
-  COMMANDS.archiveAdd,
-  COMMANDS.openDefault,
-  COMMANDS.listOpenWithApps,
-  COMMANDS.openWithApp,
-  COMMANDS.revealInManager,
-  COMMANDS.openCurrentInFinder,
-  COMMANDS.openCurrentInTerminal,
-  COMMANDS.prepareShellCommand,
-  COMMANDS.runShellCommand,
-  COMMANDS.loadSettings,
-  COMMANDS.saveSettings,
-] as const satisfies readonly TauriCommandName[];
+// COMMANDS에는 실제 등록된 프론트엔드 명령만 포함. Rust 등록 여부는 독립 검증.
+export const BACKEND_IMPLEMENTED_COMMANDS: readonly TauriCommandName[] = Object.values(COMMANDS);
 
 const implementedCommandSet = new Set<TauriCommandName>(BACKEND_IMPLEMENTED_COMMANDS);
 

@@ -6,100 +6,110 @@
 
 ## 2. Action 모델
 
-```ts
-type ActionId = string;
-type PanelRatio = '50:50' | '70:30' | '30:70';
-interface AppAction {
-  id: ActionId;
-  category: 'navigation' | 'selection' | 'file' | 'archive' | 'view' | 'panel' | 'settings' | 'help';
-  labelKey: string;
-  descriptionKey: string;
-  defaultShortcut?: string;
-  menuPath?: string[];
-  contextScopes?: Array<'file' | 'directory' | 'archive' | 'blank' | 'selection'>;
-  dangerLevel: 'none' | 'safe' | 'destructive' | 'irreversible';
-  isEnabled(context: ActionContext): boolean;
-  run(context: ActionContext): Promise<void>;
-}
-```
+- 실제 `AppAction` 계약과 액션 선언의 기준: [`src/actions/registry.ts`](../../src/actions/registry.ts)
+- `shortcutLabel`: 사용자에게 표시할 설명, `keyboardBindings`: 실제 키 입력 매칭 기준
+- `command`·`runPath`: 명령 및 실행 경로 정보, 실제 실행·비동기 처리·상태 소유권은 기존 UI 훅·operation store·Tauri 계층 유지
+
+| 내부 속성 | 의미 | 생략 시 의미 |
+| --- | --- | --- |
+| `requiresConcreteSources` | 가상 항목을 제외한 대상 파일 필요 여부 | 대상 요구 없음 |
+| `dialogKind` | 공통 정의의 작업 다이얼로그 종류 | 작업 다이얼로그 없음 |
+| `setting` | 테마·언어·크기 표시의 종류와 값 또는 아이콘 토글 | 설정 액션 아님 |
+
+- 설정 종류별 타입과 체크·변경 값 계산: [`settingActions.ts`](../../src/actions/settingActions.ts) 기준
+- 다이얼로그 종류·실행 모드·장시간 작업 종류: [`dialogDefinitions.ts`](../../src/operations/dialogDefinitions.ts) 기준
+- 레지스트리에 React 컴포넌트·store·Tauri 실행 함수 추가 금지
+- 공통 정의에서 레지스트리 역참조 금지
 
 ## 3. 기본 액션 목록
 
-| ID | 범주 | 기본 단축키 | 메뉴 | 위험도 | 실행 경로 |
-| --- | --- | --- | --- | --- | --- |
-| `panel.switchActive` | panel | Tab | View | none | UI state |
-| `panel.swapPaths` | panel | ts | View/Swap Panel Paths | none | UI state |
-| `panel.copyPathToOther` | panel | tp | View/Copy Path to Other Panel | safe | UI state + list_dir |
-| `panel.compareDirectories` | panel | tc | View/Compare Directories | none | UI state |
-| `nav.enter` | navigation | Enter/l | File/Open | safe | list_dir/open_default |
-| `external.openWith` | file | 없음 | File/Open With… | safe | macOS 단일 파일의 `list_open_with_apps` 조회 후 `open_with_app` 실행 |
-| `nav.up` | navigation | Backspace/h | Go/Up | safe | list_dir |
-| `nav.back` | navigation | Alt+Left | Go/Back | safe | list_dir |
-| `nav.forward` | navigation | Alt+Right | Go/Forward | safe | list_dir |
-| `nav.refresh` | navigation | Ctrl+R | View/Refresh | safe | list_dir |
-| `nav.gotoPath` | navigation | gp | View/Go To Path | safe | goto_path |
-| `nav.locations` | navigation | gm | View/Mount Points | safe | list_locations |
-| `tab.new` | panel | tn | View/New Tab | none | UI state + list_dir |
-| `tab.close` | panel | tx | View/Close Tab | none | UI state |
-| `selection.toggle` | selection | Space | Edit/Select | none | UI state |
-| `selection.all` | selection | Ctrl+A | Edit/Select All | none | UI state |
-| `file.clipboardCopy` | file | macOS Cmd+C / Windows·Linux Ctrl+C | Edit/Copy | safe | 선택 또는 포커스 항목을 앱 내부 복사 목록에 저장 |
-| `file.clipboardCut` | file | Windows·Linux Ctrl+X | Edit/Cut | safe | 일반 파일 시스템 항목을 이동 준비; 아직 원본을 변경하지 않음 |
-| `file.clipboardPaste` | file | macOS Cmd+V / Windows·Linux Ctrl+V | Edit/Paste | safe | 복사 목록은 `file.copy`, 잘라내기 목록은 `file.move` 경로 사용 |
-| `file.clipboardMovePaste` | file | macOS Opt+Cmd+V | Edit/Move Here | destructive | Cmd+C로 준비한 일반 파일 시스템 항목을 `file.move` 확인 다이얼로그로 이동 |
-| `file.copy` | file | y/F5 | Edit/Copy to Other Panel | safe | 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add` |
-| `file.move` | file | x/F6 | Edit/Move | destructive | start_move |
-| `file.trash` | file | d | File/Delete | destructive | start_delete trash |
-| `file.deletePermanent` | file | Shift+D/Shift+Delete | File/Permanent Delete | irreversible | start_delete permanent |
-| `file.mkdir` | file | a/F7 | File/New Folder | safe | create_dir |
-| `file.rename` | file | r/F2 | File/Rename | destructive | rename_entry |
-| `app.quit` | file | Cmd+Q | File/Quit | none | getCurrentWindow().close safety policy |
-| `file.properties` | file | i | View/File Info | safe | get_metadata |
-| `file.quickView` | file | F3 | View/Quick View | safe | preview_file |
-| `archive.list` | archive | Enter on archive | Archive/Open Archive | safe | archive_list |
-| `archive.extract` | archive | zx | File/Archive Extract | destructive | archive_extract |
-| `archive.extractAuto` | archive | za | File/Archive Extract Auto | destructive | archive_extract auto target |
-| `archive.create` | archive | zc | File/Archive Compress | safe | archive_create |
-| `external.openDefault` | file | o | File/Open Default App | safe | open_default |
-| `external.reveal` | file | none | File/Reveal | safe | reveal_in_manager |
-| `external.openCurrentInFinder` | navigation | none | Go/Open Current Folder in Finder | safe | open_current_in_finder |
-| `external.openCurrentInTerminal` | navigation | none | Go/Open Terminal Here | safe | open_current_in_terminal |
-| `settings.themeDark` | settings | none | Settings/Theme/Dark | none | save_settings |
-| `settings.themeLight` | settings | none | Settings/Theme/Light | none | save_settings |
-| `settings.themeHighContrast` | settings | none | Settings/Theme/High Contrast | none | save_settings |
-| `settings.languageEn` | settings | none | Settings/Language/English | none | save_settings |
-| `settings.languageKo` | settings | none | Settings/Language/Korean | none | save_settings |
-| `settings.toggleIcons` | settings | none | Settings/Toggle Icons | none | save_settings |
-| `settings.sizeAuto` | settings | none | Settings/File Size Format/Auto | none | save_settings |
-| `settings.sizeBytes` | settings | none | Settings/File Size Format/Bytes | none | save_settings |
-| `view.sortName` | view | sn | View/Sort/Name | none | UI state + list_dir |
-| `view.sortSize` | view | ss | View/Sort/Size | none | UI state + list_dir |
-| `view.sortDate` | view | sd | View/Sort/Modified Date | none | UI state + list_dir |
-| `view.sortExt` | view | se | View/Sort/Extension | none | UI state + list_dir |
-| `view.reverseSort` | view | sr | View/Sort/Reverse | none | UI state + list_dir |
-| `view.sortAsc` | view | none | View/Sort/Ascending | none | UI state + list_dir |
-| `view.sortDesc` | view | none | View/Sort/Descending | none | UI state + list_dir |
-| `filter.start` | view | / | View/Filter | none | UI state |
-| `filter.clear` | view | Esc in filter | View/Clear Filter | none | UI state + list_dir |
-| `view.toggleHidden` | view |  | View/Hidden Files | none | UI state + list_dir |
-| `selection.invert` | selection | v | Edit/Invert Selection | none | UI state |
-| `selection.clear` | selection | u | Edit/Clear Selection | none | UI state |
-| `layout.toggleSingleDual` | view | none | View/Toggle Layout | none | UI state |
-| `layout.ratio50` | view | none | View/Panel Ratio/50:50 | none | UI state |
-| `layout.ratio70Left` | view | none | View/Panel Ratio/70:30 | none | UI state |
-| `layout.ratio70Right` | view | none | View/Panel Ratio/30:70 | none | UI state |
-| `history.list` | navigation | th | View/History List | none | UI state |
-| `bookmark.add` | navigation | Ctrl+B | View/Bookmark Add | safe | save_settings |
-| `bookmark.list` | navigation | tb | View/Bookmark List | none | UI state |
-| `bookmark.rename` | navigation | none | Go/Bookmark/Rename | safe | save_settings |
-| `bookmark.delete` | navigation | none | 목록 항목의 삭제 버튼 | destructive | bookmark list → save_settings |
-| `archive.list` | archive | Enter on archive | Archive/Open Archive | safe | archive_list 기반 가상 디렉터리 진입 |
-| `external.runShellCommand` | file | : | File/Run Shell Command | destructive | ShellCommandDialog → run_shell_command |
-| `help.shortcuts` | help | ? | Help/Keyboard Help | none | dialog |
-| `help.search` | help | none | Help/Search | none | UI state |
-| `help.about` | help | none | Help/About | none | dialog |
+- 다음 생성 구간은 `npm run docs:generate`로 갱신, 직접 편집 금지
+
+<!-- BEGIN GENERATED:action-table -->
+| ID | 범주 | 표시 단축키 | 실제 키 바인딩 | 메뉴 | 위험도 | 실행 경로 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `menu.open` | navigation | F9 | `F9` | 없음 | none | UI state |
+| `panel.switchActive` | panel | Tab | `Tab` | View | none | UI state |
+| `panel.swapPaths` | panel | ts | `t s` | View > Swap Panel Paths | none | UI state |
+| `panel.copyPathToOther` | panel | tp | `t p` | View > Copy Path to Other Panel | safe | UI state + list_dir |
+| `panel.compareDirectories` | panel | tc | `t c` | View > Compare Directories | none | UI state |
+| `nav.enter` | navigation | Enter/l | `Enter`, `l` | File > Open | safe | list_dir/open_default |
+| `external.openWith` | file | 없음 | 없음 | File > Open With… | safe | list_open_with_apps/open_with_app |
+| `nav.up` | navigation | Backspace/h | `Backspace`, `h` | Go > Up | safe | list_dir |
+| `nav.back` | navigation | Alt+Left | `Alt+ArrowLeft` | Go > Back | safe | list_dir |
+| `nav.forward` | navigation | Alt+Right | `Alt+ArrowRight` | Go > Forward | safe | list_dir |
+| `nav.refresh` | navigation | Ctrl+R | `Ctrl+R` | View > Refresh | safe | list_dir |
+| `nav.gotoPath` | navigation | gp | `g p` | View > Go To Path | safe | goto_path |
+| `nav.locations` | navigation | gm | `g m` | View > Mount Points | safe | list_locations |
+| `nav.top` | navigation | gg | `g g` | Go > Top | none | UI state |
+| `nav.bottom` | navigation | G | `Shift+G` | Go > Bottom | none | UI state |
+| `tab.new` | panel | tn | `t n` | View > New Tab | none | UI state + list_dir |
+| `tab.close` | panel | tx | `t x` | View > Close Tab | none | UI state |
+| `tab.list` | panel | tt | `t t` | View > Tab List | none | UI state |
+| `selection.toggle` | selection | Space | `Space` | Edit > Select | none | UI state |
+| `selection.all` | selection | Ctrl+A | `Ctrl+A` | Edit > Select All | none | UI state |
+| `file.clipboardCopy` | file | Cmd+C | `Cmd+C`, `Ctrl+C` | Edit > Copy | safe | UI clipboard state |
+| `file.clipboardCut` | file | Ctrl+X | `Ctrl+X` | Edit > Cut | safe | UI clipboard state |
+| `file.clipboardPaste` | file | Cmd+V | `Cmd+V`, `Ctrl+V` | Edit > Paste | safe | start_copy/start_move/archive_extract/archive_add |
+| `file.clipboardMovePaste` | file | Opt+Cmd+V | `Alt+Cmd+V` | Edit > Move Here | destructive | start_move via confirmation dialog |
+| `file.copy` | file | y/F5 | `y`, `F5` | Edit > Copy to Other Panel | safe | start_copy |
+| `file.move` | file | x/F6 | `x`, `F6` | Edit > Move | destructive | start_move |
+| `file.trash` | file | d | `d` | File > Delete | destructive | start_delete trash |
+| `file.deletePermanent` | file | Shift+D/Shift+Delete | `Shift+D`, `Shift+Delete` | File > Permanent Delete | irreversible | start_delete permanent |
+| `file.mkdir` | file | a/F7 | `a`, `F7` | File > New Folder | safe | create_dir |
+| `file.rename` | file | r/F2 | `r`, `F2` | File > Rename | destructive | rename_entry |
+| `app.quit` | file | Cmd+Q | `Cmd+Q` | File > Quit | none | getCurrentWindow().close safety-gated by explicit menu/Cmd+Q |
+| `file.properties` | file | i | `i` | View > File Info | safe | get_metadata |
+| `file.quickView` | file | F3 | `F3` | View > Quick View | safe | preview_file |
+| `archive.list` | archive | Enter on archive | 없음 | Archive > Open Archive | safe | archive_list virtual-directory |
+| `archive.extract` | archive | zx | `z x` | File > Archive Extract | destructive | archive_extract |
+| `archive.extractAuto` | archive | za | `z a` | File > Archive Extract Auto | destructive | archive_extract auto |
+| `archive.create` | archive | zc | `z c` | File > Archive Compress | safe | archive_create |
+| `external.openDefault` | file | o | `o` | File > Open Default App | safe | open_default |
+| `external.reveal` | file | 없음 | 없음 | File > Reveal | safe | reveal_in_manager |
+| `external.openCurrentInFinder` | navigation | 없음 | 없음 | Go > Open Current Folder in Finder | safe | open_current_in_finder |
+| `external.openCurrentInTerminal` | navigation | 없음 | 없음 | Go > Open Terminal Here | safe | open_current_in_terminal |
+| `view.sortName` | view | sn | `s n` | View > Sort > Name | none | UI state + list_dir |
+| `view.sortSize` | view | ss | `s s` | View > Sort > Size | none | UI state + list_dir |
+| `view.sortDate` | view | sd | `s d` | View > Sort > Modified Date | none | UI state + list_dir |
+| `view.sortExt` | view | se | `s e` | View > Sort > Extension | none | UI state + list_dir |
+| `view.reverseSort` | view | sr | `s r` | View > Sort > Reverse | none | UI state + list_dir |
+| `view.sortAsc` | view | 없음 | 없음 | View > Sort > Ascending | none | UI state + list_dir |
+| `view.sortDesc` | view | 없음 | 없음 | View > Sort > Descending | none | UI state + list_dir |
+| `filter.start` | view | / | `/` | View > Filter | none | UI state |
+| `filter.clear` | view | Esc in filter | 없음 | View > Clear Filter | none | UI state + list_dir |
+| `view.toggleHidden` | view | . | `.` | View > Hidden Files | none | UI state + list_dir |
+| `selection.invert` | selection | v | `v` | Edit > Invert Selection | none | UI state |
+| `selection.clear` | selection | u | `u` | Edit > Clear Selection | none | UI state |
+| `layout.toggleSingleDual` | view | Ctrl+W | `Ctrl+W` | View > Toggle Layout | none | UI state |
+| `layout.ratio50` | view | 없음 | 없음 | View > Panel Ratio > 50:50 | none | UI state |
+| `layout.ratio70Left` | view | 없음 | 없음 | View > Panel Ratio > 70:30 | none | UI state |
+| `layout.ratio70Right` | view | 없음 | 없음 | View > Panel Ratio > 30:70 | none | UI state |
+| `history.list` | navigation | th | `t h` | View > History List | none | UI state |
+| `bookmark.add` | navigation | Ctrl+B | `Ctrl+B` | View > Bookmark Add | safe | save_settings |
+| `bookmark.list` | navigation | tb | `t b` | View > Bookmark List | none | UI state |
+| `bookmark.rename` | navigation | 없음 | 없음 | Go > Bookmark > Rename | safe | save_settings |
+| `bookmark.delete` | navigation | 없음 | 없음 | 없음 | destructive | bookmark list → save_settings |
+| `settings.themeDark` | settings | 없음 | 없음 | Settings > Theme > Dark | none | save_settings |
+| `settings.themeLight` | settings | 없음 | 없음 | Settings > Theme > Light | none | save_settings |
+| `settings.themeHighContrast` | settings | 없음 | 없음 | Settings > Theme > High Contrast | none | save_settings |
+| `settings.languageEn` | settings | 없음 | 없음 | Settings > Language > English | none | save_settings |
+| `settings.languageKo` | settings | 없음 | 없음 | Settings > Language > Korean | none | save_settings |
+| `settings.toggleIcons` | settings | 없음 | 없음 | Settings > Toggle Icons | none | save_settings |
+| `settings.sizeAuto` | settings | 없음 | 없음 | Settings > File Size Format > Auto | none | save_settings |
+| `settings.sizeBytes` | settings | 없음 | 없음 | Settings > File Size Format > Bytes | none | save_settings |
+| `external.runShellCommand` | file | : | `:` | File > Run Shell Command | destructive | ShellCommandDialog → run_shell_command |
+| `help.shortcuts` | help | ? | `?` | Help > Keyboard Help | none | dialog |
+| `help.search` | help | 없음 | 없음 | Help > Search | none | UI state |
+| `help.about` | help | 없음 | 없음 | Help > About | none | dialog |
+<!-- END GENERATED:action-table -->
 
 ## 4. Context rules
+
+- `external.openWith`: macOS 단일 파일의 연결 앱 조회 후 선택한 앱으로 한 번 열기
+- `file.copy`: 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add`로 실행
+- `app.quit`: 현재 Tauri 창의 종료 안전 정책 적용
+- `bookmark.delete`: 북마크 목록의 지정 항목 삭제 버튼으로 실행, 현재 경로 기준 삭제 메뉴 미노출
 
 - `ActionContext`는 active panel, focused entry, selected entries, opposite panel path, operation state, settings 포함
 - action enablement는 메뉴/컨텍스트 메뉴/hotkey strip/help에서 같은 selector 사용

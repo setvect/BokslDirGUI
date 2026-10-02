@@ -53,6 +53,11 @@ it('keeps presentation calculations independent of React, Tauri and operation st
   }
 });
 
+it('keeps shared dialog definitions dependency-free and setting calculations independent of execution', () => {
+  expect(dependencies('src/operations/dialogDefinitions.ts')).toEqual([]);
+  expect(dependencies('src/actions/settingActions.ts')).toEqual(['src/domain/types.ts']);
+});
+
 it('keeps Rust service imports explicit and acyclic', () => {
   const rust = new Map(Object.entries(import.meta.glob('../../src-tauri/src/**/*.rs', { query: '?raw', import: 'default', eager: true }))
     .filter(([path]) => !/(?:^|\/)(?:tests|contract_tests|test_support)\.rs$/.test(path))

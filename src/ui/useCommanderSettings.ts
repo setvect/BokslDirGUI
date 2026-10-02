@@ -1,8 +1,7 @@
+import { resolveSettingUpdate } from '../actions/settingActions';
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import {
-  type ActionId
-} from '../actions/registry';
+import { ACTION_BY_ID, type ActionId } from '../actions/registry';
 import type { PanelId, Settings } from '../domain/types';
 import type { CommanderStatusText } from '../i18n-resources';
 import {
@@ -83,40 +82,15 @@ export function useCommanderSettings(runtime: CommanderSettingsDependencies) {
   };
 
   const applyDirectSetting = (actionId: ActionId) => {
-    const themeByAction: Partial<Record<ActionId, Settings['theme']>> = {
-      'settings.themeDark': 'dark',
-      'settings.themeLight': 'light',
-      'settings.themeHighContrast': 'highContrast',
-    };
-    const languageByAction: Partial<Record<ActionId, Settings['language']>> = {
-      'settings.languageEn': 'en',
-      'settings.languageKo': 'ko',
-    };
-    const sizeByAction: Partial<Record<ActionId, Settings['sizeFormat']>> = {
-      'settings.sizeAuto': 'binary',
-      'settings.sizeBytes': 'decimal',
-    };
-    const theme = themeByAction[actionId];
-    if (theme) {
-      void saveSettingsPatch({ theme }, runtime.statusText.themeChanged(theme));
-      return true;
-    }
-    const language = languageByAction[actionId];
-    if (language) {
-      void saveSettingsPatch({ language }, COMMANDER_STATUS_TEXT[language].languageChanged(language));
-      return true;
-    }
-    const sizeFormat = sizeByAction[actionId];
-    if (sizeFormat) {
-      void saveSettingsPatch({ sizeFormat }, runtime.statusText.sizeFormat(sizeFormat === 'binary' ? 'auto' : 'bytes'));
-      return true;
-    }
-    if (actionId === 'settings.toggleIcons') {
-      const showIcons = !settings.view.showIcons;
-      void saveSettingsPatch({ view: { ...settings.view, showIcons } }, runtime.statusText.icons(showIcons));
-      return true;
-    }
-    return false;
+    const setting = ACTION_BY_ID.get(actionId)?.setting;
+    if (!setting) return false;
+    const update = resolveSettingUpdate(setting, settings);
+    const message = update.kind === 'theme' ? runtime.statusText.themeChanged(update.value)
+      : update.kind === 'language' ? COMMANDER_STATUS_TEXT[update.value].languageChanged(update.value)
+      : update.kind === 'sizeFormat' ? runtime.statusText.sizeFormat(update.value === 'binary' ? 'auto' : 'bytes')
+      : runtime.statusText.icons(update.value);
+    void saveSettingsPatch(update.patch, message);
+    return true;
   };
 
   useEffect(() => {

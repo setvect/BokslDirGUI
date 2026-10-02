@@ -1,3 +1,4 @@
+import { isSettingChecked } from '../actions/settingActions';
 import {
   ACTIONS,
   actionVisibleOnPlatform,
@@ -82,8 +83,8 @@ export const menuNodesForRoot = (root: string, context: ActionContext, settings:
         accelerator: menuLabelAccelerator(acceleratorSegments.at(-1) ?? action.displayLabel),
         action,
         enabled: isActionAvailable(action, context),
-        checkable: isCheckableMenuAction(action),
-        checked: isCheckedMenuAction(action, settings),
+        checkable: Boolean(action.setting),
+        checked: action.setting ? isSettingChecked(action.setting, settings) : false,
       });
       continue;
     }
@@ -95,40 +96,12 @@ export const menuNodesForRoot = (root: string, context: ActionContext, settings:
       accelerator: menuLabelAccelerator(acceleratorSegments[0] ?? action.displayLabel),
       action,
       enabled: isActionAvailable(action, context),
-      checkable: isCheckableMenuAction(action),
-      checked: isCheckedMenuAction(action, settings),
+      checkable: Boolean(action.setting),
+      checked: action.setting ? isSettingChecked(action.setting, settings) : false,
     });
   }
 
   return nodes;
-};
-
-const CHECKABLE_MENU_ACTION_IDS = new Set<ActionId>([
-  'settings.themeDark',
-  'settings.themeLight',
-  'settings.themeHighContrast',
-  'settings.languageEn',
-  'settings.languageKo',
-  'settings.sizeAuto',
-  'settings.sizeBytes',
-  'settings.toggleIcons',
-]);
-
-const isCheckableMenuAction = (action: AppAction) =>
-  CHECKABLE_MENU_ACTION_IDS.has(action.id as ActionId);
-
-const isCheckedMenuAction = (action: AppAction, settings: Settings) => {
-  const actionId = action.id as ActionId;
-  return (
-    (actionId === 'settings.themeDark' && settings.theme === 'dark') ||
-    (actionId === 'settings.themeLight' && settings.theme === 'light') ||
-    (actionId === 'settings.themeHighContrast' && settings.theme === 'highContrast') ||
-    (actionId === 'settings.languageEn' && settings.language === 'en') ||
-    (actionId === 'settings.languageKo' && settings.language === 'ko') ||
-    (actionId === 'settings.sizeAuto' && settings.sizeFormat === 'binary') ||
-    (actionId === 'settings.sizeBytes' && settings.sizeFormat === 'decimal') ||
-    (actionId === 'settings.toggleIcons' && settings.view.showIcons)
-  );
 };
 
 export const handleTopMenuKeyDown = (event: KeyboardEvent, runtime: TopMenuKeyboardRuntime | null) => {

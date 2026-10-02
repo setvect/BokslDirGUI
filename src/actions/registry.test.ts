@@ -1,3 +1,5 @@
+import { requiredActionIdsFromParity } from '../verification/featureContracts';
+import parityMatrix from '../../docs/implementation/tui-parity-matrix.json';
 import { describe, expect, it } from 'vitest';
 import { COMMANDS } from '../tauri/commands';
 import {
@@ -21,51 +23,7 @@ import {
   type ActionId,
 } from './registry';
 
-const requiredActionIds: ActionId[] = [
-  'menu.open',
-  'view.sortName',
-  'view.sortSize',
-  'view.sortDate',
-  'view.sortExt',
-  'view.reverseSort',
-  'view.sortAsc',
-  'view.sortDesc',
-  'filter.start',
-  'filter.clear',
-  'view.toggleHidden',
-  'selection.invert',
-  'selection.clear',
-  'layout.toggleSingleDual',
-  'layout.ratio50',
-  'layout.ratio70Left',
-  'layout.ratio70Right',
-  'nav.back',
-  'nav.forward',
-  'nav.top',
-  'nav.bottom',
-  'tab.list',
-  'history.list',
-  'bookmark.add',
-  'bookmark.list',
-  'bookmark.rename',
-  'bookmark.delete',
-  'settings.themeDark',
-  'settings.themeLight',
-  'settings.themeHighContrast',
-  'settings.languageEn',
-  'settings.languageKo',
-  'settings.toggleIcons',
-  'settings.sizeAuto',
-  'settings.sizeBytes',
-  'archive.list',
-  'app.quit',
-  'external.openDefault',
-  'external.openCurrentInFinder',
-  'external.openCurrentInTerminal',
-  'external.runShellCommand',
-  'help.search',
-  'help.about',
-];
+const requiredActionIds = requiredActionIdsFromParity(parityMatrix);
 
 describe('action registry', () => {
   it('contains unique action IDs', () => {

@@ -1,4 +1,4 @@
-import { fileShortcutPlatform, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope, type FileShortcutPlatform } from '../actions/registry';
+import { ACTION_BY_ID, fileShortcutPlatform, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope, type FileShortcutPlatform } from '../actions/registry';
 import type { FileEntry, PanelId } from '../domain/types';
 
 export interface ActionContextInput {
@@ -128,24 +128,5 @@ export const filterEnabledActions = (actions: AppAction[], context: ActionContex
       (!entry || (!blocksVirtualEntryTarget(action, entry) && actionCanTargetEntry(action, entry, context))),
   );
 
-const SOURCE_REQUIRED_ACTIONS = new Set<ActionId>([
-  'file.copy',
-  'file.clipboardCopy',
-  'file.clipboardCut',
-  'file.move',
-  'file.trash',
-  'file.deletePermanent',
-  'file.rename',
-  'file.properties',
-  'file.quickView',
-  'archive.list',
-  'archive.extract',
-  'archive.extractAuto',
-  'archive.create',
-  'external.openDefault',
-  'external.openWith',
-  'external.reveal',
-]);
-
 export const actionNeedsConcreteSources = (actionId: ActionId) =>
-  SOURCE_REQUIRED_ACTIONS.has(actionId);
+  ACTION_BY_ID.get(actionId)?.requiresConcreteSources ?? false;

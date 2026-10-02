@@ -10,21 +10,8 @@ import type {
   PanelId
 } from '../domain/types';
 
-export type DialogKind =
-  | 'copy'
-  | 'move'
-  | 'trash'
-  | 'deletePermanent'
-  | 'rename'
-  | 'createDir'
-  | 'properties'
-  | 'archiveCreate'
-  | 'archiveExtract'
-  | 'externalOpenDefault'
-  | 'externalReveal'
-  | 'shellCommand';
-
-export type DialogExecutionMode = 'atomicCommand' | 'longRunningOperation' | 'unsupportedPreview';
+import type { DialogKind, DialogExecutionMode } from './dialogDefinitions';
+export type { DialogKind, DialogExecutionMode, LongRunningDialogKind, AtomicCommandDialogKind } from './dialogDefinitions';
 
 export interface OperationDialogDraft {
   id: number;
@@ -123,19 +110,3 @@ export interface OperationStoreState {
   clearSummary(): void;
   clearOperationHistory(): void;
 }
-
-export type LongRunningDialogKind =
-  | 'copy'
-  | 'move'
-  | 'trash'
-  | 'deletePermanent'
-  | 'archiveCreate'
-  | 'archiveExtract';
-
-export type AtomicCommandDialogKind =
-  | 'rename'
-  | 'createDir'
-  | 'properties'
-  | 'externalOpenDefault'
-  | 'externalReveal'
-  | 'shellCommand';

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ACTION_BY_ID } from '../actions/registry';
+import { ACTIONS, ACTION_BY_ID } from '../actions/registry';
 import type { FileEntry } from '../domain/types';
 import { dialogExecutionModeForDialog, dialogKindForAction } from './dialogDraft';
 import { canTransitionOperation, isOperationInFlight } from './operationLifecycle';
@@ -55,24 +55,9 @@ describe('operation store', () => {
   });
 
   it('covers all operation/dialog action requirements', () => {
-    const requiredDialogActions = [
-      'file.copy',
-      'file.move',
-      'file.trash',
-      'file.deletePermanent',
-      'file.rename',
-      'file.mkdir',
-      'file.properties',
-      'archive.create',
-      'archive.extract',
-      'archive.extractAuto',
-      'external.openDefault',
-      'external.reveal',
-      'external.runShellCommand',
-    ] as const;
-
-    for (const actionId of requiredDialogActions) {
-      expect(dialogKindForAction(actionId)).not.toBeNull();
+    for (const action of ACTIONS.filter((item) => item.dialogKind)) {
+      openAction(action.id);
+      expect(useOperationStore.getState().dialog?.dialogKind).toBe(action.dialogKind);
     }
   });
 

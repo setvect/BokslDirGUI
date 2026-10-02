@@ -1,3 +1,4 @@
+import { requiredActionIdsFromParity } from './featureContracts';
 import { describe, expect, it } from 'vitest';
 import parityMatrix from '../../docs/implementation/tui-parity-matrix.json';
 import { ACTIONS, ACTION_BY_ID, isActionAvailable, menuRootsFromRegistry } from '../actions/registry';
@@ -21,7 +22,7 @@ describe('full-scope verification harness', () => {
     }
   });
 
-  it('keeps implemented frontend wrappers aligned with registered backend handlers', () => {
+  it('keeps frontend supported names aligned with the common command list', () => {
     expect(BACKEND_IMPLEMENTED_COMMANDS).toEqual(Object.values(COMMANDS));
     expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
     expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
@@ -36,28 +37,7 @@ describe('full-scope verification harness', () => {
   });
 
   it('keeps parity-critical GUI and file-manager actions registered', () => {
-    const requiredIds = [
-      'menu.open',
-      'nav.back',
-      'nav.forward',
-      'history.list',
-      'bookmark.add',
-      'bookmark.list',
-      'bookmark.rename',
-      'bookmark.delete',
-      'layout.toggleSingleDual',
-      'layout.ratio50',
-      'layout.ratio70Left',
-      'layout.ratio70Right',
-      'app.quit',
-      'archive.list',
-      'archive.extractAuto',
-      'external.openDefault',
-      'external.runShellCommand',
-      'settings.toggleIcons',
-      'help.search',
-      'help.about',
-    ] as const;
+    const requiredIds = requiredActionIdsFromParity(parityMatrix);
 
     for (const id of requiredIds) {
       expect(ACTION_BY_ID.has(id)).toBe(true);

@@ -60,3 +60,34 @@
 
 - 공개 반영 전 `design-consistency-report.md`의 machine-check checklist 통과 필수
 - 최종 검증일: 2026-06-13
+
+## 기능 변경 시 기준과 문서 관리
+
+- 개선 근거: 터미널 편집기 제거 시 같은 액션 속성·다이얼로그 타입·명령·필수 목록·문서 표의 반복 수정 발생
+- 개선 범위: 중복 선언 제거와 누락 검출, 패널 상태·operation store·React↔Rust 계약·파일 작업 실행 경로 유지
+
+| 변경 대상 | 수정 기준 | 파생 소비처 |
+| --- | --- | --- |
+| 다이얼로그 종류·실행 모드 | [`dialogDefinitions.ts`](../../src/operations/dialogDefinitions.ts) | 기존 타입 export·번역 타입·실행기 연결 검사 |
+| 액션의 대상 조건·다이얼로그·설정 | [`registry.ts`](../../src/actions/registry.ts) | 대상 조회·다이얼로그 조회·메뉴 체크·설정 변경 |
+| 프론트 명령 이름 | [`commands.ts`](../../src/tauri/commands.ts)의 `COMMANDS` | 백엔드 지원 목록·Rust 대조 검사 |
+| 독립 기능 요구·동등성 상태·제외 근거 | [`tui-parity-matrix.json`](tui-parity-matrix.json) | 필수 액션 검사·동등성 문서 표 |
+
+- 액션·기능 추가 또는 제거 시 레지스트리와 독립 요구사항의 의도적인 동시 검토 필수
+- 다이얼로그·명령 변경 시 위 공통 정의와 해당 실행 구현·행동 테스트 수정 필수
+- 타입·속성·목록 통합을 이유로 입력 검증·확인·취소·충돌·완료 처리 테스트 축소 금지
+- Rust의 실제 `generate_handler!` 등록과 `#[tauri::command]` 구현은 프론트 목록과 별도 대조 유지
+- 상태 확인·드롭 오버레이의 기존 네이티브 전용 명령만 [`featureContracts.ts`](../../src/verification/featureContracts.ts)에 용도 명시 예외 허용
+- 사용자 요청으로 제외된 터미널 편집기 5개 항목은 날짜·사유·원천 TUI 기록 유지, 구현 완료와 구분 필수
+
+### 생성 문서와 검증
+
+- 적용 문서: [액션 레지스트리](action-registry.md), [동등성 매트릭스](tui-parity-matrix.md)의 `BEGIN GENERATED`·`END GENERATED` 사이만 갱신
+- `npm run docs:generate`: 실제 레지스트리와 독립 요구사항 JSON에서 지정 표 생성, 입력 순서 고정·실행 시각 미포함
+- `npm run docs:check`: 파일 수정 없이 불일치 보고, `npm run verify`에 포함
+- 기존 Vite의 서버 측 모듈 로딩으로 실제 TypeScript 정의 참조, 네트워크 리스닝·신규 의존성 없음
+- `npm test`: 동작 테스트와 검증 도구의 실패 사례 테스트 실행
+- 필수 액션 누락·Rust 미등록 명령·잘못된 다이얼로그 연결·문서 불일치의 실패 검증 유지
+- 메뉴·단축키·설정 저장·입력창 소유권·파일 안전성의 독립 행동 검증 유지
+- 생성 구간 밖 설명·판단 근거는 수동 관리, 기능 변경마다 과거 검토·완료 문서 일괄 갱신 금지
+- 과거 기록에 적힌 날짜·검증 수치·완료·실패·미검증 상태 보존, 현재 변경을 과거 검증 결과로 표현 금지

@@ -1,27 +1,12 @@
-import type { ActionId } from '../actions/registry';
+import { DIALOG_DEFINITIONS } from './dialogDefinitions';
+import { ACTION_BY_ID, type ActionId } from '../actions/registry';
 import type { OperationKind } from '../domain/types';
-import { AtomicCommandDialogKind, DialogExecutionMode, DialogKind, LongRunningDialogKind, OpenDialogRequest, OperationDialogDraft } from './operationTypes';
+import { DialogExecutionMode, DialogKind, LongRunningDialogKind, OpenDialogRequest, OperationDialogDraft } from './operationTypes';
 
 let nextDialogId = 0;
 
-export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
-  const mapping: Partial<Record<ActionId, DialogKind>> = {
-    'file.copy': 'copy',
-    'file.move': 'move',
-    'file.trash': 'trash',
-    'file.deletePermanent': 'deletePermanent',
-    'file.rename': 'rename',
-    'file.mkdir': 'createDir',
-    'file.properties': 'properties',
-    'archive.extract': 'archiveExtract',
-    'archive.extractAuto': 'archiveExtract',
-    'archive.create': 'archiveCreate',
-    'external.openDefault': 'externalOpenDefault',
-    'external.reveal': 'externalReveal',
-    'external.runShellCommand': 'shellCommand',
-  };
-  return mapping[actionId] ?? null;
-};
+export const dialogKindForAction = (actionId: ActionId): DialogKind | null =>
+  ACTION_BY_ID.get(actionId)?.dialogKind ?? null;
 
 export const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequest): OperationDialogDraft => {
   const isPermanentDelete = dialogKind === 'deletePermanent';
@@ -68,55 +53,14 @@ const targetForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => 
   return request.sources[0]?.path ?? request.workingDir;
 };
 
-const LONG_RUNNING_DIALOGS: readonly LongRunningDialogKind[] = [
-  'copy',
-  'move',
-  'trash',
-  'deletePermanent',
-  'archiveCreate',
-  'archiveExtract',
-];
-
-const ATOMIC_COMMAND_DIALOGS: readonly AtomicCommandDialogKind[] = [
-  'rename',
-  'createDir',
-  'properties',
-  'externalOpenDefault',
-  'externalReveal',
-  'shellCommand',
-];
-
 export const isLongRunningDialog = (dialogKind: DialogKind): dialogKind is LongRunningDialogKind =>
-  LONG_RUNNING_DIALOGS.includes(dialogKind as LongRunningDialogKind);
+  DIALOG_DEFINITIONS[dialogKind].executionMode === 'longRunningOperation';
 
-const isAtomicCommandDialog = (dialogKind: DialogKind): dialogKind is AtomicCommandDialogKind =>
-  ATOMIC_COMMAND_DIALOGS.includes(dialogKind as AtomicCommandDialogKind);
+export const dialogExecutionModeForDialog = (dialogKind: DialogKind): DialogExecutionMode =>
+  DIALOG_DEFINITIONS[dialogKind].executionMode;
 
-export const dialogExecutionModeForDialog = (dialogKind: DialogKind): DialogExecutionMode => {
-  if (isLongRunningDialog(dialogKind)) {
-    return 'longRunningOperation';
-  }
-  if (isAtomicCommandDialog(dialogKind)) {
-    return 'atomicCommand';
-  }
-  return 'unsupportedPreview';
-};
-
-const CONNECTABLE_SAFE_MUTATIONS: readonly DialogKind[] = ['createDir', 'rename'];
-const CONNECTABLE_LONG_RUNNING_OPERATIONS: readonly DialogKind[] = ['copy', 'move', 'trash', 'deletePermanent', 'archiveCreate', 'archiveExtract'];
-
-const isBackendExecutionStubbed = (dialogKind: DialogKind, request: OpenDialogRequest) => {
-  if (CONNECTABLE_LONG_RUNNING_OPERATIONS.includes(dialogKind)) {
-    return !request.longRunningExecutor;
-  }
-  if (isLongRunningDialog(dialogKind)) {
-    return true;
-  }
-  if (CONNECTABLE_SAFE_MUTATIONS.includes(dialogKind)) {
-    return !request.atomicExecutor;
-  }
-  return dialogExecutionModeForDialog(dialogKind) === 'atomicCommand' && !request.atomicExecutor;
-};
+const isBackendExecutionStubbed = (dialogKind: DialogKind, request: OpenDialogRequest) =>
+  isLongRunningDialog(dialogKind) ? !request.longRunningExecutor : !request.atomicExecutor;
 
 const initialInputValueForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
   if (dialogKind === 'rename') {
@@ -198,14 +142,5 @@ const archiveCreateNameIsSupported = (name: string) => [
   '.zip', '.jar', '.war', '.tar', '.tar.gz', '.tgz', '.tar.zst', '.tzst', '.7z',
 ].some((suffix) => name.toLowerCase().endsWith(suffix));
 
-export const operationKindForDialog = (dialogKind: LongRunningDialogKind): OperationKind => {
-  const mapping: Record<LongRunningDialogKind, OperationKind> = {
-    copy: 'copy',
-    move: 'move',
-    trash: 'trash',
-    deletePermanent: 'delete',
-    archiveCreate: 'archiveCreate',
-    archiveExtract: 'archiveExtract',
-  };
-  return mapping[dialogKind];
-};
+export const operationKindForDialog = (dialogKind: LongRunningDialogKind): OperationKind =>
+  DIALOG_DEFINITIONS[dialogKind].operationKind;

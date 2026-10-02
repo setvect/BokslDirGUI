@@ -1,3 +1,4 @@
+import { loadFeatureMetadata } from './load-feature-metadata.mjs';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -12,85 +13,21 @@ const checks = [];
 const addCheck = (name, passed, detail) => checks.push({ name, passed, detail });
 
 const packageJson = JSON.parse(read('package.json'));
-for (const script of ['typecheck', 'test', 'build', 'check', 'rust:test', 'verify:scope', 'verify']) {
+for (const script of ['typecheck', 'test', 'build', 'check', 'rust:test', 'verify:scope', 'docs:generate', 'docs:check', 'verify']) {
   addCheck(`package script: ${script}`, Boolean(packageJson.scripts?.[script]), packageJson.scripts?.[script] ?? 'missing');
 }
 
 const registry = read('src/actions/registry.ts');
 const i18nResources = read('src/i18n-resources.ts');
-const registryActionIds = [...registry.matchAll(/id: '([^']+)'/g)].map((match) => match[1]);
+const metadata = await loadFeatureMetadata();
+const { requiredActionIdsFromParity, validateFeatureMetadata, validateRustCommands } = metadata.validation;
+const registryActionIds = metadata.actions.map((action) => action.id);
+const actionById = new Map(metadata.actions.map((action) => [action.id, action]));
 const registryActionIdSet = new Set(registryActionIds);
 
 const parityMatrix = JSON.parse(read('docs/implementation/tui-parity-matrix.json'));
 const parityMatrixDoc = read('docs/implementation/tui-parity-matrix.md');
 const allowedParityStatuses = new Set(['implemented', 'partial', 'stub', 'planned', 'missing', 'excluded']);
-const expectedTuiActionIds = [
-  'move_up',
-  'move_down',
-  'go_parent',
-  'enter',
-  'go_top',
-  'go_bottom',
-  'page_up',
-  'page_down',
-  'toggle_panel',
-  'toggle_layout',
-  'tab_new',
-  'tab_close',
-  'copy',
-  'move',
-  'open_default',
-  'open_terminal_editor',
-  'run_shell_command',
-  'delete',
-  'perm_delete',
-  'new_dir',
-  'rename',
-  'file_info',
-  'archive_compress',
-  'archive_extract',
-  'archive_extract_auto',
-  'archive_preview',
-  'toggle_sel',
-  'invert_selection',
-  'select_all',
-  'deselect',
-  'help_keys',
-  'refresh',
-  'open_menu',
-  'quit',
-  'theme_dark',
-  'theme_light',
-  'theme_contrast',
-  'language_en',
-  'language_ko',
-  'toggle_icons',
-  'editor_preset_vi',
-  'editor_preset_vim',
-  'editor_preset_nano',
-  'editor_preset_emacs',
-  'sort_name',
-  'sort_size',
-  'sort_date',
-  'sort_ext',
-  'sort_asc',
-  'sort_desc',
-  'filter_start',
-  'filter_clear',
-  'toggle_hidden',
-  'mount_points',
-  'goto_path',
-  'tab_list',
-  'history_back',
-  'history_forward',
-  'history_list',
-  'bookmark_add',
-  'bookmark_list',
-  'size_auto',
-  'size_bytes',
-  'about',
-];
-const expectedTuiActionIdSet = new Set(expectedTuiActionIds);
 const parityRows = Array.isArray(parityMatrix.tuiActions) ? parityMatrix.tuiActions : [];
 const parityRowsById = new Map(parityRows.map((row) => [row.tuiId, row]));
 const guiOnlyExtensionIds = new Set((parityMatrix.guiOnlyExtensions ?? []).map((item) => item.guiActionId));
@@ -107,18 +44,9 @@ addCheck(
   parityMatrixDoc.includes('Phase 0 하드 게이트') && parityMatrixDoc.includes('implemented'),
   'docs/implementation/tui-parity-matrix.md',
 );
-addCheck(
-  'TUI parity matrix covers every known BokslDir TUI action exactly once',
-  parityRows.length === expectedTuiActionIds.length
-    && new Set(parityRows.map((row) => row.tuiId)).size === expectedTuiActionIds.length
-    && expectedTuiActionIds.every((id) => parityRowsById.has(id)),
-  `${parityRows.length}/${expectedTuiActionIds.length} rows`,
-);
-addCheck(
-  'TUI parity matrix has no unknown TUI action ids',
-  parityRows.every((row) => expectedTuiActionIdSet.has(row.tuiId)),
-  parityRows.filter((row) => !expectedTuiActionIdSet.has(row.tuiId)).map((row) => row.tuiId).join(', ') || 'ok',
-);
+const featureErrors = validateFeatureMetadata(metadata.actions, Object.values(metadata.commands), metadata.dialogs, parityMatrix);
+addCheck('feature metadata matches independent parity requirements', featureErrors.length === 0, featureErrors.join('; ') || 'ok');
+const expectedTuiActionIdSet = new Set(parityRows.map((row) => row.tuiId));
 addCheck(
   'TUI parity matrix statuses are controlled vocabulary',
   parityRows.every((row) => allowedParityStatuses.has(row.implementationStatus)),
@@ -141,7 +69,7 @@ addCheck(
     && parityRows.every((row) => !excludedEditorIds.has(row.tuiId) ? row.implementationStatus !== 'excluded'
       : row.implementationStatus === 'excluded' && row.guiActionIds.length === 0 && row.guiMenuPaths.length === 0
         && row.notes.includes('2026-10-03 사용자 명시 요청'))
-    && !registry.includes("id: 'external.openEditor'") && !registry.includes("id: 'settings.editor")
+    && !registryActionIdSet.has('external.openEditor') && !registryActionIds.some((id) => id.startsWith('settings.editor'))
     && !read('src-tauri/src/lib.rs').includes('commands::open_external_editor'),
   '2026-10-03 사용자 요청에 따른 터미널 편집기 및 설정 제거',
 );
@@ -163,7 +91,7 @@ addCheck(
     && parityRowsById.get('open_menu')?.guiActionIds?.includes('menu.open')
     && parityRowsById.get('open_menu')?.tuiKeyboardBindings?.includes('F9')
     && read('src/ui/menuModel.ts').includes('handleTopMenuKeyDown')
-    && registry.includes("id: 'menu.open'"),
+    && registryActionIdSet.has('menu.open'),
   'F9 menu may be implemented only when registry and shell keyboard state machine evidence exist',
 );
 addCheck(
@@ -214,7 +142,7 @@ addCheck(
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
       && row.evidence?.some((item) => hasCommanderTestEvidence(item))
-      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+      && row.guiActionIds?.every((actionId) => registryActionIdSet.has(actionId));
   }),
   'settings/theme/language/size and direct sort rows require direct menu actions plus runtime tests before completion',
 );
@@ -224,7 +152,7 @@ addCheck(
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
       && row.evidence?.some((item) => hasCommanderTestEvidence(item))
-      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+      && row.guiActionIds?.every((actionId) => registryActionIdSet.has(actionId));
   })
     && parityRowsById.get('delete')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Delete')
     && parityRowsById.get('perm_delete')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Permanent Delete')
@@ -245,7 +173,7 @@ addCheck(
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
       && row.evidence?.some((item) => hasCommanderTestEvidence(item) || item.includes('registry.test.ts'))
-      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+      && row.guiActionIds?.every((actionId) => registryActionIdSet.has(actionId));
   })
     && parityRowsById.get('open_default')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Open Default App')
     && parityRowsById.get('run_shell_command')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Run Shell Command')
@@ -259,11 +187,11 @@ addCheck(
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
       && row.evidence?.some((item) => hasCommanderTestEvidence(item))
-      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+      && row.guiActionIds?.every((actionId) => registryActionIdSet.has(actionId));
   })
     && parityRowsById.get('archive_preview')?.guiActionIds?.includes('archive.list')
-    && registry.includes("id: 'archive.extractAuto'")
-    && registry.includes("id: 'archive.list'")
+    && registryActionIdSet.has('archive.extractAuto')
+    && registryActionIdSet.has('archive.list')
     && read('src/ui/fileActionPlans.ts').includes('archiveAutoExtractFolderName')
     && read('src/ui/archiveVirtual.ts').includes('archiveVirtualRootPath')
     && read('src/ui/CommanderShell.archives.test.tsx').includes('uses auto-extract to derive a target folder')
@@ -278,10 +206,10 @@ addCheck(
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
       && row.evidence?.some((item) => hasCommanderTestEvidence(item) || item.includes('registry.test.ts'))
-      && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
+      && row.guiActionIds?.every((actionId) => registryActionIdSet.has(actionId));
   })
-    && registry.includes("id: 'app.quit'")
-    && registry.includes("id: 'settings.toggleIcons'")
+    && registryActionIdSet.has('app.quit')
+    && registryActionIdSet.has('settings.toggleIcons')
     && read('src/ui/CommanderShell.clipboard.test.tsx').includes('uses an explicit Cmd+Q/File Quit policy')
     && read('src/ui/CommanderShell.settings.test.tsx').includes('opens path, location, tab, history, bookmark, help search, and about overlays')
     && read('src/ui/CommanderShell.navigation.test.tsx').includes('applies typed filters and preserves them through refresh until clear'),
@@ -306,72 +234,13 @@ addCheck(
   [...guiOnlyExtensionIds].filter((id) => !registryActionIdSet.has(id)).join(', ') || 'ok',
 );
 
-const requiredActionIds = [
-  'menu.open',
-  'panel.switchActive',
-  'nav.enter',
-  'nav.up',
-  'nav.back',
-  'nav.forward',
-  'nav.refresh',
-  'nav.gotoPath',
-  'nav.locations',
-  'selection.toggle',
-  'selection.all',
-  'file.copy',
-  'file.move',
-  'file.trash',
-  'file.deletePermanent',
-  'file.mkdir',
-  'file.rename',
-  'file.properties',
-  'app.quit',
-  'archive.list',
-  'archive.create',
-  'archive.extract',
-  'archive.extractAuto',
-  'external.openDefault',
-  'external.reveal',
-  'external.openCurrentInFinder',
-  'external.openCurrentInTerminal',
-  'external.runShellCommand',
-  'view.sortName',
-  'view.sortSize',
-  'view.sortDate',
-  'view.sortExt',
-  'view.reverseSort',
-  'filter.start',
-  'filter.clear',
-  'view.toggleHidden',
-  'selection.invert',
-  'selection.clear',
-  'layout.toggleSingleDual',
-  'history.list',
-  'bookmark.add',
-  'bookmark.list',
-  'bookmark.rename',
-  'bookmark.delete',
-  'settings.themeDark',
-  'settings.themeLight',
-  'settings.themeHighContrast',
-  'settings.languageEn',
-  'settings.languageKo',
-  'settings.toggleIcons',
-  'settings.sizeAuto',
-  'settings.sizeBytes',
-  'layout.ratio50',
-  'layout.ratio70Left',
-  'layout.ratio70Right',
-  'help.shortcuts',
-  'help.search',
-  'help.about',
-];
+const requiredActionIds = requiredActionIdsFromParity(parityMatrix);
 for (const actionId of requiredActionIds) {
-  addCheck(`action registry includes ${actionId}`, registry.includes(`id: '${actionId}'`), 'docs/implementation/full-scope-test-spec.md §3.6');
+  addCheck(`action registry includes ${actionId}`, registryActionIdSet.has(actionId), 'docs/implementation/full-scope-test-spec.md §3.6');
 }
 addCheck('bookmark deletion is list-scoped and old menu is absent',
-  registry.includes("id: 'bookmark.delete'")
-    && !registry.includes("menuPath: ['Go', 'Bookmark', 'Delete']")
+  registryActionIdSet.has('bookmark.delete')
+    && actionById.get('bookmark.delete')?.menuPath?.join('/') !== 'Go/Bookmark/Delete'
     && read('src/ui/useNavigationMenus.ts').includes('deleteNavigationBookmark')
     && read('src/ui/CommanderOverlays.tsx').includes('onDeleteBookmark'),
   'bookmark list deletion and settings persistence');
@@ -469,13 +338,13 @@ for (const token of ['COMMANDER_SHORTCUTS_DISABLED_SELECTOR', 'commanderShortcut
 
 const operationStore = read('src/operations/operationStore.ts');
 const operationStoreTest = read('src/operations/operationStore.test.ts');
-for (const dialogKind of ['copy', 'move', 'trash', 'deletePermanent', 'rename', 'createDir', 'archiveCreate', 'archiveExtract', 'shellCommand']) {
-  addCheck(`operation dialog supports ${dialogKind}`, read('src/operations/dialogDraft.ts').includes(`'${dialogKind}'`), 'G005 dialog shell coverage');
+for (const dialogKind of Object.keys(metadata.dialogs)) {
+  addCheck(`operation dialog supports ${dialogKind}`, metadata.actions.some((action) => action.dialogKind === dialogKind), 'G005 dialog shell coverage');
 }
 addCheck('operation store uses backend stub policy boundary', operationStore.includes('backendExecutionStubbed'), 'Stub policy applies to safe and destructive file mutation shells');
 addCheck('operation store removed danger-only stub flag', !operationStore.includes('destructiveExecutionStubbed'), 'Stub policy must not hide safe mutation stubs');
 addCheck('operation store separates atomic command execution mode', operationStore.includes("'atomicCommand'") && read('src/operations/dialogDraft.ts').includes('dialogExecutionModeForDialog'), 'Atomic commands must not be queued as long-running progress');
-addCheck('operation store separates long-running operation execution mode', read('src/operations/dialogDraft.ts').includes("'longRunningOperation'") && read('src/operations/dialogDraft.ts').includes('LONG_RUNNING_DIALOGS'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
+addCheck('operation store separates long-running operation execution mode', Object.values(metadata.dialogs).some((definition) => definition.executionMode === 'longRunningOperation') && operationStore.includes('isLongRunningDialog'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
 addCheck('operation store validates safe mutation names', operationStore.includes('validateDialogInput') && read('src/operations/dialogDraft.ts').includes('errors.invalidName'), 'create_dir/rename_entry dialog names must be validated before Rust command execution');
 addCheck('operation store exposes atomic executor seam', read('src/operations/operationTypes.ts').includes('AtomicCommandExecutor') && operationStore.includes('onAtomicSuccess'), 'Connected atomic commands must use request/response execution, not progress stubs');
 addCheck('operation store exposes long-running executor seam', read('src/operations/operationTypes.ts').includes('LongRunningOperationExecutor') && read('src/operations/operationEvents.ts').includes('applyOperationProgress') && read('src/operations/operationEvents.ts').includes('applyOperationSummary'), 'copy/move/delete/trash must consume backend operation events instead of preview-only stubs');
@@ -500,9 +369,8 @@ const rustLib = read('src-tauri/src/lib.rs');
 const rustBackend = read('src-tauri/src/commands.rs');
 
 const archiveVirtual = read('src/ui/archiveVirtual.ts');
-for (const command of ['list_dir', 'get_metadata', 'preview_file', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'list_open_with_apps', 'open_with_app', 'reveal_in_manager', 'open_current_in_finder', 'open_current_in_terminal', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
-  addCheck(`rust handler includes ${command}`, rustBackend.includes(`fn ${command}(`) && rustLib.includes(`commands::${command}`), 'command handler and app registration');
-}
+const rustCommandErrors = validateRustCommands(Object.values(metadata.commands), rustLib, rustBackend);
+addCheck('frontend commands match Rust registration and implementation', rustCommandErrors.length === 0, rustCommandErrors.join('; ') || 'ok');
 addCheck('rust list_dir normalizes filter once', read('src-tauri/src/navigation.rs').includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
 addCheck('rust safe mutation validates child names', read('src-tauri/src/mutation.rs').includes('validate_child_name') && read('src-tauri/src/mutation.rs').includes('already_exists'), 'create_dir/rename_entry must reject invalid names and overwrites');
 addCheck('rust rename preserves source entry identity for symlinks', read('src-tauri/src/tests.rs').includes('rename_entry_renames_symlink_entry_not_target') && read('src-tauri/src/mutation.rs').includes('fs::symlink_metadata(&source)'), 'rename_entry must rename the visible entry, not a symlink target');

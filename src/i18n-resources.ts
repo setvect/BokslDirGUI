@@ -1,3 +1,4 @@
+import type { DialogKind as OperationDialogKind } from './operations/dialogDefinitions';
 import { APP_NAME } from './foundation';
 
 export type SupportedLanguage = 'ko' | 'en';
@@ -935,19 +936,7 @@ export const OVERLAY_TEXT = {
   },
 } as const satisfies Record<SupportedLanguage, Record<string, string>>;
 
-export type OperationDialogKind =
-  | 'copy'
-  | 'move'
-  | 'trash'
-  | 'deletePermanent'
-  | 'rename'
-  | 'createDir'
-  | 'properties'
-  | 'archiveCreate'
-  | 'archiveExtract'
-  | 'externalOpenDefault'
-  | 'externalReveal'
-  | 'shellCommand';
+export type { DialogKind as OperationDialogKind } from './operations/dialogDefinitions';
 
 export const OPERATION_DIALOG_TEXT = {
   ko: {

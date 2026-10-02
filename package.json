@@ -9,14 +9,16 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/test-feature-tools.mjs",
     "check": "npm run typecheck && cargo check --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "verify:scope": "node scripts/verify-full-scope.mjs",
-    "verify": "npm run typecheck && npm test && npm run build && npm run check && npm run rust:test && npm run verify:scope"
+    "verify": "npm run typecheck && npm test && npm run build && npm run check && npm run rust:test && npm run verify:scope && npm run docs:check",
+    "docs:generate": "node scripts/generate-docs.mjs",
+    "docs:check": "node scripts/generate-docs.mjs --check"
   },
   "dependencies": {
     "@crabnebula/tauri-plugin-drag": "^2.1.0",
