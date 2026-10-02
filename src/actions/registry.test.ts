@@ -54,10 +54,6 @@ const requiredActionIds: ActionId[] = [
   'settings.themeHighContrast',
   'settings.languageEn',
   'settings.languageKo',
-  'settings.editorVi',
-  'settings.editorVim',
-  'settings.editorNano',
-  'settings.editorEmacs',
   'settings.toggleIcons',
   'settings.sizeAuto',
   'settings.sizeBytes',
@@ -66,7 +62,6 @@ const requiredActionIds: ActionId[] = [
   'external.openDefault',
   'external.openCurrentInFinder',
   'external.openCurrentInTerminal',
-  'external.openEditor',
   'external.runShellCommand',
   'help.search',
   'help.about',
@@ -92,7 +87,6 @@ describe('action registry', () => {
 
   it('keeps external integration and editor preset menu paths aligned with TUI parity rows', () => {
     expect(ACTION_BY_ID.get('external.openDefault')?.menuPath).toEqual(['File', 'Open Default App']);
-    expect(ACTION_BY_ID.get('external.openEditor')?.menuPath).toEqual(['File', 'Open Terminal Editor']);
     expect(ACTION_BY_ID.get('external.openCurrentInFinder')?.menuPath).toEqual(['Go', 'Open Current Folder in Finder']);
     expect(ACTION_BY_ID.get('external.openCurrentInTerminal')?.menuPath).toEqual(['Go', 'Open Terminal Here']);
     expect(ACTION_BY_ID.get('external.runShellCommand')?.menuPath).toEqual(['File', 'Run Shell Command']);
@@ -105,10 +99,6 @@ describe('action registry', () => {
     expect(ACTION_BY_ID.get('layout.toggleSingleDual')?.menuPath).toEqual(['View', 'Toggle Layout']);
     expect(ACTION_BY_ID.get('help.shortcuts')?.menuPath).toEqual(['Help', 'Keyboard Help']);
     expect(ACTION_BY_ID.get('settings.toggleIcons')?.menuPath).toEqual(['Settings', 'Toggle Icons']);
-    expect(ACTION_BY_ID.get('settings.editorVi')?.menuPath).toEqual(['Settings', 'Default Editor', 'vi']);
-    expect(ACTION_BY_ID.get('settings.editorVim')?.menuPath).toEqual(['Settings', 'Default Editor', 'vim']);
-    expect(ACTION_BY_ID.get('settings.editorNano')?.menuPath).toEqual(['Settings', 'Default Editor', 'nano']);
-    expect(ACTION_BY_ID.get('settings.editorEmacs')?.menuPath).toEqual(['Settings', 'Default Editor', 'emacs']);
   });
 
   it('does not expose the retired current-path bookmark delete menu', () => {
@@ -312,6 +302,8 @@ describe('action registry', () => {
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('help.search')!)).toBe('');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('external.openWith')!)).toBe('');
     expect(actionForKeyboardShortcut(key('.'))?.id).toBe('view.toggleHidden');
+    expect(actionForKeyboardShortcut(key('e'))).toBeNull();
+    expect(ACTIONS.some((action) => action.id === 'external.openEditor' || action.id.startsWith('settings.editor'))).toBe(false);
   });
 });
 

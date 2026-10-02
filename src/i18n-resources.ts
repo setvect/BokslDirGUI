@@ -24,7 +24,6 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.shellCommandDisabled': '쉘 명령 실행은 기본 비활성입니다.',
     'errors.shellConfirmationInvalid': '셸 명령 실행 확인이 만료되었거나 유효하지 않습니다. 다시 실행 확인을 눌러주세요.',
     'errors.invalidShellCommand': '실행할 쉘 명령을 입력해야 합니다.',
-    'errors.externalEditorNotConfigured': '외부 편집기가 설정되지 않았습니다.',
     'errors.openWithFileRequired': '다음으로 열기는 파일을 선택해야 합니다.',
     'errors.openWithAppUnavailable': '이 파일을 열 수 있는 앱이 아닙니다. 앱 목록을 다시 확인하세요.',
     'errors.previewNotFile': '파일만 미리 볼 수 있습니다.',
@@ -65,7 +64,6 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.shellCommandDisabled': 'Shell command execution is disabled by default.',
     'errors.shellConfirmationInvalid': 'Shell command confirmation expired or is invalid. Confirm the command again.',
     'errors.invalidShellCommand': 'Enter a shell command to run.',
-    'errors.externalEditorNotConfigured': 'No external editor is configured.',
     'errors.openWithFileRequired': 'Select a file to open with an application.',
     'errors.openWithAppUnavailable': 'This app is no longer available for this file. Reload the application list.',
     'errors.previewNotFile': 'Only files can be previewed.',
@@ -160,7 +158,6 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     'Open Default App': '기본 앱으로 열기',
     'Open With…': '다음으로 열기…',
     Reveal: '파일 위치 열기',
-    'Open Terminal Editor': '터미널 편집기로 열기',
     'Open Current Folder in Finder': '현재 폴더를 Finder에서 열기',
     'Open Terminal Here': '현재 폴더에서 터미널 열기',
     Sort: '정렬',
@@ -189,7 +186,6 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Language: '언어',
     English: '영어',
     Korean: '한국어',
-    'Default Editor': '기본 편집기',
     'Toggle Icons': '아이콘 전환',
     'File Size Format': '파일 크기 형식',
     Auto: '자동',
@@ -245,7 +241,6 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     'Open Default App': 'Open Default App',
     'Open With…': 'Open With…',
     Reveal: 'Reveal',
-    'Open Terminal Editor': 'Open Terminal Editor',
     Sort: 'Sort',
     Name: 'Name',
     Size: 'Size',
@@ -272,7 +267,6 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Language: 'Language',
     English: 'English',
     Korean: 'Korean',
-    'Default Editor': 'Default Editor',
     'Toggle Icons': 'Toggle Icons',
     'File Size Format': 'File Size Format',
     Auto: 'Auto',
@@ -329,7 +323,6 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'external.reveal': '파일 위치 열기',
     'external.openCurrentInFinder': '현재 폴더를 Finder에서 열기',
     'external.openCurrentInTerminal': '현재 폴더에서 터미널 열기',
-    'external.openEditor': '터미널 편집기로 열기',
     'filter.start': '필터',
     'filter.clear': '필터 해제',
     'view.toggleHidden': '숨김 파일',
@@ -387,7 +380,6 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'external.reveal': 'Reveal',
     'external.openCurrentInFinder': 'Open Current Folder in Finder',
     'external.openCurrentInTerminal': 'Open Terminal Here',
-    'external.openEditor': 'Open Terminal Editor',
     'filter.start': 'Filter',
     'filter.clear': 'Clear Filter',
     'view.toggleHidden': 'Hidden Files',
@@ -430,7 +422,6 @@ export const HOTKEY_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'archive.create': '압축',
     'archive.extract': '해제',
     'archive.extractAuto': '자동해제',
-    'external.openEditor': '편집',
     'external.openDefault': '앱열기',
     'tab.new': '새탭',
     'tab.close': '탭닫기',
@@ -466,7 +457,6 @@ export const HOTKEY_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'archive.create': 'Archive',
     'archive.extract': 'Extract',
     'archive.extractAuto': 'AutoExtract',
-    'external.openEditor': 'Edit',
     'external.openDefault': 'OpenApp',
     'tab.new': 'NewTab',
     'tab.close': 'CloseTab',
@@ -596,7 +586,6 @@ export interface CommanderStatusText {
   bookmarkNotFound: string;
   themeChanged(theme: string): string;
   languageChanged(language: string): string;
-  editorChanged(editor: string): string;
   zoom(percent: number): string;
   locationsLoading: string;
   locationsFailed(error: string): string;
@@ -659,7 +648,6 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     bookmarkNotFound: '현재 위치에 등록된 북마크가 없습니다.',
     themeChanged: (theme) => `테마 · ${theme === 'dark' ? '다크' : theme === 'light' ? '라이트' : '고대비'}`,
     languageChanged: (language) => `언어 · ${language === 'ko' ? '한국어' : '영어'}`,
-    editorChanged: (editor) => `기본 편집기 · ${editor}`,
     zoom: (percent) => `화면 배율 · ${percent}%`,
     locationsLoading: '위치 목록을 불러오는 중…',
     locationsFailed: (error) => `위치 목록 실패: ${error}`,
@@ -720,7 +708,6 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     bookmarkNotFound: 'There is no bookmark for the current location.',
     themeChanged: (theme) => `Theme · ${theme === 'dark' ? 'Dark' : theme === 'light' ? 'Light' : 'High Contrast'}`,
     languageChanged: (language) => `Language · ${language === 'ko' ? 'Korean' : 'English'}`,
-    editorChanged: (editor) => `Default editor · ${editor}`,
     zoom: (percent) => `Zoom · ${percent}%`,
     locationsLoading: 'Loading locations…',
     locationsFailed: (error) => `Locations failed: ${error}`,
@@ -960,7 +947,6 @@ export type OperationDialogKind =
   | 'archiveExtract'
   | 'externalOpenDefault'
   | 'externalReveal'
-  | 'externalEditor'
   | 'shellCommand';
 
 export const OPERATION_DIALOG_TEXT = {
@@ -1073,7 +1059,6 @@ export const OPERATION_DIALOG_TITLES = {
     archiveExtract: '압축 해제',
     externalOpenDefault: '기본 앱으로 열기',
     externalReveal: '파일 위치 열기',
-    externalEditor: '터미널 편집기로 열기',
     shellCommand: '쉘 명령 실행',
   },
   en: {
@@ -1088,7 +1073,6 @@ export const OPERATION_DIALOG_TITLES = {
     archiveExtract: 'Extract Archive',
     externalOpenDefault: 'Open with Default App',
     externalReveal: 'Reveal in File Manager',
-    externalEditor: 'Open in Terminal Editor',
     shellCommand: 'Run Shell Command',
   },
 } as const satisfies Record<SupportedLanguage, Record<OperationDialogKind, string>>;
@@ -1105,7 +1089,6 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     archiveExtract: () => '압축 파일을 대상 폴더에 풉니다.',
     externalOpenDefault: () => '선택한 항목을 기본 앱으로 엽니다.',
     externalReveal: () => '선택한 항목의 위치를 파일 관리자에서 엽니다.',
-    externalEditor: () => '선택한 항목을 터미널 편집기로 엽니다.',
     shellCommand: () => '현재 폴더에서 명령을 실행합니다. 설정에서 허용된 경우에만 사용할 수 있습니다.',
     properties: () => '선택한 항목의 정보를 확인합니다.',
   },
@@ -1120,7 +1103,6 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     archiveExtract: () => 'Extract the archive into the target folder.',
     externalOpenDefault: () => 'Open the selected item with the default app.',
     externalReveal: () => 'Reveal the selected item in the file manager.',
-    externalEditor: () => 'Open the selected item in the terminal editor.',
     shellCommand: () => 'Run a command in the current folder when shell commands are enabled in settings.',
     properties: () => 'Show information for the selected item.',
   },
@@ -1139,7 +1121,6 @@ export const OPERATION_DIALOG_PRIMARY_LABELS = {
     archiveExtract: '압축 해제',
     externalOpenDefault: '기본 앱으로 열기',
     externalReveal: '파일 위치 열기',
-    externalEditor: '편집기로 열기',
     shellCommand: '실행',
   },
   en: {
@@ -1154,7 +1135,6 @@ export const OPERATION_DIALOG_PRIMARY_LABELS = {
     archiveExtract: 'Extract Archive',
     externalOpenDefault: 'Open',
     externalReveal: 'Reveal',
-    externalEditor: 'Open Editor',
     shellCommand: 'Run',
   },
 } as const satisfies Record<SupportedLanguage, Record<OperationDialogKind, string>>;

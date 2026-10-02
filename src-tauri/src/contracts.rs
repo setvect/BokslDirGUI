@@ -197,6 +197,7 @@ pub(crate) struct ShellCommandResult {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ExternalSettings {
+    // 기존 설정 파일 호환용 필드. 편집기 실행에는 사용하지 않음.
     pub(crate) editor_id: Option<String>,
     pub(crate) shell_command: ShellCommandEnabled,
 }

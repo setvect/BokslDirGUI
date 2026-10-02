@@ -23,7 +23,7 @@ const registryActionIdSet = new Set(registryActionIds);
 
 const parityMatrix = JSON.parse(read('docs/implementation/tui-parity-matrix.json'));
 const parityMatrixDoc = read('docs/implementation/tui-parity-matrix.md');
-const allowedParityStatuses = new Set(['implemented', 'partial', 'stub', 'planned', 'missing']);
+const allowedParityStatuses = new Set(['implemented', 'partial', 'stub', 'planned', 'missing', 'excluded']);
 const expectedTuiActionIds = [
   'move_up',
   'move_down',
@@ -122,7 +122,7 @@ addCheck(
 addCheck(
   'TUI parity matrix statuses are controlled vocabulary',
   parityRows.every((row) => allowedParityStatuses.has(row.implementationStatus)),
-  'allowed: implemented, partial, stub, planned, missing',
+  'allowed: implemented, partial, stub, planned, missing, excluded',
 );
 addCheck(
   'TUI parity matrix implemented rows carry evidence',
@@ -133,6 +133,17 @@ addCheck(
   'TUI parity matrix missing rows are not mapped to GUI actions',
   parityRows.every((row) => row.implementationStatus !== 'missing' || row.guiActionIds.length === 0),
   'missing means no GUI action is registered yet',
+);
+const excludedEditorIds = new Set(['open_terminal_editor', 'editor_preset_vi', 'editor_preset_vim', 'editor_preset_nano', 'editor_preset_emacs']);
+addCheck(
+  'only explicitly removed editor features are excluded from parity',
+  parityRows.filter((row) => row.implementationStatus === 'excluded').length === excludedEditorIds.size
+    && parityRows.every((row) => !excludedEditorIds.has(row.tuiId) ? row.implementationStatus !== 'excluded'
+      : row.implementationStatus === 'excluded' && row.guiActionIds.length === 0 && row.guiMenuPaths.length === 0
+        && row.notes.includes('2026-10-03 사용자 명시 요청'))
+    && !registry.includes("id: 'external.openEditor'") && !registry.includes("id: 'settings.editor")
+    && !read('src-tauri/src/lib.rs').includes('commands::open_external_editor'),
+  '2026-10-03 사용자 요청에 따른 터미널 편집기 및 설정 제거',
 );
 const menuActionIds = (parityMatrix.menuRoots ?? []).flatMap((root) => root.actionIds ?? []);
 addCheck(
@@ -229,20 +240,18 @@ addCheck(
   parityRows.filter((row) => row.implementationStatus === 'missing').map((row) => row.tuiId).join(', ') || 'ok',
 );
 addCheck(
-  'TUI parity matrix records external/editor/shell rows as implemented only with runtime and menu evidence',
-  ['open_default', 'open_terminal_editor', 'run_shell_command', 'editor_preset_vi', 'editor_preset_vim', 'editor_preset_nano', 'editor_preset_emacs'].every((id) => {
+  'TUI parity matrix records external/shell rows as implemented only with runtime and menu evidence',
+  ['open_default', 'run_shell_command'].every((id) => {
     const row = parityRowsById.get(id);
     return row?.implementationStatus === 'implemented'
       && row.evidence?.some((item) => hasCommanderTestEvidence(item) || item.includes('registry.test.ts'))
       && row.guiActionIds?.every((actionId) => registry.includes(`id: '${actionId}'`));
   })
     && parityRowsById.get('open_default')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Open Default App')
-    && parityRowsById.get('open_terminal_editor')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Open Terminal Editor')
     && parityRowsById.get('run_shell_command')?.guiMenuPaths?.some((menuPath) => menuPath.join(' > ') === 'File > Run Shell Command')
-    && read('src/ui/fileActionExecutors.ts').includes('settings.external.editorId')
-    && read('src/ui/CommanderShell.operations.test.tsx').includes('opens files through default app and configured external editor command paths')
+    && read('src/ui/CommanderShell.operations.test.tsx').includes('opens files through the default app and leaves the removed editor shortcut inactive')
     && read('src/ui/CommanderShell.operations.test.tsx').includes('runs an enabled shell command directly from the input dialog'),
-  'external open/editor/shell rows require File menu parity, persisted editor preset, direct shell execution, and tests',
+  'external open/shell rows require File menu parity, direct shell execution, and tests',
 );
 addCheck(
   'TUI parity matrix records archive rows as implemented only with virtual-directory and backend evidence',
@@ -325,7 +334,6 @@ const requiredActionIds = [
   'external.reveal',
   'external.openCurrentInFinder',
   'external.openCurrentInTerminal',
-  'external.openEditor',
   'external.runShellCommand',
   'view.sortName',
   'view.sortSize',
@@ -348,10 +356,6 @@ const requiredActionIds = [
   'settings.themeHighContrast',
   'settings.languageEn',
   'settings.languageKo',
-  'settings.editorVi',
-  'settings.editorVim',
-  'settings.editorNano',
-  'settings.editorEmacs',
   'settings.toggleIcons',
   'settings.sizeAuto',
   'settings.sizeBytes',
@@ -465,7 +469,7 @@ for (const token of ['COMMANDER_SHORTCUTS_DISABLED_SELECTOR', 'commanderShortcut
 
 const operationStore = read('src/operations/operationStore.ts');
 const operationStoreTest = read('src/operations/operationStore.test.ts');
-for (const dialogKind of ['copy', 'move', 'trash', 'deletePermanent', 'rename', 'createDir', 'archiveCreate', 'archiveExtract', 'externalEditor', 'shellCommand']) {
+for (const dialogKind of ['copy', 'move', 'trash', 'deletePermanent', 'rename', 'createDir', 'archiveCreate', 'archiveExtract', 'shellCommand']) {
   addCheck(`operation dialog supports ${dialogKind}`, read('src/operations/dialogDraft.ts').includes(`'${dialogKind}'`), 'G005 dialog shell coverage');
 }
 addCheck('operation store uses backend stub policy boundary', operationStore.includes('backendExecutionStubbed'), 'Stub policy applies to safe and destructive file mutation shells');
@@ -496,7 +500,7 @@ const rustLib = read('src-tauri/src/lib.rs');
 const rustBackend = read('src-tauri/src/commands.rs');
 
 const archiveVirtual = read('src/ui/archiveVirtual.ts');
-for (const command of ['list_dir', 'get_metadata', 'preview_file', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'list_open_with_apps', 'open_with_app', 'reveal_in_manager', 'open_current_in_finder', 'open_current_in_terminal', 'open_external_editor', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
+for (const command of ['list_dir', 'get_metadata', 'preview_file', 'watch_path', 'goto_path', 'list_locations', 'create_dir', 'rename_entry', 'start_copy', 'start_move', 'start_delete', 'cancel_operation', 'resolve_conflict', 'archive_list', 'archive_create', 'archive_extract', 'archive_add', 'open_default', 'list_open_with_apps', 'open_with_app', 'reveal_in_manager', 'open_current_in_finder', 'open_current_in_terminal', 'prepare_shell_command', 'run_shell_command', 'load_settings', 'save_settings']) {
   addCheck(`rust handler includes ${command}`, rustBackend.includes(`fn ${command}(`) && rustLib.includes(`commands::${command}`), 'command handler and app registration');
 }
 addCheck('rust list_dir normalizes filter once', read('src-tauri/src/navigation.rs').includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');

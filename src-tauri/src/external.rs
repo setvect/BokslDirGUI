@@ -1,19 +1,18 @@
 use crate::contracts::{ActionResult, AppError, CommandResult};
 use crate::filesystem::map_io_error;
 use crate::navigation;
-use crate::settings_service;
 use std::env;
 use std::path::Path;
 use std::process::Command;
 
 pub(crate) fn open_default(path: &str) -> CommandResult<ActionResult> {
     let path = navigation::canonical_existing_path(path)?;
-    run_open_command(&path, false, None)
+    run_open_command(&path, false)
 }
 
 pub(crate) fn reveal_in_manager(path: &str) -> CommandResult<ActionResult> {
     let path = navigation::canonical_existing_path(path)?;
-    run_open_command(&path, true, None)
+    run_open_command(&path, true)
 }
 
 pub(crate) fn open_current_in_finder(path: &str) -> CommandResult<ActionResult> {
@@ -61,32 +60,7 @@ fn open_directory_in_app(path: &str, bundle_id: &str) -> CommandResult<ActionRes
     }
 }
 
-pub(crate) fn open_external_editor(
-    path: &str,
-    editor_id: Option<&str>,
-) -> CommandResult<ActionResult> {
-    let path = navigation::canonical_existing_path(path)?;
-    let settings = settings_service::load_settings()?;
-    let editor = editor_id
-        .map(str::to_string)
-        .or(settings.external.editor_id)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            AppError::new(
-                "disabled",
-                "errors.externalEditorNotConfigured",
-                Some(&path),
-                true,
-            )
-        })?;
-    run_open_command(&path, false, Some(editor))
-}
-
-fn run_open_command(
-    path: &Path,
-    reveal: bool,
-    editor: Option<String>,
-) -> CommandResult<ActionResult> {
+fn run_open_command(path: &Path, reveal: bool) -> CommandResult<ActionResult> {
     if env::var_os("BOKSLDIRGUI_EXTERNAL_DRY_RUN").is_some() {
         return Ok(ActionResult {
             ok: true,
@@ -94,13 +68,7 @@ fn run_open_command(
         });
     }
 
-    let mut command = if let Some(editor) = editor {
-        let mut command = Command::new(editor);
-        command.arg(path);
-        command
-    } else {
-        platform_open_command(path, reveal)?
-    };
+    let mut command = platform_open_command(path, reveal)?;
     command
         .spawn()
         .map_err(|error| map_io_error(error, Some(path)))?;

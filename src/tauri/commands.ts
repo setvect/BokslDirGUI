@@ -24,7 +24,6 @@ export const COMMANDS = {
   revealInManager: 'reveal_in_manager',
   openCurrentInFinder: 'open_current_in_finder',
   openCurrentInTerminal: 'open_current_in_terminal',
-  openExternalEditor: 'open_external_editor',
   prepareShellCommand: 'prepare_shell_command',
   runShellCommand: 'run_shell_command',
   loadSettings: 'load_settings',

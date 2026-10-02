@@ -212,14 +212,6 @@ pub(crate) fn open_current_in_terminal(path: String) -> CommandResult<ActionResu
 }
 
 #[tauri::command]
-pub(crate) fn open_external_editor(
-    path: String,
-    editor_id: Option<String>,
-) -> CommandResult<ActionResult> {
-    external::open_external_editor(&path, editor_id.as_deref())
-}
-
-#[tauri::command]
 pub(crate) fn prepare_shell_command(
     working_dir: String,
     command: String,

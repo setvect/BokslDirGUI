@@ -1,5 +1,8 @@
 # BokslDirGUI UI 품질 감사 TODO
 
+- 현재 상태 보정(2026-10-03): 사용자 요청으로 터미널 편집기와 전용 설정 제거, 아래 과거 구현·검토 기록 보존. 현재 범위는 [동등성 매핑](tui-parity-matrix.md) 참조
+
+
 - 상태: 3회차 전체 자동 감사·브라우저 매트릭스·네이티브 기본 창 검증 완료, 네이티브 자동 입력만 OS 권한 제한 (2026-07-26)
 - 범위: BokslDirGUI 전체 사용자 UI와 상호작용
 - 기준: 기존 TUI BokslDir 기능 동등성 + 키보드 중심 dual-panel file commander UX

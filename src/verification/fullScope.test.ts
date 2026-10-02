@@ -53,12 +53,7 @@ describe('full-scope verification harness', () => {
       'archive.list',
       'archive.extractAuto',
       'external.openDefault',
-      'external.openEditor',
       'external.runShellCommand',
-      'settings.editorVi',
-      'settings.editorVim',
-      'settings.editorNano',
-      'settings.editorEmacs',
       'settings.toggleIcons',
       'help.search',
       'help.about',
@@ -102,14 +97,13 @@ describe('full-scope verification harness', () => {
     expect(rowsById.get('archive_extract_auto')?.guiActionIds).toContain('archive.extractAuto');
     expect(rowsById.get('open_default')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
     expect(rowsById.get('open_default')?.guiMenuPaths).toContainEqual(['File', 'Open Default App']);
-    expect(rowsById.get('open_terminal_editor')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
-    expect(rowsById.get('open_terminal_editor')?.guiMenuPaths).toContainEqual(['File', 'Open Terminal Editor']);
+    expect(rowsById.get('open_terminal_editor')).toMatchObject({ implementationStatus: 'excluded', priority: 'P1' });
     expect(rowsById.get('run_shell_command')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
     expect(rowsById.get('run_shell_command')?.guiMenuPaths).toContainEqual(['File', 'Run Shell Command']);
-    expect(rowsById.get('editor_preset_vi')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
-    expect(rowsById.get('editor_preset_vim')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
-    expect(rowsById.get('editor_preset_nano')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
-    expect(rowsById.get('editor_preset_emacs')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
+    expect(rowsById.get('editor_preset_vi')).toMatchObject({ implementationStatus: 'excluded', priority: 'P1' });
+    expect(rowsById.get('editor_preset_vim')).toMatchObject({ implementationStatus: 'excluded', priority: 'P1' });
+    expect(rowsById.get('editor_preset_nano')).toMatchObject({ implementationStatus: 'excluded', priority: 'P1' });
+    expect(rowsById.get('editor_preset_emacs')).toMatchObject({ implementationStatus: 'excluded', priority: 'P1' });
     for (const id of ['toggle_layout', 'tab_new', 'tab_close', 'help_keys', 'quit', 'toggle_icons', 'filter_start', 'filter_clear', 'mount_points', 'goto_path', 'tab_list', 'history_list', 'bookmark_add', 'bookmark_list', 'about'] as const) {
       expect(rowsById.get(id)).toMatchObject({ implementationStatus: 'implemented' });
     }

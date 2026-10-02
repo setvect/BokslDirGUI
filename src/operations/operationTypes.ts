@@ -22,7 +22,6 @@ export type DialogKind =
   | 'archiveExtract'
   | 'externalOpenDefault'
   | 'externalReveal'
-  | 'externalEditor'
   | 'shellCommand';
 
 export type DialogExecutionMode = 'atomicCommand' | 'longRunningOperation' | 'unsupportedPreview';
@@ -139,5 +138,4 @@ export type AtomicCommandDialogKind =
   | 'properties'
   | 'externalOpenDefault'
   | 'externalReveal'
-  | 'externalEditor'
   | 'shellCommand';

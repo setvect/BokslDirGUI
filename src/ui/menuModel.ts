@@ -109,10 +109,6 @@ const CHECKABLE_MENU_ACTION_IDS = new Set<ActionId>([
   'settings.themeHighContrast',
   'settings.languageEn',
   'settings.languageKo',
-  'settings.editorVi',
-  'settings.editorVim',
-  'settings.editorNano',
-  'settings.editorEmacs',
   'settings.sizeAuto',
   'settings.sizeBytes',
   'settings.toggleIcons',
@@ -129,10 +125,6 @@ const isCheckedMenuAction = (action: AppAction, settings: Settings) => {
     (actionId === 'settings.themeHighContrast' && settings.theme === 'highContrast') ||
     (actionId === 'settings.languageEn' && settings.language === 'en') ||
     (actionId === 'settings.languageKo' && settings.language === 'ko') ||
-    (actionId === 'settings.editorVi' && settings.external.editorId === 'vi') ||
-    (actionId === 'settings.editorVim' && settings.external.editorId === 'vim') ||
-    (actionId === 'settings.editorNano' && settings.external.editorId === 'nano') ||
-    (actionId === 'settings.editorEmacs' && settings.external.editorId === 'emacs') ||
     (actionId === 'settings.sizeAuto' && settings.sizeFormat === 'binary') ||
     (actionId === 'settings.sizeBytes' && settings.sizeFormat === 'decimal') ||
     (actionId === 'settings.toggleIcons' && settings.view.showIcons)

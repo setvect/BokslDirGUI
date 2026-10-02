@@ -34,6 +34,7 @@ describe('Open With', () => {
     fireEvent.contextMenu(target);
     const openWithItem = await screen.findByRole('menuitem', { name: '다음으로 열기…' });
     expect(openWithItem.querySelector('kbd')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /터미널 편집기로 열기/ })).toBeNull();
     expect(screen.getByRole('menuitem', { name: '파일 위치 열기' }).querySelector('kbd')).toBeNull();
     expect(screen.getByRole('menuitem', { name: /^열기\s*Enter/ }).querySelector('kbd')?.textContent).toBe('Enter');
     await user.click(openWithItem);

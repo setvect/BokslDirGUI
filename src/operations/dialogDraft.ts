@@ -18,7 +18,6 @@ export const dialogKindForAction = (actionId: ActionId): DialogKind | null => {
     'archive.create': 'archiveCreate',
     'external.openDefault': 'externalOpenDefault',
     'external.reveal': 'externalReveal',
-    'external.openEditor': 'externalEditor',
     'external.runShellCommand': 'shellCommand',
   };
   return mapping[actionId] ?? null;
@@ -84,7 +83,6 @@ const ATOMIC_COMMAND_DIALOGS: readonly AtomicCommandDialogKind[] = [
   'properties',
   'externalOpenDefault',
   'externalReveal',
-  'externalEditor',
   'shellCommand',
 ];
 

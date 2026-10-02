@@ -68,7 +68,6 @@ describe('operation store', () => {
       'archive.extractAuto',
       'external.openDefault',
       'external.reveal',
-      'external.openEditor',
       'external.runShellCommand',
     ] as const;
 

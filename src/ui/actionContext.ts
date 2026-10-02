@@ -145,7 +145,6 @@ const SOURCE_REQUIRED_ACTIONS = new Set<ActionId>([
   'external.openDefault',
   'external.openWith',
   'external.reveal',
-  'external.openEditor',
 ]);
 
 export const actionNeedsConcreteSources = (actionId: ActionId) =>

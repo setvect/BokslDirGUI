@@ -1,15 +1,16 @@
 {
   "schemaVersion": 1,
   "generatedFor": "BokslDirGUI Phase 0 parity hard gate",
-  "updatedAt": "2026-09-27",
+  "updatedAt": "2026-10-03",
   "statusVocabulary": [
     "implemented",
     "partial",
     "stub",
     "planned",
-    "missing"
+    "missing",
+    "excluded"
   ],
-  "completionRule": "implementationStatus=implemented는 evidence가 있고 GUI action/menu/key behavior가 TUI 의미와 동등할 때만 허용한다. partial/stub/planned/missing은 완료로 간주하지 않는다.",
+  "completionRule": "implementationStatus=implemented는 evidence가 있고 GUI action/menu/key behavior가 TUI 의미와 동등할 때만 허용한다. partial/stub/planned/missing은 완료로 간주하지 않는다. excluded는 사용자 명시 요청으로 제품 범위에서 제외한 항목이며 구현 완료를 뜻하지 않음.",
   "sources": {
     "tuiActions": "/Users/boksl/IdeaProjects/BokslDir/src/core/actions.rs",
     "tuiMenus": "/Users/boksl/IdeaProjects/BokslDir/src/ui/components/dropdown_menu.rs",
@@ -673,7 +674,7 @@
       ],
       "evidence": [
         "src/actions/registry.ts: external.openDefault File/Open Default App",
-        "src/ui/CommanderShell.operations.test.tsx: opens files through default app and configured external editor command paths",
+        "src/ui/CommanderShell.operations.test.tsx: opens files through the default app and leaves the removed editor shortcut inactive",
         "src-tauri/src/external.rs: open_default dry-run/recoverable error command boundary"
       ],
       "notes": "o/File > Open Default App가 선택 파일을 OS 기본 앱 command boundary로 전달하고, recoverable backend error는 dialog/status로 표시된다.",
@@ -695,25 +696,13 @@
           "Open Terminal Editor"
         ]
       ],
-      "guiActionIds": [
-        "external.openEditor"
-      ],
-      "guiShortcutLabels": [
-        "e"
-      ],
-      "guiMenuPaths": [
-        [
-          "File",
-          "Open Terminal Editor"
-        ]
-      ],
+      "guiActionIds": [],
+      "guiShortcutLabels": [],
+      "guiMenuPaths": [],
       "evidence": [
-        "src/actions/registry.ts: external.openEditor File/Open Terminal Editor",
-        "src/ui/fileActionExecutors.ts: openExternalEditor receives persisted settings.external.editorId",
-        "src/ui/CommanderShell.operations.test.tsx: opens files through default app and configured external editor command paths",
-        "src-tauri/src/external.rs: open_external_editor validates configured/explicit editor"
+        "docs/requirements/02-file-operations.md: 2026-10-03 사용자 요청에 따른 터미널 편집기 기능 제거"
       ],
-      "notes": "e/File > Open Terminal Editor는 Settings Default Editor preset 또는 명시 editorId를 사용해 파일을 terminal editor로 연다.",
+      "notes": "2026-10-03 사용자 명시 요청으로 터미널 편집기 열기와 전용 편집기 설정 제거. 원천 TUI 정보만 보존.",
       "tuiId": "open_terminal_editor",
       "tuiLabel": "Open in terminal editor",
       "tuiCategory": "FileOperation",
@@ -721,7 +710,7 @@
       "tuiKeyboardBindings": [
         "e"
       ],
-      "implementationStatus": "implemented",
+      "implementationStatus": "excluded",
       "priority": "P1"
     },
     {
@@ -1632,29 +1621,19 @@
           "vi"
         ]
       ],
-      "guiActionIds": [
-        "settings.editorVi"
-      ],
+      "guiActionIds": [],
       "guiShortcutLabels": [],
-      "guiMenuPaths": [
-        [
-          "Settings",
-          "Default Editor",
-          "vi"
-        ]
-      ],
+      "guiMenuPaths": [],
       "evidence": [
-        "src/actions/registry.ts: settings.editorVi",
-        "src/ui/useCommanderSettings.ts: applyDirectSetting saves external.editorId=vi",
-        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
+        "docs/requirements/02-file-operations.md: 2026-10-03 사용자 요청에 따른 터미널 편집기 기능 제거"
       ],
-      "notes": "Settings > Default Editor > vi가 settings.external.editorId=vi로 저장된다.",
+      "notes": "2026-10-03 사용자 명시 요청으로 터미널 편집기 열기와 전용 편집기 설정 제거. 원천 TUI 정보만 보존.",
       "tuiId": "editor_preset_vi",
       "tuiLabel": "Default editor: vi",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "implemented",
+      "implementationStatus": "excluded",
       "priority": "P1"
     },
     {
@@ -1666,29 +1645,19 @@
           "vim"
         ]
       ],
-      "guiActionIds": [
-        "settings.editorVim"
-      ],
+      "guiActionIds": [],
       "guiShortcutLabels": [],
-      "guiMenuPaths": [
-        [
-          "Settings",
-          "Default Editor",
-          "vim"
-        ]
-      ],
+      "guiMenuPaths": [],
       "evidence": [
-        "src/actions/registry.ts: settings.editorVim",
-        "src/ui/useCommanderSettings.ts: applyDirectSetting saves external.editorId=vim",
-        "src/ui/CommanderShell.settings.test.tsx: applies direct Settings menu actions visibly and persists them"
+        "docs/requirements/02-file-operations.md: 2026-10-03 사용자 요청에 따른 터미널 편집기 기능 제거"
       ],
-      "notes": "Settings > Default Editor > vim이 settings.external.editorId=vim으로 저장되고 open terminal editor 경로에서 사용된다.",
+      "notes": "2026-10-03 사용자 명시 요청으로 터미널 편집기 열기와 전용 편집기 설정 제거. 원천 TUI 정보만 보존.",
       "tuiId": "editor_preset_vim",
       "tuiLabel": "Default editor: vim",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "implemented",
+      "implementationStatus": "excluded",
       "priority": "P1"
     },
     {
@@ -1700,29 +1669,19 @@
           "nano"
         ]
       ],
-      "guiActionIds": [
-        "settings.editorNano"
-      ],
+      "guiActionIds": [],
       "guiShortcutLabels": [],
-      "guiMenuPaths": [
-        [
-          "Settings",
-          "Default Editor",
-          "nano"
-        ]
-      ],
+      "guiMenuPaths": [],
       "evidence": [
-        "src/actions/registry.ts: settings.editorNano",
-        "src/ui/useCommanderSettings.ts: applyDirectSetting saves external.editorId=nano",
-        "src/actions/registry.test.ts: editor preset menu path coverage"
+        "docs/requirements/02-file-operations.md: 2026-10-03 사용자 요청에 따른 터미널 편집기 기능 제거"
       ],
-      "notes": "Settings > Default Editor > nano가 settings.external.editorId=nano로 저장된다.",
+      "notes": "2026-10-03 사용자 명시 요청으로 터미널 편집기 열기와 전용 편집기 설정 제거. 원천 TUI 정보만 보존.",
       "tuiId": "editor_preset_nano",
       "tuiLabel": "Default editor: nano",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "implemented",
+      "implementationStatus": "excluded",
       "priority": "P1"
     },
     {
@@ -1734,29 +1693,19 @@
           "emacs"
         ]
       ],
-      "guiActionIds": [
-        "settings.editorEmacs"
-      ],
+      "guiActionIds": [],
       "guiShortcutLabels": [],
-      "guiMenuPaths": [
-        [
-          "Settings",
-          "Default Editor",
-          "emacs"
-        ]
-      ],
+      "guiMenuPaths": [],
       "evidence": [
-        "src/actions/registry.ts: settings.editorEmacs",
-        "src/ui/useCommanderSettings.ts: applyDirectSetting saves external.editorId=emacs",
-        "src/actions/registry.test.ts: editor preset menu path coverage"
+        "docs/requirements/02-file-operations.md: 2026-10-03 사용자 요청에 따른 터미널 편집기 기능 제거"
       ],
-      "notes": "Settings > Default Editor > emacs가 settings.external.editorId=emacs로 저장된다.",
+      "notes": "2026-10-03 사용자 명시 요청으로 터미널 편집기 열기와 전용 편집기 설정 제거. 원천 TUI 정보만 보존.",
       "tuiId": "editor_preset_emacs",
       "tuiLabel": "Default editor: emacs",
       "tuiCategory": "System",
       "tuiShortcutDisplay": null,
       "tuiKeyboardBindings": [],
-      "implementationStatus": "implemented",
+      "implementationStatus": "excluded",
       "priority": "P1"
     },
     {

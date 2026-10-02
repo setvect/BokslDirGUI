@@ -91,7 +91,6 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `open_current_in_terminal` | `{ path }` | `ActionResult` | macOS 현재 패널 디렉터리에서 Terminal 열기; 실제 디렉터리 검증 |
 | `list_open_with_apps` | `{ path }` | `OpenWithApp[]` | macOS NSWorkspace의 파일 연결 앱 조회, 기본 앱 우선 정렬 |
 | `open_with_app` | `{ path, applicationPath }` | `ActionResult` | 파일·앱 재검증 후 선택 앱으로 열기, 기본 연결 유지 |
-| `open_external_editor` | `{ path, editorId? }` | `ActionResult` | 명시 확인/설정 기반 |
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
 | `run_shell_command` | `{ workingDir, command, args?, confirmToken? }` | `ShellCommandResult` | 설정·작업 디렉터리 검증 후 즉시 실행, stdout/stderr/exitCode 반환; 기존 토큰 전달 시 검증 유지 |
 | `load_settings` | `{}` | `Settings` | schema version 포함 |
@@ -159,3 +158,8 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - 종료 상태 실패 시 `errors.externalCommandFailed`, 연결 앱 불일치 시 `errors.openWithAppUnavailable` 반환
 - Tauri 전이 의존성으로 사용 중인 `objc2`, `objc2-app-kit`, `objc2-foundation`의 macOS 전용 직접 의존성 명시
 - 의존성 목적: 외부 스크립트나 앱 이름 하드코딩 없이 OS 연결 앱 조회, 현재 잠금 버전 재사용
+
+## 제거된 터미널 편집기 계약
+
+- 2026-10-03 사용자 요청으로 `open_external_editor` 명령 제거
+- `external.editorId`는 기존 설정 JSON의 읽기·쓰기 호환용으로만 유지, 실행 또는 설정 UI 사용 없음

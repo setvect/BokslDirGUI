@@ -195,6 +195,7 @@ export interface Settings {
   language: 'ko' | 'en';
   sizeFormat: 'binary' | 'decimal';
   external: {
+    /** Legacy setting retained for existing settings files; no editor action uses it. */
     editorId: string | null;
     shellCommand: {
       enabled: boolean;

@@ -64,16 +64,11 @@ interface AppAction {
 | `external.reveal` | file | none | File/Reveal | safe | reveal_in_manager |
 | `external.openCurrentInFinder` | navigation | none | Go/Open Current Folder in Finder | safe | open_current_in_finder |
 | `external.openCurrentInTerminal` | navigation | none | Go/Open Terminal Here | safe | open_current_in_terminal |
-| `external.openEditor` | file | e | File/Open Terminal Editor | safe | open_external_editor |
 | `settings.themeDark` | settings | none | Settings/Theme/Dark | none | save_settings |
 | `settings.themeLight` | settings | none | Settings/Theme/Light | none | save_settings |
 | `settings.themeHighContrast` | settings | none | Settings/Theme/High Contrast | none | save_settings |
 | `settings.languageEn` | settings | none | Settings/Language/English | none | save_settings |
 | `settings.languageKo` | settings | none | Settings/Language/Korean | none | save_settings |
-| `settings.editorVi` | settings | none | Settings/Default Editor/vi | none | save_settings |
-| `settings.editorVim` | settings | none | Settings/Default Editor/vim | none | save_settings |
-| `settings.editorNano` | settings | none | Settings/Default Editor/nano | none | save_settings |
-| `settings.editorEmacs` | settings | none | Settings/Default Editor/emacs | none | save_settings |
 | `settings.toggleIcons` | settings | none | Settings/Toggle Icons | none | save_settings |
 | `settings.sizeAuto` | settings | none | Settings/File Size Format/Auto | none | save_settings |
 | `settings.sizeBytes` | settings | none | Settings/File Size Format/Bytes | none | save_settings |

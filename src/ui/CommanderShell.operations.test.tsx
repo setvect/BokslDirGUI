@@ -560,7 +560,7 @@ describe('CommanderShell operations', () => {
     expect(focusedRowText(container)).toContain('한글-이름-📦');
   });
 
-  it('opens files through default app and configured external editor command paths', async () => {
+  it('opens files through the default app and leaves the removed editor shortcut inactive', async () => {
     const user = userEvent.setup();
     const mutationClient = {
       createDir: vi.fn(),
@@ -580,7 +580,6 @@ describe('CommanderShell operations', () => {
         },
       })),
       openDefault: vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } })),
-      openExternalEditor: vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } })),
     };
     const { container } = renderCommander(createFixturePanelDataSource(), mutationClient);
     await screen.findByText('Architecture.md');
@@ -601,12 +600,8 @@ describe('CommanderShell operations', () => {
     useOperationStore.getState().closeDialog();
 
     await user.keyboard('e');
-    expect(await screen.findByRole('dialog', { name: '터미널 편집기로 열기' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: '편집기로 열기' }));
-    await waitFor(() => expect(mutationClient.openExternalEditor).toHaveBeenCalledWith({
-      path: expect.stringContaining('Architecture.md'),
-      editorId: 'vim',
-    }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mutationClient.openDefault).toHaveBeenCalledTimes(1);
   });
 
   it('runs an enabled shell command directly from the input dialog', async () => {

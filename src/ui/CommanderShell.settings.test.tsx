@@ -490,14 +490,7 @@ describe('CommanderShell settings', () => {
     await user.keyboard('{Escape}');
 
     await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
-    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /Default Editor/ }));
-    await user.click(await screen.findByRole('menuitem', { name: /vim/ }));
-    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
-      patch: { external: { editorId: 'vim', shellCommand: { enabled: false } } },
-    }));
-    expect(await screen.findByText('Default editor · vim')).toBeTruthy();
-
-    await user.click(screen.getByRole('button', { name: 'Settings(S)' }));
+    expect(screen.queryByRole('menuitem', { name: /Default Editor/ })).toBeNull();
     fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /File Size Format/ }));
     await user.click(await screen.findByRole('menuitem', { name: /Bytes/ }));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { sizeFormat: 'decimal' } }));

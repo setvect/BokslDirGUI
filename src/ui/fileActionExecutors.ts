@@ -1,7 +1,6 @@
 import {
   type ActionId
 } from '../actions/registry';
-import type { Settings } from '../domain/types';
 import { type AtomicCommandExecutor, type LongRunningOperationExecutor } from '../operations/operationTypes';
 import { LongRunningOperationClient, SafeMutationClient } from '../tauri/commanderClients';
 import { ArchiveAddPlan, ArchiveCopyPlan, archiveFormatForPath, joinPath, parseShellCommandInput } from './fileActionPlans';
@@ -9,7 +8,6 @@ import { ArchiveAddPlan, ArchiveCopyPlan, archiveFormatForPath, joinPath, parseS
 export const atomicExecutorForAction = (
   actionId: ActionId,
   mutationClient: SafeMutationClient,
-  settings: Settings,
 ): AtomicCommandExecutor | undefined => {
   if (actionId === 'file.mkdir') {
     return (dialog) =>
@@ -33,14 +31,6 @@ export const atomicExecutorForAction = (
     return (dialog) => mutationClient.revealInManager
       ? mutationClient.revealInManager({ path: dialog.sources[0]?.path ?? '' })
       : unsupportedClientResult('reveal_in_manager', dialog.targetDir);
-  }
-  if (actionId === 'external.openEditor') {
-    return (dialog) => mutationClient.openExternalEditor
-      ? mutationClient.openExternalEditor({
-        path: dialog.sources[0]?.path ?? '',
-        editorId: settings.external.editorId ?? undefined,
-      })
-      : unsupportedClientResult('open_external_editor', dialog.targetDir);
   }
   if (actionId === 'external.runShellCommand') {
     return async (dialog) => {

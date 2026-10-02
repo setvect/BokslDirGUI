@@ -96,12 +96,6 @@ export function useCommanderSettings(runtime: CommanderSettingsDependencies) {
       'settings.sizeAuto': 'binary',
       'settings.sizeBytes': 'decimal',
     };
-    const editorByAction: Partial<Record<ActionId, string>> = {
-      'settings.editorVi': 'vi',
-      'settings.editorVim': 'vim',
-      'settings.editorNano': 'nano',
-      'settings.editorEmacs': 'emacs',
-    };
     const theme = themeByAction[actionId];
     if (theme) {
       void saveSettingsPatch({ theme }, runtime.statusText.themeChanged(theme));
@@ -115,11 +109,6 @@ export function useCommanderSettings(runtime: CommanderSettingsDependencies) {
     const sizeFormat = sizeByAction[actionId];
     if (sizeFormat) {
       void saveSettingsPatch({ sizeFormat }, runtime.statusText.sizeFormat(sizeFormat === 'binary' ? 'auto' : 'bytes'));
-      return true;
-    }
-    const editorId = editorByAction[actionId];
-    if (editorId) {
-      void saveSettingsPatch({ external: { ...settings.external, editorId } }, runtime.statusText.editorChanged(editorId));
       return true;
     }
     if (actionId === 'settings.toggleIcons') {

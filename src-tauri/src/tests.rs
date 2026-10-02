@@ -1,7 +1,7 @@
 use crate::archive;
 use crate::commands::{
     archive_list, create_dir, get_metadata, health_check, list_dir, list_locations, load_settings,
-    open_current_in_finder, open_current_in_terminal, open_default, open_external_editor,
+    open_current_in_finder, open_current_in_terminal, open_default,
     prepare_shell_command, preview_file, rename_entry, reveal_in_manager, run_shell_command,
     save_settings, watch_path,
 };
@@ -924,7 +924,7 @@ fn shell_command_confirm_token_expires_after_ttl() {
 }
 
 #[test]
-fn external_open_commands_support_dry_run_and_editor_policy() {
+fn external_open_commands_support_dry_run() {
     let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
     let fixture = TempFixture::new();
     let source = fixture.root.join("alpha.txt");
@@ -958,19 +958,6 @@ fn external_open_commands_support_dry_run_and_editor_policy() {
                 .expect_err("a missing current directory must fail");
         assert_eq!(missing_error.code, "not_found");
     }
-
-    let missing_editor = open_external_editor(source.to_string_lossy().into_owned(), None)
-        .expect_err("external editor requires configured editor");
-    assert_eq!(
-        missing_editor.message_key,
-        "errors.externalEditorNotConfigured"
-    );
-    let editor = open_external_editor(
-        source.to_string_lossy().into_owned(),
-        Some("fake-editor".to_string()),
-    )
-    .expect("explicit editor id should pass dry-run");
-    assert!(editor.ok);
 
     env::remove_var("BOKSLDIRGUI_EXTERNAL_DRY_RUN");
     env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");

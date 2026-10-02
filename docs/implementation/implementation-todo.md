@@ -1,5 +1,8 @@
 # BokslDirGUI 구현 TODO 계획서
 
+- 현재 상태 보정(2026-10-03): 사용자 요청으로 터미널 편집기와 전용 설정 제거, 아래 과거 구현·검토 기록 보존. 현재 범위는 [동등성 매핑](tui-parity-matrix.md) 참조
+
+
 - 상태: RALPLAN approved (2026-06-13)
 - 기준: 기존 TUI BokslDir 기능 동등성 + GUI 전환 필수 기능
 - 범위: 현재 구현 완료 내용을 포함한 전체 구현 TODO

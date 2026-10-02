@@ -20,12 +20,14 @@
 | `stub` | UI 또는 adapter만 있고 실제 동작은 stub/preview | 불가 |
 | `planned` | 설계/계획에만 있음 | 불가 |
 | `missing` | GUI action/command/menu가 없음 | 불가 |
+| `excluded` | 사용자 명시 요청에 따른 제품 범위 제외 | 구현 완료가 아닌 제외 |
 
 ## 현재 요약
 
 | 상태 | 개수 |
 | --- | ---: |
-| implemented | 64 |
+| implemented | 59 |
+| excluded | 5 |
 
 ### P0 gap
 
@@ -34,6 +36,12 @@
 ### 완전 누락 항목
 
 - 없음
+
+## 사용자 요청에 따른 제외
+
+- 2026-10-03: 터미널 편집기로 열기·`e` 단축키·vi/vim/nano/emacs 설정 메뉴 제거
+- TUI 원천 행과 메뉴 기록 보존, GUI 동등성 완료 대상에서는 명시적 제외
+- 기존 `external.editorId`는 저장 호환용 필드로만 유지
 
 ## TUI 메뉴 루트
 
@@ -79,7 +87,7 @@
 | `copy` | y | Edit > Copy | `file.copy` | implemented | P0 | 선택이 없으면 포커스 항목을 대상으로 확인 다이얼로그 없이 즉시 시작; 일반→일반은 `start_copy`, 압축 내부→일반은 선택 entry 기반 `archive_extract`, 일반→압축 내부는 `archive_add`로 라우팅하며 공통 충돌/취소/패널 refresh 정책을 적용 |
 | `move` | x | Edit > Move | `file.move` | implemented | P0 | TUI Edit > Move 메뉴와 x 단축키를 맞췄고, destructive move는 명시 확인 다이얼로그를 거친 뒤 실제 operation 시작; 충돌/취소는 독립 상태 UI와 Rust start_move overwrite 안전 정책으로 처리 |
 | `open_default` | o | File > Open Default App | `external.openDefault` | implemented | P1 | o/File > Open Default App가 선택 파일을 OS 기본 앱 command boundary로 전달하고, recoverable backend error는 dialog/status로 표시 |
-| `open_terminal_editor` | e | File > Open Terminal Editor | `external.openEditor` | implemented | P1 | e/File > Open Terminal Editor는 Settings Default Editor preset 또는 명시 editorId를 사용해 파일을 terminal editor로 열기 |
+| `open_terminal_editor` | e | File > Open Terminal Editor | 없음 | excluded | P1 | 2026-10-03 사용자 요청으로 터미널 편집기 및 전용 설정 제거 |
 | `run_shell_command` | : | File > Run Shell Command | `external.runShellCommand` | implemented | P1 | 기본 비활성 정책을 유지하되 TUI File > Run Shell Command 위치로 노출하고, enabled 설정에서 입력 후 바로 실행 |
 | `delete` | d | File > Delete | `file.trash` | implemented | P1 | TUI Delete는 GUI에서 File > Delete/d로 노출하고 Rust trash mode로 실행; 선택이 없으면 포커스 concrete row를 대상으로 하며, 가상 parent는 제외하고 trash 실패 시 영구 삭제로 fallback하지 않음 |
 | `perm_delete` | D | File > Permanent Delete | `file.deletePermanent` | implemented | P1 | 영구 삭제는 별도 File > Permanent Delete/D action이며 PERMANENT_DELETE 명시 입력 없이는 operation client/Rust confirm token으로 전달되지 않음 |
@@ -104,10 +112,10 @@
 | `language_en` | - | Settings > Language > English | `settings.languageEn` | implemented | P0 | English language direct menu action saves settings.language=en and updates shell data-language |
 | `language_ko` | - | Settings > Language > Korean | `settings.languageKo` | implemented | P0 | Korean language direct menu action saves settings.language=ko and updates shell data-language |
 | `toggle_icons` | - | Settings > Toggle Icons | `settings.toggleIcons` | implemented | P2 | Settings > Toggle Icons가 settings.view.showIcons를 저장하고 파일 row icon 표시를 즉시 토글 |
-| `editor_preset_vi` | - | Settings > Default Editor > vi | `settings.editorVi` | implemented | P1 | Settings > Default Editor > vi가 settings.external.editorId=vi로 저장 |
-| `editor_preset_vim` | - | Settings > Default Editor > vim | `settings.editorVim` | implemented | P1 | Settings > Default Editor > vim이 settings.external.editorId=vim으로 저장되고 open terminal editor 경로에서 사용 |
-| `editor_preset_nano` | - | Settings > Default Editor > nano | `settings.editorNano` | implemented | P1 | Settings > Default Editor > nano가 settings.external.editorId=nano로 저장 |
-| `editor_preset_emacs` | - | Settings > Default Editor > emacs | `settings.editorEmacs` | implemented | P1 | Settings > Default Editor > emacs가 settings.external.editorId=emacs로 저장 |
+| `editor_preset_vi` | - | Settings > Default Editor > vi | 없음 | excluded | P1 | 2026-10-03 사용자 요청으로 터미널 편집기 및 전용 설정 제거 |
+| `editor_preset_vim` | - | Settings > Default Editor > vim | 없음 | excluded | P1 | 2026-10-03 사용자 요청으로 터미널 편집기 및 전용 설정 제거 |
+| `editor_preset_nano` | - | Settings > Default Editor > nano | 없음 | excluded | P1 | 2026-10-03 사용자 요청으로 터미널 편집기 및 전용 설정 제거 |
+| `editor_preset_emacs` | - | Settings > Default Editor > emacs | 없음 | excluded | P1 | 2026-10-03 사용자 요청으로 터미널 편집기 및 전용 설정 제거 |
 | `sort_name` | sn | View > Sort By > Name | `view.sortName` | implemented | P1 | 메뉴 그룹명만 다름 |
 | `sort_size` | ss | View > Sort By > Size | `view.sortSize` | implemented | P1 | 메뉴 그룹명만 다름 |
 | `sort_date` | sd | View > Sort By > Date | `view.sortDate` | implemented | P1 | GUI label은 Modified Date |
