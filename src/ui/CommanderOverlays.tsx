@@ -15,6 +15,7 @@ import {
 import type { PanelNavigationState } from './panelState';
 import { useCommanderKeyboardBoundaryProps, type CommanderKeyboardOwner } from './keyboardOwnership';
 import { shortenPath } from './textLayout';
+import { formatDateTime } from './format';
 
 export interface NavigationListItem {
   id: string;
@@ -306,6 +307,7 @@ export function AboutDialog({ language, onClose }: { language: SupportedLanguage
           <div className="about-copy">
             <p>{text.aboutLine1}</p>
             <p>{text.aboutLine2}</p>
+            <p>{text.aboutBuildDate}: <time dateTime={__APP_BUILD_TIME__}>{formatDateTime(__APP_BUILD_TIME__)}</time></p>
           </div>
         </div>
         <div className="filter-actions">
