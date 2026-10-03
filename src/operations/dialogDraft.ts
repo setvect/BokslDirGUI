@@ -44,7 +44,7 @@ export const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequ
 };
 
 const targetForDialog = (dialogKind: DialogKind, request: OpenDialogRequest) => {
-  if (dialogKind === 'copy' || dialogKind === 'move' || dialogKind === 'archiveCreate' || dialogKind === 'archiveExtract') {
+  if (dialogKind === 'bulkRename' || dialogKind === 'copy' || dialogKind === 'move' || dialogKind === 'archiveCreate' || dialogKind === 'archiveExtract') {
     return request.targetDir;
   }
   if (dialogKind === 'createDir' || dialogKind === 'shellCommand') {

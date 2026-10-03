@@ -86,7 +86,7 @@ pub(crate) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntr
     file_entry_from_path(&target, false)
 }
 
-fn validate_child_name<'a>(name: &'a str, path: Option<&Path>) -> CommandResult<&'a str> {
+pub(crate) fn validate_child_name<'a>(name: &'a str, path: Option<&Path>) -> CommandResult<&'a str> {
     let trimmed = name.trim();
     if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
         return Err(AppError::new(

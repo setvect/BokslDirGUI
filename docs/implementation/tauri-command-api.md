@@ -163,3 +163,26 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 - 2026-10-03 사용자 요청으로 `open_external_editor` 명령 제거
 - `external.editorId`는 기존 설정 JSON의 읽기·쓰기 호환용으로만 유지, 실행 또는 설정 UI 사용 없음
+
+## 파일 클립보드·다중 이름 변경·작업 환경 복원
+
+| 명령 | 입력 | 응답·정책 |
+| --- | --- | --- |
+| `read_file_clipboard` | `{ resolve: boolean }` | `{ changeCount, paths, entries }`; macOS `public.file-url`만 수용, `resolve=true`에서 실제 항목 조회 |
+| `write_file_clipboard` | `{ paths: string[] }` | 클립보드 변경 번호; 전체 원본 확인 후 기록, 링크 자체 경로 보존 |
+| `clear_file_clipboard` | `{ changeCount: number }` | 해당 변경 번호가 아직 최신인 경우에만 해제 |
+| `preview_bulk_rename` | `{ sources, rules }` | `{ item: { source, newName, stamp }, changed, error }[]`; 파일 변경 없는 사전 검증 |
+| `start_bulk_rename` | `{ items: { source, newName, stamp }[] }` | `OperationStarted(kind=rename)`; 기존 진행률·취소·완료 이벤트 사용 |
+
+- `rules`: `find`·`replacement`·`prefix` 문자열, `numbering`·`preserveExtension` 불리언, `start`·`padding` 정수
+- 치환은 리터럴 전체 치환, 번호는 표시 순서대로 `_001` 형식 추가, 확장자 유지 기본값 참
+- 다중 이름 변경은 최대 10,000개, 기존 대상·중복 대상·폴더와 그 자손의 동시 변경 거부
+- 대소문자 무시 플랫폼의 계획 중복을 보수적으로 차단, macOS의 Unicode 정규화 동등 이름도 중복 처리
+- 실행 직전 원본 식별 정보 재검증과 원자적 no-replace 이름 변경 사용, 중간 실패 시 중단·완료 수 보고
+- 새 기본 단축키 지정 없음; 파일 메뉴와 선택 항목 컨텍스트 메뉴에서 접근
+- 설정의 선택 필드 `session.tabs.left/right`: `{ items: SavedTab[], activeIndex }`, 패널당 최대 5개
+- `SavedTab`: `path`·`sort`·`filter`·`showHidden`·`historyBack`·`historyForward`, 히스토리 각 최대 100개
+- 설정의 선택 필드 `window`: `{ width, height, maximized }`, 일반 창 크기 보존과 연속 크기 이벤트 저장 병합
+- 기존 `leftPath`·`rightPath`·`activePanel` 호환 유지, 저장 필드에 선택·진행 작업·압축 암호 포함 금지
+- 접근 불가능한 저장 경로는 홈으로 대체하고 원래 경로 안내; 잠긴 압축 탭은 오류 상태 유지·사용자 새로고침 시 암호 요청
+- 검증 근거: `nativeFileClipboard.test.tsx`, `BulkRenameDialog.test.tsx`, `sessionState.test.tsx`, Rust `file_clipboard`·`bulk_rename`·`window_session` 테스트

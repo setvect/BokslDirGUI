@@ -48,7 +48,7 @@
 | `tab.list` | panel | tt | `t t` | View > Tab List | none | UI state |
 | `selection.toggle` | selection | Space | `Space` | Edit > Select | none | UI state |
 | `selection.all` | selection | Ctrl+A | `Ctrl+A` | Edit > Select All | none | UI state |
-| `file.clipboardCopy` | file | Cmd+C | `Cmd+C`, `Ctrl+C` | Edit > Copy | safe | UI clipboard state |
+| `file.clipboardCopy` | file | Cmd+C | `Cmd+C`, `Ctrl+C` | Edit > Copy | safe | macOS write_file_clipboard / UI clipboard state |
 | `file.clipboardCut` | file | Ctrl+X | `Ctrl+X` | Edit > Cut | safe | UI clipboard state |
 | `file.clipboardPaste` | file | Cmd+V | `Cmd+V`, `Ctrl+V` | Edit > Paste | safe | start_copy/start_move/archive_extract/archive_add |
 | `file.clipboardMovePaste` | file | Opt+Cmd+V | `Alt+Cmd+V` | Edit > Move Here | destructive | start_move via confirmation dialog |
@@ -58,6 +58,7 @@
 | `file.deletePermanent` | file | Shift+D/Shift+Delete | `Shift+D`, `Shift+Delete` | File > Permanent Delete | irreversible | start_delete permanent |
 | `file.mkdir` | file | a/F7 | `a`, `F7` | File > New Folder | safe | create_dir |
 | `file.rename` | file | r/F2 | `r`, `F2` | File > Rename | destructive | rename_entry |
+| `file.bulkRename` | file | 없음 | 없음 | File > Bulk Rename | destructive | preview_bulk_rename/start_bulk_rename |
 | `app.quit` | file | Cmd+Q | `Cmd+Q` | File > Quit | none | getCurrentWindow().close safety-gated by explicit menu/Cmd+Q |
 | `file.properties` | file | i | `i` | View > File Info | safe | get_metadata |
 | `file.quickView` | file | F3 | `F3` | View > Quick View | safe | preview_file |

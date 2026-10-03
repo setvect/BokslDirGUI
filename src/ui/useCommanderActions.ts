@@ -5,7 +5,7 @@ import {
   labelForAction,
   type ActionId
 } from '../actions/registry';
-import type { AppError, FileEntry, FilePreview, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
+import type { AppError, RenameItem, FileEntry, FilePreview, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
 import type { CommanderStatusText } from '../i18n-resources';
 import {
   formatUserErrorMessage
@@ -90,16 +90,34 @@ interface CommanderActionsDependencies {
 }
 export function useCommanderActions(dependencies: CommanderActionsDependencies) {
 
+  const [bulkRename, setBulkRename] = useState<{ panelId: PanelId; sources: FileEntry[]; workingDir: string } | null>(null);
+  const confirmBulkRename = (items: RenameItem[]) => {
+    const snapshot = bulkRename;
+    if (!snapshot || dependencies.operationBusy || !dependencies.operationClient.startBulkRename) return;
+    setBulkRename(null);
+    void dependencies.startLongRunningOperation({
+      action: ACTION_BY_ID.get('file.bulkRename')!, ...snapshot, targetDir: snapshot.workingDir,
+      longRunningExecutor: () => dependencies.operationClient.startBulkRename!({ items }),
+      cancelExecutor: operationId => dependencies.operationClient.cancelOperation({ operationId }),
+      onOperationSummary: summary => {
+        if (summary.completedFiles > 0) dependencies.clearCompletedSelection(snapshot.panelId, snapshot.workingDir);
+        dependencies.refreshPanel('left', true); dependencies.refreshPanel('right', true);
+        dependencies.setStatusMessage(operationSummaryStatusLabel(summary, dependencies.settings.language));
+      },
+    });
+  };
   const previewRequestRef = useRef(0);
   const [openWithEntry, setOpenWithEntry] = useState<FileEntry | null>(null);
 
-  const { fileClipboard, captureClipboard, pasteClipboard, completeClipboardMove } = useFileClipboard({
+  const { fileClipboard, clipboardCount, clipboardCanMove, captureClipboard, pasteClipboard, completeClipboardMove } = useFileClipboard({
     get settings() { return dependencies.settings; },
     get panelState() { return dependencies.panelState; },
     get statusText() { return dependencies.statusText; },
     get setStatusMessage() { return dependencies.setStatusMessage; },
     get runtimeBackendAvailable() { return dependencies.runtimeBackendAvailable; },
     get dispatch() { return handleAction; },
+    get mutationClient() { return dependencies.mutationClient; },
+    get operationBusy() { return dependencies.operationBusy; },
   });
 
   const pendingArchiveCopyRef = useRef<PendingArchiveCopy | null>(null);
@@ -211,6 +229,13 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     if (actionId === 'file.clipboardPaste' || actionId === 'file.clipboardMovePaste') { pasteClipboard(actionId, panelOverride); return; }
 
+    if (actionId === 'file.bulkRename') {
+      if (!sources.length || dependencies.operationBusy || !dependencies.runtimeBackendAvailable
+        || isArchiveVirtualPath(panelListing.path) || sources.some(entry => isArchiveVirtualPath(entry.path))
+        || !dependencies.mutationClient.previewBulkRename || !dependencies.operationClient.startBulkRename) return;
+      setBulkRename({ sources: [...sources], panelId: panelOverride, workingDir: panelListing.path });
+      return;
+    }
     if (actionId === 'external.openWith') {
       const entry = sources[0];
       if (!dependencies.runtimeBackendAvailable || !dependencies.mutationClient.listOpenWithApps || !dependencies.mutationClient.openWithApp
@@ -544,7 +569,6 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
               preserveSelection: currentPanel.path !== panelListing.path,
               focusPath: currentPanel.path === panelListing.path ? entry.path : focusedEntryOf(currentPanel)?.path,
               background: true,
-              persistSession: false,
               forceArchiveReload: true,
             });
             dependencies.setStatusMessage(dependencies.statusText.operationDoneWithEntry(labelForAction(action, dependencies.settings.language), entry.name));
@@ -590,5 +614,5 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     dependencies.setStatusMessage(dependencies.statusText.actionReady(labelForAction(action, dependencies.settings.language)));
   };
-  return { openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, openEntry, quickPreview };
+  return { bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, openEntry, quickPreview };
 }

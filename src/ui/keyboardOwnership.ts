@@ -19,6 +19,7 @@ export type CommanderKeyboardOwner =
   | 'bookmark-rename'
   | 'quick-preview'
   | 'open-with'
+  | 'bulk-rename'
   | 'shortcut-help'
   | 'help-search'
   | 'about-dialog'

@@ -890,7 +890,8 @@ button {
   color: var(--muted);
 }
 
-.filter-form input {
+.filter-form input,
+.bulk-rename-fields input:not([type='checkbox']) {
   width: 100%;
   border: 1px solid var(--line-strong);
   background: var(--input-bg);
@@ -2022,3 +2023,14 @@ html.is-file-dragging * {
   -webkit-user-select: none !important;
   user-select: none !important;
 }
+
+.bulk-rename-dialog { top: 32px; width: min(1000px, calc(100vw - 40px)); max-height: calc(100vh - 64px); overflow-y: auto; }
+.bulk-rename-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.bulk-rename-fields label { min-width: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bulk-rename-fields input:not([type='checkbox']) { width: 100%; min-width: 0; }
+.bulk-rename-preview { max-height: 35vh; overflow: auto; border: 1px solid var(--dialog-section-border); }
+.bulk-rename-preview table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.bulk-rename-preview th, .bulk-rename-preview td { padding: 8px; text-align: left; overflow-wrap: anywhere; vertical-align: top; }
+
+.bulk-rename-fields input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.bulk-rename-fields input[type='checkbox'] { accent-color: var(--blue); }

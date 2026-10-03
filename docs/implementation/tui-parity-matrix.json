@@ -103,6 +103,10 @@
   ],
   "guiOnlyExtensions": [
     {
+      "guiActionId": "file.bulkRename",
+      "reason": "선택 파일의 문자열 치환·접두사·번호 붙이기, 미리보기와 충돌 확인 후 일괄 이름 변경"
+    },
+    {
       "guiActionId": "external.openWith",
       "reason": "macOS 파일 연결 앱 목록에서 선택한 앱으로 한 번 열기"
     },

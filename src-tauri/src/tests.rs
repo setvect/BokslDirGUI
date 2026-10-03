@@ -791,6 +791,29 @@ fn load_and_save_settings_persist_bookmarks_and_layout() {
 }
 
 #[test]
+fn workspace_tabs_and_window_round_trip_and_reject_invalid_indices() {
+    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let fixture = TempFixture::new();
+    env::set_var("BOKSLDIRGUI_SETTINGS_PATH", fixture.root.join("workspace.json"));
+    let tab = serde_json::json!({ "path": "/saved", "sort": { "field": "size", "direction": "desc", "directoriesFirst": true },
+        "filter": ".json", "showHidden": true, "historyBack": ["/previous"], "historyForward": [] });
+    let tabs = serde_json::json!({ "left": { "items": [tab.clone(), tab.clone()], "activeIndex": 1 }, "right": { "items": [tab], "activeIndex": 0 } });
+    let saved = save_settings(serde_json::json!({ "session": { "tabs": tabs }, "window": { "width": 1400, "height": 900, "maximized": true } })).unwrap();
+    let loaded = load_settings().unwrap();
+    assert_eq!(loaded.session, saved.session);
+    assert_eq!(loaded.window, saved.window);
+    assert_eq!(loaded.session.tabs.as_ref().unwrap().left.active_index, 1);
+    assert!(save_settings(serde_json::json!({ "session": { "tabs": { "left": { "activeIndex": 99 } } } })).is_err());
+    assert!(save_settings(serde_json::json!({ "window": { "width": 20 } })).is_err());
+    assert_eq!(load_settings().unwrap().session, saved.session);
+    // 다른 설정 변경 뒤에도 탭과 창 상태 보존.
+    let patched = save_settings(serde_json::json!({ "theme": "light" })).unwrap();
+    assert_eq!(patched.session, saved.session);
+    assert_eq!(patched.window, saved.window);
+    env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
+}
+
+#[test]
 fn save_settings_rejects_invalid_layout_ratio() {
     let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
     let fixture = TempFixture::new();

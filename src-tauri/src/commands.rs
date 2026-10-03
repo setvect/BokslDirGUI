@@ -271,3 +271,27 @@ pub(crate) fn hide_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
         .ok_or_else(|| "drop overlay window is unavailable".to_string())?;
     overlay.hide().map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub(crate) fn read_file_clipboard(resolve: bool) -> CommandResult<crate::file_clipboard::FileClipboard> {
+    crate::file_clipboard::read(resolve)
+}
+#[tauri::command]
+pub(crate) fn write_file_clipboard(paths: Vec<String>) -> CommandResult<i64> {
+    crate::file_clipboard::write(paths)
+}
+#[tauri::command]
+pub(crate) fn clear_file_clipboard(change_count: i64) -> CommandResult<()> {
+    crate::file_clipboard::clear(change_count)
+}
+
+#[tauri::command]
+pub(crate) async fn preview_bulk_rename(sources: Vec<String>, rules: crate::bulk_rename::RenameRules) -> CommandResult<Vec<crate::bulk_rename::RenamePreview>> {
+    tauri::async_runtime::spawn_blocking(move || crate::bulk_rename::preview(sources, rules))
+        .await.map_err(|error| AppError::new("io_error", "errors.io", None, true).with_detail("message", error.to_string()))?
+}
+#[tauri::command]
+pub(crate) async fn start_bulk_rename(app: tauri::AppHandle, items: Vec<crate::bulk_rename::RenameItem>) -> CommandResult<OperationStarted> {
+    tauri::async_runtime::spawn_blocking(move || operation::start_bulk_rename(Some(&app), items))
+        .await.map_err(|error| AppError::new("io_error", "errors.io", None, true).with_detail("message", error.to_string()))?
+}

@@ -4,6 +4,7 @@ export const DIALOG_DEFINITIONS = {
   move: { executionMode: 'longRunningOperation', operationKind: 'move' },
   trash: { executionMode: 'longRunningOperation', operationKind: 'trash' },
   deletePermanent: { executionMode: 'longRunningOperation', operationKind: 'delete' },
+  bulkRename: { executionMode: 'longRunningOperation', operationKind: 'rename' },
   rename: { executionMode: 'atomicCommand' },
   createDir: { executionMode: 'atomicCommand' },
   properties: { executionMode: 'atomicCommand' },

@@ -1,6 +1,11 @@
 
 
 export const COMMANDS = {
+  previewBulkRename: 'preview_bulk_rename',
+  startBulkRename: 'start_bulk_rename',
+  readFileClipboard: 'read_file_clipboard',
+  writeFileClipboard: 'write_file_clipboard',
+  clearFileClipboard: 'clear_file_clipboard',
   listDir: 'list_dir',
   getMetadata: 'get_metadata',
   previewFile: 'preview_file',

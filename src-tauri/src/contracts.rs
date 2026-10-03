@@ -236,6 +236,8 @@ impl Default for LayoutSettings {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SessionSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tabs: Option<SessionTabs>,
     pub(crate) left_path: Option<String>,
     pub(crate) right_path: Option<String>,
     pub(crate) active_panel: PanelId,
@@ -244,11 +246,37 @@ pub(crate) struct SessionSettings {
 impl Default for SessionSettings {
     fn default() -> Self {
         Self {
+            tabs: None,
             left_path: None,
             right_path: None,
             active_panel: PanelId::Right,
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionTabs {
+    pub(crate) left: SavedPanelTabs,
+    pub(crate) right: SavedPanelTabs,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SavedPanelTabs {
+    pub(crate) items: Vec<SavedTab>,
+    pub(crate) active_index: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SavedTab {
+    pub(crate) path: String,
+    pub(crate) sort: SortSpec,
+    pub(crate) filter: Option<String>,
+    pub(crate) show_hidden: bool,
+    pub(crate) history_back: Vec<String>,
+    pub(crate) history_forward: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -283,6 +311,8 @@ impl Default for ViewSettings {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Settings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) window: Option<WindowSettings>,
     pub(crate) schema_version: u32,
     pub(crate) theme: String,
     pub(crate) language: String,
@@ -299,6 +329,7 @@ pub(crate) struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            window: None,
             schema_version: 1,
             theme: "dark".to_string(),
             language: "ko".to_string(),
@@ -310,6 +341,14 @@ impl Default for Settings {
             view: ViewSettings::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WindowSettings {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) maximized: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

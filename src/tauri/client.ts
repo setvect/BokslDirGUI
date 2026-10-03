@@ -2,6 +2,8 @@ import { invoke, isTauri, type InvokeArgs } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type {
   ActionResult,
+  NativeFileClipboard,
+  RenameRules, RenameItem, RenamePreview,
   OpenWithApp,
   AppError,
   ArchiveListing,
@@ -142,6 +144,11 @@ const invokeCommand = async <T>(command: TauriCommandName, args?: object): Promi
 };
 
 export const tauriClient = {
+  previewBulkRename: (input: { sources: string[]; rules: RenameRules }) => invokeCommand<RenamePreview[]>(COMMANDS.previewBulkRename, input),
+  startBulkRename: (input: { items: RenameItem[] }) => invokeCommand<OperationStarted>(COMMANDS.startBulkRename, input),
+  readFileClipboard: (input: { resolve: boolean }) => invokeCommand<NativeFileClipboard>(COMMANDS.readFileClipboard, input),
+  writeFileClipboard: (input: { paths: string[] }) => invokeCommand<number>(COMMANDS.writeFileClipboard, input),
+  clearFileClipboard: (input: { changeCount: number }) => invokeCommand<void>(COMMANDS.clearFileClipboard, input),
   listDir: (input: ListDirInput) => invokeCommand<DirectoryListing>(COMMANDS.listDir, input),
   getMetadata: (input: { path: string }) => invokeCommand<FileMetadata>(COMMANDS.getMetadata, input),
   previewFile: (input: { path: string; maxBytes?: number }) => invokeCommand<FilePreview>(COMMANDS.previewFile, input),

@@ -31,5 +31,5 @@ trash = "5.2.9"
 # Tauri가 이미 사용하는 objc2 바인딩으로 macOS 연결 앱 목록 조회.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSPasteboard", "NSPasteboardItem"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString", "NSURL", "NSFileManager"] }

@@ -98,6 +98,22 @@ pub(crate) fn settings_path() -> CommandResult<PathBuf> {
 }
 
 fn validate_settings(settings: &Settings, path: &Path) -> CommandResult<()> {
+    if let Some(tabs) = &settings.session.tabs {
+        for panel in [&tabs.left, &tabs.right] {
+            if panel.items.is_empty() || panel.items.len() > 5 || panel.active_index >= panel.items.len()
+                || panel.items.iter().any(|tab| tab.path.is_empty() || tab.path.contains('\0')
+                    || tab.history_back.len() > 100 || tab.history_forward.len() > 100) {
+                return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+                    .with_detail("field", "session.tabs"));
+            }
+        }
+    }
+    if let Some(window) = &settings.window {
+        if window.width < 1080 || window.height < 680 || window.width > 16384 || window.height > 16384 {
+            return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+                .with_detail("field", "window"));
+        }
+    }
     if !["dark", "light", "highContrast"].contains(&settings.theme.as_str()) {
         return Err(AppError::new(
             "invalid_settings",

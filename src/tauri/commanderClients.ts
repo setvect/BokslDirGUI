@@ -46,6 +46,10 @@ export const TAURI_NATIVE_FILE_DRAG_CLIENT: NativeFileDragClient = {
 };
 
 export interface SafeMutationClient {
+  previewBulkRename?: typeof tauriClient.previewBulkRename;
+  readFileClipboard?: typeof tauriClient.readFileClipboard;
+  writeFileClipboard?: typeof tauriClient.writeFileClipboard;
+  clearFileClipboard?: typeof tauriClient.clearFileClipboard;
   createDir(input: { parent: string; name: string }): ReturnType<typeof tauriClient.createDir>;
   renameEntry(input: { path: string; newName: string }): ReturnType<typeof tauriClient.renameEntry>;
   getMetadata?(input: { path: string }): ReturnType<typeof tauriClient.getMetadata>;
@@ -64,6 +68,7 @@ export interface SafeMutationClient {
 }
 
 export interface LongRunningOperationClient {
+  startBulkRename?: typeof tauriClient.startBulkRename;
   startCopy(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startCopy>;
   startMove(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startMove>;
   startDelete(input: { targets: string[]; mode: 'trash' | 'permanent'; confirmToken?: string }): ReturnType<typeof tauriClient.startDelete>;

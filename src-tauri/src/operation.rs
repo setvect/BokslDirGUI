@@ -1,5 +1,7 @@
 //! File operations share one registry and cancellation/progress lifecycle.
 mod archive_ops;
+mod bulk_rename;
+pub(crate) use bulk_rename::start as start_bulk_rename;
 mod conflict;
 mod delete;
 mod file_io;

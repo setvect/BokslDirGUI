@@ -1,3 +1,4 @@
+import { normalizeSavedTabs } from './sessionState';
 import type { Settings } from '../domain/types';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -76,6 +77,7 @@ export const normalizeSettings = (value: unknown): Settings => {
     session: {
       ...DEFAULT_SETTINGS.session,
       ...(candidate.session ?? {}),
+      tabs: normalizeSavedTabs(candidate.session?.tabs),
       activePanel: candidate.session?.activePanel === 'left' ? 'left' : 'right',
       leftPath: typeof candidate.session?.leftPath === 'string' ? candidate.session.leftPath : null,
       rightPath: typeof candidate.session?.rightPath === 'string' ? candidate.session.rightPath : null,

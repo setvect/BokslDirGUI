@@ -23,7 +23,6 @@ export interface ListPanelOptions {
   filter?: string | null;
   showHidden?: boolean;
   statusAfterSuccess?: string | null;
-  persistSession?: boolean;
   background?: boolean;
   forceArchiveReload?: boolean;
 }
@@ -45,6 +44,7 @@ export interface PendingArchiveCopy {
 }
 
 export interface FileClipboardSnapshot {
+  nativeVersion?: number;
   intent: 'copy' | 'move';
   panelId: PanelId;
   listing: DirectoryListing;

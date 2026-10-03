@@ -189,7 +189,22 @@ export interface ShellCommandResult {
   timedOut: boolean;
 }
 
+export interface SavedTab {
+  path: string;
+  sort: SortSpec;
+  filter: string | null;
+  showHidden: boolean;
+  historyBack: string[];
+  historyForward: string[];
+}
+
+export interface SavedPanelTabs {
+  items: SavedTab[];
+  activeIndex: number;
+}
+
 export interface Settings {
+  window?: { width: number; height: number; maximized: boolean };
   schemaVersion: number;
   theme: 'dark' | 'light' | 'highContrast';
   language: 'ko' | 'en';
@@ -210,6 +225,7 @@ export interface Settings {
     leftPath: string | null;
     rightPath: string | null;
     activePanel: PanelId;
+    tabs?: Record<PanelId, SavedPanelTabs>;
   };
   view: {
     zoomStep: number;
@@ -217,3 +233,16 @@ export interface Settings {
     showIcons: boolean;
   };
 }
+
+export interface NativeFileClipboard {
+  changeCount: number;
+  paths: string[];
+  entries: FileEntry[];
+}
+
+export interface RenameRules {
+  find: string; replacement: string; prefix: string;
+  numbering: boolean; start: number; padding: number; preserveExtension: boolean;
+}
+export interface RenameItem { source: string; newName: string; stamp: string; }
+export interface RenamePreview { item: RenameItem; changed: boolean; error: AppError | null; }

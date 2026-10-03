@@ -1,6 +1,6 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import type { ArchiveListing, FileEntry, PanelId, Settings, SortSpec } from '../domain/types';
+import type { ArchiveListing, FileEntry, PanelId, SavedTab, Settings, SortSpec } from '../domain/types';
 import type { CommanderStatusText } from '../i18n-resources';
 import {
   formatUserErrorMessage
@@ -23,6 +23,8 @@ import {
   PANEL_IDS,
   clampFocusedIndex,
   createPanelStates,
+  createPanelStateFromListing,
+  createDirectoryListing,
   focusedEntryOf,
   markPanelError,
   markPanelLoading,
@@ -35,6 +37,7 @@ import {
 } from './panelState';
 import { PanelUiPatch, SelectionMode, oppositePanelOf, reassignPanelState, selectedPathsInRange } from './selectionModel';
 import { shortenPath } from './textLayout';
+import { sessionFromPanels } from './sessionState';
 
 interface PanelNavigationDependencies {
   readonly dataSource: PanelDataSource;
@@ -48,7 +51,6 @@ interface PanelNavigationDependencies {
   readonly mutationClient: SafeMutationClient;
   readonly runtimeBackendAvailable: boolean;
   readonly setArchivePasswordRequest: Dispatch<SetStateAction<ArchivePasswordRequest | null>>;
-  readonly settingsRef: RefObject<Settings>;
   readonly saveSettingsPatch: (patch: Partial<Settings>, successMessage: string | null, options?: { silent?: boolean; }) => Promise<void>;
   readonly settingsLoaded: boolean;
 }
@@ -82,6 +84,8 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
   panelStateRef.current = panelState;
 
   const initialPanelLoadStartedRef = useRef(false);
+  const [sessionReady, setSessionReady] = useState(() => !runtime.dataSource.loadInitialOnMount);
+  const lastSavedSessionRef = useRef<string | null>(null);
 
   const [panelTabs, setPanelTabs] = useState<Record<PanelId, PanelNavigationState[]>>(() => ({
     left: [panelState.left],
@@ -211,9 +215,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       },
     }));
     if (!options.background) runtime.setStatusMessage(options.statusAfterSuccess ?? null);
-    if (options.persistSession !== false && !isArchiveVirtualPath(result.data.path)) {
-      persistSessionPaths(panelId, result.data.path);
-    }
     if (!options.background && !commanderKeyboardHasOwner()) runtime.shellRef.current?.focus({ preventScroll: true });
     return null;
   };
@@ -261,6 +262,7 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     sort: SortSpec,
     filter: string | null,
     forceReload = false,
+    requestPassword = true,
   ) => {
     const parsed = parseArchiveVirtualPath(virtualPath);
     if (!parsed || !runtime.mutationClient.archiveList || !runtime.runtimeBackendAvailable) {
@@ -293,7 +295,7 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       const result = await runtime.mutationClient.archiveList({ archivePath, password, limit: ARCHIVE_LIST_LIMIT });
       if (!result.ok) {
         archiveListingsRef.current.delete(archivePath);
-        if (result.error.code === 'password_required' || result.error.code === 'invalid_password') {
+        if (requestPassword && (result.error.code === 'password_required' || result.error.code === 'invalid_password')) {
           archivePasswordsRef.current.delete(archivePath);
           runtime.setArchivePasswordRequest({ kind: 'open', panelId, virtualPath, archivePath });
         }
@@ -327,7 +329,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     void listPanel(panelId, panel.path, {
       preserveSelection: true,
       preserveFocusPath: focusedEntryOf(panel)?.path,
-      persistSession: false,
       background,
       forceArchiveReload: true,
     });
@@ -339,7 +340,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       preserveSelection: true,
       preserveFocusPath: focusedEntryOf(panel)?.path,
       statusAfterSuccess: status,
-      persistSession: false,
       forceArchiveReload: true,
     }).then(() => {
       runtime.shellRef.current?.focus({ preventScroll: true });
@@ -453,16 +453,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     });
   };
 
-  const persistSessionPaths = (nextPanelId: PanelId, nextPath: string) => {
-    const nextSession: Settings['session'] = {
-      ...runtime.settingsRef.current.session,
-      leftPath: nextPanelId === 'left' ? nextPath : runtime.settingsRef.current.session.leftPath ?? panelStateRef.current.left.path,
-      rightPath: nextPanelId === 'right' ? nextPath : runtime.settingsRef.current.session.rightPath ?? panelStateRef.current.right.path,
-      activePanel: nextPanelId,
-    };
-    void runtime.saveSettingsPatch({ session: nextSession }, null, { silent: true });
-  };
-
   const selectEntry = (panelId: PanelId, index: number, entry: FileEntry, mode: SelectionMode) => {
     setActivePanel(panelId);
     setPanelState((current) => {
@@ -512,54 +502,93 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       right: markPanelLoading(current.right),
     }));
 
-    const restoreLeft = runtime.settings.session.leftPath;
-    const restoreRight = runtime.settings.session.rightPath;
-    const initialRequest: Promise<PanelInitialLoadResult> = restoreLeft || restoreRight
-      ? Promise.all(PANEL_IDS.map((panelId) => runtime.dataSource.listDir({
-        panelId,
-        path: (panelId === 'left' ? restoreLeft : restoreRight) ?? runtime.dataSource.initialListings[panelId].path,
-        showHidden: false,
-        sort: runtime.dataSource.initialListings[panelId].sort ?? DEFAULT_SORT,
-        filter: null,
-      }))).then(([left, right]) => ({ left, right }))
-      : runtime.dataSource.loadInitialListings();
-
+    const savedSession = runtime.settings.session;
     const requestIds: Record<PanelId, number> = {
-      left: beginPanelRequest('left'),
-      right: beginPanelRequest('right'),
+      left: beginPanelRequest('left'), right: beginPanelRequest('right'),
     };
-
-    void initialRequest.then((results) => {
-      if (cancelled) {
-        return;
-      }
-      setPanelState((current) => {
-        const next = { ...current };
-        for (const panelId of PANEL_IDS) {
-          if (!isCurrentPanelRequest(panelId, requestIds[panelId])) {
-            continue;
-          }
-          const result = results[panelId];
-          const panel = current[panelId];
-          next[panelId] = result.ok
-            ? {
-              ...replacePanelListing(panel, result.data, {
-                preserveSelection: true,
-                preserveFocusPath: focusedEntryOf(panel)?.path,
-              }),
-              showHidden: panel.showHidden,
-            }
-            : markPanelError(panel, result.error);
+    const unavailable: string[] = [];
+    let locations: ReturnType<PanelDataSource['listLocations']> | undefined;
+    const restoreTab = async (panelId: PanelId, tab: SavedTab) => {
+      const load = (path: string) => isArchiveVirtualPath(path)
+        ? listArchiveVirtualPanel(panelId, path, tab.showHidden, tab.sort, tab.filter, false, false)
+        : runtime.dataSource.listDir({ panelId, path, showHidden: tab.showHidden, sort: tab.sort, filter: tab.filter });
+      let result = await load(tab.path);
+      if (!result.ok) {
+        unavailable.push(tab.path);
+        // 암호를 저장하지 않으며 잠긴 압축 탭은 유지하여 사용자가 다시 열 수 있도록 표시.
+        if (result.error.code !== 'password_required' && result.error.code !== 'invalid_password') {
+          locations ??= runtime.dataSource.listLocations();
+          const fallback = await locations;
+          if (fallback.ok) result = await load(fallback.data.home);
         }
-        return next;
+      }
+      return createPanelStateFromListing(result.ok ? result.data : createDirectoryListing(panelId, tab.path), {
+        ...tab, error: result.ok ? null : result.error,
       });
-    });
+    };
+    const restore = async () => {
+      let restored: Record<PanelId, PanelNavigationState[]>;
+      const indices = { left: 0, right: 0 };
+      if (savedSession.tabs) {
+        const savedTabs = savedSession.tabs;
+        const [left, right] = await Promise.all(PANEL_IDS.map((panelId) =>
+          Promise.all(savedTabs[panelId].items.map((tab) => restoreTab(panelId, tab)))));
+        restored = { left, right };
+        indices.left = savedTabs.left.activeIndex;
+        indices.right = savedTabs.right.activeIndex;
+      } else {
+        const restoreLeft = savedSession.leftPath, restoreRight = savedSession.rightPath;
+        const initialRequest: Promise<PanelInitialLoadResult> = restoreLeft || restoreRight
+          ? Promise.all(PANEL_IDS.map((panelId) => runtime.dataSource.listDir({
+            panelId, path: (panelId === 'left' ? restoreLeft : restoreRight) ?? runtime.dataSource.initialListings[panelId].path,
+            showHidden: false, sort: runtime.dataSource.initialListings[panelId].sort ?? DEFAULT_SORT, filter: null,
+          }))).then(([left, right]) => ({ left, right }))
+          : runtime.dataSource.loadInitialListings();
+        const results = await initialRequest;
+        const panels = await Promise.all(PANEL_IDS.map(async (panelId) => {
+          const result = results[panelId];
+          if (!result.ok && (restoreLeft || restoreRight)) return restoreTab(panelId, {
+            path: (panelId === 'left' ? restoreLeft : restoreRight) ?? runtime.dataSource.initialListings[panelId].path,
+            sort: DEFAULT_SORT, filter: null, showHidden: false, historyBack: [], historyForward: [],
+          });
+          return result.ok ? replacePanelListing(panelStateRef.current[panelId], result.data, {
+            preserveSelection: true, preserveFocusPath: focusedEntryOf(panelStateRef.current[panelId])?.path,
+          }) : markPanelError(panelStateRef.current[panelId], result.error);
+        }));
+        restored = { left: [panels[0]], right: [panels[1]] };
+      }
+      if (cancelled) return;
+      setPanelState((current) => ({
+        left: isCurrentPanelRequest('left', requestIds.left) ? restored.left[indices.left] : current.left,
+        right: isCurrentPanelRequest('right', requestIds.right) ? restored.right[indices.right] : current.right,
+      }));
+      setPanelTabs((current) => ({
+        left: isCurrentPanelRequest('left', requestIds.left) ? restored.left : current.left,
+        right: isCurrentPanelRequest('right', requestIds.right) ? restored.right : current.right,
+      }));
+      setActiveTab((current) => ({
+        left: isCurrentPanelRequest('left', requestIds.left) ? indices.left : current.left,
+        right: isCurrentPanelRequest('right', requestIds.right) ? indices.right : current.right,
+      }));
+      if (unavailable.length) runtime.setStatusMessage(runtime.statusText.sessionRestoreUnavailable(unavailable));
+      setSessionReady(true);
+    };
+    void restore();
 
     return () => {
       cancelled = true;
       initialPanelLoadStartedRef.current = false;
     };
   }, [runtime.dataSource, runtime.settingsLoaded]);
+
+  const sessionSnapshot = JSON.stringify(sessionFromPanels(panelState, panelTabs, activeTab, activePanel));
+  useEffect(() => {
+    if (!runtime.settingsLoaded || !sessionReady || panelState.left.loading || panelState.right.loading) return;
+    if (lastSavedSessionRef.current === sessionSnapshot) return;
+    const firstSnapshot = lastSavedSessionRef.current === null;
+    lastSavedSessionRef.current = sessionSnapshot;
+    if (!firstSnapshot) void runtime.saveSettingsPatch({ session: JSON.parse(sessionSnapshot) }, null, { silent: true });
+  }, [sessionSnapshot, sessionReady, runtime.settingsLoaded, panelState.left.loading, panelState.right.loading]);
 
   const addTab = (panelId: PanelId) => {
     const panel = panelState[panelId];
@@ -604,7 +633,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     setPanelState((current) => ({ ...current, [panelId]: restored }));
     selectionAnchorRef.current[panelId] = null;
     runtime.setDirectoryComparison(null);
-    if (!isArchiveVirtualPath(restored.path)) persistSessionPaths(panelId, restored.path);
     runtime.setStatusMessage(runtime.statusText.tabClosed(panelIdLabel(panelId, runtime.settings.language)));
   };
 
@@ -623,14 +651,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       right: current.left.map((tab) => reassignPanelState(tab, 'right')),
     }));
     setActiveTab((current) => ({ left: current.right, right: current.left }));
-    void runtime.saveSettingsPatch({
-      session: {
-        ...runtime.settings.session,
-        leftPath: panelState.right.path,
-        rightPath: panelState.left.path,
-        activePanel,
-      },
-    }, null, { silent: true });
     runtime.setStatusMessage(runtime.settings.language === 'ko' ? '좌우 패널 경로를 맞바꿨습니다.' : 'Swapped panel paths.');
     return;
 
@@ -650,7 +670,6 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     setActivePanel(panelId);
     selectionAnchorRef.current[panelId] = null;
     runtime.setDirectoryComparison(null);
-    if (!isArchiveVirtualPath(saved.path)) persistSessionPaths(panelId, saved.path);
     runtime.shellRef.current?.focus({ preventScroll: true });
 
   };

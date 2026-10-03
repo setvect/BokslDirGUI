@@ -47,6 +47,7 @@ import {
 import { clampNumber, viewMetricsForSettings } from './settingsModel';
 import { BottomStatusStrip, HotkeyStrip } from './StatusStrips';
 import { TopMenuBar } from './TopMenuBar';
+import { BulkRenameDialog } from './BulkRenameDialog';
 import { OpenWithDialog } from './OpenWithDialog';
 import { useCommanderActions } from './useCommanderActions';
 import { useCommanderKeyboard } from './useCommanderKeyboard';
@@ -127,7 +128,6 @@ export function CommanderShell({
     get mutationClient() { return mutationClient; },
     get runtimeBackendAvailable() { return runtimeBackendAvailable; },
     get setArchivePasswordRequest() { return setArchivePasswordRequest; },
-    get settingsRef() { return settingsRef; },
     get saveSettingsPatch() { return saveSettingsPatch; },
     get settingsLoaded() { return settingsLoaded; },
   });
@@ -147,7 +147,7 @@ export function CommanderShell({
     get dataSource() { return dataSource; },
     get gotoPanelPath() { return gotoPanelPath; },
   });
-  const { openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, openEntry, quickPreview } = useCommanderActions({
+  const { bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, openEntry, quickPreview } = useCommanderActions({
     clearCompletedSelection,
     get setActivePanel() { return setActivePanel; },
     get navigateUp() { return navigateUp; },
@@ -288,9 +288,9 @@ export function CommanderShell({
     selectedCount: activeTargets.selectedCount,
     hasConcreteFocus: activeTargets.hasConcreteFocus,
     effectiveTargetCount: activeTargets.effectiveTargetCount,
-    clipboardCount: fileClipboard?.entries.length ?? 0,
+    clipboardCount,
     clipboardMode: fileClipboard?.intent ?? null,
-    clipboardCanMove: Boolean(fileClipboard && !isArchiveVirtualPath(fileClipboard.listing.path) && !isArchiveVirtualPath(activeListing.path)),
+    clipboardCanMove: clipboardCanMove && !isArchiveVirtualPath(activeListing.path),
     hasOppositePanel: true,
     shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: operationBusy || panelState.left.loading || panelState.right.loading,
@@ -503,6 +503,8 @@ export function CommanderShell({
           onCancel={closeOverlay}
         />
       ) : null}
+      {bulkRename ? <BulkRenameDialog sources={bulkRename.sources} language={settings.language} client={mutationClient}
+        onConfirm={confirmBulkRename} onClose={() => { setBulkRename(null); requestAnimationFrame(() => shellRef.current?.focus()); }} /> : null}
       {openWithEntry ? (
         <OpenWithDialog
           key={openWithEntry.path}
