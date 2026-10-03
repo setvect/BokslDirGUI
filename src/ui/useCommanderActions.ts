@@ -35,6 +35,7 @@ import {
 } from './panelState';
 import { oppositePanelOf, shouldClearSourceSelectionAfterOperation, sourcesBelongToListing } from './selectionModel';
 import { useFileClipboard } from './useFileClipboard';
+import { useTrashUndo } from './useTrashUndo';
 
 interface CommanderActionsDependencies {
   readonly clearCompletedSelection: (panelId: PanelId, sourcePath: string) => void;
@@ -89,6 +90,16 @@ interface CommanderActionsDependencies {
   readonly openOperationDialog: (request: OpenDialogRequest) => void;
 }
 export function useCommanderActions(dependencies: CommanderActionsDependencies) {
+  const { trashUndoAvailable, openTrashUndo, refreshTrashUndo } = useTrashUndo({
+    get mutationClient() { return dependencies.mutationClient; },
+    get operationClient() { return dependencies.operationClient; },
+    get runtimeBackendAvailable() { return dependencies.runtimeBackendAvailable; },
+    get operationBusy() { return dependencies.operationBusy; },
+    get language() { return dependencies.settings.language; },
+    get openOperationDialog() { return dependencies.openOperationDialog; },
+    get refreshPanel() { return dependencies.refreshPanel; },
+    get setStatusMessage() { return dependencies.setStatusMessage; },
+  });
 
   const [bulkRename, setBulkRename] = useState<{ panelId: PanelId; sources: FileEntry[]; workingDir: string } | null>(null);
   const confirmBulkRename = (items: RenameItem[]) => {
@@ -228,6 +239,8 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     if (actionId === 'file.clipboardCopy' || actionId === 'file.clipboardCut') { captureClipboard(action, sources, panelOverride, panelListing); return; }
 
     if (actionId === 'file.clipboardPaste' || actionId === 'file.clipboardMovePaste') { pasteClipboard(actionId, panelOverride); return; }
+
+    if (actionId === 'file.undoTrash') { openTrashUndo(panelOverride, panelListing.path); return; }
 
     if (actionId === 'file.bulkRename') {
       if (!sources.length || dependencies.operationBusy || !dependencies.runtimeBackendAvailable
@@ -577,6 +590,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
           dependencies.setStatusMessage(dependencies.statusText.operationDone(labelForAction(action, dependencies.settings.language)));
         },
         onOperationSummary: (summary: OperationSummary, dialog: OperationDialogDraft) => {
+          if (dialog.dialogKind === 'trash') refreshTrashUndo();
           if (shouldClearSourceSelectionAfterOperation(summary, dialog.dialogKind)) {
             dependencies.clearCompletedSelection(dialog.panelId, panelListing.path);
           }
@@ -614,5 +628,5 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     dependencies.setStatusMessage(dependencies.statusText.actionReady(labelForAction(action, dependencies.settings.language)));
   };
-  return { bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, openEntry, quickPreview };
+  return { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, openEntry, quickPreview };
 }

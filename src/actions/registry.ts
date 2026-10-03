@@ -15,6 +15,7 @@ export interface ActionContext {
   hasConcreteFocus: boolean;
   effectiveTargetCount: number;
   clipboardCount?: number;
+  trashUndoAvailable?: boolean;
   clipboardMode?: 'copy' | 'move' | null;
   clipboardCanMove?: boolean;
   platform?: 'mac' | 'other';
@@ -100,6 +101,7 @@ export const ACTIONS = [
   action({ id: 'tab.list', category: 'panel', shortcutLabel: 'tt', keyboardBindings: ['t t'], menuPath: ['View', 'Tab List'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.toggle', category: 'selection', hotkeyLabel: 'Sel', shortcutLabel: 'Space', keyboardBindings: ['Space'], menuPath: ['Edit', 'Select'], dangerLevel: 'none', runPath: 'UI state', isEnabled: hasFocus }),
   action({ id: 'selection.all', category: 'selection', hotkeyLabel: 'SelAll', shortcutLabel: 'Ctrl+A', keyboardBindings: ['Ctrl+A'], menuPath: ['Edit', 'Select All'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'file.undoTrash', dialogKind: 'undoTrash', category: 'file', displayLabel: 'Undo Move to Trash', shortcutLabel: 'Cmd+Z', keyboardBindings: ['Cmd+Z'], menuPath: ['Edit', 'Undo Move to Trash'], dangerLevel: 'safe', command: COMMANDS.startTrashUndo, runPath: 'preview_trash_undo/start_trash_undo', isEnabled: (c) => c.platform === 'mac' && c.trashUndoAvailable === true && canInvokeBackend(c) }),
   action({ id: 'file.clipboardCopy', requiresConcreteSources: true, category: 'file', displayLabel: 'Copy', shortcutLabel: 'Cmd+C', keyboardBindings: ['Cmd+C', 'Ctrl+C'], menuPath: ['Edit', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'macOS write_file_clipboard / UI clipboard state', isEnabled: hasEffectiveTarget }),
   action({ id: 'file.clipboardCut', requiresConcreteSources: true, category: 'file', displayLabel: 'Cut', shortcutLabel: 'Ctrl+X', keyboardBindings: ['Ctrl+X'], menuPath: ['Edit', 'Cut'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'UI clipboard state', isEnabled: (c) => c.platform === 'other' && hasEffectiveTarget(c) && !c.activePathIsArchive && c.backendAvailable }),
   action({ id: 'file.clipboardPaste', category: 'file', displayLabel: 'Paste', shortcutLabel: 'Cmd+V', keyboardBindings: ['Cmd+V', 'Ctrl+V'], menuPath: ['Edit', 'Paste'], contextScopes: ['blank'], dangerLevel: 'safe', runPath: 'start_copy/start_move/archive_extract/archive_add', isEnabled: (c) => (c.clipboardCount ?? 0) > 0 && (c.clipboardMode !== 'move' || c.clipboardCanMove === true) && canMutate(c) }),
@@ -266,7 +268,7 @@ export const fileShortcutPlatform = (userAgent = typeof navigator === 'undefined
 export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortcutPlatform()) =>
   platform === 'mac'
     ? action.id !== 'file.clipboardCut'
-    : !['file.clipboardMovePaste', 'external.openCurrentInFinder', 'external.openCurrentInTerminal', 'external.openWith'].includes(action.id);
+    : !['file.undoTrash', 'file.clipboardMovePaste', 'external.openCurrentInFinder', 'external.openCurrentInTerminal', 'external.openWith'].includes(action.id);
 
 export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform()) =>
   ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform));

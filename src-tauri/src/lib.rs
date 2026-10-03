@@ -38,6 +38,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::health_check,
+            commands::preview_trash_undo,
+            commands::start_trash_undo,
             commands::preview_bulk_rename,
             commands::start_bulk_rename,
             commands::read_file_clipboard,

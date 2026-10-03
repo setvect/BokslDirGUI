@@ -103,6 +103,10 @@
   ],
   "guiOnlyExtensions": [
     {
+      "guiActionId": "file.undoTrash",
+      "reason": "macOS 앱 세션 내 최근 휴지통 작업을 Cmd+Z로 확인 후 원래 위치에 복원, 충돌 시 덮어쓰기 금지"
+    },
+    {
       "guiActionId": "file.bulkRename",
       "reason": "선택 파일의 문자열 치환·접두사·번호 붙이기, 미리보기와 충돌 확인 후 일괄 이름 변경"
     },

@@ -1,6 +1,8 @@
 
 
 export const COMMANDS = {
+  previewTrashUndo: 'preview_trash_undo',
+  startTrashUndo: 'start_trash_undo',
   previewBulkRename: 'preview_bulk_rename',
   startBulkRename: 'start_bulk_rename',
   readFileClipboard: 'read_file_clipboard',

@@ -681,10 +681,17 @@ fn start_delete_trash_moves_without_permanent_fallback() {
 
     assert_eq!(started.kind, OperationKind::Trash);
     assert!(!source.exists());
+    let preview = operation::preview_trash_undo().expect("successful trash creates an undo receipt");
+    assert_eq!(preview.id, started.operation_id);
+    assert_eq!(preview.entries.len(), 1);
+    assert_eq!(preview.entries[0].name, "alpha.txt");
     assert!(fs::read_dir(&trash_dir)
         .expect("trash dir should be readable")
         .flatten()
         .any(|entry| entry.file_name().to_string_lossy().contains("alpha.txt")));
+    operation::start_trash_undo(None, preview.id).expect("recorded deletion can be restored");
+    assert!(source.exists());
+    assert_eq!(fs::read_dir(&trash_dir).unwrap().count(), 0);
 }
 
 #[test]

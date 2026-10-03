@@ -147,7 +147,7 @@ export function CommanderShell({
     get dataSource() { return dataSource; },
     get gotoPanelPath() { return gotoPanelPath; },
   });
-  const { bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, openEntry, quickPreview } = useCommanderActions({
+  const { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, openEntry, quickPreview } = useCommanderActions({
     clearCompletedSelection,
     get setActivePanel() { return setActivePanel; },
     get navigateUp() { return navigateUp; },
@@ -289,6 +289,7 @@ export function CommanderShell({
     hasConcreteFocus: activeTargets.hasConcreteFocus,
     effectiveTargetCount: activeTargets.effectiveTargetCount,
     clipboardCount,
+    trashUndoAvailable,
     clipboardMode: fileClipboard?.intent ?? null,
     clipboardCanMove: clipboardCanMove && !isArchiveVirtualPath(activeListing.path),
     hasOppositePanel: true,

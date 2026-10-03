@@ -72,6 +72,7 @@
 <!-- BEGIN GENERATED:parity-gui-extensions -->
 | GUI action | 이유 |
 | --- | --- |
+| `file.undoTrash` | macOS 앱 세션 내 최근 휴지통 작업을 Cmd+Z로 확인 후 원래 위치에 복원, 충돌 시 덮어쓰기 금지 |
 | `file.bulkRename` | 선택 파일의 문자열 치환·접두사·번호 붙이기, 미리보기와 충돌 확인 후 일괄 이름 변경 |
 | `external.openWith` | macOS 파일 연결 앱 목록에서 선택한 앱으로 한 번 열기 |
 | `external.reveal` | GUI 전환 필수 기능: 시스템 파일 관리자에서 위치 표시 |

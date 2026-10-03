@@ -2,6 +2,7 @@ import { invoke, isTauri, type InvokeArgs } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type {
   ActionResult,
+  TrashUndoPreview,
   NativeFileClipboard,
   RenameRules, RenameItem, RenamePreview,
   OpenWithApp,
@@ -144,6 +145,8 @@ const invokeCommand = async <T>(command: TauriCommandName, args?: object): Promi
 };
 
 export const tauriClient = {
+  previewTrashUndo: () => invokeCommand<TrashUndoPreview | null>(COMMANDS.previewTrashUndo),
+  startTrashUndo: (input: { id: string }) => invokeCommand<OperationStarted>(COMMANDS.startTrashUndo, input),
   previewBulkRename: (input: { sources: string[]; rules: RenameRules }) => invokeCommand<RenamePreview[]>(COMMANDS.previewBulkRename, input),
   startBulkRename: (input: { items: RenameItem[] }) => invokeCommand<OperationStarted>(COMMANDS.startBulkRename, input),
   readFileClipboard: (input: { resolve: boolean }) => invokeCommand<NativeFileClipboard>(COMMANDS.readFileClipboard, input),

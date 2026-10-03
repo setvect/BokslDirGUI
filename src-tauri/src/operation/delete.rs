@@ -1,16 +1,10 @@
-#[cfg(test)]
-use super::file_io::unique_temp_target;
 use crate::contracts::{
-    AppError, CommandResult, DeleteMode, OperationKind, OperationState, OperationSummary,
+    CommandResult, DeleteMode, OperationKind, OperationState, OperationSummary,
 };
 use crate::filesystem::map_io_error;
-#[cfg(test)]
-use crate::mutation;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
-#[cfg(test)]
-use std::{env, path::PathBuf};
 
 use super::file_io::{
     collect_source_paths, count_entries_and_bytes, guard_delete_target, ProgressTicker,
@@ -81,12 +75,13 @@ pub(super) fn run_delete(
         None,
     );
 
+    let mut trash_recorder = super::trash_restore::TrashRecorder::new(operation_id);
     for target in &targets {
         if is_cancelled(operation_id) {
             return cancel_summary(operation_id, kind, &stats);
         }
         let result = if mode == DeleteMode::Trash {
-            move_to_trash(target)
+            trash_recorder.trash(target)
         } else {
             delete_tree_cancellable(
                 app,
@@ -120,31 +115,6 @@ pub(super) fn run_delete(
         }
     }
     summary_from_stats(operation_id, kind, &stats)
-}
-
-pub(super) fn move_to_trash(source: &Path) -> CommandResult<()> {
-    #[cfg(test)]
-    if let Some(path) = env::var_os("BOKSLDIRGUI_TRASH_DIR") {
-        let trash_dir = PathBuf::from(path);
-        fs::create_dir_all(&trash_dir).map_err(|error| map_io_error(error, Some(&trash_dir)))?;
-        let target = unique_temp_target(&trash_dir, source);
-        return mutation::rename_no_replace(source, &target)
-            .map_err(|error| map_io_error(error, Some(source)));
-    }
-    #[cfg(target_os = "macos")]
-    let result = {
-        use trash::macos::{DeleteMethod, TrashContextExtMacos};
-        let mut context = trash::TrashContext::default();
-        context.set_delete_method(DeleteMethod::NsFileManager);
-        context.delete(source)
-    };
-    #[cfg(not(target_os = "macos"))]
-    let result = trash::delete(source);
-
-    result.map_err(|error| {
-        AppError::new("trash_failed", "errors.trashFailed", Some(source), true)
-            .with_detail("message", error.to_string())
-    })
 }
 
 pub(super) fn delete_tree_cancellable(

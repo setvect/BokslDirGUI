@@ -393,6 +393,7 @@ pub(crate) enum OperationKind {
     Move,
     Delete,
     Trash,
+    RestoreTrash,
     Rename,
     CreateDir,
     ArchiveCreate,

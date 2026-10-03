@@ -187,6 +187,7 @@ pub(super) fn next_operation_id(kind: OperationKind) -> String {
         OperationKind::Move => "move",
         OperationKind::Delete => "delete",
         OperationKind::Trash => "trash",
+        OperationKind::RestoreTrash => "restore-trash",
         OperationKind::Rename => "rename",
         OperationKind::CreateDir => "create-dir",
         OperationKind::ArchiveCreate => "archive-create",

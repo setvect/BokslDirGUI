@@ -5,6 +5,7 @@ export type OperationKind =
   | 'move'
   | 'delete'
   | 'trash'
+  | 'restoreTrash'
   | 'rename'
   | 'createDir'
   | 'archiveCreate'
@@ -246,3 +247,8 @@ export interface RenameRules {
 }
 export interface RenameItem { source: string; newName: string; stamp: string; }
 export interface RenamePreview { item: RenameItem; changed: boolean; error: AppError | null; }
+
+export interface TrashUndoPreview {
+  id: string;
+  entries: FileEntry[];
+}

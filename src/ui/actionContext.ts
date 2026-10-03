@@ -8,6 +8,7 @@ export interface ActionContextInput {
   hasConcreteFocus?: boolean;
   effectiveTargetCount?: number;
   clipboardCount?: number;
+  trashUndoAvailable?: boolean;
   clipboardMode?: 'copy' | 'move' | null;
   clipboardCanMove?: boolean;
   platform?: FileShortcutPlatform;
@@ -77,6 +78,7 @@ export const createActionContext = ({
   hasConcreteFocus: hasConcreteFocusOverride,
   effectiveTargetCount,
   clipboardCount = 0,
+  trashUndoAvailable = false,
   clipboardMode = null,
   clipboardCanMove = false,
   platform = fileShortcutPlatform(),
@@ -94,6 +96,7 @@ export const createActionContext = ({
     hasConcreteFocus,
     effectiveTargetCount: effectiveTargetCount ?? (selectedCount > 0 ? selectedCount : hasConcreteFocus ? 1 : 0),
     clipboardCount,
+    trashUndoAvailable,
     clipboardMode,
     clipboardCanMove,
     platform,

@@ -186,3 +186,14 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - 기존 `leftPath`·`rightPath`·`activePanel` 호환 유지, 저장 필드에 선택·진행 작업·압축 암호 포함 금지
 - 접근 불가능한 저장 경로는 홈으로 대체하고 원래 경로 안내; 잠긴 압축 탭은 오류 상태 유지·사용자 새로고침 시 암호 요청
 - 검증 근거: `nativeFileClipboard.test.tsx`, `BulkRenameDialog.test.tsx`, `sessionState.test.tsx`, Rust `file_clipboard`·`bulk_rename`·`window_session` 테스트
+
+## 휴지통 작업 실행 취소
+
+- `preview_trash_undo()` → `{ id, entries: FileEntry[] } | null`: 현재 세션의 최근 복원 가능 작업 조회
+- `start_trash_undo({ id })` → `OperationStarted`: 확인한 이력 ID를 검증하고 `restoreTrash` 작업 시작
+- macOS [FileManager 휴지통 API](https://developer.apple.com/documentation/foundation/filemanager/trashitem(at:resultingitemurl:))가 반환한 실제 휴지통 위치 기록, 파일명 추측 금지
+- 원래 경로·휴지통 위치·파일 및 부모 폴더 동일성 정보는 Rust 메모리에서 관리, 프론트 입력은 이력 ID로 제한
+- 최근 20개 작업을 세션 내 유지, 다중 항목은 한 작업으로 복원, 재시작·영구 삭제·타 앱 삭제 이력 제외
+- 복원은 기존 작업 레지스트리·진행 이벤트·취소·요약 경로 사용, 충돌 시 덮어쓰기 없이 오류 요약과 재시도 유지
+- 휴지통 항목 소실·교체는 오류 안내 후 해당 복원 기록 제거, 부분 취소·경로 충돌·부모 폴더 문제는 미완료 항목 유지
+- 비 macOS의 기존 휴지통 동작 유지, 복원 메뉴 노출 제외

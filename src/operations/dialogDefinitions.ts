@@ -1,5 +1,6 @@
 // 실행 모드와 작업 종류의 단일 정의. UI·store·Tauri에 의존하지 않음.
 export const DIALOG_DEFINITIONS = {
+  undoTrash: { executionMode: 'longRunningOperation', operationKind: 'restoreTrash' },
   copy: { executionMode: 'longRunningOperation', operationKind: 'copy' },
   move: { executionMode: 'longRunningOperation', operationKind: 'move' },
   trash: { executionMode: 'longRunningOperation', operationKind: 'trash' },

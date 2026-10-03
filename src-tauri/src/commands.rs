@@ -295,3 +295,13 @@ pub(crate) async fn start_bulk_rename(app: tauri::AppHandle, items: Vec<crate::b
     tauri::async_runtime::spawn_blocking(move || operation::start_bulk_rename(Some(&app), items))
         .await.map_err(|error| AppError::new("io_error", "errors.io", None, true).with_detail("message", error.to_string()))?
 }
+
+#[tauri::command]
+pub(crate) fn preview_trash_undo() -> Option<operation::TrashUndoPreview> {
+    operation::preview_trash_undo()
+}
+
+#[tauri::command]
+pub(crate) fn start_trash_undo(app: tauri::AppHandle, id: String) -> CommandResult<OperationStarted> {
+    operation::start_trash_undo(Some(&app), id)
+}
