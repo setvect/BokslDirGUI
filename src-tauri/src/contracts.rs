@@ -102,6 +102,23 @@ pub(crate) struct FileMetadata {
     pub(crate) mime_type: Option<String>,
     pub(crate) readonly: bool,
     pub(crate) directory_stats: Option<DirectoryStats>,
+    pub(crate) image_metadata: Option<ImageMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ImageMetadata {
+    pub(crate) width: Option<usize>,
+    pub(crate) height: Option<usize>,
+    pub(crate) exif_status: String,
+    pub(crate) fields: Vec<ImageMetadataField>,
+    pub(crate) truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct ImageMetadataField {
+    pub(crate) key: String,
+    pub(crate) value: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

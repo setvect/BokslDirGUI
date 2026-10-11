@@ -45,6 +45,27 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - 하위 폴더까지 별도 작업 스레드에서 순회하되 심볼릭 링크를 따라가지 않고 링크·소켓 등 특수 파일은 집계에서 제외
 - 접근 오류가 나면 불완전한 합계를 반환하지 않고 get_metadata 오류를 반환
 
+### 2.2.1 이미지 메타데이터
+
+- `FileMetadata.imageMetadata`: 이미지 정보 객체 또는 null, 프론트엔드의 기존 클라이언트 응답 호환을 위한 필드 생략 허용
+- 일반 파일 정보 조회의 `get_metadata` 응답 확장, 파일 목록 조회에서 이미지 본문 읽기 없음
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| width / height | number/null | 픽셀 크기, 이미지 헤더 우선·EXIF 크기 보완 |
+| exifStatus | present / absent / unreadable / limited | 표시 가능한 EXIF 존재·없음·손상/읽기 실패·읽기 한도 도달 구분 |
+| fields | `{ key, value }[]` | 원본 이미지 IFD의 EXIF 태그 이름과 단위 포함 표시값 |
+| truncated | boolean | 태그 수 또는 개별 값 길이 제한에 따른 생략 여부 |
+
+- JPEG·TIFF/DNG·HEIF/HEIC/AVIF·PNG·WebP의 EXIF 조회 지원, GIF·BMP는 픽셀 크기 조회 지원
+- MakerNote 등 바이너리 값과 썸네일 IFD 제외, 별도 XMP/IPTC·외부 sidecar·제조사 전용 RAW 해석 제외
+- 조회당 실제 읽기량 16 MiB 제한, 픽셀 본문은 가능한 경우 seek로 건너뛰기
+- 응답은 128개 태그·값당 512문자와 생략 표시로 제한, 한도 도달 시 상태 표시 필수
+- 큰 TIFF처럼 파서가 전체 본문을 요구하는 경우 `limited` 반환 가능, 미리보기의 8 MiB 제한과 독립
+- 메타데이터 분석 실패 시 기본 파일 정보 유지, 촬영 시각의 시간대 임의 변환 금지
+- 의존성 근거: [kamadak-exif 0.6.1](https://docs.rs/kamadak-exif/0.6.1/exif/)의 Rust EXIF 컨테이너 파서와 [imagesize 0.14.0](https://docs.rs/imagesize/0.14.0/imagesize/)의 디코딩 없는 크기 조회 사용
+- 선정 이유: 공통 이미지 형식 지원·전용 파서 재사용·외부 실행 파일 설치 불필요, 전체 이미지 디코더 도입 없이 독립 검증 가능
+
 ### 2.3 AppError
 
 | 필드 | 타입 | 설명 |

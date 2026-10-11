@@ -4,7 +4,7 @@ import aboutMascot from '../assets/about-mascot.png';
 import { APP_NAME } from '../foundation';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { ACTIONS, actionVisibleOnPlatform, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
-import type { FilePreview, PanelId } from '../domain/types';
+import type { PanelId } from '../domain/types';
 import {
   ACTION_CATEGORY_LABELS,
   NAVIGATION_GROUP_LABELS,
@@ -29,99 +29,6 @@ export interface NavigationListState {
   panelId: PanelId;
   title: string;
   items: NavigationListItem[];
-}
-
-export function QuickPreviewDialog({ language, preview, loading, onClose }: {
-  language: SupportedLanguage;
-  preview: FilePreview | null;
-  loading: boolean;
-  onClose(): void;
-}) {
-  const text = OVERLAY_TEXT[language];
-  const scrollRef = useRef<HTMLPreElement>(null);
-
-  useEffect(() => {
-    if (!loading && preview?.kind === 'text') {
-      scrollRef.current?.focus({ preventScroll: true });
-    }
-  }, [loading, preview]);
-
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const scrollArea = scrollRef.current;
-    if (!scrollArea || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-      return;
-    }
-    const lineHeight = Number.parseFloat(window.getComputedStyle(scrollArea).lineHeight) || 28;
-    const pageHeight = Math.max(lineHeight, scrollArea.clientHeight - lineHeight);
-    const distance = {
-      ArrowDown: lineHeight,
-      ArrowUp: -lineHeight,
-      PageDown: pageHeight,
-      PageUp: -pageHeight,
-    }[event.key];
-    if (distance === undefined && event.key !== 'Home' && event.key !== 'End') {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.key === 'Home') {
-      scrollArea.scrollTop = 0;
-    } else if (event.key === 'End') {
-      scrollArea.scrollTop = scrollArea.scrollHeight;
-    } else if (distance !== undefined) {
-      scrollArea.scrollTop += distance;
-    }
-  };
-
-  return (
-    <CommanderOverlayDialog
-      owner="quick-preview"
-      title={text.quickView}
-      ariaLabel={text.quickView}
-      onClose={onClose}
-      className="quick-preview-dialog"
-      onOpenAutoFocus={(event) => {
-        if (scrollRef.current) {
-          event.preventDefault();
-          scrollRef.current.focus({ preventScroll: true });
-        }
-      }}
-    >
-      <div className="quick-preview-content" onKeyDown={handleKeyDown}>
-        {loading ? <p>{text.previewLoading}</p> : null}
-        {!loading && preview ? (
-          <>
-            <div className="quick-preview-meta">
-              <strong title={preview.path}>{preview.name}</strong>
-              <span>{preview.sizeBytes.toLocaleString()} {text.bytes}</span>
-              {preview.mimeType ? <span>{preview.mimeType}</span> : null}
-            </div>
-            {preview.kind === 'image' && preview.dataUrl ? (
-              <img src={preview.dataUrl} alt={preview.name} className="quick-preview-image" />
-            ) : null}
-            {preview.kind === 'text' ? (
-              <>
-                {preview.truncated ? <p className="operation-warning">{text.previewTruncated}</p> : null}
-                <pre
-                  className="quick-preview-text"
-                  ref={scrollRef}
-                  role="region"
-                  aria-label={`${text.quickView}: ${preview.name}`}
-                  tabIndex={0}
-                >{preview.text}</pre>
-              </>
-            ) : null}
-            {preview.kind === 'unsupported' ? <p>{text.previewUnsupported}</p> : null}
-            {preview.kind === 'tooLarge' ? <p>{text.previewTooLarge}</p> : null}
-          </>
-        ) : null}
-        <div className="filter-actions">
-          <button type="button" onClick={onClose}>{text.close}</button>
-        </div>
-      </div>
-    </CommanderOverlayDialog>
-  );
 }
 
 const SHORTCUT_HELP_COLUMNS: readonly (readonly AppActionCategory[])[] = [

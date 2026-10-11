@@ -78,6 +78,15 @@ export interface FileMetadata extends FileEntry {
   mimeType: string | null;
   readonly: boolean;
   directoryStats: DirectoryStats | null;
+  imageMetadata?: ImageMetadata | null;
+}
+
+export interface ImageMetadata {
+  width: number | null;
+  height: number | null;
+  exifStatus: 'present' | 'absent' | 'unreadable' | 'limited';
+  fields: Array<{ key: string; value: string }>;
+  truncated: boolean;
 }
 
 export interface FilePreview {

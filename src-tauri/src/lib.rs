@@ -1,5 +1,6 @@
 mod path_text;
 mod preview;
+mod image_metadata;
 
 mod archive;
 mod commands;

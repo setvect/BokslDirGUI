@@ -88,12 +88,18 @@ pub(crate) fn get_metadata(path: &str) -> CommandResult<FileMetadata> {
     } else {
         None
     };
+    let image_metadata = if matches!(entry.kind, EntryKind::File | EntryKind::Executable) {
+        crate::image_metadata::read_image_metadata(&path)
+    } else {
+        None
+    };
     Ok(FileMetadata {
         absolute_path: display_path(&path),
         extension,
         mime_type,
         readonly,
         directory_stats,
+        image_metadata,
         entry,
     })
 }

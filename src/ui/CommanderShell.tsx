@@ -30,9 +30,9 @@ import {
   HelpSearchDialog,
   NavigationListDialog,
   PathPrompt,
-  QuickPreviewDialog,
   ShortcutHelpDialog
 } from './CommanderOverlays';
+import { QuickPreviewDialog } from './QuickPreviewDialog';
 import { ArchivePasswordRequest } from './commanderTypes';
 import { DirectoryComparison } from './directoryComparison';
 import { archiveCopyExecutorForPlan } from './fileActionExecutors';
@@ -519,6 +519,7 @@ export function CommanderShell({
         <QuickPreviewDialog
           language={settings.language}
           preview={quickPreview.preview}
+          getMetadata={mutationClient.getMetadata}
           loading={quickPreview.loading}
           onClose={closeOverlay}
         />

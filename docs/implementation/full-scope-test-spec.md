@@ -46,6 +46,8 @@
 ### 3.3 파일 작업
 
 - copy/move/delete/trash/permanent delete/create dir/rename/properties가 성공/실패 fixture 보유
+- 파일 정보: EXIF 카메라·노출·촬영 시각·GPS·저작권·픽셀 크기, 정보 없음·손상·읽기 한도·표시 길이 제한·원본 보존 검증
+- F3 빠른 보기: 8 MiB 초과 이미지 정보 조회·`i`/버튼 토글·본문 스크롤 보존·키보드 소유권·늦은 응답 무시·오류 후 재시도 검증
 - conflict prompt가 `overwrite`, `skip`, `allOverwrite`, `allSkip`, `cancel`을 구분하고 `allOverwrite`/`allSkip`를 이후 충돌에 일관 적용
 - cancel은 partial summary 제공
 - 권한 오류/디스크 오류/존재하지 않는 경로가 앱 crash로 이어지지 않음

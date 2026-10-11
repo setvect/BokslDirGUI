@@ -8,8 +8,7 @@ import {
   type OperationDialogText,
   type SupportedLanguage
 } from '../i18n-resources';
-import { formatDateTime } from '../ui/format';
-import { formatBytes } from './progressPresentation';
+import { FileInfoView } from '../ui/FileInfoView';
 
 export function OperationResultView({
   value,
@@ -21,28 +20,7 @@ export function OperationResultView({
   text: OperationDialogText;
 }) {
   if (isFileMetadata(value)) {
-    const directoryStats = value.kind === 'directory' ? value.directoryStats : null;
-    const sizeBytes = directoryStats ? directoryStats.totalFileBytes : value.sizeBytes;
-    const locale = language === 'ko' ? 'ko-KR' : 'en-US';
-    return (
-      <div className="operation-result-stack">
-        <dl className="operation-result-list">
-          <div><dt>{text.fileInfo}</dt><dd>{value.name}</dd></div>
-          <div><dt>{text.currentLocation}</dt><dd><code title={value.absolutePath}>{value.absolutePath}</code></dd></div>
-          <div><dt>{text.type}</dt><dd>{metadataKindLabel(language, value.kind)}</dd></div>
-          <div><dt>{directoryStats ? text.directoryFileSize : text.size}</dt><dd>{sizeBytes === null ? '—' : formatBytes(sizeBytes)}</dd></div>
-          {directoryStats ? (
-            <>
-              <div><dt>{text.fileCount}</dt><dd>{directoryStats.fileCount.toLocaleString(locale)}</dd></div>
-              <div><dt>{text.directoryCount}</dt><dd>{directoryStats.directoryCount.toLocaleString(locale)}</dd></div>
-            </>
-          ) : null}
-          <div><dt>{text.modified}</dt><dd>{formatDateTime(value.modifiedAt) || '—'}</dd></div>
-          <div><dt>{text.permissions}</dt><dd>{value.permissions ?? '—'}</dd></div>
-        </dl>
-        {directoryStats ? <p className="operation-muted">{text.directoryScanScope}</p> : null}
-      </div>
-    );
+    return <FileInfoView metadata={value} language={language} />;
   }
   if (isArchiveListing(value)) {
     return (

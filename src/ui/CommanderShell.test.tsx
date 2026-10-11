@@ -183,10 +183,13 @@ describe('CommanderShell rendering', () => {
         limitBytes: 256 * 1024,
       },
     }));
+    const getMetadata = vi.fn(async () => ({ ok: true as const, data: {
+      ...file, absolutePath: file.path, extension: 'md', mimeType: 'text/markdown', readonly: false, directoryStats: null,
+    } }));
     render(
       <CommanderShell
         dataSource={dataSource}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), previewFile }}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), previewFile, getMetadata }}
         initialFocusIndex={{ right: 0 }}
       />,
     );
@@ -218,6 +221,13 @@ describe('CommanderShell rendering', () => {
     expect(document.querySelector('.commander-shell')?.getAttribute('aria-activedescendant')).toBe(focusedPath);
     expect(screen.getByText('파일 앞부분만 표시합니다.')).toBeTruthy();
     expect(previewFile).toHaveBeenCalledWith({ path: file.path });
+    await user.keyboard('i');
+    const info = await screen.findByRole('complementary', { name: '파일 정보' });
+    await waitFor(() => expect(within(info).getByText(file.path)).toBeTruthy());
+    expect(getMetadata).toHaveBeenCalledWith({ path: file.path });
+    expect(document.querySelector('.commander-shell')?.getAttribute('aria-activedescendant')).toBe(focusedPath);
+    await user.keyboard('i');
+    expect(screen.queryByRole('complementary')).toBeNull();
     await user.click(screen.getByRole('button', { name: '닫기' }));
     expect(screen.queryByRole('dialog', { name: '빠른 보기' })).toBeNull();
     await user.keyboard('{ArrowDown}');

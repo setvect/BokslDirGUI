@@ -1207,6 +1207,80 @@ button {
   min-height: 180px;
 }
 
+.quick-preview-dialog.has-file-info {
+  width: min(1200px, 94vw);
+}
+
+.quick-preview-body {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.quick-preview-body.has-file-info {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+}
+
+.quick-preview-document {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  gap: 8px;
+}
+
+.quick-preview-info {
+  min-width: 0;
+  max-height: 62vh;
+  overflow: auto;
+  border-left: 1px solid var(--dialog-section-border);
+  padding-left: 12px;
+}
+
+.file-info-view {
+  gap: 16px;
+}
+
+.file-info-view > section {
+  display: grid;
+  gap: 8px;
+}
+
+.file-info-view h4 {
+  margin: 0;
+}
+
+.file-info-view h4:not(:first-child) {
+  margin-top: 8px;
+}
+
+.file-info-view dt,
+.file-info-view dd {
+  overflow-wrap: anywhere;
+}
+
+.file-info-view dd {
+  white-space: pre-wrap;
+}
+
+.file-info-view summary {
+  cursor: pointer;
+  color: var(--cyan);
+  padding-block: 8px;
+}
+
+@media (max-width: 760px) {
+  .quick-preview-body.has-file-info {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quick-preview-info {
+    max-height: 36vh;
+    border-left: 0;
+    border-top: 1px solid var(--dialog-section-border);
+    padding: 10px 0 0;
+  }
+}
+
 .quick-preview-meta {
   display: flex;
   gap: 14px;
