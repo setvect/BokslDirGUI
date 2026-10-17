@@ -100,8 +100,8 @@ describe('CommanderShell rendering', () => {
   it('shows row tooltip details and uses middle ellipsis DOM for long names', async () => {
     const longEntry = {
       ...testEntry(SAMPLE_LISTINGS.right.path, 'very-long-project-configuration-file.generated.json'),
-      modifiedAt: '2026-02-18T11:42:00+09:00',
-      createdAt: '2026-02-17T10:15:00+09:00',
+      modifiedAt: new Date(2026, 1, 18, 11, 42).toISOString(),
+      createdAt: new Date(2026, 1, 17, 10, 15).toISOString(),
     };
     const dataSource = createFixturePanelDataSource({
       left: SAMPLE_LISTINGS.left,

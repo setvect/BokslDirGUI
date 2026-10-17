@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -9,8 +10,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: new URL('./index.html', import.meta.url).pathname,
-        dropOverlay: new URL('./drop-overlay.html', import.meta.url).pathname,
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        dropOverlay: fileURLToPath(new URL('./drop-overlay.html', import.meta.url)),
       },
     },
   },
