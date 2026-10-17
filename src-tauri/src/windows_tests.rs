@@ -178,8 +178,6 @@ fn windows_mutations_reject_ads_before_resolving_parent() {
             .code,
         "invalid_path"
     );
-    let error = crate::operation::canonical_existing_entry(&ads).unwrap_err();
-    assert_eq!(error.code, "invalid_path");
     assert_eq!(fs::read_to_string(file).unwrap(), "keep");
 }
 

@@ -42,5 +42,3 @@ pub(crate) use test_support::start_copy_cancel_after_for_test;
 
 #[cfg(test)]
 pub(crate) use file_io::{guard_delete_target, is_cross_device_error};
-#[cfg(all(test, windows))]
-pub(crate) use file_io::canonical_existing_entry;

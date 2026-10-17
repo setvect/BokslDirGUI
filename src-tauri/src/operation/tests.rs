@@ -583,3 +583,15 @@ fn cross_volume_move_cancellation_keeps_source() {
     assert_eq!(fs::read_to_string(source).unwrap(), "original");
     assert!(!target.join("source.txt").exists());
 }
+
+#[cfg(windows)]
+#[test]
+fn source_entry_rejects_ads_before_resolving_parent() {
+    let fixture = Fixture::new();
+    let file = fixture.0.join("original.txt");
+    fs::write(&file, "keep").unwrap();
+    let ads = format!("{}:stream", file.display());
+    let error = super::file_io::canonical_existing_entry(&ads).unwrap_err();
+    assert_eq!(error.code, "invalid_path");
+    assert_eq!(fs::read_to_string(file).unwrap(), "keep");
+}
