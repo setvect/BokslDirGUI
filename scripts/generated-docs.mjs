@@ -47,7 +47,8 @@ export function replaceGeneratedSections(source, sections) {
     if (finish < start || /<!-- (?:BEGIN|END) GENERATED:/.test(result.slice(start, finish))) {
       throw new Error(`생성 구간 순서 또는 중첩 오류: ${name}`);
     }
-    result = result.slice(0, start) + '\n' + content + '\n' + result.slice(finish);
+    const newline = result.startsWith('\r\n', start) ? '\r\n' : '\n';
+    result = result.slice(0, start) + newline + content.replace(/\r?\n/g, newline) + newline + result.slice(finish);
   }
   return result;
 }

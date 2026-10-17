@@ -70,6 +70,13 @@ test('생성 경계 밖 수동 설명·과거 기록 보존과 반복 생성의 
   assert.equal(result, original.replace('이전 표', '| 새 표 |'));
   assert.equal(replaceGeneratedSections(result, sections), result);
 });
+test('Windows 줄바꿈을 유지하며 동일 내용은 불일치로 보고하지 않음', () => {
+  const source = '설명\r\n<!-- BEGIN GENERATED:test -->\r\n| 표 |\r\n| 값 |\r\n<!-- END GENERATED:test -->\r\n과거 기록\r\n';
+  assert.equal(replaceGeneratedSections(source, { test: '| 표 |\n| 값 |' }), source);
+  const updated = replaceGeneratedSections(source, { test: '| 표 |\n| 새 값 |' });
+  assert.equal(updated, source.replace('| 값 |', '| 새 값 |'));
+  assert.equal(replaceGeneratedSections(updated, { test: '| 표 |\n| 새 값 |' }), updated);
+});
 test('생성 경계 누락·중복·역순·중첩은 덮어쓰기 대신 실패', () => {
   const begin = '<!-- BEGIN GENERATED:test -->';
   const end = '<!-- END GENERATED:test -->';
