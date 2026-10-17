@@ -303,7 +303,14 @@ fn invalid_path_returns_typed_error() {
 #[test]
 fn list_locations_returns_home_and_roots() {
     let locations = list_locations().expect("locations should be available");
-    assert!(!locations.home.is_empty());
+    assert!(Path::new(&locations.home).is_absolute());
+    assert!(!locations.roots.is_empty());
+    #[cfg(windows)]
+    for root in &locations.roots {
+        assert!(Path::new(root).is_absolute());
+        assert!(root.ends_with(":\\"));
+    }
+    #[cfg(not(windows))]
     assert!(locations.roots.iter().any(|root| root == "/"));
 }
 
