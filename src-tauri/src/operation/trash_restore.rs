@@ -34,6 +34,8 @@ struct Receipt {
 }
 #[derive(PartialEq, Eq)]
 struct Identity {
+    #[cfg(windows)]
+    entry_id: String,
     #[cfg(unix)]
     device: u64,
     #[cfg(unix)]
@@ -46,6 +48,8 @@ impl Identity {
         #[cfg(unix)]
         use std::os::unix::fs::MetadataExt;
         Ok(Self {
+            #[cfg(windows)]
+            entry_id: crate::platform::entry_identity(path)?,
             #[cfg(unix)]
             device: metadata.dev(),
             #[cfg(unix)]

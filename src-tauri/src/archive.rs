@@ -330,7 +330,8 @@ fn parse_7z_slt_entries(stdout: &[u8]) -> Vec<ArchiveEntryInfo> {
                 entries.push(entry);
             }
             current = SevenZipEntryFields::default();
-            current.path = Some(value.trim().to_string());
+            // 7z의 Windows 구분자만 가상 경로 구분자로 통일. ..·절대 경로는 안전 검사에 유지.
+            current.path = Some(value.trim().replace('\\', "/"));
             continue;
         }
         current.apply(key, value);

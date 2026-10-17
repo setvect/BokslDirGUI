@@ -86,7 +86,7 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - `BOKSLDIRGUI_REQUIRE_PROVIDERS=1`: provider 의존 테스트의 도구 부재 조기 반환을 실패로 처리
 - 도구 가용성 통과와 포맷별 처리 성공의 구분 필수
 - CI의 Windows 도구 보고는 Windows 압축 기능 완료 판정이 아님, 동봉과 포맷별 지원은 W3 범위
-- 로컬 Mac은 `7z/7zz` 미설치 확인, 해당 실제 7z 왕복은 미검증 유지
+- 최초 로컬 Mac 검증은 `7z/7zz` 미설치로 실제 7z 왕복 미검증, 임시 도구를 이용한 후속 검증은 7절 참조
 
 ## 4. Windows 수동 체크리스트
 
@@ -148,3 +148,10 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - manifest 보완: Tauri 2.6.2 기본 Common Controls v6 선언을 그대로 보존하여 MSVC의 앱·라이브러리 테스트 실행 파일에 포함, 다른 대상 빌드 유지
 - 보완 근거: [Tauri 공식 이슈와 유지보수자 해결책](https://github.com/tauri-apps/tauri/issues/13419), 로컬 `tauri-winres 0.3.6`의 앱 바이너리 한정 리소스 연결 확인
 - Windows 최종 테스트·설치 파일 결과: manifest 보완 후 CI 실행 증거로 별도 판정, 기존 수동 체크리스트의 미실행 상태 유지
+- manifest 후속 결과: Windows 테스트 본문 실행 확인, Unix 루트 고정 기대값을 OS별 루트 계약 검사로 보완
+- 파일 동일성 보완: Windows 휴지통 receipt 검사에 기존 볼륨·파일 ID 조회 재사용, 생성 시각이 같은 교체 파일의 잘못된 복원 차단
+- 7z 경로 보완: Windows 목록의 역슬래시를 가상 경로 구분자로 통일, 상위 경로·절대 경로의 추출 거부 회귀 유지
+- 로컬 실제 7z 검증: 공식 7-Zip 26.04 macOS 배포본의 SHA-256 확인 후 임시 경로에서 실행, 시스템 설치 변경 없음
+- 후속 검증: UTC `npm run verify` 통과, 프론트 328개·도구 14개·Rust 97개 통과·실제 macOS 휴지통 1개 명시 제외, 스모크 261개 통과
+- 엄격 provider 검증: `npm run verify:providers` 및 `BOKSLDIRGUI_REQUIRE_PROVIDERS=1 cargo test --manifest-path src-tauri/Cargo.toml --locked -- --nocapture` 통과, 7z 실제 목록·추가·덮어쓰기·추출·암호·대용량 목록 포함
+- 변경 검토: 기존 플랫폼 파일 식별 경계와 압축 가상 경로 계약 재사용, 추가 상태 소유자·우회 실행 경로·관련 없는 구조 정리 없음

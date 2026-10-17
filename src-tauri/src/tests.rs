@@ -1513,6 +1513,19 @@ fn archive_7z_slt_parser_preserves_spaces_and_unsafe_paths() {
 }
 
 #[test]
+fn archive_7z_windows_separators_keep_virtual_paths_and_traversal_guards() {
+    let output = b"Path = fixture.7z\r\nType = 7z\r\n----------\r\nPath = nested\\my file.txt\r\nSize = 5\r\nPath = ..\\escape.txt\r\nSize = 1\r\nPath = C:\\absolute.txt\r\nSize = 1\r\n";
+    let paths = archive::parse_7z_slt_paths_for_test(output);
+    assert_eq!(paths, vec!["nested/my file.txt", "../escape.txt", "C:/absolute.txt"]);
+    assert!(!operation::archive_entry_is_unsafe_for_test(&paths[0]));
+    assert!(operation::archive_entry_is_unsafe_for_test(&paths[1]));
+    assert!(operation::archive_entry_is_unsafe_for_test(&paths[2]));
+    let entries = archive::parse_7z_slt_entries_for_test(output);
+    assert_eq!(entries[0].name, "my file.txt");
+    assert!(entries[0].path.ends_with("!nested/my file.txt"));
+}
+
+#[test]
 fn archive_listing_parsers_keep_file_metadata_when_available() {
     let names = vec![
         "alpha.txt".to_string(),
@@ -1599,14 +1612,13 @@ fn archive_7z_provider_lists_real_fixture_when_available() {
 
     let added = fixture.root.join("added-7z.txt");
     fs::write(&added, b"first").expect("7z add fixture should be written");
-    operation::start_archive_add(
-        None,
+    let summary = operation::archive_add_summary_for_test(
         vec![added.to_string_lossy().into_owned()],
         archive_path.to_string_lossy().into_owned(),
         "nested".to_string(),
         ConflictDecision::Overwrite,
-    )
-    .expect("7z archive add should start");
+    );
+    assert_eq!(summary.state, OperationState::Completed, "{:?}", summary.errors);
     let listing = archive_list(archive_path.to_string_lossy().into_owned(), None, None)
         .expect("updated 7z listing should succeed");
     assert!(listing
@@ -1615,14 +1627,13 @@ fn archive_7z_provider_lists_real_fixture_when_available() {
         .any(|entry| entry.path.ends_with("!nested/added-7z.txt")));
 
     fs::write(&added, b"second").expect("7z conflict fixture should be updated");
-    operation::start_archive_add(
-        None,
+    let summary = operation::archive_add_summary_for_test(
         vec![added.to_string_lossy().into_owned()],
         archive_path.to_string_lossy().into_owned(),
         "nested".to_string(),
         ConflictDecision::Overwrite,
-    )
-    .expect("7z archive overwrite should start");
+    );
+    assert_eq!(summary.state, OperationState::Completed, "{:?}", summary.errors);
     let extract_dir = fixture.root.join("7z-add-extract");
     fs::create_dir_all(&extract_dir).expect("7z extract directory should exist");
     operation::start_archive_extract(
