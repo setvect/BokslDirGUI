@@ -11,7 +11,7 @@ use super::conflict::handle_conflict;
 use super::file_io::{
     canonical_existing_directory, collect_source_paths, copy_tree, copy_tree_replacing,
     count_entries_and_bytes, is_cross_device_error, is_socket_file_type, path_is_occupied,
-    remove_entry_any, same_path, scan_work, SpecialFileScanPolicy,
+    remove_entry_any, same_path, path_is_within, scan_work, SpecialFileScanPolicy,
 };
 use super::runtime::should_cancel_for_test;
 use super::runtime::{
@@ -38,9 +38,9 @@ pub(super) fn run_copy(
     };
     for source in &sources {
         let destination = source.file_name().map(|name| target_dir.join(name));
-        if (source.is_dir() && target_dir.starts_with(source))
+        if (source.is_dir() && path_is_within(&target_dir, source))
             || destination.is_some_and(|destination| {
-                source != &destination && source.starts_with(&destination)
+                source != &destination && path_is_within(source, &destination)
             })
         {
             return Err(error_summary(
@@ -187,6 +187,17 @@ pub(super) fn run_move(
     target_dir: &str,
     policy: ConflictDecision,
 ) -> OperationSummary {
+    run_move_with_rename(app, operation_id, sources, target_dir, policy, mutation::rename_no_replace)
+}
+
+pub(super) fn run_move_with_rename(
+    app: Option<&tauri::AppHandle>,
+    operation_id: &str,
+    sources: &[String],
+    target_dir: &str,
+    policy: ConflictDecision,
+    rename: impl Fn(&Path, &Path) -> std::io::Result<()>,
+) -> OperationSummary {
     let kind = OperationKind::Move;
     let target_dir = match canonical_existing_directory(target_dir) {
         Ok(path) => path,
@@ -198,9 +209,9 @@ pub(super) fn run_move(
     };
     for source in &sources {
         let destination = source.file_name().map(|name| target_dir.join(name));
-        if (source.is_dir() && target_dir.starts_with(source))
+        if (source.is_dir() && path_is_within(&target_dir, source))
             || destination.is_some_and(|destination| {
-                source != &destination && source.starts_with(&destination)
+                source != &destination && path_is_within(source, &destination)
             })
         {
             return error_summary(
@@ -342,7 +353,7 @@ pub(super) fn run_move(
                 continue;
             }
         };
-        match mutation::rename_no_replace(source, &destination) {
+        match rename(source, &destination) {
             Ok(()) => {
                 stats.completed_files += source_entries;
                 stats.completed_bytes += source_bytes;

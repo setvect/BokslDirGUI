@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ACTION_BY_ID, labelForAction } from '../actions/registry';
-import type { PanelId, TrashUndoPreview } from '../domain/types';
+import type { PanelId, PlatformInfo, TrashUndoPreview } from '../domain/types';
 import { formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
 import { operationSummaryStatusLabel } from '../operations/operationLabels';
 import type { OpenDialogRequest } from '../operations/operationTypes';
@@ -11,6 +11,7 @@ interface Dependencies {
   readonly operationClient: LongRunningOperationClient;
   readonly runtimeBackendAvailable: boolean;
   readonly operationBusy: boolean;
+  readonly platformInfo?: PlatformInfo;
   readonly language: SupportedLanguage;
   readonly openOperationDialog: (request: OpenDialogRequest) => void;
   readonly refreshPanel: (panel: PanelId, background?: boolean) => void;
@@ -22,7 +23,7 @@ export function useTrashUndo(dependencies: Dependencies) {
   const [revision, setRevision] = useState(0);
   const sequence = useRef(0);
   const { mutationClient, operationClient, runtimeBackendAvailable, operationBusy } = dependencies;
-  const enabled = runtimeBackendAvailable && !!mutationClient.previewTrashUndo && !!operationClient.startTrashUndo;
+  const enabled = runtimeBackendAvailable && (dependencies.platformInfo?.features.trashUndo ?? true) && !!mutationClient.previewTrashUndo && !!operationClient.startTrashUndo;
   useEffect(() => {
     const request = ++sequence.current;
     setPreview(null);

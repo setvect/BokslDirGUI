@@ -46,6 +46,7 @@ export const TAURI_NATIVE_FILE_DRAG_CLIENT: NativeFileDragClient = {
 };
 
 export interface SafeMutationClient {
+  getPlatformInfo?: typeof tauriClient.getPlatformInfo;
   previewTrashUndo?: typeof tauriClient.previewTrashUndo;
   previewBulkRename?: typeof tauriClient.previewBulkRename;
   readFileClipboard?: typeof tauriClient.readFileClipboard;

@@ -276,3 +276,16 @@ const key = (
   metaKey: modifiers.metaKey ?? false,
   shiftKey: modifiers.shiftKey ?? false,
 });
+
+it('uses backend feature availability even when keyboard presentation is macOS', () => {
+  const context: ActionContext = { activePanel: 'left', focusedEntryKind: 'file', selectedCount: 1,
+    hasConcreteFocus: true, effectiveTargetCount: 1, platform: 'mac', hasOppositePanel: true,
+    shellCommandEnabled: false, operationBusy: false, backendAvailable: true, activePathIsArchive: false,
+    trashUndoAvailable: true,
+    platformInfo: { os: 'windows', features: { openWith: false, currentFolderManager: false,
+      currentFolderTerminal: false, nativeFileClipboard: false, trashUndo: false } } };
+  for (const id of ['external.openWith', 'file.undoTrash', 'external.openCurrentInFinder', 'external.openCurrentInTerminal'] as const) {
+    expect(ACTION_BY_ID.get(id)!.isEnabled(context)).toBe(false);
+  }
+  expect(ACTION_BY_ID.get('file.copy')!.isEnabled(context)).toBe(true);
+});

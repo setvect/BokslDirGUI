@@ -77,14 +77,20 @@ pub(crate) fn archive_extract_summary_for_test(
 
 #[cfg(test)]
 pub(crate) fn external_archive_command_cancel_for_test() -> Option<(CommandResult<()>, Duration)> {
-    let sleep = external_binary("sleep")?;
+    #[cfg(not(windows))]
+    let executable = external_binary("sleep")?;
+    #[cfg(windows)]
+    let executable = String::from("powershell.exe");
     let operation_id = next_operation_id(OperationKind::ArchiveCreate);
     register_operation(&operation_id);
     let worker_operation_id = operation_id.clone();
     let worker = thread::spawn(move || {
         let started_at = Instant::now();
-        let mut command = Command::new(sleep);
+        let mut command = Command::new(executable);
+        #[cfg(not(windows))]
         command.arg("10");
+        #[cfg(windows)]
+        command.args(["-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 10"]);
         let result = run_external_command(&worker_operation_id, command, None);
         (result, started_at.elapsed())
     });

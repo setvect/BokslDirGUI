@@ -30,6 +30,13 @@ imagesize = "0.14.0"
 
 # OS 복원 정보와 플랫폼별 휴지통 처리를 위해 전용 구현을 사용한다.
 trash = "5.2.9"
+# Tauri의 기존 전이 의존성 재사용: OS 홈/설정 경로와 파일 동일성 비교.
+dirs = "6.0.0"
+same-file = "1.0.6"
+
+# Windows 드라이브 및 재파싱 지점 검증에 필요한 최소 OS API.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security"] }
 
 # Tauri가 이미 사용하는 objc2 바인딩으로 macOS 연결 앱 목록 조회.
 [target.'cfg(target_os = "macos")'.dependencies]

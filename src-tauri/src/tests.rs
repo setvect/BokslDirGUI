@@ -733,6 +733,7 @@ fn delete_guard_rejects_protected_root_path() {
 }
 
 #[test]
+#[cfg(unix)]
 fn delete_guard_rejects_platform_protected_paths() {
     for protected in ["/System", "/bin", "/usr", "/Users"] {
         let error = operation::guard_delete_target(Path::new(protected))
@@ -748,7 +749,7 @@ fn resolve_conflict_feeds_backend_wait_channel() {
 }
 #[test]
 fn cross_device_error_detection_supports_move_fallback_policy() {
-    let error = io::Error::from_raw_os_error(18);
+    let error = io::Error::from_raw_os_error(if cfg!(windows) { 17 } else { 18 });
     assert!(operation::is_cross_device_error(&error));
 }
 
@@ -856,16 +857,16 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
 
     let disabled = prepare_shell_command(
         fixture.root.to_string_lossy().into_owned(),
-        "echo".to_string(),
-        Some(vec!["hello".to_string()]),
+        test_echo_command().0,
+        Some(test_echo_args("hello")),
     )
     .expect("disabled shell preview should be returned");
     assert!(!disabled.policy.enabled);
     assert_eq!(disabled.confirm_token, "disabled");
     let denied = run_shell_command(
         fixture.root.to_string_lossy().into_owned(),
-        "echo".to_string(),
-        Some(vec!["blocked".to_string()]),
+        test_echo_command().0,
+        Some(test_echo_args("blocked")),
         None,
     )
     .expect_err("direct shell command must respect the disabled setting");
@@ -877,15 +878,15 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
     .expect("shell command setting should be enabled for test");
     let preview = prepare_shell_command(
         fixture.root.to_string_lossy().into_owned(),
-        "echo".to_string(),
-        Some(vec!["hello".to_string()]),
+        test_echo_command().0,
+        Some(test_echo_args("hello")),
     )
     .expect("enabled shell preview should issue token");
     assert!(preview.policy.enabled);
     let direct = run_shell_command(
         fixture.root.to_string_lossy().into_owned(),
-        "echo".to_string(),
-        Some(vec!["direct".to_string()]),
+        test_echo_command().0,
+        Some(test_echo_args("direct")),
         None,
     )
     .expect("enabled shell command should run without a confirmation token");
@@ -893,8 +894,8 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
     assert_eq!(direct.stdout.trim(), "direct");
     let result = run_shell_command(
         fixture.root.to_string_lossy().into_owned(),
-        "echo".to_string(),
-        Some(vec!["hello".to_string()]),
+        test_echo_command().0,
+        Some(test_echo_args("hello")),
         Some(preview.confirm_token.clone()),
     )
     .expect("tokenized shell command should run");
@@ -903,8 +904,8 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
 
     let reused = run_shell_command(
         fixture.root.to_string_lossy().into_owned(),
-        "echo".to_string(),
-        Some(vec!["hello".to_string()]),
+        test_echo_command().0,
+        Some(test_echo_args("hello")),
         Some(preview.confirm_token),
     )
     .expect_err("shell confirm token must be one-shot");
@@ -929,7 +930,7 @@ fn shell_command_confirm_token_expires_after_ttl() {
 
     let preview = prepare_shell_command(
         fixture.root.to_string_lossy().into_owned(),
-        "echo".to_string(),
+        test_echo_command().0,
         Some(vec!["expired".to_string()]),
     )
     .expect("enabled shell preview should issue token");
@@ -937,7 +938,7 @@ fn shell_command_confirm_token_expires_after_ttl() {
     shell_command::advance_clock_past_token_ttl_for_test();
     let expired = run_shell_command(
         fixture.root.to_string_lossy().into_owned(),
-        "echo".to_string(),
+        test_echo_command().0,
         Some(vec!["expired".to_string()]),
         Some(preview.confirm_token),
     )
@@ -997,6 +998,7 @@ fn external_open_commands_support_dry_run() {
 fn archive_zip_create_list_extract_round_trip_uses_relative_entry_names() {
     let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
     if !command_available("zip") || !command_available("unzip") {
+        report_missing_provider("zip/unzip");
         return;
     }
     let fixture = TempFixture::new();
@@ -1231,6 +1233,7 @@ fn archive_zip_create_list_extract_round_trip_uses_relative_entry_names() {
 fn archive_required_formats_create_list_and_extract_round_trip() {
     let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
     if !command_available("zip") || !command_available("unzip") || !command_available("tar") {
+        report_missing_provider("zip/unzip/tar");
         return;
     }
     for (suffix, format) in [
@@ -1292,6 +1295,7 @@ fn archive_required_formats_create_list_and_extract_round_trip() {
 fn archive_listing_limit_reports_truncation() {
     let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
     if !command_available("zip") || !command_available("unzip") {
+        report_missing_provider("zip/unzip");
         return;
     }
     let fixture = TempFixture::new();
@@ -1322,6 +1326,7 @@ fn archive_password_round_trip_and_unsafe_entry_guards() {
     let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
     let fixture = TempFixture::new();
     if !command_available("zip") || !command_available("unzip") {
+        report_missing_provider("zip/unzip");
         return;
     }
     let secret_archive = fixture.root.join("secret.zip");
@@ -1423,6 +1428,7 @@ fn archive_password_round_trip_and_unsafe_entry_guards() {
 fn external_archive_provider_is_killed_when_operation_is_cancelled() {
     let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
     let Some((result, elapsed)) = operation::external_archive_command_cancel_for_test() else {
+        report_missing_provider("sleep");
         return;
     };
     let error = result.expect_err("cancelled external provider should return cancellation");
@@ -1549,6 +1555,7 @@ fn archive_listing_parsers_keep_file_metadata_when_available() {
 fn archive_7z_provider_lists_real_fixture_when_available() {
     let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
     let Some(binary) = archive::seven_zip_binary_for_test() else {
+        report_missing_provider("7z/7zz");
         return;
     };
     let fixture = TempFixture::new();
@@ -1631,6 +1638,7 @@ fn archive_7z_provider_lists_real_fixture_when_available() {
 fn archive_7z_password_and_large_listing_when_provider_is_available() {
     let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
     let Some(_binary) = archive::seven_zip_binary_for_test() else {
+        report_missing_provider("7z/7zz");
         return;
     };
     let fixture = TempFixture::new();
@@ -1710,4 +1718,17 @@ fn archive_7z_password_and_large_listing_when_provider_is_available() {
 
 fn command_available(command: &str) -> bool {
     Command::new(command).arg("--help").output().is_ok()
+}
+
+fn test_echo_command() -> (String, Vec<String>) {
+    if cfg!(windows) { ("cmd.exe".into(), vec!["/D".into(), "/C".into(), "echo".into()]) }
+    else { ("echo".into(), vec![]) }
+}
+fn test_echo_args(text: &str) -> Vec<String> {
+    let mut args = test_echo_command().1; args.push(text.into()); args
+}
+
+pub(crate) fn report_missing_provider(name: &str) {
+    assert!(env::var_os("BOKSLDIRGUI_REQUIRE_PROVIDERS").is_none(), "필수 압축/프로세스 검증 도구 없음: {name}");
+    eprintln!("[미검증: 도구 없음] {name}; 전체 지원 완료로 판단 금지");
 }

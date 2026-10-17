@@ -2,7 +2,6 @@ use crate::contracts::{AppError, ArchiveListing, CommandResult, EntryKind, FileE
 use crate::filesystem::{is_archive_path, map_io_error};
 use crate::navigation;
 use crate::path_text::display_path;
-use std::env;
 use std::path::Path;
 use std::process::Command;
 
@@ -378,6 +377,12 @@ fn success_status_for_test() -> std::process::ExitStatus {
     std::process::ExitStatus::from_raw(0)
 }
 
+#[cfg(all(test, windows))]
+fn success_status_for_test() -> std::process::ExitStatus {
+    use std::os::windows::process::ExitStatusExt;
+    std::process::ExitStatus::from_raw(0)
+}
+
 #[derive(Default)]
 struct SevenZipEntryFields {
     path: Option<String>,
@@ -515,14 +520,7 @@ fn permission_text_from_7z_attributes(attributes: Option<&str>) -> Option<String
 }
 
 fn find_binary(name: &str) -> Option<String> {
-    let path_var = env::var_os("PATH")?;
-    for dir in env::split_paths(&path_var) {
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Some(display_path(&candidate));
-        }
-    }
-    None
+    crate::platform::find_executable(name)
 }
 
 #[cfg(test)]

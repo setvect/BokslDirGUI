@@ -99,6 +99,7 @@ fn external_command_observer_receives_output_before_process_exit() {
 fn zip_create_reports_processed_items_before_publication() {
     let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
     if external_binary("zip").is_none() {
+        crate::tests::report_missing_provider("zip");
         return;
     }
     let fixture = Fixture::new();
@@ -363,6 +364,7 @@ fn archive_extract_rejects_escaping_strip_prefix_before_creating_target() {
 fn archive_skip_does_not_count_as_success() {
     let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
     if external_binary("zip").is_none() || external_binary("unzip").is_none() {
+        crate::tests::report_missing_provider("zip/unzip");
         return;
     }
     let fixture = Fixture::new();
@@ -391,9 +393,10 @@ fn archive_skip_does_not_count_as_success() {
 #[test]
 fn rename_preserves_exact_source_name_with_surrounding_spaces() {
     let fixture = Fixture::new();
-    fs::write(fixture.0.join(" note "), b"intended").unwrap();
+    let name = if cfg!(windows) { " note" } else { " note " };
+    fs::write(fixture.0.join(name), b"intended").unwrap();
     fs::write(fixture.0.join("note"), b"unrelated").unwrap();
-    mutation::rename_entry(&display_path(&fixture.0.join(" note ")), "renamed").unwrap();
+    mutation::rename_entry(&display_path(&fixture.0.join(name)), "renamed").unwrap();
     assert_eq!(fs::read(fixture.0.join("renamed")).unwrap(), b"intended");
     assert_eq!(fs::read(fixture.0.join("note")).unwrap(), b"unrelated");
 }
@@ -494,6 +497,7 @@ fn failing_archive_provider_never_publishes_partial_create_or_add() {
     use std::os::unix::fs::PermissionsExt;
     let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
     if external_binary("zip").is_none() || external_binary("unzip").is_none() {
+        crate::tests::report_missing_provider("zip/unzip");
         return;
     }
     let fixture = Fixture::new();
@@ -538,4 +542,44 @@ fn failing_archive_provider_never_publishes_partial_create_or_add() {
         .file_name()
         .to_string_lossy()
         .starts_with(".boksldirgui-op")));
+}
+
+#[test]
+fn cross_volume_move_copies_before_removing_source_and_keeps_source_on_copy_failure() {
+    use super::transfer::run_move_with_rename;
+    let fixture = Fixture::new();
+    let source = fixture.0.join("source.txt");
+    let target = fixture.0.join("target"); fs::create_dir(&target).unwrap();
+    fs::write(&source, "original").unwrap();
+    let summary = run_move_with_rename(None, "cross-volume", &[display_path(&source)], &display_path(&target),
+        ConflictDecision::Skip, |_, _| Err(io::Error::from_raw_os_error(if cfg!(windows) { 17 } else { 18 })));
+    assert_eq!(summary.state, OperationState::Completed);
+    assert!(!source.exists()); assert_eq!(fs::read_to_string(target.join("source.txt")).unwrap(), "original");
+    fs::write(&source, "second").unwrap(); fs::remove_file(target.join("source.txt")).unwrap();
+    let summary = run_move_with_rename(None, "failed-cross-volume", &[display_path(&source)], &display_path(&target),
+        ConflictDecision::Skip, |_, _| {
+            // 스캔 이후 대상이 생기는 경합: 새 대상과 원본 모두 보존.
+            fs::write(target.join("source.txt"), "concurrent").unwrap();
+            Err(io::Error::from_raw_os_error(if cfg!(windows) { 17 } else { 18 }))
+        });
+    assert_eq!(summary.state, OperationState::Failed);
+    assert_eq!(fs::read_to_string(&source).unwrap(), "second");
+    assert_eq!(fs::read_to_string(target.join("source.txt")).unwrap(), "concurrent");
+}
+
+#[test]
+fn cross_volume_move_cancellation_keeps_source() {
+    use super::transfer::run_move_with_rename;
+    let fixture = Fixture::new(); let source = fixture.0.join("source.txt");
+    let target = fixture.0.join("target"); fs::create_dir(&target).unwrap(); fs::write(&source, "original").unwrap();
+    let id = next_operation_id(OperationKind::Move); register_operation(&id);
+    let summary = run_move_with_rename(None, &id, &[display_path(&source)], &display_path(&target),
+        ConflictDecision::Skip, |_, _| {
+            super::runtime::cancel_operation(id.clone()).unwrap();
+            Err(io::Error::from_raw_os_error(if cfg!(windows) { 17 } else { 18 }))
+        });
+    finish_operation(&id);
+    assert_eq!(summary.state, OperationState::Cancelled);
+    assert_eq!(fs::read_to_string(source).unwrap(), "original");
+    assert!(!target.join("source.txt").exists());
 }

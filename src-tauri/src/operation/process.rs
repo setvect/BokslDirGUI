@@ -1,7 +1,5 @@
 use crate::contracts::{AppError, CommandResult};
 use crate::filesystem::map_io_error;
-use crate::path_text::display_path;
-use std::env;
 use std::io::Read;
 use std::path::Path;
 use std::process::Command;
@@ -189,12 +187,5 @@ pub(super) fn run_external_command_capture_observed(
 }
 
 pub(super) fn external_binary(name: &str) -> Option<String> {
-    let path_var = env::var_os("PATH")?;
-    for dir in env::split_paths(&path_var) {
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Some(display_path(&candidate));
-        }
-    }
-    None
+    crate::platform::find_executable(name)
 }

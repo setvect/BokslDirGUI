@@ -1,6 +1,6 @@
 use crate::contracts::{AppError, CommandResult};
 use crate::filesystem::map_io_error;
-use crate::mutation::{path_is_occupied, validate_child_name};
+use crate::mutation::{target_conflicts, validate_child_name};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
@@ -79,7 +79,7 @@ pub(crate) fn preview(
             item: RenameItem {
                 source: source.to_string_lossy().into_owned(),
                 new_name,
-                stamp: stamp(&metadata),
+                stamp: stamp(&metadata, &source)?,
             },
             error: None,
         });
@@ -117,7 +117,8 @@ fn plan_errors(items: &[RenameItem]) -> Vec<Option<AppError>> {
                 let target = source.with_file_name(&item.new_name);
                 let metadata =
                     fs::symlink_metadata(&source).map_err(|e| map_io_error(e, Some(&source)))?;
-                if stamp(&metadata) != item.stamp {
+                crate::platform::validate_reparse_point(&source, &metadata)?;
+                if stamp(&metadata, &source)? != item.stamp {
                     return Err(AppError::new(
                         "source_changed",
                         "errors.renameSourceChanged",
@@ -125,7 +126,7 @@ fn plan_errors(items: &[RenameItem]) -> Vec<Option<AppError>> {
                         true,
                     ));
                 }
-                if target != source && path_is_occupied(&target) {
+                if target_conflicts(&source, &target) {
                     return Err(AppError::new(
                         "already_exists",
                         "errors.alreadyExists",
@@ -179,6 +180,7 @@ fn plan_errors(items: &[RenameItem]) -> Vec<Option<AppError>> {
 
 fn source_path(raw: &str) -> CommandResult<PathBuf> {
     let raw = Path::new(raw);
+    crate::platform::validate_path_input(raw)?;
     if !raw.is_absolute() {
         return Err(invalid(Some(raw)));
     }
@@ -193,27 +195,31 @@ fn source_path(raw: &str) -> CommandResult<PathBuf> {
         .map_err(|e| map_io_error(e, Some(raw)))?;
     Ok(parent.join(name))
 }
-fn stamp(metadata: &fs::Metadata) -> String {
+fn stamp(metadata: &fs::Metadata, _path: &Path) -> CommandResult<String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        format!(
+        Ok(format!(
             "{}:{}:{}:{}:{}",
             metadata.dev(),
             metadata.ino(),
             metadata.len(),
             metadata.mtime(),
             metadata.mtime_nsec()
-        )
+        ))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        format!(
+        Ok(format!("{}:{:?}:{}", crate::platform::entry_identity(_path)?, metadata.modified(), metadata.len()))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        Ok(format!(
             "{:?}:{:?}:{}",
             metadata.created(),
             metadata.modified(),
             metadata.len()
-        )
+        ))
     }
 }
 fn invalid(path: Option<&Path>) -> AppError {
@@ -289,7 +295,7 @@ pub(crate) mod tests {
         fs::create_dir(&directory).unwrap();
         let rows = preview(vec![directory.to_string_lossy().into_owned()], rules()).unwrap();
         assert_eq!(rows[0].item.new_name, "접두_dir.new_001");
-        let spaced = root.join(" spaced ");
+        let spaced = root.join(if cfg!(windows) { " spaced.txt" } else { " spaced " });
         fs::write(&spaced, "keep").unwrap();
         let mut rule = rules();
         rule.find.clear();

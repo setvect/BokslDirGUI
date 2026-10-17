@@ -1,0 +1,137 @@
+# Windows W0부터 W2까지 구현과 검증
+
+- 기준일: 2026-10-17
+- 작업 전 태그: `before-windows-w0-w2-20261017`, 기준 커밋 `4969651`
+- 기본 검증 대상: Windows 11 x64 사용자 환경, CI 빌드 대상은 Windows Server 2022 x64 runner
+- ARM64·다른 Windows 버전: 지원 판정 전 별도 실행 증거 필요, 현재 미검증
+- 상태: Mac에서 가능한 구현·회귀 검증 수행, Windows 실제 빌드·동작 판정 대기
+- 전체 계획: [Windows 지원 분석과 작업 계획](windows-support-plan.md)
+
+## 1. 이번 구현 범위
+
+| 단계 | 변경 | 확인 범위 |
+| --- | --- | --- |
+| W0 | Unix 한정 테스트 종료 상태의 Windows 구현, 파일 URL 경로 수정, Windows 테스트용 셸·junction fixture | Mac 테스트·소스 검사, Windows 실행 대기 |
+| W0 | macOS·Windows CI, 설치 산출물 업로드, provider 가용성 보고·엄격 검사 | 설정 작성 완료, 원격 workflow 실행 전 |
+| W1 | `get_platform_info`와 공통 DTO, action context·실행·클립보드·복원 가용성 연결 | Mac UI·계약·늦은 응답 테스트 |
+| W1 | OS 사용자 홈·설정 경로, Windows 논리 드라이브 조회, UNC·확장 경로의 루트 보존 | 순수 경로 계산은 Mac 검증, Windows OS 조회 대기 |
+| W2 | Windows 예약 이름·끝 점/공백·ADS·장치 경로 검사, 다른 볼륨 오류 17·파일 잠금 오류 구분 | 순수 규칙·모의 오류 테스트, 실제 Windows 오류 대기 |
+| W2 | 파일 동일성 기반 자기 복사·중첩 검사, Windows 파일 ID 기반 이름 변경 사전 재검증 | Mac 파일 작업 회귀, Windows ID·대소문자 이름 변경 대기 |
+| W2 | 보호 디렉터리 조회, 파일·디렉터리 심볼릭 링크 복사/삭제, 미지원 재파싱 지점 차단 | Mac 공통 경로 회귀, Windows 링크·권한 대기 |
+| W2 | Windows 숨김/시스템 속성·실행 파일 판별, 일반 파일 속성 보존 | Windows 전용 회귀 추가, 실제 실행 대기 |
+
+- Windows 미구현 기능의 지원 정보: 연결 앱·현재 폴더 파일 관리자/터미널·네이티브 파일 클립보드·휴지통 복원은 false 유지
+- Windows 앱 내부 Ctrl+C/X/V와 공통 파일 작업 유지, W4·W5의 OS 연동 완료와 구분
+- 공통 operation store·작업 확인·진행률·충돌·취소·요약의 소유권 유지
+- 태그 이후 구현 변경의 커밋·브랜치 push 미수행
+
+## 2. 경로와 파일 정책
+
+- Rust 실제 파일 경로: `Path`·`PathBuf`와 OS canonical 경로 유지, Windows 확장 경로 접두사 무조건 제거 금지
+- React 경로: 전달받은 원문 유지, 부모 경계 계산에만 구분자 정규화, 경로 전체 trim·소문자화 금지
+- Windows 입력: 절대 드라이브·UNC·그 확장 길이 경로만 허용, 드라이브 상대 경로·장치 namespace·ADS 입력 거부
+- 압축 내부 경로: 기존 `/` 기반 가상 경로 유지, 실제 OS 경로와 분리
+- 외부 앱에 확장 경로를 전달하는 호환성: W4 실제 앱 검증 대상, 이번 단계에서 완료 주장 없음
+- 생성 대상 이름: Windows 예약어·금지 문자·끝 점·끝 공백 거부
+- 기존 원본 이름: 정확한 항목 식별자 유지, 새 이름의 정규화로 원본 경로 변경 금지
+- 대소문자만 변경: 같은 파일 ID와 디렉터리 항목을 확인한 경우만 기존 no-replace 이동 시도
+- 심볼릭 링크: 파일·디렉터리 링크의 대상을 복사하거나 삭제하지 않고 링크 항목 자체 처리
+- junction·알 수 없는 재파싱 지점: 변경 작업 전 명시적 미지원 오류, 대상 재귀 변경 금지
+- 디렉터리 크기 계산: Windows 재파싱 지점의 하위 대상 추적 제외
+- `.lnk`: 일반 파일로 복사·이동·삭제, 심볼릭 링크로 간주 금지
+- 일반 파일의 Windows 보존 범위: 파일 내용·읽기 전용·숨김·시스템·archive 속성
+- ACL·소유자·ADS·시간·디렉터리 메타데이터·압축/희소 속성의 전체 보존: 미구현 범위 명시, 무손실 전체 메타데이터 복사 주장 금지
+- 권한 부족: 항목별 오류 표시, 앱 전체 관리자 권한 실행으로 우회 금지
+- 이동 취소·복사 경합 실패: 원본 유지, 기존 대상 덮어쓰기 금지
+
+## 3. Windows에서 직접 실행할 명령
+
+- 전제: Windows 네이티브 터미널, Node 24 이상, Rust 1.93.0 MSVC, C++ Build Tools, WebView2 준비
+- 전제: 작업 변경을 포함한 동일 소스와 lockfile 사용, 기준 태그만 checkout한 상태와 구분
+- 실행 위치: 저장소 루트
+
+```powershell
+npm ci
+npm run typecheck
+npm test
+cargo check --manifest-path src-tauri/Cargo.toml --locked
+cargo test --manifest-path src-tauri/Cargo.toml --locked --no-run
+cargo test --manifest-path src-tauri/Cargo.toml --locked -- --nocapture
+npm run verify
+npm run tauri:build -- --bundles nsis
+```
+
+- 자동 Windows 테스트: 예약 이름, 파일 속성·잠금, 대소문자 이름 변경, 홈 보호, 드라이브 형식, 설정 반복 저장, 파일 ID 교체, junction 차단, 장치/ADS 경로 거부
+- 심볼릭 링크 테스트: 개발자 모드 또는 생성 권한이 있는 전용 환경에서 명시 실행
+
+```powershell
+cargo test --manifest-path src-tauri/Cargo.toml windows_symlink_policy_preserves_link_identity -- --ignored --nocapture
+```
+
+- 테스트는 임시 fixture만 사용, 사용자 데이터·실제 OS 주요 디렉터리를 삭제하는 검증 금지
+- 보호 경로 테스트는 guard 반환값만 검사, 실제 보호 디렉터리 변경 금지
+
+### 압축 도구 미실행 구분
+
+```powershell
+npm run verify:providers -- --report-only
+npm run verify:providers
+$env:BOKSLDIRGUI_REQUIRE_PROVIDERS = '1'
+cargo test --manifest-path src-tauri/Cargo.toml -- --nocapture
+Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
+```
+
+- `--report-only`: 도구 부재를 포함해 `temp/verification/platform-providers.json` 저장, 결과 수집 목적
+- 기본 `verify:providers`: 필요한 도구가 하나라도 없으면 실패
+- `BOKSLDIRGUI_REQUIRE_PROVIDERS=1`: provider 의존 테스트의 도구 부재 조기 반환을 실패로 처리
+- 도구 가용성 통과와 포맷별 처리 성공의 구분 필수
+- CI의 Windows 도구 보고는 Windows 압축 기능 완료 판정이 아님, 동봉과 포맷별 지원은 W3 범위
+- 로컬 Mac은 `7z/7zz` 미설치 확인, 해당 실제 7z 왕복은 미검증 유지
+
+## 4. Windows 수동 체크리스트
+
+| 항목 | 확인 방법과 기대 결과 | 상태 |
+| --- | --- | --- |
+| 시작·설정 | Explorer에서 실행 후 사용자 홈 기준 탐색, AppData 설정 저장·재시작 복원 | 미실행 |
+| 드라이브 | C/D 드라이브 표시, 연결 해제·비어 있는 드라이브·접근 거부 오류 표시 | 미실행 |
+| UNC 공유 | 공유 루트 상위 이동 제한, 하위 폴더·주소 입력·북마크·탭 복원 | 미실행 |
+| 긴 경로 | 실제 긴 디렉터리에서 목록·복사·이름 변경, 확장 경로와 일반 경로 동일 항목 검사 | 미실행 |
+| 이름 | 한글·이모지·공백, 대소문자만 변경, 예약 이름·끝 점/공백 거부 | 미실행 |
+| 파일 동일성 | hardlink·대소문자 구분 디렉터리·대소문자 별칭의 동일 원본 덮어쓰기 방지 | 미실행 |
+| 다른 볼륨 이동 | 별도 임시 볼륨 사이 성공·취소·복사 실패·원본 제거 실패, 원본과 대상 상태·요약 확인 | 미실행 |
+| 사용 중인 파일 | 공유 삭제 권한 없는 핸들로 잠근 파일의 이동·삭제 실패와 원인 안내 | 미실행 |
+| 읽기 전용 | 복사 속성 보존, 덮어쓰기·취소·정리 실패 시 원본·복구 경로 보존 | 미실행 |
+| 링크 | 파일·디렉터리·끊긴 링크의 복사·이름 변경·삭제, 생성 권한 부족 오류 | 미실행 |
+| 재파싱 지점 | junction·OneDrive 등 미지원 지점이 대상 재귀 변경 없이 중단되는지 확인 | 미실행 |
+| 삭제 보호 | 사용자 홈·OS 주요 폴더·드라이브/공유 루트 guard 거부, 실제 삭제 실행 금지 | 미실행 |
+| 기본 GUI | Tab·방향키·Space·Enter·입력창 소유권·한글 입력·배율·창 복원 | 미실행 |
+| 설치 | NSIS 설치·일반 권한 실행·재시작·제거, WebView2 환경 | 미실행 |
+
+- 실제 Explorer/Finder 연동·OS 클립보드·휴지통 복원·드래그 완성은 W4~W7에서 추가 검증
+- Windows 체크리스트의 미실행을 Mac 테스트 통과로 대체 금지
+
+## 5. 설계 선택과 후속 작업
+
+- `dirs 6.0.0`: 기존 Tauri 전이 의존성을 직접 사용하여 OS 홈·설정 경로 조회 일원화
+- `same-file 1.0.6`: 기존 lockfile의 검증된 라이브러리 재사용, 경로 문자열만으로 파일 동일성 판단 방지
+- `windows-sys 0.61.2`: 기존 lockfile 버전 재사용, 드라이브·파일 ID·재파싱 태그·파일 속성 API의 Windows 대상 의존성만 추가
+- `.github/workflows/desktop.yml`: macOS 14·Windows Server 2022 x64 빌드/테스트, 결과·패키지 artifact 저장, 외부 릴리스 발행 없음
+- 현재 CI provider 보고 단계의 성공은 모든 압축 기능의 검증 성공이 아님
+- Windows 실제 실행 후 오류가 확인되면 W0~W2 잔여 결함으로 추적, W3~W7 완료로 잘못 분류 금지
+- junction·클라우드 재파싱 지점 지원 확대와 전체 메타데이터 보존은 별도 Windows 실증 후 정책 확정 필요
+
+## 6. Mac 검증 결과와 변경 검토
+
+- 실행 환경: macOS, 2026-10-17 로컬 작업 트리
+- `npm run verify`: 통과, TypeScript·프론트 빌드·Rust check·생성 문서 정합성 포함
+- 프론트 테스트: 34개 파일, 328개 테스트 통과, 검증 스크립트 테스트 통과
+- Rust 테스트: 96개 통과·1개 명시 제외, 제외 항목은 실제 macOS 휴지통 복원 테스트
+- 압축 provider 부재 조기 반환: 7z 관련 실제 왕복 미실행, 위 Rust 통과 집계와 별도 해석 필수
+- 전체 범위 스모크: 261개 검사 통과
+- 마지막 경로 검사 보완 후 `npm run rust:test`: 96개 통과·1개 명시 제외 재확인
+- 다른 볼륨 이동 모의 회귀: 성공 후 원본 제거·복사 경합 실패 시 원본 보존·취소 시 원본 보존 통과
+- `git diff --check`·신규 파일 공백·문서 로컬 링크·CI YAML 구문 검사 통과
+- 변경 검토: 공통 action registry·operation store 소유권·플랫폼 응답 수명주기·파일 변경 진입점 확인
+- 검토 중 보완: 부모/파일명 분리 전 Windows 원본 전체 경로 검사 추가, 단일·일괄 이름 변경과 파일 작업의 ADS 경로 우회 차단
+- 구조 정리: 플랫폼 API와 파일 동일성 판정의 공통 경계 재사용, 관련 없는 모듈 재설계 없음
+- Windows 전용 테스트·CI 실제 실행·설치 패키지·실제 GUI 동작: 미실행, 이 문서의 수동 체크리스트로 후속 확인 필요

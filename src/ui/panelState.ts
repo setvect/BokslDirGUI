@@ -147,27 +147,21 @@ export const parentNavigationEntryOf = (panel: PanelNavigationState) =>
   panel.listing.entries.find((entry) => entry.isVirtual && entry.kind === 'directory') ?? null;
 
 export const parentPathOf = (path: string) => {
-  const normalized = stripTrailingSeparators(path.trim());
-  if (!normalized || normalized === '/') {
-    return '/';
-  }
-
-  const driveRoot = normalized.match(/^([A-Za-z]:)([\\/])?$/);
-  if (driveRoot) {
-    return `${driveRoot[1]}${driveRoot[2] ?? '\\'}`;
-  }
-
-  const separatorIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-  if (separatorIndex < 0) {
-    return normalized;
-  }
-  if (separatorIndex === 0) {
-    return '/';
-  }
-  if (/^[A-Za-z]:/.test(normalized) && separatorIndex === 2) {
-    return `${normalized.slice(0, 2)}${normalized[separatorIndex]}`;
-  }
-  return normalized.slice(0, separatorIndex);
+  if (!path) return '/';
+  // 문자열은 그대로 유지하고 루트 경계 판정에만 구분자를 통일.
+  const view = path.replace(/\\/g, '/');
+  const root = view.match(/^\/\/\?\/(?:[A-Za-z]:\/|UNC\/[^/]+\/[^/]+(?:\/|$))/i)
+    ?? view.match(/^\/\/[^/?]+\/[^/]+(?:\/|$)/)
+    ?? view.match(/^[A-Za-z]:\//)
+    ?? view.match(/^\//);
+  const rootLength = root?.[0].length ?? 0;
+  let end = path.length;
+  while (end > rootLength && /[\\/]$/.test(path.slice(0, end))) end--;
+  if (end <= rootLength) return path.slice(0, rootLength);
+  const normalized = path.slice(0, end);
+  const index = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+  if (index < rootLength) return rootLength ? path.slice(0, rootLength) : normalized;
+  return normalized.slice(0, index);
 };
 
 export const panelCanGoBack = (panel: PanelNavigationState) => panel.historyBack.length > 0;
@@ -189,14 +183,6 @@ const indexOfPathOrDefault = (entries: FileEntry[], path: string, defaultIndex: 
 const firstConcreteEntryIndexOrDefault = (entries: FileEntry[], defaultIndex: number) => {
   const found = entries.findIndex((entry) => !entry.isVirtual);
   return found >= 0 ? found : clampFocusedIndex(defaultIndex, entries.length);
-};
-
-const stripTrailingSeparators = (path: string) => {
-  let normalized = path;
-  while (normalized.length > 1 && /[\\/]$/.test(normalized) && !/^[A-Za-z]:[\\/]$/.test(normalized)) {
-    normalized = normalized.slice(0, -1);
-  }
-  return normalized;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));

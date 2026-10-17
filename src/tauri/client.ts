@@ -2,6 +2,7 @@ import { invoke, isTauri, type InvokeArgs } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type {
   ActionResult,
+  PlatformInfo,
   TrashUndoPreview,
   NativeFileClipboard,
   RenameRules, RenameItem, RenamePreview,
@@ -145,6 +146,7 @@ const invokeCommand = async <T>(command: TauriCommandName, args?: object): Promi
 };
 
 export const tauriClient = {
+  getPlatformInfo: () => invokeCommand<PlatformInfo>(COMMANDS.getPlatformInfo),
   previewTrashUndo: () => invokeCommand<TrashUndoPreview | null>(COMMANDS.previewTrashUndo),
   startTrashUndo: (input: { id: string }) => invokeCommand<OperationStarted>(COMMANDS.startTrashUndo, input),
   previewBulkRename: (input: { sources: string[]; rules: RenameRules }) => invokeCommand<RenamePreview[]>(COMMANDS.previewBulkRename, input),

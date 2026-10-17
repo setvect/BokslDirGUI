@@ -72,7 +72,8 @@ it('accepts Finder move sources in the shell and waits for the common move confi
   const { client } = setup();
   const operations = { startCopy: vi.fn(), startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'finder-move', kind: 'move' as const, state: 'queued' as const } })),
     startDelete: vi.fn(), cancelOperation: vi.fn(), resolveConflict: vi.fn() };
-  renderCommander(createFixturePanelDataSource(), client, operations);
+  // 초기 클립보드 응답과 패널 상태 반영을 마친 뒤 키보드 입력 전송.
+  await act(async () => { renderCommander(createFixturePanelDataSource(), client, operations); });
   await waitFor(() => expect(client.readFileClipboard).toHaveBeenCalled());
   const shell = screen.getByRole('application');
   shell.focus();

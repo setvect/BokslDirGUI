@@ -55,6 +55,7 @@ import { useCommanderSettings } from './useCommanderSettings';
 import { useFileDrag } from './useFileDrag';
 import { useNavigationMenus } from './useNavigationMenus';
 import { usePanelNavigation } from './usePanelNavigation';
+import { useRuntimePlatform } from './useRuntimePlatform';
 
 const DEFAULT_DATA_SOURCE = createTauriPanelDataSource();
 
@@ -81,6 +82,7 @@ export function CommanderShell({
   nativeFileDropClient,
   nativeFileDragClient,
 }: CommanderShellProps) {
+  const platformInfo = useRuntimePlatform(mutationClient, runtimeBackendAvailable);
   const openOperationDialog = useOperationStore((state) => state.openDialog);
   const startLongRunningOperation = useOperationStore((state) => state.startLongRunningOperation);
   const operationDialogOpen = useOperationStore((state) => Boolean(state.dialog));
@@ -149,6 +151,7 @@ export function CommanderShell({
   });
   const { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, openEntry, quickPreview } = useCommanderActions({
     clearCompletedSelection,
+    get platformInfo() { return platformInfo; },
     get setActivePanel() { return setActivePanel; },
     get navigateUp() { return navigateUp; },
     get panelState() { return panelState; },
@@ -283,6 +286,7 @@ export function CommanderShell({
   const activePanelState = panelState[activePanel];
   const activeTargets = resolveActionTargets(activePanelState);
   const context = createActionContext({
+    platformInfo,
     activePanel,
     focusedEntry: activeTargets.focusedEntry,
     selectedCount: activeTargets.selectedCount,
@@ -381,6 +385,7 @@ export function CommanderShell({
           showIcons={settings.view.showIcons}
           operationBusy={operationBusy || panelState.left.loading || panelState.right.loading}
           backendAvailable={runtimeBackendAvailable}
+          platformInfo={platformInfo}
           onActivate={() => setActivePanel('left')}
           onEntryFocus={(index) => recordFocusedRow('left', index)}
           onEntrySelect={(index, entry, mode) => selectEntry('left', index, entry, mode)}
@@ -413,6 +418,7 @@ export function CommanderShell({
           showIcons={settings.view.showIcons}
           operationBusy={operationBusy || panelState.left.loading || panelState.right.loading}
           backendAvailable={runtimeBackendAvailable}
+          platformInfo={platformInfo}
           onActivate={() => setActivePanel('right')}
           onEntryFocus={(index) => recordFocusedRow('right', index)}
           onEntrySelect={(index, entry, mode) => selectEntry('right', index, entry, mode)}

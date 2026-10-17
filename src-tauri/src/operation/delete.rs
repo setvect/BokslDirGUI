@@ -126,6 +126,7 @@ pub(super) fn delete_tree_cancellable(
 ) -> CommandResult<()> {
     check_cancelled(operation_id, path)?;
     let metadata = fs::symlink_metadata(path).map_err(|error| map_io_error(error, Some(path)))?;
+    crate::platform::validate_reparse_point(path, &metadata)?;
     if metadata.is_dir() {
         for child in fs::read_dir(path).map_err(|error| map_io_error(error, Some(path)))? {
             let child = child.map_err(|error| map_io_error(error, Some(path)))?;
@@ -134,7 +135,7 @@ pub(super) fn delete_tree_cancellable(
         check_cancelled(operation_id, path)?;
         fs::remove_dir(path).map_err(|error| map_io_error(error, Some(path)))?;
     } else {
-        fs::remove_file(path).map_err(|error| map_io_error(error, Some(path)))?;
+        super::file_io::remove_entry_any(path).map_err(|error| map_io_error(error, Some(path)))?;
         if metadata.is_file() {
             stats.completed_bytes += metadata.len();
         }

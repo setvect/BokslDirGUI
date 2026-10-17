@@ -1,6 +1,7 @@
 
 
 export const COMMANDS = {
+  getPlatformInfo: 'get_platform_info',
   previewTrashUndo: 'preview_trash_undo',
   startTrashUndo: 'start_trash_undo',
   previewBulkRename: 'preview_bulk_rename',

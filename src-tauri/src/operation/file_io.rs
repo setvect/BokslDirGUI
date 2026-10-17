@@ -3,7 +3,6 @@ use crate::filesystem::map_io_error;
 use crate::mutation;
 use crate::navigation;
 use crate::path_text::display_path;
-use std::env;
 use std::fs;
 use std::io;
 use std::io::Read;
@@ -304,12 +303,8 @@ where
                 .map_err(|error| map_io_error(error, Some(destination)))?;
             on_chunk(read as u64)?;
         }
-        let permissions = source_file
-            .metadata()
-            .map_err(|error| map_io_error(error, Some(source)))?
-            .permissions();
-        destination_file
-            .set_permissions(permissions)
+        let source_metadata = source_file.metadata().map_err(|error| map_io_error(error, Some(source)))?;
+        crate::platform::copy_file_attributes(&destination_file, &source_metadata)
             .map_err(|error| map_io_error(error, Some(destination)))?;
         Ok(())
     })();
@@ -359,6 +354,7 @@ pub(super) fn scan_work(
     check_cancelled(operation_id, source)?;
     let metadata =
         fs::symlink_metadata(source).map_err(|error| map_io_error(error, Some(source)))?;
+    crate::platform::validate_reparse_point(source, &metadata)?;
     if !metadata.is_file()
         && !metadata.is_dir()
         && !metadata.file_type().is_symlink()
@@ -412,6 +408,7 @@ pub(super) fn collect_source_paths(paths: &[String]) -> CommandResult<Vec<PathBu
 
 pub(super) fn canonical_existing_entry(path: &str) -> CommandResult<PathBuf> {
     let raw = PathBuf::from(path);
+    crate::platform::validate_path_input(&raw)?;
     let parent = raw
         .parent()
         .ok_or_else(|| AppError::new("invalid_path", "errors.invalidPath", Some(&raw), true))?;
@@ -438,10 +435,11 @@ pub(super) fn canonical_existing_directory(path: &str) -> CommandResult<PathBuf>
 }
 
 pub(super) fn same_path(left: &Path, right: &Path) -> bool {
-    match (left.canonicalize(), right.canonicalize()) {
-        (Ok(left), Ok(right)) => left == right,
-        _ => left == right,
-    }
+    left == right || same_file::is_same_file(left, right).unwrap_or(false)
+}
+
+pub(super) fn path_is_within(path: &Path, ancestor: &Path) -> bool {
+    path.ancestors().any(|candidate| same_path(candidate, ancestor))
 }
 
 pub(super) fn path_is_occupied(path: &Path) -> bool {
@@ -450,6 +448,11 @@ pub(super) fn path_is_occupied(path: &Path) -> bool {
 
 pub(super) fn remove_entry_any(path: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(path)?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileTypeExt;
+        if metadata.file_type().is_symlink_dir() { return fs::remove_dir(path); }
+    }
     if metadata.is_dir() {
         fs::remove_dir_all(path)
     } else {
@@ -467,7 +470,21 @@ pub(super) fn copy_symlink(source: &Path, destination: &Path) -> CommandResult<(
     symlink(target, destination).map_err(|error| map_io_error(error, Some(destination)))
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub(super) fn copy_symlink(source: &Path, destination: &Path) -> CommandResult<()> {
+    use std::os::windows::fs::{FileTypeExt, symlink_dir, symlink_file};
+    let metadata = fs::symlink_metadata(source).map_err(|e| map_io_error(e, Some(source)))?;
+    crate::platform::validate_reparse_point(source, &metadata)?;
+    let target = fs::read_link(source).map_err(|e| map_io_error(e, Some(source)))?;
+    let result = if metadata.file_type().is_symlink_dir() {
+        symlink_dir(target, destination)
+    } else {
+        symlink_file(target, destination)
+    };
+    result.map_err(|e| map_io_error(e, Some(destination)))
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(super) fn copy_symlink(source: &Path, _destination: &Path) -> CommandResult<()> {
     Err(AppError::new(
         "unsupported",
@@ -490,29 +507,7 @@ pub(crate) fn guard_delete_target(path: &Path) -> CommandResult<()> {
 }
 
 pub(super) fn is_protected_delete_path(path: &Path) -> bool {
-    const PROTECTED_UNIX_PATHS: &[&str] = &[
-        "/Applications",
-        "/bin",
-        "/etc",
-        "/Library",
-        "/Network",
-        "/private",
-        "/sbin",
-        "/System",
-        "/usr",
-        "/Users",
-        "/var",
-        "/Volumes",
-    ];
-    if PROTECTED_UNIX_PATHS
-        .iter()
-        .any(|protected| path == Path::new(protected))
-    {
-        return true;
-    }
-    env::var_os("HOME")
-        .map(PathBuf::from)
-        .is_some_and(|home| path == home)
+    crate::platform::protected_delete_path(path)
 }
 
 pub(super) fn count_entries_and_bytes(
@@ -522,6 +517,7 @@ pub(super) fn count_entries_and_bytes(
 ) -> CommandResult<u64> {
     check_cancelled(operation_id, path)?;
     let metadata = fs::symlink_metadata(path).map_err(|error| map_io_error(error, Some(path)))?;
+    crate::platform::validate_reparse_point(path, &metadata)?;
     if metadata.is_file() {
         *total_bytes += metadata.len();
     }
@@ -550,5 +546,5 @@ pub(super) fn unique_temp_target(parent: &Path, destination: &Path) -> PathBuf {
 }
 
 pub(crate) fn is_cross_device_error(error: &io::Error) -> bool {
-    error.raw_os_error() == Some(18)
+    crate::platform::cross_device_error(error.raw_os_error(), cfg!(windows))
 }

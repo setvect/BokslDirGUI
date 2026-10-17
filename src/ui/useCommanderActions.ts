@@ -2,10 +2,11 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useRef, useState } from 'react';
 import {
   ACTION_BY_ID,
+  platformAllowsAction,
   labelForAction,
   type ActionId
 } from '../actions/registry';
-import type { AppError, RenameItem, FileEntry, FilePreview, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
+import type { AppError, PlatformInfo, RenameItem, FileEntry, FilePreview, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
 import type { CommanderStatusText } from '../i18n-resources';
 import {
   formatUserErrorMessage
@@ -47,6 +48,7 @@ interface CommanderActionsDependencies {
   readonly statusText: CommanderStatusText;
   readonly mutationClient: SafeMutationClient;
   readonly runtimeBackendAvailable: boolean;
+  readonly platformInfo?: PlatformInfo;
   readonly settings: Settings;
   readonly activePanel: PanelId;
   readonly topMenuState: TopMenuState | null;
@@ -94,6 +96,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     get mutationClient() { return dependencies.mutationClient; },
     get operationClient() { return dependencies.operationClient; },
     get runtimeBackendAvailable() { return dependencies.runtimeBackendAvailable; },
+    get platformInfo() { return dependencies.platformInfo; },
     get operationBusy() { return dependencies.operationBusy; },
     get language() { return dependencies.settings.language; },
     get openOperationDialog() { return dependencies.openOperationDialog; },
@@ -126,6 +129,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     get statusText() { return dependencies.statusText; },
     get setStatusMessage() { return dependencies.setStatusMessage; },
     get runtimeBackendAvailable() { return dependencies.runtimeBackendAvailable; },
+    get platformInfo() { return dependencies.platformInfo; },
     get dispatch() { return handleAction; },
     get mutationClient() { return dependencies.mutationClient; },
     get operationBusy() { return dependencies.operationBusy; },
@@ -197,6 +201,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     const { actionId, panelId: panelOverride = dependencies.activePanel, sources: sourceOverride,
       targetDir: targetDirOverride, sourceListing: sourceListingOverride, clipboardMoveSnapshot } = request;
     const action = ACTION_BY_ID.get(actionId)!;
+    if (!platformAllowsAction(actionId, dependencies.platformInfo)) return;
     if (actionId === 'menu.open') {
       if (dependencies.topMenuState) {
         dependencies.closeTopMenu();

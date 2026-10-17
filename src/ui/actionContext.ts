@@ -1,5 +1,5 @@
 import { ACTION_BY_ID, fileShortcutPlatform, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope, type FileShortcutPlatform } from '../actions/registry';
-import type { FileEntry, PanelId } from '../domain/types';
+import type { FileEntry, PanelId, PlatformInfo } from '../domain/types';
 
 export interface ActionContextInput {
   activePanel: PanelId;
@@ -12,6 +12,7 @@ export interface ActionContextInput {
   clipboardMode?: 'copy' | 'move' | null;
   clipboardCanMove?: boolean;
   platform?: FileShortcutPlatform;
+  platformInfo?: PlatformInfo;
   hasOppositePanel: boolean;
   shellCommandEnabled: boolean;
   operationBusy: boolean;
@@ -82,6 +83,7 @@ export const createActionContext = ({
   clipboardMode = null,
   clipboardCanMove = false,
   platform = fileShortcutPlatform(),
+  platformInfo,
   hasOppositePanel,
   shellCommandEnabled,
   operationBusy,
@@ -99,7 +101,8 @@ export const createActionContext = ({
     trashUndoAvailable,
     clipboardMode,
     clipboardCanMove,
-    platform,
+    platform: platformInfo && platformInfo.os !== 'unknown' ? (platformInfo.os === 'macos' ? 'mac' : 'other') : platform,
+    platformInfo,
     hasOppositePanel,
     shellCommandEnabled,
     operationBusy,

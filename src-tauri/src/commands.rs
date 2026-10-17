@@ -17,6 +17,11 @@ use std::path::PathBuf;
 use tauri::Manager;
 
 #[tauri::command]
+pub(crate) fn get_platform_info() -> crate::platform::PlatformInfo {
+    crate::platform::info()
+}
+
+#[tauri::command]
 pub(crate) fn health_check() -> &'static str {
     "ok"
 }

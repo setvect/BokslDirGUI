@@ -1,4 +1,15 @@
 export type PanelId = 'left' | 'right';
+export interface PlatformInfo {
+  os: string;
+  features: {
+    openWith: boolean;
+    currentFolderManager: boolean;
+    currentFolderTerminal: boolean;
+    nativeFileClipboard: boolean;
+    trashUndo: boolean;
+  };
+}
+
 export type EntryKind = 'file' | 'directory' | 'symlink' | 'executable' | 'archive' | 'unknown';
 export type OperationKind =
   | 'copy'

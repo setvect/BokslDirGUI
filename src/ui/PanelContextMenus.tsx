@@ -5,7 +5,7 @@ import {
   shortcutLabelForAction,
   type AppAction
 } from '../actions/registry';
-import type { DirectoryListing, FileEntry, Settings } from '../domain/types';
+import type { DirectoryListing, FileEntry, Settings, PlatformInfo } from '../domain/types';
 import { createActionContext } from './actionContext';
 import {
   isArchiveVirtualPath
@@ -14,11 +14,12 @@ import { useCommanderKeyboardBoundaryProps } from './keyboardOwnership';
 import { blankContextMenuActions, contextMenuActions } from './menuModel';
 import { contextMenuSources } from './selectionModel';
 
-export function BlankContextMenuContent({ language, listing, operationBusy, backendAvailable, onOpenAction }: {
+export function BlankContextMenuContent({ language, listing, operationBusy, backendAvailable, platformInfo, onOpenAction }: {
   language: Settings['language'];
   listing: DirectoryListing;
   operationBusy: boolean;
   backendAvailable: boolean;
+  platformInfo?: PlatformInfo;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
 }) {
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('context-menu');
@@ -32,6 +33,7 @@ export function BlankContextMenuContent({ language, listing, operationBusy, back
     shellCommandEnabled: false,
     operationBusy,
     backendAvailable,
+    platformInfo,
     activePathIsArchive: isArchiveVirtualPath(listing.path),
   });
   const actions = blankContextMenuActions(context, Boolean(listing.filter));
@@ -53,13 +55,14 @@ export function BlankContextMenuContent({ language, listing, operationBusy, back
   );
 }
 
-export function EntryContextMenuContent({ language, entry, listing, selectedPaths, operationBusy, backendAvailable, onOpenAction }: {
+export function EntryContextMenuContent({ language, entry, listing, selectedPaths, operationBusy, backendAvailable, platformInfo, onOpenAction }: {
   language: Settings['language'];
   entry: FileEntry;
   listing: DirectoryListing;
   selectedPaths: readonly string[];
   operationBusy: boolean;
   backendAvailable: boolean;
+  platformInfo?: PlatformInfo;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
 }) {
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('context-menu');
@@ -74,6 +77,7 @@ export function EntryContextMenuContent({ language, entry, listing, selectedPath
     shellCommandEnabled: false,
     operationBusy,
     backendAvailable,
+    platformInfo,
     activePathIsArchive: isArchiveVirtualPath(listing.path),
   });
 

@@ -1,0 +1,22 @@
+[
+  {
+    "os": "macos",
+    "features": {
+      "openWith": true,
+      "currentFolderManager": true,
+      "currentFolderTerminal": true,
+      "nativeFileClipboard": true,
+      "trashUndo": true
+    }
+  },
+  {
+    "os": "windows",
+    "features": {
+      "openWith": false,
+      "currentFolderManager": false,
+      "currentFolderTerminal": false,
+      "nativeFileClipboard": false,
+      "trashUndo": false
+    }
+  }
+]

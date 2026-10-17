@@ -10,7 +10,7 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, type 
 import {
   type AppAction
 } from '../actions/registry';
-import type { FileEntry, Settings } from '../domain/types';
+import type { FileEntry, Settings, PlatformInfo } from '../domain/types';
 import {
   COMMANDER_UI_TEXT,
   formatUserErrorMessage
@@ -51,6 +51,7 @@ interface FilePanelProps {
   showIcons: boolean;
   operationBusy: boolean;
   backendAvailable: boolean;
+  platformInfo?: PlatformInfo;
   onActivate(): void;
   onEntryFocus(index: number): void;
   onEntrySelect(index: number, entry: FileEntry, mode: SelectionMode): void;
@@ -84,6 +85,7 @@ export function FilePanel({
   showIcons,
   operationBusy,
   backendAvailable,
+  platformInfo,
   onActivate,
   onEntryFocus,
   onEntrySelect,
@@ -370,6 +372,7 @@ export function FilePanel({
                             selectedPaths={panel.selectedPaths}
                             operationBusy={operationBusy}
                             backendAvailable={backendAvailable}
+                            platformInfo={platformInfo}
                             onOpenAction={onOpenAction}
                           />
                         </ContextMenu.Portal>
@@ -386,6 +389,7 @@ export function FilePanel({
               listing={listing}
               operationBusy={operationBusy}
               backendAvailable={backendAvailable}
+              platformInfo={platformInfo}
               onOpenAction={onOpenAction}
             />
           </ContextMenu.Portal>

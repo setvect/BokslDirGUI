@@ -14,6 +14,17 @@ describe('panel state path helpers', () => {
     expect(parentPathOf('C:/Users/boksl')).toBe('C:/Users');
   });
 
+  it('keeps UNC and extended Windows roots and exact whitespace', () => {
+    expect(parentPathOf("\\\\server\\share")).toBe("\\\\server\\share");
+    expect(parentPathOf("\\\\server\\share\\")).toBe("\\\\server\\share\\");
+    expect(parentPathOf("\\\\?\\C:\\")).toBe("\\\\?\\C:\\");
+    expect(parentPathOf("\\\\?\\UNC\\server\\share")).toBe("\\\\?\\UNC\\server\\share");
+    expect(parentPathOf("\\\\server\\share\\한글 폴더\\child")).toBe("\\\\server\\share\\한글 폴더");
+    expect(parentPathOf("\\\\?\\C:\\한글 폴더\\child")).toBe("\\\\?\\C:\\한글 폴더");
+    expect(parentPathOf("/folder with spaces /child ")).toBe("/folder with spaces ");
+    expect(parentPathOf("C:\\folder with spaces \\child ")).toBe("C:\\folder with spaces ");
+  });
+
   it('focuses the first concrete row when a child directory is opened', () => {
     const current = createPanelStateFromListing(
       createDirectoryListing('left', '/Users/boksl/IdeaProjects', [

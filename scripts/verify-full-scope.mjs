@@ -1,8 +1,8 @@
-import { loadFeatureMetadata } from './load-feature-metadata.mjs';
+import { loadFeatureMetadata, projectRoot } from './load-feature-metadata.mjs';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = projectRoot;
 const read = (path) => readFileSync(join(root, path), 'utf8');
 const hasCommanderTestEvidence = (item) => {
   const file = item.split(':')[0];

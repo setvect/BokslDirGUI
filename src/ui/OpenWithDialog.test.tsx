@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OpenWithApp } from '../domain/types';
 import type { TauriResult } from '../tauri/client';
 import { tauriClient } from '../tauri/client';
+import platformFixtures from '../tauri/fixtures/platform.json';
 import { OpenWithDialog } from './OpenWithDialog';
 import './testing/commanderTestSetup';
 import { renderCommander, testEntry } from './testing/commanderTestSupport';
@@ -18,6 +19,7 @@ const success = { ok: true as const, data: { ok: true, messageKey: null } };
 const failure = { ok: false as const, error: { code: 'external_failed', messageKey: 'errors.externalCommandFailed', path: entry.path, recoverable: true, details: null } };
 const clientForTest = () => ({
   ...tauriClient,
+  getPlatformInfo: vi.fn(async () => ({ ok: true as const, data: platformFixtures[0] })),
   listOpenWithApps: vi.fn(async (_input: { path: string }): Promise<TauriResult<OpenWithApp[]>> => ({ ok: true, data: apps })),
   openWithApp: vi.fn(async () => success),
 });

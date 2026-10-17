@@ -107,8 +107,8 @@ test('docs:check CLI는 시험용 문서 불일치에 실패하고 파일을 수
     'docs/implementation/tui-parity-matrix.json', 'docs/implementation/tui-parity-matrix.md', 'docs/implementation/action-registry.md']) {
     await copyFile(join(projectRoot, path), join(root, path));
   }
-  await symlink(join(projectRoot, 'src'), join(root, 'src'), 'dir');
-  await symlink(join(projectRoot, 'node_modules'), join(root, 'node_modules'), 'dir');
+  await symlink(join(projectRoot, 'src'), join(root, 'src'), process.platform === 'win32' ? 'junction' : 'dir');
+  await symlink(join(projectRoot, 'node_modules'), join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   const path = join(root, 'docs/implementation/action-registry.md');
   const original = await readFile(path, 'utf8');
   const stale = original.replace('<!-- BEGIN GENERATED:action-table -->', '<!-- BEGIN GENERATED:action-table -->\n오래된 내용');

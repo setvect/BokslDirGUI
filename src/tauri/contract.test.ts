@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
-import type { AppError, FileEntry, OperationProgress, Settings } from '../domain/types';
+import type { AppError, PlatformInfo, FileEntry, OperationProgress, Settings } from '../domain/types';
 import { normalizeInvokeError } from './client';
 import fixture from './fixtures/contract.json';
+import platformFixtures from './fixtures/platform.json';
 
 it('consumes the same camelCase and nullable fixture verified by Rust serialization', () => {
   // JSON imports widen enum strings; narrow those exact literals while checking all remaining fields.
@@ -21,4 +22,11 @@ it('retains the persisted settings shape without a format migration', () => {
     view: { ...fixture.settings.view, density: 'compact' },
   };
   expect(settings).toEqual(fixture.settings);
+});
+
+it('consumes the platform capability fixture also checked by Rust', () => {
+  const platforms: PlatformInfo[] = platformFixtures;
+  expect(platforms[0].features.nativeFileClipboard).toBe(true);
+  expect(platforms[1].os).toBe('windows');
+  expect(platforms[1].features.nativeFileClipboard).toBe(false);
 });

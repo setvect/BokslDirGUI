@@ -75,25 +75,7 @@ pub(crate) fn settings_path() -> CommandResult<PathBuf> {
     if let Some(path) = env::var_os("BOKSLDIRGUI_SETTINGS_PATH") {
         return Ok(PathBuf::from(path));
     }
-    let home = home_dir()?;
-    #[cfg(target_os = "macos")]
-    let path = home
-        .join("Library")
-        .join("Application Support")
-        .join("BokslDirGUI")
-        .join("settings.json");
-    #[cfg(target_os = "windows")]
-    let path = env::var_os("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or(home)
-        .join("BokslDirGUI")
-        .join("settings.json");
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    let path = env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".config"))
-        .join("BokslDirGUI")
-        .join("settings.json");
+    let path = crate::platform::config_dir()?.join("BokslDirGUI").join("settings.json");
     Ok(path)
 }
 
@@ -180,11 +162,4 @@ fn merge_json(target: &mut serde_json::Value, patch: serde_json::Value) {
         }
         (target, patch) => *target = patch,
     }
-}
-
-fn home_dir() -> CommandResult<PathBuf> {
-    env::var_os("HOME")
-        .map(PathBuf::from)
-        .or_else(|| env::current_dir().ok())
-        .ok_or_else(|| AppError::new("io_error", "errors.homeUnavailable", None, true))
 }

@@ -218,3 +218,14 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - 복원은 기존 작업 레지스트리·진행 이벤트·취소·요약 경로 사용, 충돌 시 덮어쓰기 없이 오류 요약과 재시도 유지
 - 휴지통 항목 소실·교체는 오류 안내 후 해당 복원 기록 제거, 부분 취소·경로 충돌·부모 폴더 문제는 미완료 항목 유지
 - 비 macOS의 기존 휴지통 동작 유지, 복원 메뉴 노출 제외
+
+## 플랫폼 지원 정보
+
+- `get_platform_info`: 인수 없음, OS와 실제 OS 연동 구현의 지원 정보 반환
+- 응답 계약: `{ os: string, features: { openWith: boolean, currentFolderManager: boolean, currentFolderTerminal: boolean, nativeFileClipboard: boolean, trashUndo: boolean } }`
+- `COMMANDS` 등록 여부와 플랫폼 기능 지원 여부의 구분 필수
+- 실제 Tauri 실행에서 조회 대기·실패 시 해당 OS 전용 기능의 실행 차단
+- 메뉴·컨텍스트 메뉴·실행·OS 클립보드·휴지통 복원에서 동일 지원 정보 사용
+- Windows W0~W2에서는 위 OS 전용 기능 false 유지, 기존 내부 클립보드·공통 파일 작업 유지
+- UI 경로는 Rust에서 받은 원문 유지, Windows UNC·확장 드라이브 루트의 부모 계산 보존
+- 관련 정책·네이티브 검증: [Windows 검증](windows-validation.md) 참조

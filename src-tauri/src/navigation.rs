@@ -3,7 +3,7 @@ use crate::contracts::{
     LocationList, PanelId, SortSpec,
 };
 use crate::filesystem::{
-    file_entry_from_path, is_hidden_name, listing_version, map_io_error, mime_from_extension,
+    file_entry_from_path, listing_version, map_io_error, mime_from_extension,
     parent_virtual_entry, sort_entries,
 };
 use crate::path_text::display_path;
@@ -45,7 +45,8 @@ pub(crate) fn list_dir(
         let entry = entry.map_err(|error| map_io_error(error, Some(&path)))?;
         let entry_path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !show_hidden && is_hidden_name(&name) {
+        let file_entry = file_entry_from_path(&entry_path, false)?;
+        if !show_hidden && file_entry.is_hidden {
             continue;
         }
         if let Some(filter_text) = normalized_filter.as_deref() {
@@ -53,7 +54,7 @@ pub(crate) fn list_dir(
                 continue;
             }
         }
-        entries.push(file_entry_from_path(&entry_path, false)?);
+        entries.push(file_entry);
     }
 
     sort_entries(&mut entries, &sort);
@@ -119,6 +120,12 @@ fn collect_directory_stats(root: &Path) -> CommandResult<DirectoryStats> {
             let path = child.path();
             let metadata =
                 fs::symlink_metadata(&path).map_err(|error| map_io_error(error, Some(&path)))?;
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                // 크기 계산은 링크·junction·클라우드 재파싱 지점을 따라가지 않음.
+                if metadata.file_attributes() & 0x400 != 0 { continue; }
+            }
             if metadata.is_dir() {
                 stats.directory_count = stats.directory_count.saturating_add(1);
                 pending.push(path);
@@ -132,26 +139,9 @@ fn collect_directory_stats(root: &Path) -> CommandResult<DirectoryStats> {
 }
 
 pub(crate) fn list_locations() -> CommandResult<LocationList> {
-    let home = env::var_os("HOME")
-        .map(PathBuf::from)
-        .or_else(|| env::current_dir().ok())
-        .ok_or_else(|| AppError::new("io_error", "errors.homeUnavailable", None, true))?;
+    let home = crate::platform::home_dir()?;
     let home = canonical_existing_path(&home.to_string_lossy())?;
-
-    let mut roots = Vec::from([String::from("/")]);
-    #[cfg(target_os = "macos")]
-    {
-        let volumes = Path::new("/Volumes");
-        if let Ok(items) = fs::read_dir(volumes) {
-            for item in items.flatten() {
-                if let Ok(path) = item.path().canonicalize() {
-                    roots.push(display_path(&path));
-                }
-            }
-        }
-    }
-    roots.sort();
-    roots.dedup();
+    let roots = crate::platform::roots()?;
 
     let recent = env::current_dir()
         .ok()
@@ -173,6 +163,7 @@ pub(crate) fn list_locations() -> CommandResult<LocationList> {
 
 pub(crate) fn canonical_existing_path(path: &str) -> CommandResult<PathBuf> {
     let raw = PathBuf::from(path);
+    crate::platform::validate_path_input(&raw)?;
     raw.canonicalize()
         .map_err(|error| map_io_error(error, Some(&raw)))
 }

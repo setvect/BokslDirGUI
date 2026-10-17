@@ -1,3 +1,6 @@
+#[cfg(all(test, windows))]
+mod windows_tests;
+mod platform;
 mod path_text;
 mod preview;
 mod image_metadata;
@@ -39,6 +42,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::health_check,
+            commands::get_platform_info,
             commands::preview_trash_undo,
             commands::start_trash_undo,
             commands::preview_bulk_rename,

@@ -34,6 +34,7 @@ pub(crate) fn create_dir(parent: &str, name: &str) -> CommandResult<FileEntry> {
 
 pub(crate) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntry> {
     let raw_source = PathBuf::from(path);
+    crate::platform::validate_path_input(&raw_source)?;
     let raw_parent = raw_source.parent().ok_or_else(|| {
         AppError::new(
             "invalid_path",
@@ -54,7 +55,7 @@ pub(crate) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntr
             )
         })?;
     // The existing entry name is an exact filesystem identity, including whitespace.
-    validate_child_name(source_name, Some(&raw_source))?;
+    // 원본 이름은 Path::file_name으로 검증된 항목 식별자 그대로 사용.
     let parent = navigation::canonical_existing_path(&raw_parent.to_string_lossy())?;
     if !parent.is_dir() {
         return Err(AppError::new(
@@ -65,7 +66,8 @@ pub(crate) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntr
         ));
     }
     let source = parent.join(source_name);
-    fs::symlink_metadata(&source).map_err(|error| map_io_error(error, Some(&source)))?;
+    let metadata = fs::symlink_metadata(&source).map_err(|error| map_io_error(error, Some(&source)))?;
+    crate::platform::validate_reparse_point(&source, &metadata)?;
     let safe_name = validate_child_name(new_name, Some(&parent))?;
     let target = parent.join(safe_name);
 
@@ -73,13 +75,8 @@ pub(crate) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntr
         return file_entry_from_path(&source, false);
     }
 
-    if path_is_occupied(&target) {
-        return Err(AppError::new(
-            "already_exists",
-            "errors.alreadyExists",
-            Some(&target),
-            true,
-        ));
+    if target_conflicts(&source, &target) {
+        return Err(AppError::new("already_exists", "errors.alreadyExists", Some(&target), true));
     }
 
     rename_no_replace(&source, &target).map_err(|error| map_io_error(error, Some(&target)))?;
@@ -87,7 +84,11 @@ pub(crate) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntr
 }
 
 pub(crate) fn validate_child_name<'a>(name: &'a str, path: Option<&Path>) -> CommandResult<&'a str> {
-    let trimmed = name.trim();
+    #[cfg(windows)]
+    if !crate::platform::valid_windows_child_name(name) {
+        return Err(AppError::new("invalid_name", "errors.invalidName", path, true));
+    }
+    let trimmed = if cfg!(windows) { name } else { name.trim() };
     if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
         return Err(AppError::new(
             "invalid_name",
@@ -109,6 +110,29 @@ pub(crate) fn validate_child_name<'a>(name: &'a str, path: Option<&Path>) -> Com
         );
     }
     Ok(trimmed)
+}
+
+pub(crate) fn target_conflicts(source: &Path, target: &Path) -> bool {
+    if source == target || !path_is_occupied(target) { return false; }
+    #[cfg(windows)]
+    if source.file_name().zip(target.file_name()).is_some_and(|(a, b)|
+        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase())
+        && crate::platform::entry_identity(source).ok()
+            .zip(crate::platform::entry_identity(target).ok()).is_some_and(|(a, b)| a == b)
+    {
+        // 대소문자 구분 디렉터리의 별도 항목이나 hardlink를 덮어쓰지 않음.
+        if let Some(parent) = target.parent() {
+            if let Ok(entries) = fs::read_dir(parent) {
+                let mut exact_target = false;
+                for entry in entries {
+                    let Ok(entry) = entry else { return true; };
+                    exact_target |= Some(entry.file_name().as_os_str()) == target.file_name();
+                }
+                if !exact_target { return false; }
+            }
+        }
+    }
+    true
 }
 
 pub(crate) fn path_is_occupied(path: &Path) -> bool {
@@ -180,6 +204,7 @@ pub(crate) fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> 
 pub(crate) fn rename_no_replace(source: &Path, target: &Path) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
+    #[link(name = "kernel32")]
     extern "system" {
         fn MoveFileExW(existing: *const u16, new_name: *const u16, flags: u32) -> i32;
     }

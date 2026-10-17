@@ -55,7 +55,7 @@ pub(crate) fn file_entry_from_path(path: &Path, is_virtual: bool) -> CommandResu
         permissions: Some(format_permissions(&metadata)),
         owner: owner_text(&metadata),
         group: group_text(&metadata),
-        is_hidden: is_hidden_name(&name),
+        is_hidden: is_hidden_entry(&name, &metadata),
         is_virtual,
     })
 }
@@ -72,7 +72,7 @@ pub(crate) fn classify_entry(path: &Path, metadata: &fs::Metadata) -> EntryKind 
         if is_archive_path(path) {
             return EntryKind::Archive;
         }
-        if is_executable(metadata) {
+        if is_executable(path, metadata) {
             return EntryKind::Executable;
         }
         return EntryKind::File;
@@ -115,14 +115,15 @@ pub(crate) fn group_text(_metadata: &fs::Metadata) -> Option<String> {
 }
 
 #[cfg(unix)]
-pub(crate) fn is_executable(metadata: &fs::Metadata) -> bool {
+pub(crate) fn is_executable(_path: &Path, metadata: &fs::Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt;
     metadata.permissions().mode() & 0o111 != 0
 }
 
 #[cfg(not(unix))]
-pub(crate) fn is_executable(_metadata: &fs::Metadata) -> bool {
-    false
+pub(crate) fn is_executable(path: &Path, _metadata: &fs::Metadata) -> bool {
+    cfg!(windows) && path.extension().and_then(|s| s.to_str())
+        .is_some_and(|s| ["exe", "com", "bat", "cmd"].iter().any(|ext| s.eq_ignore_ascii_case(ext)))
 }
 
 #[cfg(unix)]
@@ -218,6 +219,17 @@ pub(crate) fn extension_of(name: &str) -> String {
         .to_lowercase()
 }
 
+pub(crate) fn is_hidden_entry(name: &str, metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x6 != 0 { return true; } // HIDDEN | SYSTEM
+    }
+    #[cfg(not(windows))]
+    let _ = metadata;
+    is_hidden_name(name)
+}
+
 pub(crate) fn is_hidden_name(name: &str) -> bool {
     name.starts_with('.') && name != ".."
 }
@@ -263,6 +275,11 @@ pub(crate) fn mime_from_extension(extension: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn map_io_error(error: io::Error, path: Option<&Path>) -> AppError {
+    #[cfg(windows)]
+    if matches!(error.raw_os_error(), Some(32 | 33)) {
+        return AppError::new("file_in_use", "errors.fileInUse", path, true)
+            .with_detail("osCode", error.raw_os_error().unwrap().to_string());
+    }
     let (code, message_key, recoverable) = match error.kind() {
         io::ErrorKind::NotFound => ("not_found", "errors.notFound", true),
         io::ErrorKind::AlreadyExists => ("already_exists", "errors.alreadyExists", true),

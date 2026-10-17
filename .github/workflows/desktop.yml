@@ -1,0 +1,59 @@
+name: Desktop verification
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.93.0
+      - run: npm ci
+      - name: Provider availability (not feature completion)
+        run: npm run verify:providers -- --report-only
+      - name: TypeScript, frontend and contract checks
+        run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run verify:scope
+      - run: npm run docs:check
+      - name: Rust compile
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --no-run
+      - name: Rust tests with explicit missing-provider output
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --manifest-path src-tauri/Cargo.toml --locked -- --nocapture 2>&1 | tee temp/verification/rust-tests.txt
+      - name: macOS application build
+        if: runner.os == 'macOS'
+        run: npm run tauri:build -- --bundles app
+      - name: Windows NSIS build
+        if: runner.os == 'Windows'
+        run: npm run tauri:build -- --bundles nsis
+      - name: Verification limits
+        if: always()
+        shell: bash
+        run: |
+          echo '### Native verification still required' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Provider absence is recorded, not counted as archive verification. Run npm run verify:providers and BOKSLDIRGUI_REQUIRE_PROVIDERS=1 Rust tests before full archive qualification.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Explorer/Finder, clipboard, Recycle Bin, links, multiple volumes, network shares and actual UI require the Windows checklist.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            temp/verification/
+            src-tauri/target/release/bundle/
+          if-no-files-found: warn

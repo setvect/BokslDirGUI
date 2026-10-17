@@ -16,6 +16,8 @@
 | `tui-parity-matrix.md` / `tui-parity-matrix.json` | 기존 TUI 액션·단축키·메뉴·서브메뉴와 GUI 구현 상태를 1:1로 대조 | Phase 0 하드 게이트, 허위 완료 방지 |
 | `full-scope-baseline.md` | 첫 완성 기준과 범위 분류 | 구현 범위 기준선 |
 | `tauri-command-api.md` | React↔Rust command/event DTO 계약 | 프론트/백엔드 병렬 구현 기준 |
+| [windows-support-plan.md](windows-support-plan.md) | 단일 소스 기반 Windows 지원의 현황·수정 범위·단계별 검증 계획 | OS 의존성 해소와 Windows 기능 동등성 완료 기준 |
+| [windows-validation.md](windows-validation.md) | W0~W2 구현 정책과 Windows 네이티브 실행 체크리스트 | Mac 검증과 Windows 미검증의 구분 |
 | [drag-and-drop.md](drag-and-drop.md) | 내부 포인터 세션, 외부 인계, 좌표 계약과 회귀 검증 | 잘못된 대상 파일 작업 방지 |
 | `component-design.md` | React 컴포넌트 구조와 책임 | UI 구현 분해 기준 |
 | `file-operation-state-machine.md` | 복사/이동/삭제/압축 작업 상태와 전이 | 데이터 안전성 기준 |

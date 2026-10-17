@@ -147,11 +147,13 @@ name = "boksldir-gui"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "dirs",
  "imagesize",
  "kamadak-exif",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
+ "same-file",
  "serde",
  "serde_json",
  "tauri",
@@ -159,6 +161,7 @@ dependencies = [
  "tauri-plugin-drag",
  "thiserror 2.0.18",
  "trash",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

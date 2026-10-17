@@ -15,6 +15,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "verify:providers": "node scripts/check-platform-providers.mjs",
     "verify:scope": "node scripts/verify-full-scope.mjs",
     "verify": "npm run typecheck && npm test && npm run build && npm run check && npm run rust:test && npm run verify:scope && npm run docs:check",
     "docs:generate": "node scripts/generate-docs.mjs",

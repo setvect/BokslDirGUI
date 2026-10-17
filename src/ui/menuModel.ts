@@ -59,7 +59,7 @@ export const menuNodesForRoot = (root: string, context: ActionContext, settings:
   const nodes: MenuNode[] = [];
   const submenuByLabel = new Map<string, MenuSubmenuNode>();
 
-  for (const action of actionsForMenu(root)) {
+  for (const action of actionsForMenu(root, context.platform)) {
     const segments = menuPathSegmentsForAction(action, language)?.slice(1) ?? [];
     const acceleratorSegments = action.menuPath?.slice(1) ?? [];
     if (segments.length > 1) {
@@ -311,7 +311,7 @@ const BLANK_CONTEXT_ACTION_IDS = new Set<ActionId>([
 ]);
 
 export const blankContextMenuActions = (context: ActionContext, hasFilter: boolean) => filterEnabledActions(
-  ACTIONS.filter((action) => actionVisibleOnPlatform(action) && BLANK_CONTEXT_ACTION_IDS.has(action.id as ActionId))
+  ACTIONS.filter((action) => actionVisibleOnPlatform(action, context.platform) && BLANK_CONTEXT_ACTION_IDS.has(action.id as ActionId))
     .filter((action) => hasFilter || action.id !== 'filter.clear'),
   context,
 );
@@ -319,6 +319,6 @@ export const blankContextMenuActions = (context: ActionContext, hasFilter: boole
 export const contextMenuActions = (entry: FileEntry, context: ActionContext) => {
   const actions = entry.isVirtual
     ? ACTIONS.filter((action) => action.id === 'nav.enter')
-    : ACTIONS.filter((action) => actionVisibleOnPlatform(action) && action.contextScopes?.some((scope) => scope !== 'blank'));
+    : ACTIONS.filter((action) => actionVisibleOnPlatform(action, context.platform) && action.contextScopes?.some((scope) => scope !== 'blank'));
   return filterEnabledActions(actions, context, entry);
 };
