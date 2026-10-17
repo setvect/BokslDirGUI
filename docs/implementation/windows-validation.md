@@ -135,3 +135,16 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - 검토 중 보완: 부모/파일명 분리 전 Windows 원본 전체 경로 검사 추가, 단일·일괄 이름 변경과 파일 작업의 ADS 경로 우회 차단
 - 구조 정리: 플랫폼 API와 파일 동일성 판정의 공통 경계 재사용, 관련 없는 모듈 재설계 없음
 - Windows 전용 테스트·CI 실제 실행·설치 패키지·실제 GUI 동작: 미실행, 이 문서의 수동 체크리스트로 후속 확인 필요
+
+## 7. 2026-10-18 CI 후속 보완 기록
+
+- 설치 실패 해결: 누락된 `@emnapi/core`·`@emnapi/runtime`과 `wasi-threads` 잠금 정합성 보완, npm 11.19.0의 별도 소스 복사본 `npm ci` 및 전체 검증 통과
+- 시간대 회귀 해결: 한국 시각 고정 fixture를 현지 시각 fixture로 변경, UTC 전체 검증 통과
+- 빌드 경로 보완: Vite 진입 파일 URL을 `fileURLToPath`로 변환, Windows 드라이브와 인코딩된 경로 보존
+- 문서 검사 회귀 해결: 생성 구간의 기존 CRLF 보존, 도구 테스트 14개 통과
+- Windows 테스트 컴파일 해결: 내부 함수 재공개 제거, ADS 원본 경로 검사의 내부 테스트 모듈 이동
+- `d3f246c` [CI 실행](https://github.com/setvect/BokslDirGUI/actions/runs/39076112886): Mac 테스트·앱 빌드·산출물 업로드 성공, Windows 프론트·문서·Rust 컴파일 성공
+- 같은 실행의 Windows 테스트: 실행 파일 시작 전 `STATUS_ENTRYPOINT_NOT_FOUND` 종료, 테스트 본문 실행 성공과 구분
+- manifest 보완: Tauri 2.6.2 기본 Common Controls v6 선언을 그대로 보존하여 MSVC의 앱·라이브러리 테스트 실행 파일에 포함, 다른 대상 빌드 유지
+- 보완 근거: [Tauri 공식 이슈와 유지보수자 해결책](https://github.com/tauri-apps/tauri/issues/13419), 로컬 `tauri-winres 0.3.6`의 앱 바이너리 한정 리소스 연결 확인
+- Windows 최종 테스트·설치 파일 결과: manifest 보완 후 CI 실행 증거로 별도 판정, 기존 수동 체크리스트의 미실행 상태 유지
