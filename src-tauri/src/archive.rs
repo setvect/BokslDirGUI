@@ -147,27 +147,16 @@ fn list_7z_entries_with_metadata(
 }
 
 fn list_tar_entries_with_metadata(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
-    let output = Command::new("tar")
-        .arg("-tf")
-        .arg(archive)
-        .output()
+    let format = archive_format_name(archive).unwrap_or_default();
+    let members = crate::archive_tar::list(archive, &format, &|| false)
         .map_err(|error| map_io_error(error, Some(archive)))?;
-    if !output.status.success() {
-        return Err(archive_provider_output_error(&output, archive, None));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(|path| ArchiveEntryInfo {
-            path: path.to_string(),
-            kind: entry_kind_for_archive_member(path, path.ends_with('/'), None, None),
-            size_bytes: None,
-            modified_at: None,
-            created_at: None,
-            permissions: None,
-        })
-        .collect())
+    Ok(members.into_iter().map(|member| ArchiveEntryInfo {
+        kind: if member.link { EntryKind::Symlink }
+            else { entry_kind_for_archive_member(&member.path, member.directory, None, None) },
+        path: member.path,
+        size_bytes: if member.directory { None } else { Some(member.size) },
+        modified_at: None, created_at: None, permissions: None,
+    }).collect())
 }
 
 fn archive_provider_output_error(

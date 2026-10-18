@@ -7,6 +7,7 @@ mod image_metadata;
 
 mod archive;
 mod archive_provider;
+mod archive_tar;
 mod commands;
 mod contracts;
 mod external;

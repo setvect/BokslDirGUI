@@ -22,8 +22,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.93.0
       - run: npm ci
       - run: npm run archive:prepare
-      - name: Provider availability (not feature completion)
-        run: npm run verify:providers -- --report-only
+      - name: Required archive providers
+        run: npm run verify:providers
       - name: TypeScript, frontend and contract checks
         run: npm test
       - run: npm run typecheck
@@ -32,11 +32,19 @@ jobs:
       - run: npm run docs:check
       - name: Rust compile
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked --no-run
-      - name: Rust tests with explicit missing-provider output
+      - name: Rust tests with required providers
+        env:
+          BOKSLDIRGUI_REQUIRE_PROVIDERS: '1'
         shell: bash
         run: |
           set -o pipefail
           cargo test --manifest-path src-tauri/Cargo.toml --locked -- --nocapture 2>&1 | tee temp/verification/rust-tests.txt
+      - name: Windows archive backend regression on macOS
+        if: runner.os == 'macOS'
+        env:
+          BOKSLDIRGUI_REQUIRE_PROVIDERS: '1'
+          BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES: '1'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: macOS application build
         if: runner.os == 'macOS'
         run: npm run tauri:build -- --bundles app
@@ -48,7 +56,7 @@ jobs:
         shell: bash
         run: |
           echo '### Native verification still required' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Provider absence is recorded, not counted as archive verification. Run npm run verify:providers and BOKSLDIRGUI_REQUIRE_PROVIDERS=1 Rust tests before full archive qualification.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Required archive providers and strict Rust tests must pass. Native GUI and installation validation remain separate.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Explorer/Finder, clipboard, Recycle Bin, links, multiple volumes, network shares and actual UI require the Windows checklist.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()

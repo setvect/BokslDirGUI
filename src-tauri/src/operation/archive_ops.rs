@@ -21,7 +21,7 @@ use super::file_io::{
     scan_work, unique_temp_target, ProgressTicker, SpecialFileScanPolicy,
 };
 use super::process::{
-    external_binary, redact_error_secret, run_external_command, run_external_command_capture,
+    external_binary, redact_error_secret, run_external_command,
     run_external_command_capture_observed, run_external_command_capture_with_secret,
     run_external_command_with_secret,
 };
@@ -155,7 +155,7 @@ pub(super) fn run_archive_create(
             &mut stats,
         ),
         "tar" | "tar.gz" | "tar.zst" if password.is_none() => {
-            run_tar_create(operation_id, &staged_target, &sources)
+            run_tar_create(app, operation_id, &staged_target, &sources, &archive_format, &target, &mut stats)
         }
         "jar" | "war" | "tar" | "tar.gz" | "tar.zst" => Err(AppError::new(
             "unsupported",
@@ -927,28 +927,25 @@ impl SevenZipProgressParser {
 }
 
 pub(super) fn run_tar_create(
-    operation_id: &str,
-    target: &Path,
-    sources: &[PathBuf],
+    app: Option<&tauri::AppHandle>, operation_id: &str, target: &Path, sources: &[PathBuf],
+    format: &str, display_target: &Path, stats: &mut OperationStats,
 ) -> CommandResult<()> {
-    let tar = external_binary("tar").ok_or_else(|| {
-        AppError::new(
-            "unsupported",
-            "errors.archiveProviderUnavailable",
-            Some(target),
-            true,
-        )
-        .with_detail("provider", "tar")
-    })?;
-    let working_dir = common_source_parent(sources, target)?;
-    let mut command = Command::new(tar);
-    command.current_dir(&working_dir).arg("-acf").arg(target);
-    for source in sources {
-        command.arg(Path::new(".").join(source.file_name().ok_or_else(|| {
-            AppError::new("invalid_path", "errors.invalidPath", Some(source), true)
-        })?));
-    }
-    run_external_command(operation_id, command, Some(target))
+    let mut ticker = ProgressTicker::new();
+    crate::archive_tar::create(target, sources, format, &|| is_cancelled(operation_id), &mut |files, bytes| {
+        stats.completed_files = files.min(stats.total_files);
+        stats.completed_bytes = bytes.min(stats.total_bytes);
+        if ticker.should_emit() {
+            emit_progress(app, operation_id, OperationKind::ArchiveCreate, OperationState::Running, stats, Some(display_target));
+        }
+    }).map_err(|error| map_tar_error(error, operation_id, target))
+}
+
+fn map_tar_error(error: std::io::Error, operation_id: &str, path: &Path) -> AppError {
+    if is_cancelled(operation_id) {
+        AppError::new("operation_cancelled", "errors.operationCancelled", Some(path), true)
+    } else if error.to_string() == "unsafe_archive_entry" {
+        AppError::new("unsafe_archive_entry", "errors.archiveUnsafePath", Some(path), true)
+    } else { map_io_error(error, Some(path)) }
 }
 
 pub(super) fn common_source_parent(sources: &[PathBuf], target: &Path) -> CommandResult<PathBuf> {
@@ -1071,26 +1068,11 @@ pub(super) fn run_7z_extract(
 }
 
 pub(super) fn run_tar_extract(
-    operation_id: &str,
-    archive: &Path,
-    target: &Path,
-    entries: Option<&[String]>,
+    operation_id: &str, archive: &Path, target: &Path, entries: Option<&[String]>,
 ) -> CommandResult<()> {
-    let tar = external_binary("tar").ok_or_else(|| {
-        AppError::new(
-            "unsupported",
-            "errors.archiveProviderUnavailable",
-            Some(archive),
-            true,
-        )
-        .with_detail("provider", "tar")
-    })?;
-    let mut command = Command::new(tar);
-    command.arg("-xf").arg(archive).arg("-C").arg(target);
-    for entry in entries.unwrap_or(&[]) {
-        command.arg(entry);
-    }
-    run_external_command(operation_id, command, Some(archive))
+    let format = archive_format_name(archive).unwrap_or_default();
+    crate::archive_tar::extract(archive, &format, target, entries, &|| is_cancelled(operation_id))
+        .map_err(|error| map_tar_error(error, operation_id, archive))
 }
 
 pub(super) fn run_archive_extract_selected(
@@ -1576,28 +1558,15 @@ pub(super) fn list_7z_entries_for_operation(
     crate::archive::safe_7z_entry_names(&stdout, archive)
 }
 
-pub(super) fn list_tar_entries_for_operation(
-    operation_id: &str,
-    archive: &Path,
-) -> CommandResult<Vec<String>> {
-    let tar = external_binary("tar").ok_or_else(|| {
-        AppError::new(
-            "unsupported",
-            "errors.archiveProviderUnavailable",
-            Some(archive),
-            true,
-        )
-        .with_detail("provider", "tar")
-    })?;
-    let mut command = Command::new(tar);
-    command.arg("-tf").arg(archive);
-    let stdout = run_external_command_capture(operation_id, command, Some(archive))?;
-    Ok(String::from_utf8_lossy(&stdout)
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
-        .collect())
+pub(super) fn list_tar_entries_for_operation(operation_id: &str, archive: &Path) -> CommandResult<Vec<String>> {
+    let format = archive_format_name(archive).unwrap_or_default();
+    let members = crate::archive_tar::list(archive, &format, &|| is_cancelled(operation_id))
+        .map_err(|error| map_tar_error(error, operation_id, archive))?;
+    if let Some(member) = members.iter().find(|member| member.link || archive_entry_is_unsafe(&member.path)) {
+        return Err(AppError::new("unsafe_archive_entry", "errors.archiveUnsafePath", Some(archive), true)
+            .with_detail("entry", &member.path));
+    }
+    Ok(members.into_iter().map(|member| member.path).collect())
 }
 
 pub(super) fn archive_entry_is_unsafe(entry: &str) -> bool {
@@ -1605,12 +1574,5 @@ pub(super) fn archive_entry_is_unsafe(entry: &str) -> bool {
 }
 
 pub(super) fn archive_entry_is_unsafe_on(entry: &str, windows: bool) -> bool {
-    let normalized = entry.replace('\\', "/");
-    let bytes = normalized.as_bytes();
-    normalized.starts_with('/')
-        || bytes.get(1) == Some(&b':')
-        || normalized.split('/').any(|component| component == "..")
-        || entry.contains('\0')
-        || (windows && normalized.split('/').filter(|part| !part.is_empty() && *part != ".")
-            .any(|part| !crate::platform::valid_windows_child_name(part)))
+    crate::archive_provider::unsafe_entry(entry, windows)
 }

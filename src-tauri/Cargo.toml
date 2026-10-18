@@ -33,6 +33,10 @@ trash = "5.2.9"
 # Tauri의 기존 전이 의존성 재사용: OS 홈/설정 경로와 파일 동일성 비교.
 dirs = "6.0.0"
 same-file = "1.0.6"
+# TAR 계열을 OS 도구 없이 스트리밍 처리. ZIP/7z 암호 호환성은 동봉 도구 유지.
+tar = "0.4.46"
+flate2 = "1.1.9"
+zstd = "0.13.3"
 
 # Windows 드라이브 및 재파싱 지점 검증에 필요한 최소 OS API.
 [target.'cfg(windows)'.dependencies]

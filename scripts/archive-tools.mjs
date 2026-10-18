@@ -8,6 +8,8 @@ export const assets = {
   mac: { name: '7z2604-mac.tar.xz', sha256: 'bee04358cbcbc7106273cee0e8d72916db2696c48067a3538c34d8cd6fd16578' },
   windows: { name: '7z2604-extra.7z', sha256: 'dc4b11d3399db18b063630137145f5585d8f7ac847bf3639bd1185d7d1f7cee0' },
   bootstrap: { name: '7zr.exe', sha256: '256feca8e274e5da655e2a284fabafd9f554365eb164862089dacd4e8276d282' },
+  linux_x64: { name: '7z2604-linux-x64.tar.xz', sha256: 'fc0327ba27e89bd086cf426dff17d77de582953cdbbc10a6576540a06853ffcd' },
+  linux_arm64: { name: '7z2604-linux-arm64.tar.xz', sha256: '5b0ac3aa91c1e3499f011d6af69d7f6b4de3ef2f011d9e2ff44c58ebd04aa388' },
 };
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export function verifyDownload(bytes, asset) {
@@ -15,7 +17,7 @@ export function verifyDownload(bytes, asset) {
   return bytes;
 }
 export function toolName(platform, arch) {
-  if (platform === 'darwin' && ['arm64', 'x64'].includes(arch)) return '7zz';
+  if (['darwin', 'linux'].includes(platform) && ['arm64', 'x64'].includes(arch)) return '7zz';
   if (platform === 'win32' && arch === 'x64') return '7za.exe';
   throw new Error(`압축 도구 배포 미지원 대상: ${platform}/${arch}`);
 }

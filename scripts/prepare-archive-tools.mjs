@@ -31,7 +31,7 @@ if (await preparedToolsValid(destination, platform, arch)) {
       const bootstrap = await download(assets.bootstrap);
       extract(bootstrap, ['e', '-y', archive, 'x64/7za.exe', 'License.txt', `-o${temporary}`]);
     } else {
-      const archive = await download(assets.mac);
+      const archive = await download(platform === 'darwin' ? assets.mac : assets[`linux_${arch}`]);
       extract('/usr/bin/tar', ['-xf', archive, '-C', temporary, '7zz', 'License.txt']);
       await chmod(join(temporary, binary), 0o755);
     }

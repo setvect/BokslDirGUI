@@ -85,7 +85,7 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - 기본 `verify:providers`: 필요한 도구가 하나라도 없으면 실패
 - `BOKSLDIRGUI_REQUIRE_PROVIDERS=1`: provider 의존 테스트의 도구 부재 조기 반환을 실패로 처리
 - 도구 가용성 통과와 포맷별 처리 성공의 구분 필수
-- CI의 Windows 도구 보고는 Windows 압축 기능 완료 판정이 아님, 동봉과 포맷별 지원은 W3 범위
+- CI의 Windows 도구 보고만으로 압축 기능 완료 판정 금지, 동봉 도구와 엄격 테스트의 후속 구현은 8절 참조
 - 최초 로컬 Mac 검증은 `7z/7zz` 미설치로 실제 7z 왕복 미검증, 임시 도구를 이용한 후속 검증은 7절 참조
 
 ## 4. Windows 수동 체크리스트
@@ -116,7 +116,7 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - `same-file 1.0.6`: 기존 lockfile의 검증된 라이브러리 재사용, 경로 문자열만으로 파일 동일성 판단 방지
 - `windows-sys 0.61.2`: 기존 lockfile 버전 재사용, 드라이브·파일 ID·재파싱 태그·파일 속성 API의 Windows 대상 의존성만 추가
 - `.github/workflows/desktop.yml`: macOS 14·Windows Server 2022 x64 빌드/테스트, 결과·패키지 artifact 저장, 외부 릴리스 발행 없음
-- 현재 CI provider 보고 단계의 성공은 모든 압축 기능의 검증 성공이 아님
+- CI provider 사전 검사와 실제 압축 회귀를 별도 실행, 도구 존재만으로 모든 압축 기능의 검증 성공 주장 금지
 - Windows 실제 실행 후 오류가 확인되면 W0~W2 잔여 결함으로 추적, W3~W7 완료로 잘못 분류 금지
 - junction·클라우드 재파싱 지점 지원 확대와 전체 메타데이터 보존은 별도 Windows 실증 후 정책 확정 필요
 
@@ -178,4 +178,13 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - Windows 경로의 Mac 실행 검증: `BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES=1 BOKSLDIRGUI_REQUIRE_PROVIDERS=1 npm run rust:test` 통과, 101개 통과·실제 macOS 휴지통 1개 명시 제외
 - 실행 범위: ZIP 암호·추가·덮어쓰기·취소·실패 시 원본 보존, ZIP/JAR/WAR/7z 특수 이름 선택 추출, 실제 링크 압축 파일의 경계 이탈 차단 포함
 - 변경 검토: 테스트 전용 provider 주입을 제품 실행에서 제외, 공통 operation 상태·충돌 처리·게시 전 임시 파일 경로 유지
-- 아직 남은 W3 작업: TAR 계열 도구 독립 처리, 압축 도구 엄격 검사와 CI 연계, Windows 네이티브 실행 증거
+- TAR 계열 구현: `tar`·`tar.gz/tgz`·`tar.zst/tzst` 생성·목록·선택 해제의 외부 도구 의존 제거, 스트림 읽기 중 취소와 생성 처리량 갱신 연결
+- 라이브러리 선택: [tar 0.4.46](https://docs.rs/tar/0.4.46/tar/)의 TAR 헤더·긴 이름 지원, 기존 `flate2` 의존성의 GZIP 스트림, [zstd 0.13.3](https://docs.rs/zstd/0.13.3/zstd/)의 Zstandard 스트림 사용
+- 선택 근거: 독립 7-Zip의 Zstandard 생성 지원을 가정하지 않고 전용 코덱 사용, 시스템 `tar` 버전 차이와 별도 프로그램 설치 제거, 메모리에 압축 전체를 적재하지 않는 처리
+- TAR 안전성: 전체 항목 사전 검사·링크/특수 항목 거부·추출 중 경로 재검사, 기존 임시 추출·충돌 처리·게시 경계 유지
+- 검증 항목: 한글·선행 공백의 선택 추출, Mac 시스템 tar의 생성물 판독, 큰 단일 파일 내부의 생성·목록 취소, 손상 스트림·절대/상위 경로·심볼릭 링크 거부
+- CI 보완: 필수 도구 검사와 `BOKSLDIRGUI_REQUIRE_PROVIDERS=1` 강제, Mac에서도 Windows ZIP 구현 경로 추가 실행, 변경 workflow의 원격 실행은 push 금지로 미실행
+- 기존 Linux 빌드 경로 보존: 공식 x64/arm64 압축 실행 파일 준비 분기 추가, Linux 지원 완료 검증과 구분
+- 남은 검증: Windows 네이티브의 압축 도구 준비·포맷별 실제 왕복, 앱 설치 후 도구 탐색과 취소 확인
+- TAR 통합 검증: 필수 도구를 강제한 `npm run verify` 및 Windows ZIP 경로 Rust 회귀 통과, 프론트 328개·도구 16개·Rust 104개·스모크 261개 통과, 실제 macOS 휴지통 1개 명시 제외
+- TAR 변경 검토: 스트림·코덱 모듈과 작업 상태 소유자의 분리, 중간 취소·코덱 종료 오류의 기존 요약/임시 파일 정리 경로 연결, 관련 없는 구조 정리 없음

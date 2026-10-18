@@ -1239,8 +1239,8 @@ fn archive_zip_create_list_extract_round_trip_uses_relative_entry_names() {
 #[test]
 fn archive_required_formats_create_list_and_extract_round_trip() {
     let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
-    if !command_available("zip") || !command_available("unzip") || !command_available("tar") {
-        report_missing_provider("zip/unzip/tar");
+    if !command_available("zip") || !command_available("unzip") {
+        report_missing_provider("zip/unzip");
         return;
     }
     for (suffix, format) in [
