@@ -186,34 +186,41 @@ pub(crate) fn archive_add(
     operation::start_archive_add(Some(&app), sources, archive_path, target_inner_dir, policy)
 }
 
+async fn run_external_service<T: Send + 'static>(
+    action: impl FnOnce() -> CommandResult<T> + Send + 'static,
+) -> CommandResult<T> {
+    tauri::async_runtime::spawn_blocking(action).await
+        .map_err(|_| AppError::new("external_failed", "errors.externalCommandFailed", None, true))?
+}
+
 #[tauri::command]
-pub(crate) fn open_default(path: String) -> CommandResult<ActionResult> {
-    external::open_default(&path)
+pub(crate) async fn open_default(path: String) -> CommandResult<ActionResult> {
+    run_external_service(move || external::open_default(&path)).await
 }
 
 #[tauri::command]
 pub(crate) async fn list_open_with_apps(path: String) -> CommandResult<Vec<OpenWithApp>> {
-    crate::open_with::list_apps(&path)
+    run_external_service(move || crate::open_with::list_apps(&path)).await
 }
 
 #[tauri::command]
-pub(crate) async fn open_with_app(path: String, application_path: String) -> CommandResult<ActionResult> {
-    crate::open_with::open(&path, &application_path)
+pub(crate) async fn open_with_app(path: String, application_id: String) -> CommandResult<ActionResult> {
+    run_external_service(move || crate::open_with::open(&path, &application_id)).await
 }
 
 #[tauri::command]
-pub(crate) fn reveal_in_manager(path: String) -> CommandResult<ActionResult> {
-    external::reveal_in_manager(&path)
+pub(crate) async fn reveal_in_manager(path: String) -> CommandResult<ActionResult> {
+    run_external_service(move || external::reveal_in_manager(&path)).await
 }
 
 #[tauri::command]
-pub(crate) fn open_current_in_finder(path: String) -> CommandResult<ActionResult> {
-    external::open_current_in_finder(&path)
+pub(crate) async fn open_current_in_file_manager(path: String) -> CommandResult<ActionResult> {
+    run_external_service(move || external::open_current_in_file_manager(&path)).await
 }
 
 #[tauri::command]
-pub(crate) fn open_current_in_terminal(path: String) -> CommandResult<ActionResult> {
-    external::open_current_in_terminal(&path)
+pub(crate) async fn open_current_in_terminal(path: String) -> CommandResult<ActionResult> {
+    run_external_service(move || external::open_current_in_terminal(&path)).await
 }
 
 #[tauri::command]

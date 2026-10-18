@@ -55,7 +55,7 @@ export function OpenWithDialog({ entry, language, client, onClose }: {
     setError(null);
     const request = requestRef.current;
     try {
-      const result = await client.openWithApp!({ path: entry.path, applicationPath: app.path });
+      const result = await client.openWithApp!({ path: entry.path, applicationId: app.id });
       if (request !== requestRef.current) return;
       if (result.ok) onClose();
       else setError(formatUserErrorMessage(language, result.error));
@@ -98,10 +98,10 @@ export function OpenWithDialog({ entry, language, client, onClose }: {
             if (next !== undefined) { event.preventDefault(); focusApp(next); }
           }}>
           {visibleApps.map((app) => (
-            <button className="navigation-list-item open-with-app" type="button" key={app.path} disabled={opening}
+            <button className="navigation-list-item open-with-app" type="button" key={app.id} disabled={opening}
               onClick={() => { void open(app); }}>
               <span>{app.name}{app.isDefault ? ` (${text.default})` : ''}</span>
-              <small title={app.path}>{app.path}</small>
+              {app.path ? <small title={app.path}>{app.path}</small> : null}
             </button>
           ))}
           {!loading && !error && visibleApps.length === 0 ? <p className="dialog-empty">{apps.length ? text.noMatch : text.empty}</p> : null}

@@ -108,10 +108,10 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `archive_add` | `{ sources, archivePath, targetInnerDir, policy }` | `OperationStarted` | 일반 파일/폴더를 zip/jar/war/7z 내부 경로에 추가; unsafe 내부 경로 차단 |
 | `open_default` | `{ path }` | `ActionResult` | OS 기본 앱 |
 | `reveal_in_manager` | `{ path }` | `ActionResult` | Finder/Explorer 등 |
-| `open_current_in_finder` | `{ path }` | `ActionResult` | macOS 현재 패널 디렉터리를 Finder에서 열기; 실제 디렉터리 검증 |
-| `open_current_in_terminal` | `{ path }` | `ActionResult` | macOS 현재 패널 디렉터리에서 Terminal 열기; 실제 디렉터리 검증 |
-| `list_open_with_apps` | `{ path }` | `OpenWithApp[]` | macOS NSWorkspace의 파일 연결 앱 조회, 기본 앱 우선 정렬 |
-| `open_with_app` | `{ path, applicationPath }` | `ActionResult` | 파일·앱 재검증 후 선택 앱으로 열기, 기본 연결 유지 |
+| `open_current_in_file_manager` | `{ path }` | `ActionResult` | 현재 패널의 실제 디렉터리 검증 후 macOS Finder·Windows 파일 관리자에서 열기 |
+| `open_current_in_terminal` | `{ path }` | `ActionResult` | 실제 디렉터리 검증 후 macOS Terminal·Windows PowerShell 열기, Windows PowerShell 미설치 시 Windows Terminal 사용 |
+| `list_open_with_apps` | `{ path }` | `OpenWithApp[]` | macOS NSWorkspace·Windows Shell의 파일 연결 앱 조회, 기본 앱 우선 정렬 |
+| `open_with_app` | `{ path, applicationId }` | `ActionResult` | 대상 파일·OS 등록 앱 식별자 재검증 후 선택 앱으로 열기, 기본 연결 유지 |
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
 | `run_shell_command` | `{ workingDir, command, args?, confirmToken? }` | `ShellCommandResult` | 설정·작업 디렉터리 검증 후 즉시 실행, stdout/stderr/exitCode 반환; 기존 토큰 전달 시 검증 유지 |
 | `load_settings` | `{}` | `Settings` | schema version 포함 |
@@ -170,7 +170,10 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 ## 다음으로 열기 계약
 
-- `OpenWithApp`: `{ path: string, name: string, isDefault: boolean }`
+- `OpenWithApp`: `{ id: string, path: string | null, name: string, isDefault: boolean }`
+- `OpenWithApp.id`: OS 조회 결과의 불투명 선택 식별자, 실행 전 재조회 필수, 임의 실행 파일 경로 수용 금지
+- `OpenWithApp.path`: 표시용 앱 경로, 경로가 없는 Windows 등록 앱은 null 허용
+- 데스크톱 외부 실행: 비동기 command와 blocking worker 사용, Windows COM 객체의 전용 STA 생성·사용·해제 유지
 - 대상: macOS 일반 파일 시스템의 단일 파일, 압축 파일 자체 포함
 - 폴더·압축 내부 가상 경로·여러 파일 선택 제외, 다른 OS에서는 액션 숨김 및 명령의 unsupported 오류 반환
 - [Apple NSWorkspace API](https://developer.apple.com/documentation/appkit/nsworkspace/urlforapplication(toopen:)-7qkzf) 기준 `NSWorkspace.URLsForApplicationsToOpenURL` 조회와 `URLForApplicationToOpenURL` 기본 앱 표시

@@ -179,9 +179,9 @@ export const tauriClient = {
     invokeCommand<OperationStarted>(COMMANDS.archiveAdd, input),
   openDefault: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openDefault, input),
   listOpenWithApps: (input: { path: string }) => invokeCommand<OpenWithApp[]>(COMMANDS.listOpenWithApps, input),
-  openWithApp: (input: { path: string; applicationPath: string }) => invokeCommand<ActionResult>(COMMANDS.openWithApp, input),
+  openWithApp: (input: { path: string; applicationId: string }) => invokeCommand<ActionResult>(COMMANDS.openWithApp, input),
   revealInManager: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.revealInManager, input),
-  openCurrentInFinder: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openCurrentInFinder, input),
+  openCurrentInFileManager: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openCurrentInFileManager, input),
   openCurrentInTerminal: (input: { path: string }) => invokeCommand<ActionResult>(COMMANDS.openCurrentInTerminal, input),
   prepareShellCommand: (input: { workingDir: string; command: string; args?: string[] }) =>
     invokeCommand<ShellCommandPreview>(COMMANDS.prepareShellCommand, input),

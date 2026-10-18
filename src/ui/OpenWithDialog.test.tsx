@@ -11,8 +11,8 @@ import './testing/commanderTestSetup';
 import { renderCommander, testEntry } from './testing/commanderTestSupport';
 
 const apps: OpenWithApp[] = [
-  { name: 'Xcode', path: '/Applications/Xcode.app', isDefault: true },
-  { name: 'Visual Studio Code', path: '/Applications/Visual Studio Code.app', isDefault: false },
+  { id: 'mac:xcode', name: 'Xcode', path: '/Applications/Xcode.app', isDefault: true },
+  { id: 'mac:code', name: 'Visual Studio Code', path: '/Applications/Visual Studio Code.app', isDefault: false },
 ];
 const entry = testEntry('/tmp', '한글 data $(name).json');
 const success = { ok: true as const, data: { ok: true, messageKey: null } };
@@ -46,10 +46,28 @@ describe('Open With', () => {
     await user.keyboard('{ArrowDown}{Enter}');
     await waitFor(() => expect(client.openWithApp).toHaveBeenCalledWith({
       path: client.listOpenWithApps.mock.calls[0][0].path,
-      applicationPath: apps[1].path,
+      applicationId: apps[1].id,
     }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '다음으로 열기' })).toBeNull());
     expect(document.activeElement).toBe(container.querySelector('.commander-shell'));
+  });
+
+  it('offers registered Windows apps without executable paths and sends only their IDs', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Windows');
+    const client = clientForTest();
+    client.getPlatformInfo.mockResolvedValue({ ok: true, data: platformFixtures[1] });
+    client.listOpenWithApps.mockResolvedValue({ ok: true, data: [
+      { id: 'handler:registered-package!App', name: 'Registered Editor', path: null, isDefault: true },
+    ] });
+    renderCommander(undefined, client);
+    fireEvent.contextMenu(screen.getByText('Architecture.md').closest('.file-row')!);
+    await userEvent.click(await screen.findByRole('menuitem', { name: '다음으로 열기…' }));
+    const button = await screen.findByRole('button', { name: 'Registered Editor (기본)' });
+    expect(button.querySelector('small')).toBeNull();
+    await userEvent.click(button);
+    expect(client.openWithApp).toHaveBeenCalledWith({
+      path: client.listOpenWithApps.mock.calls[0][0].path, applicationId: 'handler:registered-package!App',
+    });
   });
 
   it('reports a lookup failure and reloads without changing the target', async () => {
@@ -72,7 +90,7 @@ describe('Open With', () => {
     fireEvent.click(button);
     fireEvent.click(button);
     expect(client.openWithApp).toHaveBeenCalledTimes(1);
-    expect(client.openWithApp).toHaveBeenCalledWith({ path: entry.path, applicationPath: apps[1].path });
+    expect(client.openWithApp).toHaveBeenCalledWith({ path: entry.path, applicationId: apps[1].id });
     await act(async () => resolve(failure));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(close).not.toHaveBeenCalled();

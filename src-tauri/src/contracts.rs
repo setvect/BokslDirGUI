@@ -159,7 +159,8 @@ pub(crate) struct ArchiveListing {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenWithApp {
-    pub(crate) path: String,
+    pub(crate) id: String,
+    pub(crate) path: Option<String>,
     pub(crate) name: String,
     pub(crate) is_default: bool,
 }

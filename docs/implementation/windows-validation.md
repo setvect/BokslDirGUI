@@ -188,3 +188,23 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - 남은 검증: Windows 네이티브의 압축 도구 준비·포맷별 실제 왕복, 앱 설치 후 도구 탐색과 취소 확인
 - TAR 통합 검증: 필수 도구를 강제한 `npm run verify` 및 Windows ZIP 경로 Rust 회귀 통과, 프론트 328개·도구 16개·Rust 104개·스모크 261개 통과, 실제 macOS 휴지통 1개 명시 제외
 - TAR 변경 검토: 스트림·코덱 모듈과 작업 상태 소유자의 분리, 중간 취소·코덱 종료 오류의 기존 요약/임시 파일 정리 경로 연결, 관련 없는 구조 정리 없음
+
+### W4 파일 관리자·연결 앱·터미널
+
+- 공통 명칭: `external.openCurrentInFileManager`·`open_current_in_file_manager`로 일반화, registry·wrapper·등록·번역·요구사항·생성 문서 동시 갱신
+- Windows 파일 열기: Shell 항목 식별자와 `ShellExecuteExW` 사용, Explorer 위치 선택은 `SHOpenFolderAndSelectItems` 사용
+- 연결 앱: `SHAssocEnumHandlers`의 등록 항목 열거·실행 전 재조회·`IAssocHandler.Invoke` 연결, 임의 실행 파일 경로 거부
+- 기본 앱 표시: `AssocQueryStringW`의 현재 연결 정보 사용, 추천 여부와 기본 앱 여부 구분, 기본 연결 변경 없음
+- DTO 변경: `OpenWithApp.id`·표시용 nullable `path`, 실행 입력 `applicationId`, 경로 없는 Windows 등록 앱 허용
+- Windows 터미널: 시스템 디렉터리의 Windows PowerShell 우선, 미설치 시 Windows Terminal 별칭 사용, 둘 다 없으면 명시 오류
+- 경로 인수: PowerShell의 UTF-16 인코딩과 단일 인용부호 이스케이프·`LiteralPath` 사용, PATH·현재 폴더의 임의 프로그램 대체 금지
+- UI 정합성: 메뉴·컨텍스트 메뉴·도움말의 실제 기능 지원 정보 공유, Windows 앱 연동 3개 기능 활성화, 클립보드·휴지통 복원은 W5 구현 전 비활성 유지
+- 실행 수명주기: 외부 command의 blocking worker 사용, Windows COM 객체의 전용 STA 생성·사용·해제 유지
+- Mac 검증: 필수 압축 도구를 강제한 `npm run verify` 통과, 프론트 331개·도구 16개·Rust 105개·스모크 261개 통과, 실제 macOS 휴지통 1개 명시 제외
+- Windows 컴파일: `cargo xwin check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc --tests --locked` 통과, Microsoft SDK·MSVC CRT 사용, Windows 실행 검증과 구분
+- 추가 회귀: Mac·Windows 기능 정보에 따른 현재 패널 전달, Windows 등록 앱 식별자 실행 요청, 경로 없는 앱 표시, 터미널 한글·공백·따옴표·특수 문자 보존
+- 변경 검토: 공통 액션·상태 소유권 유지, 불투명 앱 식별자의 OS 재조회 검증, COM 메모리 해제·늦은 UI 응답 무시 확인, 관련 없는 구조 정리 없음
+- 남은 W4 구현: 직접 명령과 셸 입력 계약, 실행 진행·취소·자식 프로세스 종료 보완
+- Windows 실기 확인: 실제 기본 앱·등록 앱 실행, Explorer 항목 선택, 터미널의 UNC·긴 경로 진입, 기본 연결 변경 후 재조회, UI 응답성 확인 필요
+- 원격 CI: 사용자 push 금지에 따라 이번 변경의 GitHub Actions 실행 없음
+- API 근거: [항목 위치 선택](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenfolderandselectitems), [Shell 실행 정보](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-shellexecuteinfow), [등록 앱 실행](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-iassochandler-invoke)

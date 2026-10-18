@@ -49,7 +49,7 @@ export interface AppAction {
 
 const PLATFORM_ACTION_FEATURES: Readonly<Record<string, keyof PlatformInfo['features']>> = {
   'external.openWith': 'openWith',
-  'external.openCurrentInFinder': 'currentFolderManager',
+  'external.openCurrentInFileManager': 'currentFolderManager',
   'external.openCurrentInTerminal': 'currentFolderTerminal',
   'file.undoTrash': 'trashUndo',
 };
@@ -138,7 +138,7 @@ export const ACTIONS = [
   action({ id: 'archive.create', requiresConcreteSources: true, dialogKind: 'archiveCreate', category: 'archive', displayLabel: 'Archive Compress', hotkeyLabel: 'Archive', shortcutLabel: 'zc', keyboardBindings: ['z c'], menuPath: ['File', 'Archive Compress'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.archiveCreate, runPath: 'archive_create', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'external.openDefault', requiresConcreteSources: true, dialogKind: 'externalOpenDefault', category: 'file', displayLabel: 'Open Default App', shortcutLabel: 'o', keyboardBindings: ['o'], menuPath: ['File', 'Open Default App'], contextScopes: ['file'], dangerLevel: 'safe', command: COMMANDS.openDefault, runPath: 'open_default', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
   action({ id: 'external.reveal', requiresConcreteSources: true, dialogKind: 'externalReveal', category: 'file', displayLabel: 'Reveal', menuPath: ['File', 'Reveal'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.revealInManager, runPath: 'reveal_in_manager', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
-  action({ id: 'external.openCurrentInFinder', category: 'navigation', displayLabel: 'Open Current Folder in Finder', menuPath: ['Go', 'Open Current Folder in Finder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInFinder, runPath: 'open_current_in_finder', isEnabled: (c) => supportsFeature(c, 'currentFolderManager') && !c.activePathIsArchive && canInvokeBackend(c) }),
+  action({ id: 'external.openCurrentInFileManager', category: 'navigation', displayLabel: 'Open Current Folder in File Manager', menuPath: ['Go', 'Open Current Folder in File Manager'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInFileManager, runPath: 'open_current_in_file_manager', isEnabled: (c) => supportsFeature(c, 'currentFolderManager') && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'external.openCurrentInTerminal', category: 'navigation', displayLabel: 'Open Terminal Here', menuPath: ['Go', 'Open Terminal Here'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInTerminal, runPath: 'open_current_in_terminal', isEnabled: (c) => supportsFeature(c, 'currentFolderTerminal') && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'view.sortName', category: 'view', shortcutLabel: 'sn', keyboardBindings: ['s n'], menuPath: ['View', 'Sort', 'Name'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortSize', category: 'view', shortcutLabel: 'ss', keyboardBindings: ['s s'], menuPath: ['View', 'Sort', 'Size'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
@@ -281,13 +281,15 @@ export type FileShortcutPlatform = 'mac' | 'other';
 export const fileShortcutPlatform = (userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent): FileShortcutPlatform =>
   /Windows|Linux/i.test(userAgent) ? 'other' : 'mac';
 
-export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortcutPlatform()) =>
-  platform === 'mac'
-    ? action.id !== 'file.clipboardCut'
-    : !['file.undoTrash', 'file.clipboardMovePaste', 'external.openCurrentInFinder', 'external.openCurrentInTerminal', 'external.openWith'].includes(action.id);
+export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortcutPlatform(), info?: PlatformInfo) => {
+  if (action.id === 'file.clipboardCut') return platform !== 'mac';
+  if (action.id === 'file.clipboardMovePaste') return platform === 'mac';
+  const feature = platformFeatureForAction(action.id);
+  return !feature || (info ? info.features[feature] : platform === 'mac');
+};
 
-export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform()) =>
-  ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform));
+export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform(), info?: PlatformInfo) =>
+  ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform, info));
 
 export const menuRootLabelFromRegistry = (root: string, language: SupportedLanguage = 'en') => {
   const accelerator = MENU_ROOT_ACCELERATORS.get(root);

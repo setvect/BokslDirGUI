@@ -26,9 +26,9 @@ fn info_for_os(os: &'static str) -> PlatformInfo {
     PlatformInfo {
         os,
         features: PlatformFeatures {
-            open_with: mac,
-            current_folder_manager: mac,
-            current_folder_terminal: mac,
+            open_with: mac || os == "windows",
+            current_folder_manager: mac || os == "windows",
+            current_folder_terminal: mac || os == "windows",
             native_file_clipboard: mac,
             trash_undo: mac,
         },

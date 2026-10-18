@@ -20,44 +20,30 @@ pub(crate) fn list_apps(path: &str) -> CommandResult<Vec<OpenWithApp>> {
     platform_apps(&path)
 }
 
-pub(crate) fn open(path: &str, application_path: &str) -> CommandResult<ActionResult> {
+pub(crate) fn open(path: &str, application_id: &str) -> CommandResult<ActionResult> {
     let path = file_path(path)?;
-    let application = navigation::canonical_existing_path(application_path)?;
-    // 조회 이후 삭제된 앱과 프론트엔드에서 임의로 전달한 실행 파일 거부.
-    let apps = platform_apps(&path)?;
-    if !application.is_dir() || !apps.iter().any(|app| Path::new(&app.path) == application) {
-        return Err(AppError::new(
-            "invalid_application",
-            "errors.openWithAppUnavailable",
-            Some(&application),
-            true,
-        ));
-    }
-    #[cfg(target_os = "macos")]
+    #[cfg(windows)]
+    { return crate::windows_open_with::open(path, application_id.to_owned()); }
+    #[cfg(not(windows))]
     {
-        let status = open_command(&path, &application)
-            .status()
-            .map_err(|error| crate::filesystem::map_io_error(error, Some(&path)))?;
-        if !status.success() {
-            return Err(AppError::new(
-                "external_failed",
-                "errors.externalCommandFailed",
-                Some(&path),
-                true,
-            ));
+        // 재조회한 OS 등록 항목만 실행. 프론트엔드가 전달한 임의 경로 실행 금지.
+        let apps = platform_apps(&path)?;
+        let application = apps.iter().find(|app| app.id == application_id)
+            .and_then(|app| app.path.as_ref()).map(PathBuf::from)
+            .filter(|app| app.is_dir())
+            .ok_or_else(|| AppError::new("invalid_application", "errors.openWithAppUnavailable", Some(&path), true))?;
+        #[cfg(target_os = "macos")]
+        {
+            let status = open_command(&path, &application).status()
+                .map_err(|error| crate::filesystem::map_io_error(error, Some(&path)))?;
+            if !status.success() {
+                return Err(AppError::new("external_failed", "errors.externalCommandFailed", Some(&path), true));
+            }
+            Ok(ActionResult { ok: true, message_key: None })
         }
-        Ok(ActionResult {
-            ok: true,
-            message_key: None,
-        })
+        #[cfg(not(target_os = "macos"))]
+        { let _ = application; Err(AppError::new("unsupported", "errors.commandNotImplemented", Some(&path), true)) }
     }
-    #[cfg(not(target_os = "macos"))]
-    Err(AppError::new(
-        "unsupported",
-        "errors.commandNotImplemented",
-        Some(&path),
-        true,
-    ))
 }
 
 #[cfg(target_os = "macos")]
@@ -91,7 +77,8 @@ fn platform_apps(path: &Path) -> CommandResult<Vec<OpenWithApp>> {
             apps.push(OpenWithApp {
                 is_default: default_path.as_ref() == Some(&app_path),
                 name: file_manager.displayNameAtPath(&raw_path).to_string(),
-                path: app_path.to_string_lossy().into_owned(),
+                id: app_path.to_string_lossy().into_owned(),
+                path: Some(app_path.to_string_lossy().into_owned()),
             });
         }
         apps.sort_by(|a, b| {
@@ -105,7 +92,12 @@ fn platform_apps(path: &Path) -> CommandResult<Vec<OpenWithApp>> {
     })
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn platform_apps(path: &Path) -> CommandResult<Vec<OpenWithApp>> {
+    crate::windows_open_with::list(path.to_owned())
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 fn platform_apps(path: &Path) -> CommandResult<Vec<OpenWithApp>> {
     Err(AppError::new(
         "unsupported",
@@ -143,10 +135,10 @@ mod tests {
         std::fs::write(&path, "{}").unwrap();
         let apps = list_apps(path.to_str().unwrap()).unwrap();
         eprintln!("JSON applications: {:?}", apps);
-        assert!(apps.iter().all(|app| Path::new(&app.path).is_dir()));
+        assert!(apps.iter().all(|app| Path::new(app.path.as_ref().unwrap()).is_dir()));
         assert!(apps.iter().filter(|app| app.is_default).count() <= 1);
         let mut unique = std::collections::HashSet::new();
-        assert!(apps.iter().all(|app| unique.insert(&app.path)));
+        assert!(apps.iter().all(|app| unique.insert(&app.id)));
         let error = open(path.to_str().unwrap(), dir.to_str().unwrap()).unwrap_err();
         assert_eq!(error.message_key, "errors.openWithAppUnavailable");
         std::fs::remove_dir_all(dir).unwrap();

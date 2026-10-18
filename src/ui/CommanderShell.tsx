@@ -541,8 +541,8 @@ export function CommanderShell({
         />
       ) : null}
       <OperationDialogHost language={settings.language} />
-      {helpDialogOpen ? <ShortcutHelpDialog language={settings.language} onClose={() => setHelpDialogOpen(false)} /> : null}
-      {helpSearchOpen ? <HelpSearchDialog language={settings.language} onClose={closeOverlay} /> : null}
+      {helpDialogOpen ? <ShortcutHelpDialog platformInfo={platformInfo} language={settings.language} onClose={() => setHelpDialogOpen(false)} /> : null}
+      {helpSearchOpen ? <HelpSearchDialog platformInfo={platformInfo} language={settings.language} onClose={closeOverlay} /> : null}
       {aboutDialogOpen ? <AboutDialog language={settings.language} onClose={closeOverlay} /> : null}
     </main>
   );

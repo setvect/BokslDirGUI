@@ -30,7 +30,7 @@ export const COMMANDS = {
   listOpenWithApps: 'list_open_with_apps',
   openWithApp: 'open_with_app',
   revealInManager: 'reveal_in_manager',
-  openCurrentInFinder: 'open_current_in_finder',
+  openCurrentInFileManager: 'open_current_in_file_manager',
   openCurrentInTerminal: 'open_current_in_terminal',
   prepareShellCommand: 'prepare_shell_command',
   runShellCommand: 'run_shell_command',

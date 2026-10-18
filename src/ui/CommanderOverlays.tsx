@@ -4,7 +4,7 @@ import aboutMascot from '../assets/about-mascot.png';
 import { APP_NAME } from '../foundation';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { ACTIONS, actionVisibleOnPlatform, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
-import type { PanelId } from '../domain/types';
+import type { PanelId, PlatformInfo } from '../domain/types';
 import {
   ACTION_CATEGORY_LABELS,
   NAVIGATION_GROUP_LABELS,
@@ -38,12 +38,12 @@ const SHORTCUT_HELP_COLUMNS: readonly (readonly AppActionCategory[])[] = [
   ['view', 'archive', 'settings'],
 ];
 
-export function ShortcutHelpDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
+export function ShortcutHelpDialog({ language, platformInfo, onClose }: { language: SupportedLanguage; platformInfo?: PlatformInfo; onClose(): void }) {
   const text = OVERLAY_TEXT[language];
   const scrollRef = useRef<HTMLDivElement>(null);
   const shortcutGroups = new Map<AppActionCategory, (typeof ACTIONS)[number][]>();
   for (const action of ACTIONS) {
-    if ((!action.shortcutLabel && !action.keyboardBindings?.length) || !actionVisibleOnPlatform(action)) {
+    if ((!action.shortcutLabel && !action.keyboardBindings?.length) || !actionVisibleOnPlatform(action, undefined, platformInfo)) {
       continue;
     }
     const group = shortcutGroups.get(action.category) ?? [];
@@ -129,13 +129,13 @@ export function ShortcutHelpDialog({ language, onClose }: { language: SupportedL
   );
 }
 
-export function HelpSearchDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
+export function HelpSearchDialog({ language, platformInfo, onClose }: { language: SupportedLanguage; platformInfo?: PlatformInfo; onClose(): void }) {
   const text = OVERLAY_TEXT[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
   const results = ACTIONS.filter((action) => {
-    if (!actionVisibleOnPlatform(action)) return false;
+    if (!actionVisibleOnPlatform(action, undefined, platformInfo)) return false;
     if (!normalizedQuery) {
       return true;
     }

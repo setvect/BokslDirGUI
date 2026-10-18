@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import platformFixtures from '../tauri/fixtures/platform.json';
 import { ACTION_BY_ID, ACTIONS, actionVisibleOnPlatform } from '../actions/registry';
 import { useOperationStore } from '../operations/operationStore';
 import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './commanderFixture';
@@ -150,7 +151,7 @@ describe('CommanderShell keyboard', () => {
 
   it('groups every shortcut and scrolls the help dialog without moving a file row', async () => {
     const user = userEvent.setup();
-    renderCommander();
+    renderCommander(undefined, undefined, undefined, false);
 
     await user.click(screen.getByRole('button', { name: '도움말(H)' }));
     await user.click(await screen.findByText('단축키 도움말'));
@@ -695,18 +696,20 @@ describe('CommanderShell keyboard', () => {
     expect(activePanelLabel(document.body)).toContain('generic-array-6de08afde610f112');
   });
 
-  it('opens Finder and Terminal at the panel where the action was invoked', async () => {
+  it.each(platformFixtures)('opens the file manager and terminal at the invoked panel on $os', async (platform) => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(platform.os === 'windows' ? 'Windows' : 'Macintosh');
     const user = userEvent.setup();
-    const openCurrentInFinder = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: null } }));
+    const openCurrentInFileManager = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: null } }));
     const openCurrentInTerminal = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: null } }));
     const { container } = renderCommander(createFixturePanelDataSource(), {
-      createDir: vi.fn(), renameEntry: vi.fn(), openCurrentInFinder, openCurrentInTerminal,
+      createDir: vi.fn(), renameEntry: vi.fn(), openCurrentInFileManager, openCurrentInTerminal,
+      getPlatformInfo: vi.fn(async () => ({ ok: true as const, data: platform })),
     });
     const activeBlankArea = () => container.querySelector<HTMLElement>('.file-panel.is-active .file-table-scroll')!;
 
     fireEvent.contextMenu(activeBlankArea());
-    await user.click(await screen.findByRole('menuitem', { name: '현재 폴더를 Finder에서 열기' }));
-    await waitFor(() => expect(openCurrentInFinder).toHaveBeenCalledWith({ path: SAMPLE_LISTINGS.right.path }));
+    await user.click(await screen.findByRole('menuitem', { name: '현재 폴더를 파일 관리자에서 열기' }));
+    await waitFor(() => expect(openCurrentInFileManager).toHaveBeenCalledWith({ path: SAMPLE_LISTINGS.right.path }));
     expect(screen.queryByRole('dialog')).toBeNull();
 
     await user.keyboard('{Tab}');

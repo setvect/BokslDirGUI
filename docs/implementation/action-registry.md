@@ -69,7 +69,7 @@
 | `archive.create` | archive | zc | `z c` | File > Archive Compress | safe | archive_create |
 | `external.openDefault` | file | o | `o` | File > Open Default App | safe | open_default |
 | `external.reveal` | file | 없음 | 없음 | File > Reveal | safe | reveal_in_manager |
-| `external.openCurrentInFinder` | navigation | 없음 | 없음 | Go > Open Current Folder in Finder | safe | open_current_in_finder |
+| `external.openCurrentInFileManager` | navigation | 없음 | 없음 | Go > Open Current Folder in File Manager | safe | open_current_in_file_manager |
 | `external.openCurrentInTerminal` | navigation | 없음 | 없음 | Go > Open Terminal Here | safe | open_current_in_terminal |
 | `view.sortName` | view | sn | `s n` | View > Sort > Name | none | UI state + list_dir |
 | `view.sortSize` | view | ss | `s s` | View > Sort > Size | none | UI state + list_dir |

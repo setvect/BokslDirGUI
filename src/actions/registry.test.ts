@@ -45,7 +45,7 @@ describe('action registry', () => {
 
   it('keeps external integration and editor preset menu paths aligned with TUI parity rows', () => {
     expect(ACTION_BY_ID.get('external.openDefault')?.menuPath).toEqual(['File', 'Open Default App']);
-    expect(ACTION_BY_ID.get('external.openCurrentInFinder')?.menuPath).toEqual(['Go', 'Open Current Folder in Finder']);
+    expect(ACTION_BY_ID.get('external.openCurrentInFileManager')?.menuPath).toEqual(['Go', 'Open Current Folder in File Manager']);
     expect(ACTION_BY_ID.get('external.openCurrentInTerminal')?.menuPath).toEqual(['Go', 'Open Terminal Here']);
     expect(ACTION_BY_ID.get('external.runShellCommand')?.menuPath).toEqual(['File', 'Run Shell Command']);
     expect(ACTION_BY_ID.get('app.quit')?.menuPath).toEqual(['File', 'Quit']);
@@ -116,7 +116,7 @@ describe('action registry', () => {
       hasOppositePanel: true, shellCommandEnabled: false, operationBusy: false,
       backendAvailable: true, activePathIsArchive: false,
     };
-    for (const id of ['external.openCurrentInFinder', 'external.openCurrentInTerminal']) {
+    for (const id of ['external.openCurrentInFileManager', 'external.openCurrentInTerminal']) {
       const action = ACTION_BY_ID.get(id)!;
       expect(action.isEnabled(context)).toBe(true);
       expect(action.isEnabled({ ...context, activePathIsArchive: true })).toBe(false);
@@ -180,8 +180,8 @@ describe('action registry', () => {
     expect(shortcutHelpLabelForAction(paste, 'other')).toBe('Ctrl+V');
     expect(actionVisibleOnPlatform(cut, 'mac')).toBe(false);
     expect(actionVisibleOnPlatform(moveHere, 'other')).toBe(false);
-    expect(actionsForMenu('Go', 'mac').some((action) => action.id === 'external.openCurrentInFinder')).toBe(true);
-    expect(actionsForMenu('Go', 'other').some((action) => action.id === 'external.openCurrentInFinder')).toBe(false);
+    expect(actionsForMenu('Go', 'mac').some((action) => action.id === 'external.openCurrentInFileManager')).toBe(true);
+    expect(actionsForMenu('Go', 'other').some((action) => action.id === 'external.openCurrentInFileManager')).toBe(false);
     expect(actionsForMenu('Go', 'other').some((action) => action.id === 'external.openCurrentInTerminal')).toBe(false);
     expect(actionsForMenu('Edit', 'mac').some((action) => action.id === 'file.clipboardMovePaste')).toBe(true);
     expect(actionsForMenu('Edit', 'other').some((action) => action.id === 'file.clipboardCut')).toBe(true);
@@ -284,8 +284,22 @@ it('uses backend feature availability even when keyboard presentation is macOS',
     trashUndoAvailable: true,
     platformInfo: { os: 'windows', features: { openWith: false, currentFolderManager: false,
       currentFolderTerminal: false, nativeFileClipboard: false, trashUndo: false } } };
-  for (const id of ['external.openWith', 'file.undoTrash', 'external.openCurrentInFinder', 'external.openCurrentInTerminal'] as const) {
+  for (const id of ['external.openWith', 'file.undoTrash', 'external.openCurrentInFileManager', 'external.openCurrentInTerminal'] as const) {
     expect(ACTION_BY_ID.get(id)!.isEnabled(context)).toBe(false);
   }
   expect(ACTION_BY_ID.get('file.copy')!.isEnabled(context)).toBe(true);
+});
+
+
+it('shows supported Windows desktop actions consistently with backend capabilities', () => {
+  const platformInfo = { os: 'windows', features: { openWith: true, currentFolderManager: true,
+    currentFolderTerminal: true, nativeFileClipboard: false, trashUndo: false } };
+  const go = actionsForMenu('Go', 'other', platformInfo).map(action => action.id);
+  expect(go).toContain('external.openCurrentInFileManager');
+  expect(go).toContain('external.openCurrentInTerminal');
+  expect(actionsForMenu('File', 'other', platformInfo).map(action => action.id)).toContain('external.openWith');
+  expect(actionsForMenu('Edit', 'other', platformInfo).map(action => action.id)).not.toContain('file.undoTrash');
+  expect(actionVisibleOnPlatform(ACTION_BY_ID.get('external.openWith')!, 'mac', {
+    ...platformInfo, features: { ...platformInfo.features, openWith: false },
+  })).toBe(false);
 });

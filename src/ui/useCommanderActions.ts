@@ -265,9 +265,9 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
       return;
     }
 
-    if (actionId === 'external.openCurrentInFinder' || actionId === 'external.openCurrentInTerminal') {
-      const openDirectory = actionId === 'external.openCurrentInFinder'
-        ? dependencies.mutationClient.openCurrentInFinder
+    if (actionId === 'external.openCurrentInFileManager' || actionId === 'external.openCurrentInTerminal') {
+      const openDirectory = actionId === 'external.openCurrentInFileManager'
+        ? dependencies.mutationClient.openCurrentInFileManager
         : dependencies.mutationClient.openCurrentInTerminal;
       const label = labelForAction(action, dependencies.settings.language);
       if (!dependencies.runtimeBackendAvailable || isArchiveVirtualPath(panel.path) || !openDirectory) {

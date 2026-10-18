@@ -11,6 +11,12 @@ mod archive_tar;
 mod commands;
 mod contracts;
 mod external;
+#[cfg(any(windows, test))]
+mod external_terminal;
+#[cfg(windows)]
+mod windows_shell;
+#[cfg(windows)]
+mod windows_open_with;
 mod open_with;
 mod file_clipboard;
 mod bulk_rename;
@@ -74,7 +80,7 @@ pub fn run() {
             commands::list_open_with_apps,
             commands::open_with_app,
             commands::reveal_in_manager,
-            commands::open_current_in_finder,
+            commands::open_current_in_file_manager,
             commands::open_current_in_terminal,
             commands::prepare_shell_command,
             commands::run_shell_command,

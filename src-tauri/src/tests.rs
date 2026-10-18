@@ -1,7 +1,7 @@
 use crate::archive;
 use crate::commands::{
     archive_list, create_dir, get_metadata, health_check, list_dir, list_locations, load_settings,
-    open_current_in_finder, open_current_in_terminal, open_default,
+    open_current_in_file_manager, open_current_in_terminal, open_default,
     prepare_shell_command, preview_file, rename_entry, reveal_in_manager, run_shell_command,
     save_settings, watch_path,
 };
@@ -963,6 +963,12 @@ fn shell_command_confirm_token_expires_after_ttl() {
 
 #[test]
 fn external_open_commands_support_dry_run() {
+    fn manager(path: String) -> crate::contracts::CommandResult<crate::contracts::ActionResult> {
+        tauri::async_runtime::block_on(open_current_in_file_manager(path))
+    }
+    fn terminal(path: String) -> crate::contracts::CommandResult<crate::contracts::ActionResult> {
+        tauri::async_runtime::block_on(open_current_in_terminal(path))
+    }
     let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
     let fixture = TempFixture::new();
     let source = fixture.root.join("alpha.txt");
@@ -972,22 +978,22 @@ fn external_open_commands_support_dry_run() {
     );
     env::set_var("BOKSLDIRGUI_EXTERNAL_DRY_RUN", "1");
 
-    let opened = open_default(source.to_string_lossy().into_owned())
+    let opened = tauri::async_runtime::block_on(open_default(source.to_string_lossy().into_owned()))
         .expect("dry-run default open should succeed");
     assert_eq!(opened.message_key, Some("external.dryRun".to_string()));
-    let revealed = reveal_in_manager(source.to_string_lossy().into_owned())
+    let revealed = tauri::async_runtime::block_on(reveal_in_manager(source.to_string_lossy().into_owned()))
         .expect("dry-run reveal should succeed");
     assert!(revealed.ok);
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
-        for open_directory in [open_current_in_finder, open_current_in_terminal] {
+        for open_directory in [manager, terminal] {
             let opened = open_directory(fixture.root.to_string_lossy().into_owned())
                 .expect("dry-run current directory open should succeed");
             assert!(opened.ok);
         }
     }
-    for open_directory in [open_current_in_finder, open_current_in_terminal] {
+    for open_directory in [manager, terminal] {
         let file_error = open_directory(source.to_string_lossy().into_owned())
             .expect_err("a file must not be opened as the current directory");
         assert_eq!(file_error.code, "not_directory");

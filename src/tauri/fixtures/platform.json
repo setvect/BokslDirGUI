@@ -12,9 +12,9 @@
   {
     "os": "windows",
     "features": {
-      "openWith": false,
-      "currentFolderManager": false,
-      "currentFolderTerminal": false,
+      "openWith": true,
+      "currentFolderManager": true,
+      "currentFolderTerminal": true,
       "nativeFileClipboard": false,
       "trashUndo": false
     }

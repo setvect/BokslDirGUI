@@ -182,7 +182,8 @@ export interface ArchiveListing {
 }
 
 export interface OpenWithApp {
-  path: string;
+  id: string;
+  path: string | null;
   name: string;
   isDefault: boolean;
 }
