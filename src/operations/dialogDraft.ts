@@ -1,3 +1,4 @@
+import { parseShellCommandInput } from '../actions/commandInput';
 import { DIALOG_DEFINITIONS } from './dialogDefinitions';
 import { ACTION_BY_ID, type ActionId } from '../actions/registry';
 import type { OperationKind } from '../domain/types';
@@ -124,7 +125,7 @@ export const validateDialogInput = (dialogKind: DialogKind, value: string, requi
     return null;
   }
   if (dialogKind === 'shellCommand') {
-    return trimmed ? null : 'errors.invalidShellCommand';
+    return parseShellCommandInput(value) ? null : 'errors.invalidShellCommand';
   }
   if (dialogKind !== 'createDir' && dialogKind !== 'rename') {
     return null;

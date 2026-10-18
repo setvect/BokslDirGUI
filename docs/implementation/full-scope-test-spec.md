@@ -71,9 +71,10 @@
 - `external.reveal` action은 `reveal_in_manager` command로 연결되며 Finder/Explorer/파일 관리자에서 위치 표시를 시도하고 OS별 실패 처리
 - `external.openCurrentInFileManager`/`external.openCurrentInTerminal` action은 macOS·Windows에서 현재 패널의 실제 디렉터리를 전달하고, 파일·없는 경로·압축 내부 경로는 거부
 - `external.runShellCommand` action의 검증 항목
-  - `run_shell_command` command 직접 연결
+  - `prepare_shell_command` → `run_shell_command` 연결, 확정 입력의 단회 토큰 전달
   - disabled by default 정책(`external.shellCommand.enabled`) 및 workingDir 검증
-  - 입력 후 추가 확인 없이 실행, exitCode/stdout/stderr 표시
+  - 실행 버튼으로 입력 확정, 추가 확인 다이얼로그 없이 실행, exitCode/stdout/stderr 표시
+  - 토큰 누락·재사용·만료·인수 변경 거부, 잘못된 따옴표와 암묵적 Windows 배치 실행 거부
 
 ### 3.6 GUI/UX
 

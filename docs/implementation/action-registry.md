@@ -100,7 +100,7 @@
 | `settings.toggleIcons` | settings | 없음 | 없음 | Settings > Toggle Icons | none | save_settings |
 | `settings.sizeAuto` | settings | 없음 | 없음 | Settings > File Size Format > Auto | none | save_settings |
 | `settings.sizeBytes` | settings | 없음 | 없음 | Settings > File Size Format > Bytes | none | save_settings |
-| `external.runShellCommand` | file | : | `:` | File > Run Shell Command | destructive | ShellCommandDialog → run_shell_command |
+| `external.runShellCommand` | file | : | `:` | File > Run Shell Command | destructive | ShellCommandDialog → prepare_shell_command → run_shell_command |
 | `help.shortcuts` | help | ? | `?` | Help > Keyboard Help | none | dialog |
 | `help.search` | help | 없음 | 없음 | Help > Search | none | UI state |
 | `help.about` | help | 없음 | 없음 | Help > About | none | dialog |
@@ -123,7 +123,7 @@
 - 패널 상태줄은 `압축 내부 읽기 전용`을 표시해 비활성화 이유 설명
 - 압축 내부 직접 삭제/이름 변경/이동은 provider별 재작성 방식과 원자성 차이로 인해 지원하지 않음
 - 사용자는 복사/추출 후 일반 파일 시스템에서 변경하고 필요하면 새 압축 파일 생성
-- `external.runShellCommand`는 `ShellCommandDialog`에서 명령 입력 후 backend `run_shell_command`를 직접 호출
+- `external.runShellCommand`는 `ShellCommandDialog`에서 명령 입력 후 입력 확정 후 backend `prepare_shell_command`의 토큰을 같은 입력의 `run_shell_command`에 전달
 - 기본 비활성 설정을 유지하며 작업 디렉터리/명령/종료 코드/표준 오류를 사용자에게 표시
 
 ## 5. Shortcut rules

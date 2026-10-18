@@ -1113,7 +1113,7 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     archiveExtract: () => '압축 파일을 대상 폴더에 풉니다.',
     externalOpenDefault: () => '선택한 항목을 기본 앱으로 엽니다.',
     externalReveal: () => '선택한 항목의 위치를 파일 관리자에서 엽니다.',
-    shellCommand: () => '현재 폴더에서 명령을 실행합니다. 설정에서 허용된 경우에만 사용할 수 있습니다.',
+    shellCommand: () => '현재 폴더에서 프로그램을 실행합니다. 공백이 있는 인수는 따옴표로 감싸세요. 셸 문법을 쓰려면 sh, cmd.exe 또는 PowerShell을 명시하세요.',
     properties: () => '선택한 항목의 정보를 확인합니다.',
   },
   en: {
@@ -1129,7 +1129,7 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     archiveExtract: () => 'Extract the archive into the target folder.',
     externalOpenDefault: () => 'Open the selected item with the default app.',
     externalReveal: () => 'Reveal the selected item in the file manager.',
-    shellCommand: () => 'Run a command in the current folder when shell commands are enabled in settings.',
+    shellCommand: () => 'Run a program in the current folder. Quote arguments containing spaces. Invoke sh, cmd.exe or PowerShell explicitly for shell syntax.',
     properties: () => 'Show information for the selected item.',
   },
 };

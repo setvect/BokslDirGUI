@@ -47,11 +47,22 @@ export const atomicExecutorForAction = (
           },
         };
       }
-      return mutationClient.runShellCommand ? mutationClient.runShellCommand({
+      if (!mutationClient.prepareShellCommand || !mutationClient.runShellCommand) {
+        return unsupportedClientResult('prepare_shell_command/run_shell_command', dialog.targetDir);
+      }
+      const input = {
         workingDir: dialog.targetDir ?? '',
         command: parsed.command,
         args: parsed.args,
-      }) : unsupportedClientResult('run_shell_command', dialog.targetDir);
+      };
+      // The Run button confirms this immutable input; the short-lived token binds the backend request.
+      const prepared = await mutationClient.prepareShellCommand(input);
+      if (!prepared.ok) return prepared;
+      if (!prepared.data.policy.enabled) return {
+        ok: false,
+        error: { code: 'disabled', messageKey: 'errors.shellCommandDisabled', path: dialog.targetDir, details: null, recoverable: true },
+      };
+      return mutationClient.runShellCommand({ ...input, confirmToken: prepared.data.confirmToken });
     };
   }
   return undefined;

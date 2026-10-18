@@ -623,7 +623,10 @@ describe('CommanderShell operations', () => {
           view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
         },
       })),
-      prepareShellCommand: vi.fn(),
+      prepareShellCommand: vi.fn(async () => ({ ok: true as const, data: {
+        confirmToken: 'confirmed-input', fingerprint: 'preview', expiresAt: '2099-01-01T00:00:00Z',
+        requiresConfirmation: true as const, policy: { enabled: true, reasonKey: null },
+      } })),
       runShellCommand: vi.fn(async () => ({
         ok: true as const,
         data: {
@@ -647,8 +650,9 @@ describe('CommanderShell operations', () => {
       workingDir: SAMPLE_LISTINGS.right.path,
       command: 'echo',
       args: ['hello'],
+      confirmToken: 'confirmed-input',
     }));
-    expect(mutationClient.prepareShellCommand).not.toHaveBeenCalled();
+    expect(mutationClient.prepareShellCommand).toHaveBeenCalledWith({ workingDir: SAMPLE_LISTINGS.right.path, command: 'echo', args: ['hello'] });
     expect(screen.getByText(/hello/)).toBeTruthy();
   });
 

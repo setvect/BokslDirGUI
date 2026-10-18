@@ -78,13 +78,7 @@ export const archiveFormatForPath = (path: string) => {
   return 'zip';
 };
 
-export const parseShellCommandInput = (value: string): { command: string; args: string[] } | null => {
-  const parts = value.trim().match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) =>
-    part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part,
-  ) ?? [];
-  const [command, ...args] = parts;
-  return command ? { command, args } : null;
-};
+export { parseShellCommandInput } from '../actions/commandInput';
 
 export const archiveAutoExtractFolderName = (archiveName: string) => {
   const trimmed = archiveName.trim();

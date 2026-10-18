@@ -208,3 +208,17 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - Windows 실기 확인: 실제 기본 앱·등록 앱 실행, Explorer 항목 선택, 터미널의 UNC·긴 경로 진입, 기본 연결 변경 후 재조회, UI 응답성 확인 필요
 - 원격 CI: 사용자 push 금지에 따라 이번 변경의 GitHub Actions 실행 없음
 - API 근거: [항목 위치 선택](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenfolderandselectitems), [Shell 실행 정보](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-shellexecuteinfow), [등록 앱 실행](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-iassochandler-invoke)
+
+### W4 명령 입력·실행 확인
+
+- 입력 계약: 작은/큰따옴표 묶기·빈 인수·인용 구간 결합 지원, Windows 역슬래시·UNC·끝 역슬래시 보존
+- 잘못된 입력: 닫히지 않은 따옴표·빈 프로그램·NUL 거부, UI 검증과 실행 파서의 공통 계산 사용
+- 셸 구분: 직접 실행에서 환경 변수·와일드카드·파이프·리다이렉션의 자동 해석 없음, Windows 배치 파일의 암묵적 셸 실행 거부
+- 확인 정책: 기존 실행 버튼으로 확정한 입력에 단회 토큰 발급·소비, 추가 확인 다이얼로그 없음, 기본 비활성 설정 유지
+- 토큰 계약: 누락·만료·재사용·변경된 인수 거부, 작업 폴더·프로그램·인수의 구분 가능한 JSON 직렬화로 fingerprint 생성, 프로그램의 임의 trim 제거
+- 토큰 정리: 새 발급 시 만료·소비된 토큰 정리, 장시간 실행의 레지스트리 누적 축소
+- 회귀 검증: 토큰 조회 실패·비활성 정책의 실행 중단, 비동기 조회 중 입력 변경에도 확정한 요청 유지, 따옴표·Windows 경로·셸 리터럴 입력 테스트 추가
+- Mac 전체 검증: 필수 압축 도구를 강제한 `npm run verify` 통과, 프론트 342개·도구 16개·Rust 107개·스모크 261개 통과, 실제 macOS 휴지통 1개 명시 제외
+- Windows 컴파일: MSVC 대상 제품 코드·테스트 `cargo xwin check --tests --locked` 통과, 실제 명령 실행 검증과 구분
+- 변경 검토: 순수 파서의 UI·Tauri·store 의존 없음, 기존 실행 버튼과 작업 상태 소유권 유지, 명령 확정 시점의 요청 유지와 필수 토큰 검증 확인
+- 남은 작업: 공통 장기 작업 상태의 명령 실행 연결, 출력 상한·진행·취소·시간 제한·자식 프로세스 트리 종료 구현

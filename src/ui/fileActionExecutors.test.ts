@@ -1,0 +1,39 @@
+import { expect, it, vi } from 'vitest';
+import { ACTION_BY_ID } from '../actions/registry';
+import { buildDialogDraft } from '../operations/dialogDraft';
+import type { SafeMutationClient } from '../tauri/commanderClients';
+import { atomicExecutorForAction } from './fileActionExecutors';
+
+const dialog = () => ({ ...buildDialogDraft('shellCommand', {
+  action: ACTION_BY_ID.get('external.runShellCommand')!, panelId: 'left', sources: [],
+  workingDir: '/tmp', targetDir: '/tmp',
+}), inputValue: 'tool "한글 a" ""' });
+const preview = { confirmToken: 'one-shot', fingerprint: 'input', expiresAt: '2099-01-01T00:00:00Z',
+  requiresConfirmation: true as const, policy: { enabled: true, reasonKey: null } };
+
+it('does not launch when preparation fails or execution has been disabled', async () => {
+  for (const prepared of [
+    { ok: false as const, error: { code: 'invalid_command', messageKey: 'errors.invalidShellCommand', path: null, details: null, recoverable: true } },
+    { ok: true as const, data: { ...preview, policy: { enabled: false, reasonKey: null } } },
+  ]) {
+    const run = vi.fn();
+    const client: SafeMutationClient = { createDir: vi.fn(), renameEntry: vi.fn(),
+      prepareShellCommand: vi.fn(async () => prepared), runShellCommand: run };
+    expect((await atomicExecutorForAction('external.runShellCommand', client)!(dialog())).ok).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+  }
+});
+
+it('executes exactly the confirmed snapshot even if the dialog draft changes during preparation', async () => {
+  let finish!: (result: { ok: true; data: typeof preview }) => void;
+  const run = vi.fn(async () => ({ ok: true as const, data: { exitCode: 0, stdout: '', stderr: '', timedOut: false } }));
+  const client: SafeMutationClient = { createDir: vi.fn(), renameEntry: vi.fn(), runShellCommand: run,
+    prepareShellCommand: vi.fn(() => new Promise<{ ok: true; data: typeof preview }>(resolve => { finish = resolve; })) };
+  const draft = dialog();
+  const result = atomicExecutorForAction('external.runShellCommand', client)!(draft);
+  draft.inputValue = 'different-program';
+  draft.targetDir = '/other';
+  finish({ ok: true, data: preview });
+  await result;
+  expect(run).toHaveBeenCalledWith({ workingDir: '/tmp', command: 'tool', args: ['한글 a', ''], confirmToken: 'one-shot' });
+});

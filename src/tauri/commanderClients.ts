@@ -64,7 +64,7 @@ export interface SafeMutationClient {
   openCurrentInFileManager?(input: { path: string }): ReturnType<typeof tauriClient.openCurrentInFileManager>;
   openCurrentInTerminal?(input: { path: string }): ReturnType<typeof tauriClient.openCurrentInTerminal>;
   prepareShellCommand?(input: { workingDir: string; command: string; args?: string[] }): ReturnType<typeof tauriClient.prepareShellCommand>;
-  runShellCommand?(input: { workingDir: string; command: string; args?: string[]; confirmToken?: string }): ReturnType<typeof tauriClient.runShellCommand>;
+  runShellCommand?(input: { workingDir: string; command: string; args?: string[]; confirmToken: string }): ReturnType<typeof tauriClient.runShellCommand>;
   loadSettings?(): ReturnType<typeof tauriClient.loadSettings>;
   saveSettings?(input: { patch: Partial<Settings> }): ReturnType<typeof tauriClient.saveSettings>;
 }

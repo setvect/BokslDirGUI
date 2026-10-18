@@ -113,7 +113,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `list_open_with_apps` | `{ path }` | `OpenWithApp[]` | macOS NSWorkspace·Windows Shell의 파일 연결 앱 조회, 기본 앱 우선 정렬 |
 | `open_with_app` | `{ path, applicationId }` | `ActionResult` | 대상 파일·OS 등록 앱 식별자 재검증 후 선택 앱으로 열기, 기본 연결 유지 |
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
-| `run_shell_command` | `{ workingDir, command, args?, confirmToken? }` | `ShellCommandResult` | 설정·작업 디렉터리 검증 후 즉시 실행, stdout/stderr/exitCode 반환; 기존 토큰 전달 시 검증 유지 |
+| `run_shell_command` | `{ workingDir, command, args?, confirmToken }` | `ShellCommandResult` | 설정·작업 디렉터리·필수 확인 토큰 검증 후 실행, stdout/stderr/exitCode 반환 |
 | `load_settings` | `{}` | `Settings` | schema version 포함 |
 | `save_settings` | `{ patch }` | `Settings` | 원자적 저장 고려 |
 
@@ -147,8 +147,11 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - `run_shell_command`는 설정 키 `external.shellCommand.enabled === true`일 때만 활성화하고, shell interpolation을 피하기 위해 command/args를 분리하며, workingDir은 활성 패널 경로로 검증
 - `preview_file(path, maxBytes?)`는 일반 파일만 읽고 텍스트는 최대 1 MiB, 이미지는 8 MiB로 제한
 - 미지원 형식과 제한 초과 이미지는 command 오류가 아니라 `unsupported`/`tooLarge` 결과로 반환하며 파일을 실행하지 않음
-- `prepare_shell_command`와 `confirmToken`은 기존 호출 호환용; GUI는 토큰 없이 `run_shell_command`를 직접 호출
-- 토큰을 전달한 기존 호출은 backend가 작업 디렉터리/명령 fingerprint와 TTL/one-shot 조건을 검증; 무효·만료 시 `invalid_token`/`errors.shellConfirmationInvalid` 반환
+- GUI의 실행 버튼으로 입력 확정 후 `prepare_shell_command`의 토큰을 같은 입력의 `run_shell_command`에 전달, 추가 확인 다이얼로그 없음
+- backend는 모든 실행의 작업 디렉터리·명령·인수 fingerprint와 TTL/one-shot 조건 검증, 누락·무효·만료 시 `invalid_token`/`errors.shellConfirmationInvalid` 반환
+- 직접 실행 입력: 작은/큰따옴표로 공백 포함 인수 묶기, 인용 중 같은 따옴표 2개는 리터럴 따옴표 1개, 빈 인수 보존
+- 역슬래시·환경 변수·와일드카드·파이프·리다이렉션은 직접 실행에서 리터럴 전달, 닫히지 않은 따옴표와 NUL 거부
+- 셸 내장 명령과 셸 문법은 `sh`·`cmd.exe`·`powershell.exe` 등 명시 호출, Windows `.bat`·`.cmd` 직접 실행의 암묵적 셸 전환 거부
 - renderer 권한은 command invocation에 필요한 범위로 제한
 
 ## 6. TypeScript wrapper 규칙

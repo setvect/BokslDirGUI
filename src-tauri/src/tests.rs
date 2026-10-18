@@ -896,9 +896,15 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
         Some(test_echo_args("direct")),
         None,
     )
-    .expect("enabled shell command should run without a confirmation token");
-    assert_eq!(direct.exit_code, Some(0));
-    assert_eq!(direct.stdout.trim(), "direct");
+    .expect_err("enabled shell command still requires a confirmation token");
+    assert_eq!(direct.code, "invalid_token");
+    let changed = run_shell_command(
+        fixture.root.to_string_lossy().into_owned(),
+        test_echo_command().0,
+        Some(test_echo_args("changed")),
+        Some(preview.confirm_token.clone()),
+    ).expect_err("a token cannot authorize changed arguments");
+    assert_eq!(changed.code, "invalid_token");
     let result = run_shell_command(
         fixture.root.to_string_lossy().into_owned(),
         test_echo_command().0,

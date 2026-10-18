@@ -64,18 +64,19 @@ pub(crate) fn prepare_shell_command(
     let token = next_token();
     let expires_at = shell_now_instant() + SHELL_TOKEN_TTL;
     let expires_at_text = unix_text(shell_now_system() + SHELL_TOKEN_TTL);
-    token_registry()
+    let mut registry = token_registry()
         .lock()
-        .expect("shell token registry lock should not be poisoned")
-        .insert(
-            token.clone(),
-            ShellToken {
-                fingerprint: fingerprint.clone(),
-                expires_at,
-                expires_at_text: expires_at_text.clone(),
-                used: false,
-            },
-        );
+        .expect("shell token registry lock should not be poisoned");
+    registry.retain(|_, token| !token.used && token.expires_at >= shell_now_instant());
+    registry.insert(
+        token.clone(),
+        ShellToken {
+            fingerprint: fingerprint.clone(),
+            expires_at,
+            expires_at_text: expires_at_text.clone(),
+            used: false,
+        },
+    );
     Ok(ShellCommandPreview {
         confirm_token: token,
         expires_at: expires_at_text,
@@ -113,9 +114,15 @@ pub(crate) fn run_shell_command(
         ));
     }
     let fingerprint = fingerprint(&working_dir, command, &args)?;
-    if let Some(confirm_token) = confirm_token {
-        consume_token(confirm_token, &fingerprint)?;
-    }
+    let confirm_token = confirm_token.ok_or_else(|| {
+        AppError::new(
+            "invalid_token",
+            "errors.shellConfirmationInvalid",
+            Some(&working_dir),
+            true,
+        )
+    })?;
+    consume_token(confirm_token, &fingerprint)?;
     let output = Command::new(command)
         .args(&args)
         .current_dir(&working_dir)
@@ -155,8 +162,10 @@ fn consume_token(token: &str, fingerprint: &str) -> CommandResult<()> {
 }
 
 fn fingerprint(working_dir: &Path, command: &str, args: &[String]) -> CommandResult<String> {
-    let command = command.trim();
-    if command.is_empty() || command.contains('\0') {
+    if command.trim().is_empty()
+        || command.contains('\0')
+        || (cfg!(windows) && is_windows_batch_command(command))
+    {
         return Err(AppError::new(
             "invalid_command",
             "errors.invalidShellCommand",
@@ -172,12 +181,66 @@ fn fingerprint(working_dir: &Path, command: &str, args: &[String]) -> CommandRes
             true,
         ));
     }
-    Ok(format!(
-        "{}::{}::{:?}",
-        display_path(working_dir),
-        command,
-        args
-    ))
+    // Exact fields, including whitespace; delimiter concatenation can alias distinct requests.
+    Ok(
+        serde_json::to_string(&(display_path(working_dir), command, args))
+            .expect("command fingerprint strings are serializable"),
+    )
+}
+
+fn is_windows_batch_command(command: &str) -> bool {
+    command
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(command)
+        .split(':')
+        .any(|part| {
+            let normalized = part.trim_end_matches([' ', '.']).to_ascii_lowercase();
+            normalized.ends_with(".cmd") || normalized.ends_with(".bat")
+        })
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::{fingerprint, is_windows_batch_command};
+    use std::path::Path;
+
+    #[test]
+    fn confirmation_binds_exact_program_directory_and_arguments() {
+        assert_ne!(
+            fingerprint(Path::new("/a::b"), "c", &[]).unwrap(),
+            fingerprint(Path::new("/a"), "b::c", &[]).unwrap()
+        );
+        assert_ne!(
+            fingerprint(Path::new("/a"), "tool", &[]).unwrap(),
+            fingerprint(Path::new("/a"), " tool ", &[]).unwrap()
+        );
+        assert_ne!(
+            fingerprint(Path::new("/a"), "tool", &["".to_owned()]).unwrap(),
+            fingerprint(Path::new("/a"), "tool", &[]).unwrap()
+        );
+    }
+
+    #[test]
+    fn windows_batch_files_require_an_explicit_shell() {
+        for program in [
+            "script.cmd",
+            r"C:\folder\script.BAT",
+            "script.cmd. ",
+            "script.bat:stream",
+            "C:script.cmd",
+        ] {
+            assert!(is_windows_batch_command(program), "{program}");
+        }
+        for program in [
+            "cmd.exe",
+            "powershell.exe",
+            "tool",
+            r"C:\folder.cmd\tool.exe",
+        ] {
+            assert!(!is_windows_batch_command(program), "{program}");
+        }
+    }
 }
 
 fn token_registry() -> &'static Mutex<BTreeMap<String, ShellToken>> {
