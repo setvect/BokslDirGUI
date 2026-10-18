@@ -48,6 +48,7 @@ export type AtomicCommandSuccessHandler = (entry: unknown, dialog: OperationDial
 
 export type LongRunningOperationExecutor = (
   dialog: OperationDialogDraft,
+  control?: { isCancellationRequested(): boolean },
 ) => Promise<{ ok: true; data: OperationStarted } | { ok: false; error: AppError }>;
 
 export type LongRunningCancelExecutor = (operationId: string) => Promise<unknown>;

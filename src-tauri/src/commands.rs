@@ -2,7 +2,7 @@ use crate::archive;
 use crate::contracts::{
     ActionResult, AppError, ArchiveListing, CancelAck, CommandResult, ConflictAck,
     ConflictDecision, DeleteMode, DirectoryListing, FileEntry, FileMetadata, FilePreview,
-    LocationList, OpenWithApp, OperationStarted, PanelId, Settings, ShellCommandPreview, ShellCommandResult,
+    LocationList, OpenWithApp, OperationStarted, PanelId, Settings, ShellCommandPreview,
     SortSpec, WatchAck,
 };
 use crate::external;
@@ -234,17 +234,15 @@ pub(crate) fn prepare_shell_command(
 
 #[tauri::command]
 pub(crate) fn run_shell_command(
+    app: tauri::AppHandle,
     working_dir: String,
     command: String,
     args: Option<Vec<String>>,
     confirm_token: Option<String>,
-) -> CommandResult<ShellCommandResult> {
-    shell_command::run_shell_command(
-        &working_dir,
-        &command,
-        args.unwrap_or_default(),
-        confirm_token.as_deref(),
-    )
+) -> CommandResult<OperationStarted> {
+    let (command, directory) = shell_command::confirmed_command(&working_dir, &command,
+        args.unwrap_or_default(), confirm_token.as_deref())?;
+    operation::start_shell_command(&app, command, directory)
 }
 
 #[tauri::command]

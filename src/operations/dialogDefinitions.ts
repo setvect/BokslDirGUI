@@ -13,7 +13,7 @@ export const DIALOG_DEFINITIONS = {
   archiveExtract: { executionMode: 'longRunningOperation', operationKind: 'archiveExtract' },
   externalOpenDefault: { executionMode: 'atomicCommand' },
   externalReveal: { executionMode: 'atomicCommand' },
-  shellCommand: { executionMode: 'atomicCommand' },
+  shellCommand: { executionMode: 'longRunningOperation', operationKind: 'shellCommand' },
 } as const;
 
 export type DialogKind = keyof typeof DIALOG_DEFINITIONS;

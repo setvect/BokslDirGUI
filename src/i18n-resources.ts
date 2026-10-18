@@ -27,6 +27,7 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.commandNotConnected': '이 작업은 아직 실행할 수 없습니다.',
     'errors.tauriInvokeFailed': '앱 명령 실행에 실패했습니다.',
     'errors.confirmationRequired': '표시된 확인 문구를 정확히 입력하세요.',
+    'errors.shellCommandTimedOut': '명령 실행이 5분 제한을 초과해 종료되었습니다.',
     'errors.shellCommandDisabled': '쉘 명령 실행은 기본 비활성입니다.',
     'errors.shellConfirmationInvalid': '셸 명령 실행 확인이 만료되었거나 유효하지 않습니다. 다시 실행 확인을 눌러주세요.',
     'errors.invalidShellCommand': '실행할 쉘 명령을 입력해야 합니다.',
@@ -76,6 +77,7 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.commandNotConnected': 'This action cannot be run yet.',
     'errors.tauriInvokeFailed': 'The app command failed.',
     'errors.confirmationRequired': 'Type the displayed confirmation phrase exactly.',
+    'errors.shellCommandTimedOut': 'The command exceeded the five-minute limit and was terminated.',
     'errors.shellCommandDisabled': 'Shell command execution is disabled by default.',
     'errors.shellConfirmationInvalid': 'Shell command confirmation expired or is invalid. Confirm the command again.',
     'errors.invalidShellCommand': 'Enter a shell command to run.',
@@ -978,6 +980,7 @@ export const OPERATION_DIALOG_TEXT = {
     fileInfo: '파일 정보',
     archiveEntries: '압축 파일 항목',
     commandOutput: '명령 출력',
+    commandTruncated: '출력은 스트림별 처음 16 KiB까지 표시합니다.',
     type: '종류',
     path: '경로',
     size: '크기',
@@ -1024,6 +1027,7 @@ export const OPERATION_DIALOG_TEXT = {
     fileInfo: 'File information',
     archiveEntries: 'Archive entries',
     commandOutput: 'Command output',
+    commandTruncated: 'Only the first 16 KiB of each output stream is shown.',
     type: 'Type',
     path: 'Path',
     size: 'Size',
@@ -1113,7 +1117,7 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     archiveExtract: () => '압축 파일을 대상 폴더에 풉니다.',
     externalOpenDefault: () => '선택한 항목을 기본 앱으로 엽니다.',
     externalReveal: () => '선택한 항목의 위치를 파일 관리자에서 엽니다.',
-    shellCommand: () => '현재 폴더에서 프로그램을 실행합니다. 공백이 있는 인수는 따옴표로 감싸세요. 셸 문법을 쓰려면 sh, cmd.exe 또는 PowerShell을 명시하세요.',
+    shellCommand: () => '현재 폴더에서 프로그램을 최대 5분 동안 실행합니다. 공백이 있는 인수는 따옴표로 감싸세요. 셸 문법을 쓰려면 sh, cmd.exe 또는 PowerShell을 명시하세요.',
     properties: () => '선택한 항목의 정보를 확인합니다.',
   },
   en: {
@@ -1129,7 +1133,7 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     archiveExtract: () => 'Extract the archive into the target folder.',
     externalOpenDefault: () => 'Open the selected item with the default app.',
     externalReveal: () => 'Reveal the selected item in the file manager.',
-    shellCommand: () => 'Run a program in the current folder. Quote arguments containing spaces. Invoke sh, cmd.exe or PowerShell explicitly for shell syntax.',
+    shellCommand: () => 'Run a program in the current folder for up to five minutes. Quote arguments containing spaces. Invoke sh, cmd.exe or PowerShell explicitly for shell syntax.',
     properties: () => 'Show information for the selected item.',
   },
 };
@@ -1210,6 +1214,7 @@ export const OPERATION_KIND_LABELS = {
     archiveCreate: '압축 생성',
     archiveExtract: '압축 해제',
     archiveAdd: '압축 파일에 복사',
+    shellCommand: '명령 실행',
   },
   en: {
     copy: 'Copy',
@@ -1222,6 +1227,7 @@ export const OPERATION_KIND_LABELS = {
     archiveCreate: 'Create Archive',
     archiveExtract: 'Extract Archive',
     archiveAdd: 'Copy into Archive',
+    shellCommand: 'Run Command',
   },
 } as const;
 

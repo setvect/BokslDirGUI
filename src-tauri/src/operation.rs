@@ -8,6 +8,10 @@ mod trash_restore;
 pub(crate) use trash_restore::{preview as preview_trash_undo, start as start_trash_undo, TrashUndoPreview};
 mod file_io;
 mod process;
+mod shell;
+pub(crate) use shell::start as start_shell_command;
+#[cfg(test)]
+pub(crate) use shell::run_for_test as run_shell_command_for_test;
 mod runtime;
 mod start;
 #[cfg(test)]

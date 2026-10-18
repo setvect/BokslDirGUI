@@ -113,7 +113,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `list_open_with_apps` | `{ path }` | `OpenWithApp[]` | macOS NSWorkspace·Windows Shell의 파일 연결 앱 조회, 기본 앱 우선 정렬 |
 | `open_with_app` | `{ path, applicationId }` | `ActionResult` | 대상 파일·OS 등록 앱 식별자 재검증 후 선택 앱으로 열기, 기본 연결 유지 |
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
-| `run_shell_command` | `{ workingDir, command, args?, confirmToken }` | `ShellCommandResult` | 설정·작업 디렉터리·필수 확인 토큰 검증 후 실행, stdout/stderr/exitCode 반환 |
+| `run_shell_command` | `{ workingDir, command, args?, confirmToken }` | `OperationStarted` | 설정·디렉터리·필수 토큰 검증 후 공통 장기 작업 시작, kind=shellCommand, 결과는 operation_summary.commandResult |
 | `load_settings` | `{}` | `Settings` | schema version 포함 |
 | `save_settings` | `{ patch }` | `Settings` | 원자적 저장 고려 |
 
@@ -152,6 +152,11 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - 직접 실행 입력: 작은/큰따옴표로 공백 포함 인수 묶기, 인용 중 같은 따옴표 2개는 리터럴 따옴표 1개, 빈 인수 보존
 - 역슬래시·환경 변수·와일드카드·파이프·리다이렉션은 직접 실행에서 리터럴 전달, 닫히지 않은 따옴표와 NUL 거부
 - 셸 내장 명령과 셸 문법은 `sh`·`cmd.exe`·`powershell.exe` 등 명시 호출, Windows `.bat`·`.cmd` 직접 실행의 암묵적 셸 전환 거부
+- `shellCommand` 작업은 기존 `cancel_operation`과 operation 이벤트 사용, 별도 취소 레지스트리·UI store 생성 없음
+- `OperationSummary.commandResult?`: 명령 실행 시 `{ workingDir, exitCode, stdout, stderr, timedOut, truncated }`, 다른 작업은 필드 생략
+- 명령 실행 상한: 5분, stdout/stderr 각각 최초 16 KiB만 보관하며 초과 출력도 계속 배출, 표준 입력은 닫힘
+- 출력 해석: UTF-8·UTF-8 BOM·UTF-16 BOM, Windows의 비 UTF-8 출력은 OS OEM 코드페이지 fallback, 임의 프로그램의 모든 인코딩 자동 판별 보장 없음
+- 성공·실패·취소 명령의 출력 요약은 사용자가 닫을 때까지 유지, 진행 표시의 임의 백분율·파일 개수 표시 제외
 - renderer 권한은 command invocation에 필요한 범위로 제한
 
 ## 6. TypeScript wrapper 규칙

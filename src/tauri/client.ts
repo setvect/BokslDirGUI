@@ -23,7 +23,6 @@ import type {
   OperationSummary,
   Settings,
   ShellCommandPreview,
-  ShellCommandResult,
   SortSpec,
   WatchAck,
 } from '../domain/types';
@@ -186,7 +185,7 @@ export const tauriClient = {
   prepareShellCommand: (input: { workingDir: string; command: string; args?: string[] }) =>
     invokeCommand<ShellCommandPreview>(COMMANDS.prepareShellCommand, input),
   runShellCommand: (input: { workingDir: string; command: string; args?: string[]; confirmToken: string }) =>
-    invokeCommand<ShellCommandResult>(COMMANDS.runShellCommand, input),
+    invokeCommand<OperationStarted>(COMMANDS.runShellCommand, input),
   loadSettings: () => invokeCommand<Settings>(COMMANDS.loadSettings),
   saveSettings: (input: { patch: Partial<Settings> }) => invokeCommand<Settings>(COMMANDS.saveSettings, input),
   listenOperationEvents: async (handlers: OperationEventHandlers) => {

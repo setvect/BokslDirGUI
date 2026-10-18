@@ -75,6 +75,8 @@
   - disabled by default 정책(`external.shellCommand.enabled`) 및 workingDir 검증
   - 실행 버튼으로 입력 확정, 추가 확인 다이얼로그 없이 실행, exitCode/stdout/stderr 표시
   - 토큰 누락·재사용·만료·인수 변경 거부, 잘못된 따옴표와 암묵적 Windows 배치 실행 거부
+  - 준비 중 취소의 실행 차단, 공통 controller의 실행 중 취소와 출력 요약 유지
+  - 양쪽 출력 동시 포화·보관 상한·시간 초과·부모 선종료 후 자식 취소의 실제 프로세스 fixture 검증
 
 ### 3.6 GUI/UX
 

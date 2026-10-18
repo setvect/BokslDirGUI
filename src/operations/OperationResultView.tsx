@@ -51,8 +51,10 @@ export function OperationResultView({
     return (
       <div className="operation-result-stack">
         <dl className="operation-result-list">
+          <div><dt>{text.currentLocation}</dt><dd><code>{value.workingDir}</code></dd></div>
           <div><dt>{text.exitCode}</dt><dd>{value.exitCode ?? '—'}</dd></div>
         </dl>
+        {value.truncated ? <p className="operation-muted">{text.commandTruncated}</p> : null}
         <CommandOutput title={text.stdout} output={value.stdout} emptyLabel={text.noOutput} />
         <CommandOutput title={text.stderr} output={value.stderr} emptyLabel={text.noOutput} />
       </div>

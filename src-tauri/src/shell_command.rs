@@ -1,7 +1,7 @@
 use crate::contracts::{
-    AppError, CommandResult, ShellCommandPolicy, ShellCommandPreview, ShellCommandResult,
+    AppError, CommandResult, ShellCommandPolicy, ShellCommandPreview,
 };
-use crate::filesystem::{map_io_error, unix_text};
+use crate::filesystem::unix_text;
 use crate::navigation;
 use crate::path_text::display_path;
 use crate::settings_service;
@@ -22,7 +22,6 @@ static SHELL_TOKEN_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 static SHELL_TEST_CLOCK_OFFSET_MS: AtomicU64 = AtomicU64::new(0);
 const SHELL_TOKEN_TTL: Duration = Duration::from_secs(60);
-const SHELL_OUTPUT_LIMIT: usize = 16 * 1024;
 
 #[derive(Debug, Clone)]
 struct ShellToken {
@@ -89,12 +88,12 @@ pub(crate) fn prepare_shell_command(
     })
 }
 
-pub(crate) fn run_shell_command(
+pub(crate) fn confirmed_command(
     working_dir: &str,
     command: &str,
     args: Vec<String>,
     confirm_token: Option<&str>,
-) -> CommandResult<ShellCommandResult> {
+) -> CommandResult<(Command, std::path::PathBuf)> {
     let settings = settings_service::load_settings()?;
     if !settings.external.shell_command.enabled {
         return Err(AppError::new(
@@ -123,17 +122,9 @@ pub(crate) fn run_shell_command(
         )
     })?;
     consume_token(confirm_token, &fingerprint)?;
-    let output = Command::new(command)
-        .args(&args)
-        .current_dir(&working_dir)
-        .output()
-        .map_err(|error| map_io_error(error, Some(&working_dir)))?;
-    Ok(ShellCommandResult {
-        exit_code: output.status.code(),
-        stdout: limit_output(&String::from_utf8_lossy(&output.stdout)),
-        stderr: limit_output(&String::from_utf8_lossy(&output.stderr)),
-        timed_out: false,
-    })
+    let mut process = Command::new(command);
+    process.args(&args).current_dir(&working_dir);
+    Ok((process, working_dir))
 }
 
 fn consume_token(token: &str, fingerprint: &str) -> CommandResult<()> {
@@ -286,10 +277,6 @@ fn next_token() -> String {
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
     format!("shell-{nonce}-{counter}")
-}
-
-fn limit_output(value: &str) -> String {
-    value.chars().take(SHELL_OUTPUT_LIMIT).collect()
 }
 
 fn epoch_text() -> String {

@@ -10,9 +10,16 @@ type OperationGet = StoreApi<OperationStoreState>['getState'];
 
 /** Bind the backend ID once, preserving cancellation requested before start completes. */
 export async function executeLongRunningDialog(dialog: OperationDialogDraft, set: OperationSet, get: OperationGet, closeDialogAfterStart: boolean) {
-  const result = await dialog.longRunningExecutor!(dialog);
+  const result = await dialog.longRunningExecutor!(dialog, {
+    isCancellationRequested: () => get().activeOperationController?.dialog !== dialog
+      || Boolean(get().activeOperationController?.cancelRequestedBeforeStart),
+  });
   if (get().activeOperationController?.dialog !== dialog) return;
   if (!result.ok) {
+    if (result.error.code === 'operation_cancelled' && get().activeOperationController?.cancelRequestedBeforeStart) {
+      set({ dialog: null, progress: null, conflictPrompt: null, activeOperationController: null, lastError: null, summary: null });
+      return;
+    }
     const errorHandling = dialog.onOperationStartError?.(result.error, dialog);
     set((current) => ({
       ...(closeDialogAfterStart ? { dialog: errorHandling === 'dismiss' ? null : current.dialog ? { ...current.dialog, operationPending: false } : null } : {}),

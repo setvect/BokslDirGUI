@@ -15,7 +15,8 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use tauri::Emitter;
 
-use std::process::Child;
+use process_wrap::std::ChildWrapper;
+pub(super) type ExternalChild = Arc<Mutex<Box<dyn ChildWrapper>>>;
 use std::sync::Arc;
 use std::sync::Condvar;
 
@@ -23,7 +24,7 @@ pub(super) static OP_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub(super) static CANCELLED: OnceLock<Mutex<BTreeMap<String, bool>>> = OnceLock::new();
 pub(super) static CONFLICTS: OnceLock<(Mutex<BTreeMap<String, ConflictState>>, Condvar)> =
     OnceLock::new();
-pub(super) static EXTERNAL_PROCESSES: OnceLock<Mutex<BTreeMap<String, Arc<Mutex<Child>>>>> =
+pub(super) static EXTERNAL_PROCESSES: OnceLock<Mutex<BTreeMap<String, ExternalChild>>> =
     OnceLock::new();
 pub(super) const PERMANENT_DELETE_CONFIRM_TOKEN: &str = "PERMANENT_DELETE";
 pub(super) const CONFLICT_WAIT_POLL_MS: u64 = 200;
@@ -193,6 +194,7 @@ pub(super) fn next_operation_id(kind: OperationKind) -> String {
         OperationKind::ArchiveCreate => "archive-create",
         OperationKind::ArchiveExtract => "archive-extract",
         OperationKind::ArchiveAdd => "archive-add",
+        OperationKind::ShellCommand => "shell-command",
     };
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -251,11 +253,11 @@ pub(super) fn cancelled_registry() -> &'static Mutex<BTreeMap<String, bool>> {
     CANCELLED.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
-pub(super) fn external_process_registry() -> &'static Mutex<BTreeMap<String, Arc<Mutex<Child>>>> {
+pub(super) fn external_process_registry() -> &'static Mutex<BTreeMap<String, ExternalChild>> {
     EXTERNAL_PROCESSES.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
-pub(super) fn register_external_process(operation_id: &str, child: Arc<Mutex<Child>>) {
+pub(super) fn register_external_process(operation_id: &str, child: ExternalChild) {
     external_process_registry()
         .lock()
         .expect("external process registry lock should not be poisoned")
@@ -280,11 +282,11 @@ pub(super) fn kill_registered_external_process(operation_id: &str) {
     }
 }
 
-pub(super) fn kill_external_child(child: &Arc<Mutex<Child>>) {
+pub(super) fn kill_external_child(child: &ExternalChild) {
     let _ = child
         .lock()
         .expect("external process lock should not be poisoned")
-        .kill();
+        .start_kill();
 }
 
 pub(super) fn summary_from_stats(
@@ -307,6 +309,7 @@ pub(super) fn summary_from_stats(
         failed_files: stats.failed_files,
         skipped_files: stats.skipped_files,
         errors: stats.errors.clone(),
+        command_result: None,
     }
 }
 
@@ -331,6 +334,7 @@ pub(super) fn error_summary(
         },
         skipped_files: 0,
         errors: vec![error],
+        command_result: None,
     }
 }
 
@@ -347,6 +351,7 @@ pub(super) fn cancel_summary(
         failed_files: stats.failed_files,
         skipped_files: stats.skipped_files,
         errors: stats.errors.clone(),
+        command_result: None,
     }
 }
 

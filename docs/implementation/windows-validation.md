@@ -222,3 +222,20 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - Windows 컴파일: MSVC 대상 제품 코드·테스트 `cargo xwin check --tests --locked` 통과, 실제 명령 실행 검증과 구분
 - 변경 검토: 순수 파서의 UI·Tauri·store 의존 없음, 기존 실행 버튼과 작업 상태 소유권 유지, 명령 확정 시점의 요청 유지와 필수 토큰 검증 확인
 - 남은 작업: 공통 장기 작업 상태의 명령 실행 연결, 출력 상한·진행·취소·시간 제한·자식 프로세스 트리 종료 구현
+
+### W4 명령 진행·취소·출력 요약
+
+- 실행 계약: `run_shell_command`의 `OperationStarted` 반환과 기존 operation 이벤트·store 연결, 작업 폴더·종료 코드·표준 출력·오류 출력을 `operation_summary.commandResult`에 보존
+- 취소 경계: 실행 토큰 준비 중 취소 시 프로세스 생성 중단, 시작 이후 기존 작업 취소 경로로 자식 트리 종료, 부분 출력과 취소 상태 유지
+- 실행 제한: 표준 입력 닫기, 최대 5분 실행, 표준 출력·오류 각각 16KiB 보존과 초과 알림, 상한 이후에도 파이프 읽기로 교착 방지
+- 출력 해석: UTF-8·BOM이 있는 UTF-16 처리, Windows 비 UTF-8 출력의 OEM 코드 페이지 fallback, 모든 외부 프로그램의 인코딩 자동 판별 보장 없음
+- 프로세스 경계: 압축 도구와 명령의 공통 capture 재사용, Unix 프로세스 그룹·Windows Job Object로 취소, 정상 완료 후 독립 백그라운드 작업과 앱 비정상 종료의 정리 보장 제외
+- 라이브러리 선정: [Watchexec process-wrap 10.0.1](https://docs.rs/process-wrap/10.0.1/process_wrap/)의 플랫폼별 자식 트리 관리 사용, 직접 Job Object·프로세스 그룹 구현 중복 방지
+- 빌드 기준: 새 라이브러리의 최소 Rust 1.87 요구를 반영하여 프로젝트 지원 기준을 기존 CI와 같은 Rust 1.93으로 통일
+- 실제 프로세스 회귀: 양쪽 출력 2MiB 배출과 상한, 비정상 종료 코드, 시간 제한, 자식·부모 종료 후 자식 취소, 실행 전 취소 검증 통과
+- UI 회귀: 공통 취소 버튼·토큰 준비 중 취소·취소 후 부분 출력·출력 초과 안내·요약 닫기 검증 통과
+- Mac 전체 검증: `BOKSLDIRGUI_REQUIRE_PROVIDERS=1 npm run verify` 통과, 프론트 345개·도구 16개·Rust 114개·스모크 261개 통과, 실제 macOS 휴지통 1개 명시 제외
+- 전체 검증 후 추가한 공통 DTO fixture: 프론트 계약 테스트 4개와 Rust 명령 요약 직렬화 테스트 1개 통과, 일반 파일 작업 요약의 추가 필드 생략 확인
+- Windows 컴파일: MSVC 대상 제품 코드·테스트 `cargo xwin check --tests --locked` 통과, Windows 런타임 검증과 구분
+- 변경 검토: 기존 operation 상태 소유권 유지, reader·프로세스 등록 해제·취소·실패 요약 경계 확인, 별도 상태 컨테이너와 관련 없는 구조 변경 없음
+- 남은 검증: Windows Job Object의 실제 자식 종료·명령 출력 인코딩·UI 응답성과 압축 취소 재확인, 사용자 push 금지에 따라 이번 원격 CI 미실행

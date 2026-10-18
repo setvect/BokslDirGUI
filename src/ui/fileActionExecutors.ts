@@ -32,8 +32,16 @@ export const atomicExecutorForAction = (
       ? mutationClient.revealInManager({ path: dialog.sources[0]?.path ?? '' })
       : unsupportedClientResult('reveal_in_manager', dialog.targetDir);
   }
+  return undefined;
+};
+
+export const longRunningExecutorForAction = (
+  actionId: ActionId,
+  operationClient: LongRunningOperationClient,
+  mutationClient: SafeMutationClient,
+): LongRunningOperationExecutor | undefined => {
   if (actionId === 'external.runShellCommand') {
-    return async (dialog) => {
+    return async (dialog, control) => {
       const parsed = parseShellCommandInput(dialog.inputValue);
       if (!parsed) {
         return {
@@ -57,6 +65,10 @@ export const atomicExecutorForAction = (
       };
       // The Run button confirms this immutable input; the short-lived token binds the backend request.
       const prepared = await mutationClient.prepareShellCommand(input);
+      if (control?.isCancellationRequested()) return {
+        ok: false, error: { code: 'operation_cancelled', messageKey: 'errors.operationCancelled',
+          path: input.workingDir, details: null, recoverable: true },
+      };
       if (!prepared.ok) return prepared;
       if (!prepared.data.policy.enabled) return {
         ok: false,
@@ -65,13 +77,6 @@ export const atomicExecutorForAction = (
       return mutationClient.runShellCommand({ ...input, confirmToken: prepared.data.confirmToken });
     };
   }
-  return undefined;
-};
-
-export const longRunningExecutorForAction = (
-  actionId: ActionId,
-  operationClient: LongRunningOperationClient,
-): LongRunningOperationExecutor | undefined => {
   if (actionId === 'file.copy') {
     return (dialog) => operationClient.startCopy({
       sources: dialog.sources.map((source) => source.path),

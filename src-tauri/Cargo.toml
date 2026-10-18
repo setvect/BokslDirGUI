@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "BokslDirGUI desktop file manager"
 authors = ["setvect <setvect@naver.com>"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.93"
 
 [[bin]]
 name = "BokslDirGUI"
@@ -39,11 +39,13 @@ flate2 = "1.1.9"
 zstd = "0.13.3"
 # PowerShell의 UTF-16 명령을 인수 해석 없이 전달, 기존 전이 의존성 재사용.
 base64 = "0.22.1"
+# Watchexec의 검증된 Job Object/프로세스 그룹 경계로 자식 트리 취소 지원.
+process-wrap = { version = "10.0.1", default-features = false, features = ["std", "creation-flags", "job-object", "process-group"] }
 
 # Windows 드라이브 및 재파싱 지점 검증에 필요한 최소 OS API.
 [target.'cfg(windows)'.dependencies]
 # Tauri 전이 의존성과 동일한 Windows 바인딩으로 Shell COM API 사용.
-windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_SystemInformation", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_SystemInformation", "Win32_Globalization", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security"] }
 
 # Tauri가 이미 사용하는 objc2 바인딩으로 macOS 연결 앱 목록 조회.

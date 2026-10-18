@@ -14,6 +14,7 @@ export const isTerminalOperationState = (state: OperationState) =>
   state === 'completed' || state === 'completedWithErrors' || state === 'failed' || state === 'cancelled';
 
 export const summaryRequiresAttention = (summary: OperationSummary) =>
+  summary.kind === 'shellCommand' ||
   summary.state === 'failed' ||
   summary.state === 'completedWithErrors' ||
   summary.failedFiles > 0 ||

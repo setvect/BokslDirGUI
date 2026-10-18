@@ -48,6 +48,31 @@ describe('OperationDialogHost', () => {
     });
   });
 
+  it('cancels a running command through the shared controller and retains its output summary', async () => {
+    const cancel = vi.fn(async () => undefined);
+    useOperationStore.getState().openDialog({ action: ACTION_BY_ID.get('external.runShellCommand')!,
+      panelId: 'left', sources: [], targetDir: '/tmp', workingDir: '/tmp', cancelExecutor: cancel,
+      longRunningExecutor: async () => ({ ok: true, data: { operationId: 'op-command', kind: 'shellCommand', state: 'queued' } }),
+    });
+    useOperationStore.getState().updateDialogInput('tool');
+    render(<OperationDialogHost />);
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(useOperationStore.getState().progress?.operationId).toBe('op-command'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(cancel).toHaveBeenCalledWith('op-command');
+    act(() => useOperationStore.getState().applyOperationSummary({ operationId: 'op-command', kind: 'shellCommand',
+      state: 'cancelled', completedFiles: 0, failedFiles: 0, skippedFiles: 0, errors: [], commandResult: {
+        workingDir: '/tmp', exitCode: null, stdout: 'partial command output', stderr: '', timedOut: false, truncated: true,
+      },
+    }));
+    expect(await screen.findByText('partial command output')).toBeTruthy();
+    expect(screen.getByText(/first 16 KiB/)).toBeTruthy();
+    expect(screen.getByText('/tmp')).toBeTruthy();
+    expect(useOperationStore.getState().activeOperationController).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('renders a safe destructive-operation shell without duplicate close/cancel controls', async () => {
     const action = ACTION_BY_ID.get('file.move');
     if (!action) {

@@ -21,7 +21,8 @@ export type OperationKind =
   | 'createDir'
   | 'archiveCreate'
   | 'archiveExtract'
-  | 'archiveAdd';
+  | 'archiveAdd'
+  | 'shellCommand';
 export type OperationState =
   | 'idle'
   | 'validating'
@@ -171,6 +172,7 @@ export interface OperationSummary {
   failedFiles: number;
   skippedFiles?: number;
   errors: AppError[];
+  commandResult?: ShellCommandResult;
 }
 
 export interface ArchiveListing {
@@ -205,6 +207,8 @@ export interface ShellCommandPreview {
 }
 
 export interface ShellCommandResult {
+  workingDir: string;
+  truncated: boolean;
   exitCode: number | null;
   stdout: string;
   stderr: string;

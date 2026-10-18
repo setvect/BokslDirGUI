@@ -206,6 +206,8 @@ pub(crate) struct ShellCommandPreview {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ShellCommandResult {
+    pub(crate) working_dir: String,
+    pub(crate) truncated: bool,
     pub(crate) exit_code: Option<i32>,
     pub(crate) stdout: String,
     pub(crate) stderr: String,
@@ -417,6 +419,7 @@ pub(crate) enum OperationKind {
     ArchiveCreate,
     ArchiveExtract,
     ArchiveAdd,
+    ShellCommand,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -496,6 +499,8 @@ pub(crate) struct OperationSummary {
     pub(crate) failed_files: u64,
     pub(crate) skipped_files: u64,
     pub(crate) errors: Vec<AppError>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) command_result: Option<ShellCommandResult>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

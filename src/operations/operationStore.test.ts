@@ -316,6 +316,27 @@ describe('operation store', () => {
     expect(useOperationStore.getState().progress).toBeNull();
   });
 
+  it('dismisses a command cancelled during preparation without creating an operation', async () => {
+    let release!: () => void;
+    useOperationStore.getState().openDialog({ action: ACTION_BY_ID.get('external.runShellCommand')!,
+      panelId: 'left', sources: [], targetDir: '/tmp', workingDir: '/tmp',
+      longRunningExecutor: async (_dialog, control) => {
+        await new Promise<void>(resolve => { release = resolve; });
+        expect(control?.isCancellationRequested()).toBe(true);
+        return { ok: false, error: { code: 'operation_cancelled', messageKey: 'errors.operationCancelled', path: '/tmp', details: null, recoverable: true } };
+      },
+    });
+    useOperationStore.getState().updateDialogInput('tool');
+    const pending = useOperationStore.getState().confirmDialog();
+    useOperationStore.getState().cancelOperation();
+    release();
+    await pending;
+    expect(useOperationStore.getState().dialog).toBeNull();
+    expect(useOperationStore.getState().progress).toBeNull();
+    expect(useOperationStore.getState().lastError).toBeNull();
+    expect(useOperationStore.getState().activeOperationController).toBeNull();
+  });
+
   it('starts connected copy without opening a preflight dialog', async () => {
     const action = ACTION_BY_ID.get('file.copy');
     if (!action) {
@@ -339,7 +360,7 @@ describe('operation store', () => {
       dialogKind: 'copy',
       sources: [sampleEntry],
       targetDir: '/tmp/target',
-    }));
+    }), expect.objectContaining({ isCancellationRequested: expect.any(Function) }));
     expect(useOperationStore.getState().dialog).toBeNull();
     expect(useOperationStore.getState().progress).toMatchObject({
       operationId: 'op-copy-direct',

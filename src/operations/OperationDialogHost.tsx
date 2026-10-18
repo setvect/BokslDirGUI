@@ -15,7 +15,7 @@ import { OperationOverview } from './OperationOverview';
 import { OperationResultView } from './OperationResultView';
 import { useOperationStore } from './operationStore';
 import { ProgressPath } from './ProgressPath';
-import { formatByteProgress, formatEta, formatOperationError, formatThroughput, isTerminalOperationState, progressPercentLabel, progressWidth, summaryRequiresAttention } from './progressPresentation';
+import { formatByteProgress, formatBytes, formatEta, formatOperationError, formatThroughput, isTerminalOperationState, progressPercentLabel, progressWidth, summaryRequiresAttention } from './progressPresentation';
 
 export function OperationDialogHost({ language = 'en' }: { language?: SupportedLanguage } = {}) {
   const text = OPERATION_DIALOG_TEXT[language];
@@ -267,17 +267,17 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
             >
               <div className="operation-section operation-progress-layout">
                 <Dialog.Title className="operation-section-title">{text.operationProgress}</Dialog.Title>
-                <div className="progress-bar" aria-label="operation progress">
+                {visibleProgress.kind !== 'shellCommand' ? <div className="progress-bar" aria-label="operation progress">
                   <span style={{ width: progressWidth(visibleProgress) }} />
-                </div>
+                </div> : null}
                 <Dialog.Description className="operation-progress-description">
                   <span>
-                    {operationKindLabel(language, visibleProgress.kind)} · {operationStateLabel(language, visibleProgress.state)} · {visibleProgress.completedFiles}/{visibleProgress.totalFiles ?? text.unknown} {text.files}
+                    {operationKindLabel(language, visibleProgress.kind)} · {operationStateLabel(language, visibleProgress.state)}{visibleProgress.kind !== 'shellCommand' ? ` · ${visibleProgress.completedFiles}/${visibleProgress.totalFiles ?? text.unknown} ${text.files}` : ''}
                   </span>
                   <ProgressPath path={visibleProgress.currentPath} />
                 </Dialog.Description>
                 <p className="operation-progress-detail">
-                  {formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes, text.unknown)} · {progressPercentLabel(visibleProgress)}% · {formatThroughput(visibleProgress.bytesPerSecond, text.unknown)} · {text.eta} {formatEta(visibleProgress.etaSeconds, text.unknown)}
+                  {visibleProgress.kind === 'shellCommand' ? `${text.commandOutput}: ${formatBytes(visibleProgress.completedBytes)}` : <>{formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes, text.unknown)} · {progressPercentLabel(visibleProgress)}% · {formatThroughput(visibleProgress.bytesPerSecond, text.unknown)} · {text.eta} {formatEta(visibleProgress.etaSeconds, text.unknown)}</>}
                 </p>
                 <div className="operation-progress-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
                   <button type="button" className="dialog-button secondary" onClick={cancelOperation}>{text.cancel}</button>
@@ -316,7 +316,8 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
             {summaryNeedsAttention && summary ? (
               <div className="operation-section">
                 <Dialog.Title>{text.operationSummary}</Dialog.Title>
-                <Dialog.Description>{operationKindLabel(language, summary.kind)} · {operationStateLabel(language, summary.state)} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</Dialog.Description>
+                <Dialog.Description>{operationKindLabel(language, summary.kind)} · {operationStateLabel(language, summary.state)}{summary.kind !== 'shellCommand' ? ` · ${text.completed} ${summary.completedFiles} · ${text.failed} ${summary.failedFiles}` : ''}</Dialog.Description>
+                {summary.commandResult ? <OperationResultView value={summary.commandResult} language={language} text={text} /> : null}
                 {summary.errors.map((error, index) => (
                   <p className="operation-error" key={error.code + '-' + (error.path ?? '') + '-' + index}>{formatOperationError(error, language)}</p>
                 ))}

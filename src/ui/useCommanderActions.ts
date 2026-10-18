@@ -576,7 +576,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
           ? archiveCopyExecutorForPlan(archiveCopyPlan, dependencies.operationClient)
           : archiveAddPlan
             ? archiveAddExecutorForPlan(archiveAddPlan, dependencies.operationClient)
-            : longRunningExecutorForAction(actionId, dependencies.operationClient),
+            : longRunningExecutorForAction(actionId, dependencies.operationClient, dependencies.mutationClient),
         cancelExecutor: (operationId: string) => dependencies.operationClient.cancelOperation({ operationId }),
         conflictResolver: (operationId: string, decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel') => dependencies.operationClient.resolveConflict({ operationId, decision }),
         onAtomicSuccess: (result: unknown) => {

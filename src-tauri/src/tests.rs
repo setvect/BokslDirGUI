@@ -2,7 +2,7 @@ use crate::archive;
 use crate::commands::{
     archive_list, create_dir, get_metadata, health_check, list_dir, list_locations, load_settings,
     open_current_in_file_manager, open_current_in_terminal, open_default,
-    prepare_shell_command, preview_file, rename_entry, reveal_in_manager, run_shell_command,
+    prepare_shell_command, preview_file, rename_entry, reveal_in_manager,
     save_settings, watch_path,
 };
 use crate::contracts::{
@@ -10,6 +10,7 @@ use crate::contracts::{
     PanelId, SortSpec,
 };
 use crate::operation;
+use crate::operation::run_shell_command_for_test as run_shell_command;
 use crate::path_text::display_path;
 use crate::shell_command;
 use std::env;

@@ -10,7 +10,7 @@
 
 - Node.js `>= 24`
 - npm
-- Rust toolchain
+- Rust 1.93 이상 toolchain
 - Tauri 개발에 필요한 OS별 시스템 의존성
 
 - macOS 기준으로는 보통 Rust와 Xcode Command Line Tools가 필요

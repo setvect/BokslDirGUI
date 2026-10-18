@@ -630,10 +630,7 @@ describe('CommanderShell operations', () => {
       runShellCommand: vi.fn(async () => ({
         ok: true as const,
         data: {
-          exitCode: 0,
-          stdout: 'hello\n',
-          stderr: '',
-          timedOut: false,
+          operationId: 'op-shell-test', kind: 'shellCommand' as const, state: 'queued' as const,
         },
       })),
     };
@@ -653,7 +650,12 @@ describe('CommanderShell operations', () => {
       confirmToken: 'confirmed-input',
     }));
     expect(mutationClient.prepareShellCommand).toHaveBeenCalledWith({ workingDir: SAMPLE_LISTINGS.right.path, command: 'echo', args: ['hello'] });
-    expect(screen.getByText(/hello/)).toBeTruthy();
+    act(() => useOperationStore.getState().applyOperationSummary({ operationId: 'op-shell-test', kind: 'shellCommand', state: 'completed',
+      completedFiles: 1, failedFiles: 0, skippedFiles: 0, errors: [], commandResult: {
+        workingDir: SAMPLE_LISTINGS.right.path, exitCode: 0, stdout: 'hello\n', stderr: '', timedOut: false, truncated: false,
+      },
+    }));
+    expect(await screen.findByText(/hello/)).toBeTruthy();
   });
 
   it('blocks Quit while a file operation is in flight', async () => {

@@ -1,5 +1,5 @@
 use crate::contracts::{
-    AppError, EntryKind, FileEntry, OperationKind, OperationProgress, OperationState, Settings,
+    AppError, EntryKind, FileEntry, OperationKind, OperationProgress, OperationState, Settings, OperationSummary, ShellCommandResult,
 };
 use std::path::Path;
 
@@ -60,4 +60,19 @@ fn existing_settings_json_round_trips_without_migration() {
     let value = fixture()["settings"].clone();
     let settings: Settings = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(serde_json::to_value(settings).unwrap(), value);
+}
+
+
+#[test]
+fn command_summary_preserves_output_and_other_summaries_omit_the_extra_field() {
+    let mut summary = OperationSummary {
+        operation_id: "op-command-fixture".into(), kind: OperationKind::ShellCommand, state: OperationState::Cancelled,
+        completed_files: 0, failed_files: 0, skipped_files: 0, errors: vec![],
+        command_result: Some(ShellCommandResult { working_dir: "/fixture/한글".into(), exit_code: None,
+            stdout: "부분 출력\n".into(), stderr: "".into(), timed_out: false, truncated: true }),
+    };
+    assert_eq!(serde_json::to_value(&summary).unwrap(), fixture()["commandSummary"]);
+    summary.kind = OperationKind::Copy;
+    summary.command_result = None;
+    assert!(serde_json::to_value(summary).unwrap().get("commandResult").is_none());
 }

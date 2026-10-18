@@ -108,7 +108,6 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         ...dialog,
         inputValue: value,
         validationErrorKey: validateDialogInput(dialog.dialogKind, value, dialog.requiredConfirmationPhrase),
-        ...(dialog.dialogKind === 'shellCommand' ? { atomicResult: null } : null),
       },
       lastError: null,
     });
@@ -168,7 +167,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         return;
       }
 
-      if (dialog.dialogKind === 'properties' || dialog.dialogKind === 'shellCommand') {
+      if (dialog.dialogKind === 'properties') {
         set((current) => ({
           dialog: current.dialog
             ? { ...current.dialog, atomicPending: false, atomicResult: result.data }
@@ -193,9 +192,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
     if (!isLongRunningDialog(dialog.dialogKind)) {
       const error = appError(
         'unsupported',
-        dialog.dialogKind === 'shellCommand'
-          ? 'errors.shellCommandDisabled'
-          : 'errors.commandNotConnected',
+        'errors.commandNotConnected',
         dialog.targetDir,
         true,
       );
@@ -236,6 +233,11 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       return;
     }
 
+    const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue, dialog.requiredConfirmationPhrase);
+    if (validationErrorKey) {
+      set({ dialog: { ...dialog, validationErrorKey }, lastError: appError('invalid_command', validationErrorKey, dialog.targetDir, true) });
+      return;
+    }
     const operationId = `preview-${dialog.dialogKind}-${Date.now()}`;
     const operationKind = operationKindForDialog(dialog.dialogKind);
     set({

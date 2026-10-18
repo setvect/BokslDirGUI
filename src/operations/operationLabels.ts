@@ -17,6 +17,7 @@ export const conflictDecisionLabel = (language: SupportedLanguage, decision: Con
   CONFLICT_DECISION_LABELS[language][decision];
 
 export const operationSummaryStatusLabel = (summary: OperationSummary, language: SupportedLanguage) => {
+  if (summary.kind === 'shellCommand') return operationStateLabel(language, summary.state);
   const text = OPERATION_SUMMARY_STATUS_TEXT[language];
   if (summary.state === 'completed') {
     return text.completed(summary.completedFiles);
