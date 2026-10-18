@@ -1479,6 +1479,7 @@ fn archive_extract_preflight_listing_provider_is_killed_when_cancelled() {
         None => fixture.root.to_string_lossy().into_owned(),
     };
     env::set_var("PATH", next_path);
+    env::set_var("BOKSLDIRGUI_TEST_7ZIP", &fake_provider);
 
     let (result, elapsed) = operation::archive_entry_listing_cancel_for_test(archive);
 
@@ -1486,6 +1487,7 @@ fn archive_extract_preflight_listing_provider_is_killed_when_cancelled() {
         Some(path) => env::set_var("PATH", path),
         None => env::remove_var("PATH"),
     }
+    env::remove_var("BOKSLDIRGUI_TEST_7ZIP");
     let error = result.expect_err("cancelled archive listing should return cancellation");
     assert_eq!(error.code, "operation_cancelled");
     assert!(
@@ -1735,6 +1737,9 @@ fn archive_7z_password_and_large_listing_when_provider_is_available() {
 }
 
 fn command_available(command: &str) -> bool {
+    if matches!(command, "zip" | "unzip") && crate::archive_provider::zip_uses_seven_zip() {
+        return crate::archive_provider::seven_zip().is_some();
+    }
     Command::new(command).arg("--help").output().is_ok()
 }
 

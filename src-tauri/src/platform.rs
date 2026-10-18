@@ -81,7 +81,6 @@ fn drive_roots(mask: u32) -> Vec<String> {
 }
 
 // 생성 대상에만 적용. 기존 항목의 정확한 이름은 정규화하거나 trim하지 않음.
-#[cfg(any(windows, test))]
 pub(crate) fn valid_windows_child_name(name: &str) -> bool {
     if name.is_empty()
         || name.ends_with(['.', ' '])

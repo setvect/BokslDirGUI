@@ -21,6 +21,26 @@ impl Drop for Fixture {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
+
+#[test]
+fn windows_archive_targets_reject_ads_and_reserved_names_before_writing() {
+    use crate::contracts::{ConflictDecision, OperationState};
+    let f = Fixture::new();
+    let source = f.0.join("source.txt");
+    fs::write(&source, "preserved").unwrap();
+    for name in ["source.txt:archive.zip", "NUL.zip", "archive.zip."] {
+        let summary = crate::operation::archive_create_summary_for_test(
+            vec![source.to_string_lossy().into_owned()], f.0.join(name).to_string_lossy().into_owned(),
+            "zip".into(), None);
+        assert_eq!(summary.state, OperationState::Failed, "{name}");
+    }
+    let summary = crate::operation::archive_extract_summary_for_test(
+        source.to_string_lossy().into_owned(), f.0.join("source.txt:out").to_string_lossy().into_owned(),
+        None, ConflictDecision::Overwrite);
+    assert_eq!(summary.state, OperationState::Failed);
+    assert_eq!(fs::read_to_string(source).unwrap(), "preserved");
+    assert_eq!(fs::read_dir(&f.0).unwrap().count(), 1);
+}
 #[test]
 fn windows_names_case_only_rename_and_protected_home() {
     let f = Fixture::new();

@@ -45,6 +45,11 @@ pub(super) fn run_archive_create(
         Err(error) => return error_summary(operation_id, kind, error),
     };
     let target = PathBuf::from(&target_archive);
+    if let Err(error) = crate::platform::validate_path_input(&target).and_then(|()| {
+        mutation::validate_child_name(target.file_name().and_then(|name| name.to_str()).unwrap_or(""), Some(&target)).map(|_| ())
+    }) {
+        return error_summary(operation_id, kind, error);
+    }
     let parent = match target.parent() {
         Some(parent) => match navigation::canonical_existing_path(&parent.to_string_lossy()) {
             Ok(parent) => parent,
@@ -225,6 +230,9 @@ pub(super) fn run_archive_extract(
         Err(error) => return error_summary(operation_id, kind, error),
     };
     let target_candidate = PathBuf::from(&target_dir);
+    if let Err(error) = crate::platform::validate_path_input(&target_candidate) {
+        return error_summary(operation_id, kind, error);
+    }
     if !target_candidate.exists() {
         if let Err(error) = fs::create_dir_all(&target_candidate) {
             return error_summary(
@@ -638,6 +646,9 @@ pub(super) fn run_zip_create_with_progress(
     stats: &mut OperationStats,
 ) -> CommandResult<()> {
     // Info-ZIP reports completed input bytes per entry and emits dots while a large entry runs.
+    if crate::archive_provider::zip_uses_seven_zip() {
+        return run_7z_create_with_progress(app, operation_id, staged_target, sources, password, display_target, stats);
+    }
     let mut parser = ZipProgressParser::default();
     let mut ticker = ProgressTicker::new();
     let mut observer = |chunk: &[u8]| {
@@ -672,6 +683,9 @@ pub(super) fn run_zip_create_observed(
     password: Option<&str>,
     observer: Option<&mut dyn FnMut(&[u8])>,
 ) -> CommandResult<()> {
+    if crate::archive_provider::zip_uses_seven_zip() {
+        return run_7z_create_observed(operation_id, target, sources, password, observer);
+    }
     let zip = external_binary("zip").ok_or_else(|| {
         AppError::new(
             "unsupported",
@@ -821,13 +835,18 @@ pub(super) fn run_7z_create_with_progress(
             }
         }
     };
-    run_7z_create_observed(
+    let result = run_7z_create_observed(
         operation_id,
         staged_target,
         sources,
         password,
         Some(&mut observer),
-    )
+    );
+    if result.is_ok() {
+        stats.completed_files = stats.total_files;
+        stats.completed_bytes = stats.total_bytes;
+    }
+    result
 }
 
 pub(super) fn run_7z_create_observed(
@@ -851,12 +870,14 @@ pub(super) fn run_7z_create_observed(
     let working_dir = common_source_parent(sources, target)?;
     let mut command = Command::new(seven_zip);
     command.current_dir(&working_dir);
-    command.arg("a").arg("-y");
+    let zip = matches!(archive_format_name(target).as_deref(), Some("zip" | "jar" | "war"));
+    command.args(["a", "-y", "-spd", "-sccUTF-8", if zip { "-tzip" } else { "-t7z" }]);
     if observer.is_some() {
         command.arg("-bsp1");
     }
     if let Some(password) = password {
-        command.arg(format!("-p{password}")).arg("-mhe=on");
+        command.arg(format!("-p{password}"));
+        if !zip { command.arg("-mhe=on"); }
     }
     command.arg(target);
     for source in sources {
@@ -960,6 +981,9 @@ pub(super) fn run_zip_extract(
     policy: ConflictDecision,
     entries: Option<&[String]>,
 ) -> CommandResult<()> {
+    if crate::archive_provider::zip_uses_seven_zip() {
+        return run_7z_extract(operation_id, archive, target, password, policy, entries);
+    }
     let unzip = external_binary("unzip").ok_or_else(|| {
         AppError::new(
             "unsupported",
@@ -1017,7 +1041,7 @@ pub(super) fn run_7z_extract(
             .with_detail("provider", "7z")
         })?;
     let mut command = Command::new(seven_zip);
-    command.arg("x");
+    command.args(["x", "-spd", "-sccUTF-8"]);
     if let Some(password) = password {
         command.arg(format!("-p{password}"));
     }
@@ -1041,7 +1065,7 @@ pub(super) fn run_7z_extract(
         .arg(format!("-o{}", target.to_string_lossy()))
         .arg(archive);
     for entry in entries.unwrap_or(&[]) {
-        command.arg(entry);
+        command.arg(format!("-i!{entry}"));
     }
     run_external_command_with_secret(operation_id, command, Some(archive), password)
 }
@@ -1373,7 +1397,7 @@ pub(super) fn run_archive_delete_entries(
         return Ok(());
     }
     match archive_format_name(archive).as_deref() {
-        Some("zip" | "jar" | "war") => {
+        Some("zip" | "jar" | "war") if !crate::archive_provider::zip_uses_seven_zip() => {
             let zip = external_binary("zip").ok_or_else(|| {
                 AppError::new(
                     "unsupported",
@@ -1390,7 +1414,7 @@ pub(super) fn run_archive_delete_entries(
             }
             run_external_command(operation_id, command, Some(archive))
         }
-        Some("7z") => {
+        Some("zip" | "jar" | "war" | "7z") => {
             let seven_zip = external_binary("7zz")
                 .or_else(|| external_binary("7z"))
                 .ok_or_else(|| {
@@ -1403,9 +1427,9 @@ pub(super) fn run_archive_delete_entries(
                     .with_detail("provider", "7z")
                 })?;
             let mut command = Command::new(seven_zip);
-            command.arg("d").arg("-y").arg(archive);
+            command.args(["d", "-y", "-spd", "-sccUTF-8"]).arg(archive);
             for entry in entries {
-                command.arg(entry);
+                command.arg(format!("-i!{entry}"));
             }
             run_external_command(operation_id, command, Some(archive))
         }
@@ -1425,7 +1449,7 @@ pub(super) fn run_archive_add_entries(
     entries: &[String],
 ) -> CommandResult<()> {
     match archive_format_name(archive).as_deref() {
-        Some("zip" | "jar" | "war") => {
+        Some("zip" | "jar" | "war") if !crate::archive_provider::zip_uses_seven_zip() => {
             let zip = external_binary("zip").ok_or_else(|| {
                 AppError::new(
                     "unsupported",
@@ -1446,7 +1470,7 @@ pub(super) fn run_archive_add_entries(
             }
             run_external_command(operation_id, command, Some(archive))
         }
-        Some("7z") => {
+        Some("zip" | "jar" | "war" | "7z") => {
             let seven_zip = external_binary("7zz")
                 .or_else(|| external_binary("7z"))
                 .ok_or_else(|| {
@@ -1459,9 +1483,9 @@ pub(super) fn run_archive_add_entries(
                     .with_detail("provider", "7z")
                 })?;
             let mut command = Command::new(seven_zip);
-            command.current_dir(staging).arg("a").arg("-y").arg(archive);
+            command.current_dir(staging).args(["a", "-y", "-spd", "-sccUTF-8"]).arg(archive);
             for entry in entries {
-                command.arg(entry);
+                command.arg(format!("-i!{entry}"));
             }
             run_external_command(operation_id, command, Some(archive))
         }
@@ -1487,10 +1511,10 @@ pub(super) fn list_archive_entry_names_for_operation(
     password: Option<&str>,
 ) -> CommandResult<Vec<String>> {
     match archive_format_name(archive).as_deref() {
-        Some("zip" | "jar" | "war") => {
+        Some("zip" | "jar" | "war") if !crate::archive_provider::zip_uses_seven_zip() => {
             list_zip_entries_for_operation(operation_id, archive, password)
         }
-        Some("7z") => list_7z_entries_for_operation(operation_id, archive, password),
+        Some("zip" | "jar" | "war" | "7z") => list_7z_entries_for_operation(operation_id, archive, password),
         Some("tar" | "tar.gz" | "tar.zst") if password.is_none() => {
             list_tar_entries_for_operation(operation_id, archive)
         }
@@ -1542,14 +1566,14 @@ pub(super) fn list_7z_entries_for_operation(
             .with_detail("provider", "7z")
         })?;
     let mut command = Command::new(seven_zip);
-    command.arg("l").arg("-slt");
+    command.args(["l", "-slt", "-sccUTF-8"]);
     if let Some(password) = password {
         command.arg(format!("-p{password}"));
     }
     command.arg(archive);
     let stdout =
         run_external_command_capture_with_secret(operation_id, command, Some(archive), password)?;
-    Ok(crate::archive::parse_7z_slt_paths(&stdout))
+    crate::archive::safe_7z_entry_names(&stdout, archive)
 }
 
 pub(super) fn list_tar_entries_for_operation(
@@ -1577,10 +1601,16 @@ pub(super) fn list_tar_entries_for_operation(
 }
 
 pub(super) fn archive_entry_is_unsafe(entry: &str) -> bool {
+    archive_entry_is_unsafe_on(entry, cfg!(windows))
+}
+
+pub(super) fn archive_entry_is_unsafe_on(entry: &str, windows: bool) -> bool {
     let normalized = entry.replace('\\', "/");
     let bytes = normalized.as_bytes();
     normalized.starts_with('/')
         || bytes.get(1) == Some(&b':')
         || normalized.split('/').any(|component| component == "..")
         || entry.contains('\0')
+        || (windows && normalized.split('/').filter(|part| !part.is_empty() && *part != ".")
+            .any(|part| !crate::platform::valid_windows_child_name(part)))
 }

@@ -21,7 +21,7 @@ use super::file_io::{
     copy_file_no_replace, publish_replacement, scan_work, ProgressTicker, SpecialFileScanPolicy,
     COPY_PROGRESS_CHUNK_BYTES,
 };
-use super::process::{external_binary, run_external_command_capture_observed};
+use super::process::run_external_command_capture_observed;
 use super::runtime::{finish_operation, next_operation_id, register_operation, OperationStats};
 use super::transfer::{run_copy, run_move};
 
@@ -69,6 +69,84 @@ fn seven_zip_progress_parser_tracks_carriage_return_percentages() {
     assert_eq!(parser.ingest(b"warning 99%\n 100%\r"), Some(100));
 }
 
+#[test]
+fn windows_archive_names_reject_ads_devices_and_lossy_normalization() {
+    use super::archive_ops::archive_entry_is_unsafe_on;
+    for name in ["folder/file:stream", "NUL.txt", "end. /file", "\\\\server\\share\\x", "C:/x", "a/../x"] {
+        assert!(archive_entry_is_unsafe_on(name, true), "{name}");
+    }
+    for name in ["@list.txt", "-option.txt", " leading.txt", "한글/[1].txt", "./folder/file"] {
+        assert!(!archive_entry_is_unsafe_on(name, true), "{name}");
+    }
+    assert!(!archive_entry_is_unsafe_on("file:stream", false));
+}
+
+#[test]
+fn seven_zip_preserves_literal_names_and_selected_extraction() {
+    use super::archive_ops::{run_7z_create_observed, run_7z_extract};
+    let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    if crate::archive_provider::seven_zip().is_none() {
+        crate::tests::report_missing_provider("7z/7zz");
+        return;
+    }
+    let fixture = Fixture::new();
+    let names = ["@list.txt", "-option.txt", " leading.txt", "한글[1].txt"];
+    let sources: Vec<_> = names.iter().map(|name| {
+        let path = fixture.0.join(name);
+        fs::write(&path, name).unwrap();
+        path
+    }).collect();
+    for format in ["7z", "zip", "jar", "war"] {
+        let archive = fixture.0.join(format!("literal.{format}"));
+        run_7z_create_observed("literal-create", &archive, &sources, None, None).unwrap();
+        for name in names {
+            let target = fixture.0.join(format!("out-{format}-{name}"));
+            fs::create_dir(&target).unwrap();
+            run_7z_extract("literal-extract", &archive, &target, None,
+                ConflictDecision::Overwrite, Some(&[name.to_string()])).unwrap();
+            assert_eq!(fs::read_dir(&target).unwrap().count(), 1);
+            assert_eq!(fs::read_to_string(target.join(name)).unwrap(), name);
+        }
+    }
+}
+
+#[test]
+fn seven_zip_preflight_rejects_symbolic_and_hard_link_records() {
+    for field in ["Symbolic Link", "Hard Link"] {
+        let listing = format!("----------\nPath = link\n{field} = ../outside\n");
+        let error = crate::archive::safe_7z_entry_names(listing.as_bytes(), Path::new("archive.7z")).unwrap_err();
+        assert_eq!(error.code, "unsafe_archive_entry");
+    }
+    let paths = crate::archive::safe_7z_entry_names(b"----------\nPath =  leading.txt\nSize = 1\n", Path::new("archive.7z")).unwrap();
+    assert_eq!(paths, vec![" leading.txt"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn seven_zip_real_symlink_archive_never_writes_through_the_link() {
+    use std::os::unix::fs::symlink;
+    let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    let Some(binary) = crate::archive_provider::seven_zip() else {
+        crate::tests::report_missing_provider("7z/7zz");
+        return;
+    };
+    let fixture = Fixture::new();
+    let outside = fixture.0.join("outside");
+    fs::write(&outside, "preserved").unwrap();
+    symlink(&outside, fixture.0.join("link")).unwrap();
+    let archive = fixture.0.join("links.7z");
+    let output = Command::new(binary).current_dir(&fixture.0)
+        .args(["a", "-snl"]).arg(&archive).arg("./link").output().unwrap();
+    assert!(output.status.success());
+    let target = fixture.0.join("extracted");
+    let summary = run_archive_extract(None, "unsafe-link", display_path(&archive), display_path(&target),
+        None, ConflictDecision::Overwrite, None, None);
+    assert_eq!(summary.state, OperationState::Failed);
+    assert_eq!(summary.errors[0].code, "unsafe_archive_entry");
+    assert!(!target.join("link").exists());
+    assert_eq!(fs::read_to_string(outside).unwrap(), "preserved");
+}
+
 #[cfg(unix)]
 #[test]
 fn external_command_observer_receives_output_before_process_exit() {
@@ -98,7 +176,7 @@ fn external_command_observer_receives_output_before_process_exit() {
 #[test]
 fn zip_create_reports_processed_items_before_publication() {
     let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
-    if external_binary("zip").is_none() {
+    if !crate::archive_provider::zip_available() {
         crate::tests::report_missing_provider("zip");
         return;
     }
@@ -363,7 +441,7 @@ fn archive_extract_rejects_escaping_strip_prefix_before_creating_target() {
 #[test]
 fn archive_skip_does_not_count_as_success() {
     let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
-    if external_binary("zip").is_none() || external_binary("unzip").is_none() {
+    if !crate::archive_provider::zip_available() {
         crate::tests::report_missing_provider("zip/unzip");
         return;
     }
@@ -496,7 +574,7 @@ fn settings_save_preserves_corrupt_file_and_serializes_patches() {
 fn failing_archive_provider_never_publishes_partial_create_or_add() {
     use std::os::unix::fs::PermissionsExt;
     let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
-    if external_binary("zip").is_none() || external_binary("unzip").is_none() {
+    if !crate::archive_provider::zip_available() {
         crate::tests::report_missing_provider("zip/unzip");
         return;
     }
@@ -509,12 +587,13 @@ fn failing_archive_provider_never_publishes_partial_create_or_add() {
     let bin = fixture.0.join("bin");
     fs::create_dir(&bin).unwrap();
     let fake_zip = bin.join("zip");
-    fs::write(&fake_zip, "#!/bin/sh\nfor arg do\n case \"$arg\" in /*.zip) printf broken > \"$arg\";; esac\ndone\nexit 1\n").unwrap();
+    fs::write(&fake_zip, "#!/bin/sh\nif [ \"$1\" = l ]; then printf '%s\\n' '----------' 'Path = source.txt'; exit 0; fi\nfor arg do\n case \"$arg\" in /*.zip) printf broken > \"$arg\";; esac\ndone\nexit 1\n").unwrap();
     fs::set_permissions(&fake_zip, fs::Permissions::from_mode(0o755)).unwrap();
     let old_path = env::var_os("PATH").unwrap();
     let mut paths = vec![bin];
     paths.extend(env::split_paths(&old_path));
     env::set_var("PATH", env::join_paths(paths).unwrap());
+    env::set_var("BOKSLDIRGUI_TEST_7ZIP", &fake_zip);
     let created_path = fixture.0.join("new.zip");
     let created = run_archive_create(
         None,
@@ -533,6 +612,7 @@ fn failing_archive_provider_never_publishes_partial_create_or_add() {
         ConflictDecision::AllOverwrite,
     );
     env::set_var("PATH", old_path);
+    env::remove_var("BOKSLDIRGUI_TEST_7ZIP");
     assert_eq!(created.state, OperationState::Failed);
     assert_eq!(added.state, OperationState::Failed);
     assert!(!created_path.exists());

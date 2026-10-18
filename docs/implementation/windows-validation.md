@@ -172,4 +172,10 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - 도구 동봉 검증: `npm run verify` 통과, 프론트 328개·도구 16개·Rust 97개 통과·1개 명시 제외, 스모크 261개 통과
 - 실제 번들 검증: `npm run tauri:build -- --bundles app` 성공, 앱 내부 `archive-tools/7zz` 26.04 실행 및 라이선스·소스 안내·manifest 포함 확인
 - 도구 경계 변경 검토: 기존 프로세스 취소·작업 상태 유지, 배포 리소스 위치만 공통화, Windows 도구 준비 스크립트의 네이티브 실행은 미검증
-- 아직 남은 W3 작업: Windows ZIP 경로 연결, TAR 계열 도구 독립 처리, 압축 해제 안전성·취소·엄격 provider 테스트, Windows 네이티브 실행 증거
+- Windows ZIP 경로: ZIP·JAR·WAR 목록·생성·추가·덮어쓰기·선택 추출을 동봉 7-Zip에 연결, 기존 macOS Info-ZIP 경로 유지
+- 파일명 처리: `@`·옵션 형태·한글·선행 공백·대괄호 이름의 문자 그대로 선택, 7z 상대 경로 접두사에 따른 폴더 손실 방지
+- 압축 안전성: Windows 예약 이름·ADS·절대 경로·상위 경로 거부, 7z 목록에서 심볼릭/하드 링크 사전 거부, 생성·해제 대상 경로의 쓰기 전 검증
+- Windows 경로의 Mac 실행 검증: `BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES=1 BOKSLDIRGUI_REQUIRE_PROVIDERS=1 npm run rust:test` 통과, 101개 통과·실제 macOS 휴지통 1개 명시 제외
+- 실행 범위: ZIP 암호·추가·덮어쓰기·취소·실패 시 원본 보존, ZIP/JAR/WAR/7z 특수 이름 선택 추출, 실제 링크 압축 파일의 경계 이탈 차단 포함
+- 변경 검토: 테스트 전용 provider 주입을 제품 실행에서 제외, 공통 operation 상태·충돌 처리·게시 전 임시 파일 경로 유지
+- 아직 남은 W3 작업: TAR 계열 도구 독립 처리, 압축 도구 엄격 검사와 CI 연계, Windows 네이티브 실행 증거

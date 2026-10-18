@@ -50,6 +50,9 @@ fn list_archive_entries(
     password: Option<&str>,
 ) -> CommandResult<(Vec<ArchiveEntryInfo>, bool)> {
     match archive_format_name(archive).as_deref() {
+        Some("zip" | "jar" | "war") if crate::archive_provider::zip_uses_seven_zip() => {
+            list_7z_entries_with_metadata(archive, password)
+        }
         Some("zip" | "jar" | "war") => list_zip_entries_with_metadata(archive, password),
         Some("7z") => list_7z_entries_with_metadata(archive, password),
         Some("tar" | "tar.gz" | "tar.zst") => {
@@ -128,7 +131,7 @@ fn list_7z_entries_with_metadata(
             .with_detail("provider", "7z")
         })?;
     let mut command = Command::new(binary);
-    command.arg("l").arg("-slt");
+    command.args(["l", "-slt", "-sccUTF-8"]);
     if let Some(password) = password {
         command.arg(format!("-p{password}"));
     }
@@ -301,11 +304,22 @@ fn parse_zipinfo_long_line(line: &str) -> Option<ZipInfoMetadata> {
     })
 }
 
+#[cfg(test)]
 pub(crate) fn parse_7z_slt_paths(stdout: &[u8]) -> Vec<String> {
     parse_7z_slt_entries(stdout)
         .into_iter()
         .map(|entry| entry.path)
         .collect()
+}
+
+pub(crate) fn safe_7z_entry_names(stdout: &[u8], archive: &Path) -> CommandResult<Vec<String>> {
+    let entries = parse_7z_slt_entries(stdout);
+    // 외부 도구가 링크를 먼저 생성하여 뒤 항목의 쓰기 경계를 바꾸지 못하도록 사전 거부.
+    if let Some(entry) = entries.iter().find(|entry| entry.kind == EntryKind::Symlink) {
+        return Err(AppError::new("unsafe_archive_entry", "errors.archiveUnsafePath", Some(archive), true)
+            .with_detail("entry", &entry.path));
+    }
+    Ok(entries.into_iter().map(|entry| entry.path).collect())
 }
 
 fn parse_7z_slt_entries(stdout: &[u8]) -> Vec<ArchiveEntryInfo> {
@@ -322,7 +336,7 @@ fn parse_7z_slt_entries(stdout: &[u8]) -> Vec<ArchiveEntryInfo> {
         if !in_entries || trimmed.is_empty() {
             continue;
         }
-        let Some((key, value)) = trimmed.split_once(" = ") else {
+        let Some((key, value)) = line.split_once(" = ") else {
             continue;
         };
         if key == "Path" {
@@ -331,7 +345,7 @@ fn parse_7z_slt_entries(stdout: &[u8]) -> Vec<ArchiveEntryInfo> {
             }
             current = SevenZipEntryFields::default();
             // 7z의 Windows 구분자만 가상 경로 구분자로 통일. ..·절대 경로는 안전 검사에 유지.
-            current.path = Some(value.trim().replace('\\', "/"));
+            current.path = Some(value.replace('\\', "/"));
             continue;
         }
         current.apply(key, value);
@@ -392,6 +406,7 @@ struct SevenZipEntryFields {
     created_at: Option<String>,
     attributes: Option<String>,
     folder: Option<bool>,
+    link: bool,
 }
 
 impl SevenZipEntryFields {
@@ -403,22 +418,23 @@ impl SevenZipEntryFields {
             "Created" => self.created_at = seven_zip_timestamp_to_iso(value),
             "Attributes" => self.attributes = Some(value.to_string()),
             "Folder" => self.folder = Some(value == "+"),
+            "Symbolic Link" | "Hard Link" => self.link = !value.is_empty(),
             _ => {}
         }
     }
 
     fn finish(self) -> Option<ArchiveEntryInfo> {
-        let path = self.path?.trim().to_string();
+        let path = self.path?;
         if path.is_empty() {
             return None;
         }
         let permissions = permission_text_from_7z_attributes(self.attributes.as_deref());
-        let kind = entry_kind_for_archive_member(
+        let kind = if self.link { EntryKind::Symlink } else { entry_kind_for_archive_member(
             &path,
             path.ends_with('/') || self.folder.unwrap_or(false),
             permissions.as_deref(),
             self.attributes.as_deref(),
-        );
+        ) };
         Some(ArchiveEntryInfo {
             path,
             size_bytes: if kind == EntryKind::Directory {

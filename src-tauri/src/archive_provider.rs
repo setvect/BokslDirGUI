@@ -4,11 +4,19 @@ use std::sync::OnceLock;
 
 static RESOURCE_DIRECTORY: OnceLock<PathBuf> = OnceLock::new();
 
+pub(crate) fn zip_uses_seven_zip() -> bool {
+    cfg!(windows) || (cfg!(test) && std::env::var_os("BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES").is_some())
+}
+
 pub(crate) fn set_resource_directory(directory: PathBuf) {
     let _ = RESOURCE_DIRECTORY.set(directory);
 }
 
 pub(crate) fn seven_zip() -> Option<String> {
+    #[cfg(test)]
+    if let Some(path) = std::env::var_os("BOKSLDIRGUI_TEST_7ZIP") {
+        return Some(path.to_string_lossy().into_owned());
+    }
     let name = if cfg!(windows) { "7za.exe" } else { "7zz" };
     if let Some(path) = RESOURCE_DIRECTORY.get().map(|root| root.join("archive-tools").join(name)) {
         if path.is_file() {
@@ -27,4 +35,10 @@ pub(crate) fn seven_zip() -> Option<String> {
     return crate::platform::find_executable("7zz").or_else(|| crate::platform::find_executable("7z"));
     #[cfg(windows)]
     None
+}
+
+#[cfg(test)]
+pub(crate) fn zip_available() -> bool {
+    if zip_uses_seven_zip() { seven_zip().is_some() }
+    else { crate::platform::find_executable("zip").is_some() && crate::platform::find_executable("unzip").is_some() }
 }
