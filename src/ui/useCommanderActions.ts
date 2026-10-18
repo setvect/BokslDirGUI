@@ -123,7 +123,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
   const previewRequestRef = useRef(0);
   const [openWithEntry, setOpenWithEntry] = useState<FileEntry | null>(null);
 
-  const { fileClipboard, clipboardCount, clipboardCanMove, captureClipboard, pasteClipboard, completeClipboardMove } = useFileClipboard({
+  const { fileClipboard, clipboardCount, clipboardCanMove, clipboardMode, captureClipboard, pasteClipboard, completeClipboardMove } = useFileClipboard({
     get settings() { return dependencies.settings; },
     get panelState() { return dependencies.panelState; },
     get statusText() { return dependencies.statusText; },
@@ -633,5 +633,5 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     dependencies.setStatusMessage(dependencies.statusText.actionReady(labelForAction(action, dependencies.settings.language)));
   };
-  return { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, openEntry, quickPreview };
+  return { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview };
 }

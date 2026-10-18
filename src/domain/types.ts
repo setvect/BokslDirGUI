@@ -261,6 +261,7 @@ export interface Settings {
 }
 
 export interface NativeFileClipboard {
+  intent: 'copy' | 'move';
   changeCount: number;
   paths: string[];
   entries: FileEntry[];

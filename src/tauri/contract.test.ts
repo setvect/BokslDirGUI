@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, Settings } from '../domain/types';
+import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, NativeFileClipboard, Settings } from '../domain/types';
 import { normalizeInvokeError } from './client';
 import fixture from './fixtures/contract.json';
 import platformFixtures from './fixtures/platform.json';
@@ -28,7 +28,7 @@ it('consumes the platform capability fixture also checked by Rust', () => {
   const platforms: PlatformInfo[] = platformFixtures;
   expect(platforms[0].features.nativeFileClipboard).toBe(true);
   expect(platforms[1].os).toBe('windows');
-  expect(platforms[1].features.nativeFileClipboard).toBe(false);
+  expect(platforms[1].features.nativeFileClipboard).toBe(true);
 });
 
 
@@ -37,4 +37,11 @@ it('consumes command output in the shared operation summary contract', () => {
   expect(summary.commandResult?.truncated).toBe(true);
   expect(summary.commandResult?.stdout).toBe('부분 출력\n');
   expect(summary).toEqual(fixture.commandSummary);
+});
+
+
+it('consumes the native clipboard copy/move contract also checked by Rust', () => {
+  const clipboard: NativeFileClipboard = { ...fixture.fileClipboard, intent: 'move' };
+  expect(clipboard).toEqual(fixture.fileClipboard);
+  expect(clipboard.paths[0]).toBe('C:\\fixture\\한글 space.txt');
 });

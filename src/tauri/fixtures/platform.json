@@ -15,7 +15,7 @@
       "openWith": true,
       "currentFolderManager": true,
       "currentFolderTerminal": true,
-      "nativeFileClipboard": false,
+      "nativeFileClipboard": true,
       "trashUndo": false
     }
   }

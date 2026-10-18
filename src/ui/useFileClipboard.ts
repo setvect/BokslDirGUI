@@ -25,6 +25,7 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
   latest.current = dependencies;
   const local = useRef<FileClipboardSnapshot | null>(null);
   const [nativeCount, setNativeCount] = useState(0);
+  const [nativeIntent, setNativeIntent] = useState<'copy' | 'move'>('copy');
   const alive = useRef(true);
   const sequence = useRef(0);
   const writeQueue = useRef(Promise.resolve());
@@ -44,6 +45,7 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
       if (!alive.current || writing.current || revision !== sequence.current || request !== pollRequest) return;
       if (!result.ok) { setNativeCount(0); return; }
       setNativeCount(result.data.paths.length);
+      setNativeIntent(result.data.intent);
       if (local.current && local.current.nativeVersion !== result.data.changeCount) setLocal(null);
     };
     void refresh();
@@ -77,14 +79,16 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
     setLocal(snapshot);
     writing.current++;
     writeQueue.current = writeQueue.current.then(async () => {
+      if (!alive.current || revision !== sequence.current) return;
       // 가상 압축 항목은 앱 내부에서만 보관하되 외부 클립보드 변경 여부는 추적.
       const result = isArchiveVirtualPath(panelListing.path)
         ? await latest.current.mutationClient.readFileClipboard!({ resolve: false })
-        : await latest.current.mutationClient.writeFileClipboard!({ paths: sources.map(entry => entry.path) });
+        : await latest.current.mutationClient.writeFileClipboard!({ paths: sources.map(entry => entry.path), intent });
       if (!alive.current || revision !== sequence.current) return;
       if (!result.ok) { setLocal(null); latest.current.setStatusMessage(formatUserErrorMessage(latest.current.settings.language, result.error)); return; }
       snapshot.nativeVersion = typeof result.data === 'number' ? result.data : result.data.changeCount;
       setNativeCount(isArchiveVirtualPath(panelListing.path) ? 0 : sources.length);
+      setNativeIntent(intent);
       captured();
     }).finally(() => { writing.current--; });
     return;
@@ -130,14 +134,20 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
       if (!alive.current || request !== pasteRequest.current || revision !== sequence.current || latest.current.operationBusy
         || latest.current.panelState[panelId].path !== targetDir) return;
       if (!result.ok) { latest.current.setStatusMessage(formatUserErrorMessage(latest.current.settings.language, result.error)); return; }
+      if (header.ok && result.data.changeCount !== header.data.changeCount) {
+        latest.current.setStatusMessage(formatUserErrorMessage(latest.current.settings.language, { messageKey: 'errors.fileClipboardChanged' }));
+        return;
+      }
       let snapshot = local.current?.nativeVersion === result.data.changeCount ? local.current : null;
       if (!snapshot && result.data.entries.length) snapshot = {
-        nativeVersion: result.data.changeCount, intent: 'copy', panelId,
+        nativeVersion: result.data.changeCount, intent: result.data.intent, panelId,
         listing: createDirectoryListing(panelId, '/', result.data.entries), entries: result.data.entries,
       };
+      if (snapshot && !internalArchive) snapshot = { ...snapshot, entries: result.data.entries };
       pasteRequest.current++;
       setLocal(snapshot);
       setNativeCount(result.data.paths.length);
+      setNativeIntent(result.data.intent);
       pasteSnapshot(actionId, panelId, snapshot, targetDir);
     });
   };
@@ -148,7 +158,7 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
       if (snapshot.nativeVersion !== undefined) void dependencies.mutationClient.clearFileClipboard?.({ changeCount: snapshot.nativeVersion });
     }
   };
-  return { fileClipboard, clipboardCount: fileClipboard?.entries.length ?? nativeCount,
+  return { fileClipboard, clipboardMode: fileClipboard?.intent ?? (nativeCount > 0 ? nativeIntent : null), clipboardCount: fileClipboard?.entries.length ?? nativeCount,
     clipboardCanMove: fileClipboard ? !isArchiveVirtualPath(fileClipboard.listing.path) : nativeCount > 0,
     captureClipboard, pasteClipboard, completeClipboardMove };
 }

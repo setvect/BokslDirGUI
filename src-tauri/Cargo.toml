@@ -45,7 +45,7 @@ process-wrap = { version = "10.0.1", default-features = false, features = ["std"
 # Windows 드라이브 및 재파싱 지점 검증에 필요한 최소 OS API.
 [target.'cfg(windows)'.dependencies]
 # Tauri 전이 의존성과 동일한 Windows 바인딩으로 Shell COM API 사용.
-windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_SystemInformation", "Win32_Globalization", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_SystemInformation", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_Globalization", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security"] }
 
 # Tauri가 이미 사용하는 objc2 바인딩으로 macOS 연결 앱 목록 조회.

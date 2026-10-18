@@ -239,3 +239,24 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - Windows 컴파일: MSVC 대상 제품 코드·테스트 `cargo xwin check --tests --locked` 통과, Windows 런타임 검증과 구분
 - 변경 검토: 기존 operation 상태 소유권 유지, reader·프로세스 등록 해제·취소·실패 요약 경계 확인, 별도 상태 컨테이너와 관련 없는 구조 변경 없음
 - 남은 검증: Windows Job Object의 실제 자식 종료·명령 출력 인코딩·UI 응답성과 압축 취소 재확인, 사용자 push 금지에 따라 이번 원격 CI 미실행
+
+### W5 Windows 파일 클립보드
+
+- 네이티브 구현: `CF_HDROP`의 절대 파일 목록·`Preferred DropEffect`의 복사/이동 의도·`GetClipboardSequenceNumber` 변경 번호 사용, Windows 기능 지원 정보 활성화
+- 메모리 경계: `GlobalSize` 상한 16MiB와 `DROPFILES` 오프셋·종료 문자·UTF-16 검사, ANSI 코드 페이지 변환, 링크 전용 의도의 복사/이동 오해석 거부
+- 소유권: 별도 메시지 창으로 클립보드 소유권 확보, 성공한 메모리 블록만 OS에 이전, 잠금·창·실패 할당의 RAII 해제, 초기화하지 않은 할당 여유 공간의 외부 노출 방지
+- 쓰기 검증: 전체 원본 존재와 두 형식의 할당 확인 후 교체, 실패한 형식 쌍의 노출 방지, 심볼릭 링크 자체 경로 보존
+- 공통 계약: `NativeFileClipboard.intent`와 쓰기 입력 `intent` 추가, macOS 파일 URL 읽기의 복사 의도와 기존 Move Here 유지, Windows 잘라내기의 공통 이동 확인 연결
+- 비동기 경계: OS 클립보드·원본 조회를 blocking worker에서 실행, 요청 대상 변경·더 최신 복사·컴포넌트 종료 후 응답 무시, 원본 조회 도중 클립보드 버전 변경 시 실행 중단
+- 부분 완료: 이동 전 취소·실패 시 기존 목록 유지, 하나 이상 완료된 이동의 실패·취소 뒤 기존 변경 번호만 해제, 작업 중 새로 복사한 내용 유지
+- 압축 경계: 가상 압축 항목의 내부 snapshot 유지, Explorer 클립보드 덮어쓰기 없음, 외부 변경 감지 유지
+- 형식 회귀: 한글·이모지·공백·UNC·확장 경로·ANSI 왕복, 잘못된 오프셋·잘린 메모리·미종료 이름·고립 surrogate·잘못된 이동 형식 거부 통과
+- UI 회귀: Explorer 이동 의도·Windows copy/cut 쓰기·조회 중 버전 변경·부분 완료 뒤 새 복사 보존·내부 압축 클립보드·미지원 플랫폼 fallback 통과
+- Mac 전체 검증: `BOKSLDIRGUI_REQUIRE_PROVIDERS=1 npm run verify` 통과, 프론트 353개·도구 16개·Rust 120개·스모크 261개 통과, 실제 macOS 휴지통 1개 명시 제외
+- Windows 컴파일: MSVC 대상 제품·테스트 코드 `cargo xwin check --tests --locked` 통과, 실제 Windows 클립보드 실행과 구분
+- 네이티브 테스트: `native_file_clipboard_round_trip_and_stale_clear`의 파일/폴더·copy/cut·소유 창 종료 후 읽기·오래된 해제·없는 원본 검증 추가, 일반 로컬 실행에서는 시스템 클립보드 보호를 위해 명시 제외
+- CI 연결: 폐기 가능한 Windows runner에서 위 네이티브 테스트를 `--ignored --nocapture`로 별도 실행, 사용자 push 금지에 따른 원격 실행 미실행
+- 변경 검토: 기존 파일 클립보드 hook·공통 액션·operation store 유지, OS 메모리 처리와 순수 형식 검증 분리, 관련 없는 재설계 없음
+- Windows 실기 확인: Explorer 양방향 복사·잘라내기, 텍스트 복사로 선택 해제, 클립보드 점유·한글/긴/UNC 경로·부분 이동 후 재복사 확인 필요
+- 다음 구현: W5 휴지통 삭제 결과 식별·Windows 복원 API·Ctrl+Z 연결
+- API 근거: [Shell 클립보드 형식](https://learn.microsoft.com/en-us/windows/win32/shell/clipboard), [메모리 소유권 이전](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setclipboarddata), [변경 번호](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipboardsequencenumber)

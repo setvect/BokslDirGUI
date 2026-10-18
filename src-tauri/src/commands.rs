@@ -283,16 +283,16 @@ pub(crate) fn hide_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub(crate) fn read_file_clipboard(resolve: bool) -> CommandResult<crate::file_clipboard::FileClipboard> {
-    crate::file_clipboard::read(resolve)
+pub(crate) async fn read_file_clipboard(resolve: bool) -> CommandResult<crate::file_clipboard::FileClipboard> {
+    run_external_service(move || crate::file_clipboard::read(resolve)).await
 }
 #[tauri::command]
-pub(crate) fn write_file_clipboard(paths: Vec<String>) -> CommandResult<i64> {
-    crate::file_clipboard::write(paths)
+pub(crate) async fn write_file_clipboard(paths: Vec<String>, intent: crate::file_clipboard::ClipboardIntent) -> CommandResult<i64> {
+    run_external_service(move || crate::file_clipboard::write(paths, intent)).await
 }
 #[tauri::command]
-pub(crate) fn clear_file_clipboard(change_count: i64) -> CommandResult<()> {
-    crate::file_clipboard::clear(change_count)
+pub(crate) async fn clear_file_clipboard(change_count: i64) -> CommandResult<()> {
+    run_external_service(move || crate::file_clipboard::clear(change_count)).await
 }
 
 #[tauri::command]

@@ -1,7 +1,21 @@
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 use crate::contracts::AppError;
 use crate::contracts::{CommandResult, FileEntry};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ClipboardIntent {
+    Copy,
+    Move,
+}
+
+#[cfg(windows)]
+#[path = "file_clipboard/windows.rs"]
+mod native_windows;
+#[cfg(any(windows, test))]
+#[path = "file_clipboard/windows_format.rs"]
+mod windows_format;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -9,6 +23,7 @@ pub(crate) struct FileClipboard {
     change_count: i64,
     paths: Vec<String>,
     entries: Vec<FileEntry>,
+    intent: ClipboardIntent,
 }
 
 #[cfg(target_os = "macos")]
@@ -59,6 +74,7 @@ mod native {
             return Err(changed());
         }
         Ok(FileClipboard {
+            intent: super::ClipboardIntent::Copy,
             change_count: version,
             paths,
             entries,
@@ -173,22 +189,31 @@ pub(crate) fn read(resolve: bool) -> CommandResult<FileClipboard> {
             native::read(&objc2_app_kit::NSPasteboard::generalPasteboard(), resolve)
         })
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        native_windows::read(resolve)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = resolve;
         Err(unsupported())
     }
 }
-pub(crate) fn write(paths: Vec<String>) -> CommandResult<i64> {
+pub(crate) fn write(paths: Vec<String>, intent: ClipboardIntent) -> CommandResult<i64> {
     #[cfg(target_os = "macos")]
     {
+        let _ = intent; // Finder exposes copy; the app owns its Move Here intent.
         objc2::rc::autoreleasepool(|_| {
             native::write(&objc2_app_kit::NSPasteboard::generalPasteboard(), paths)
         })
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
     {
-        let _ = paths;
+        native_windows::write(paths, intent)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = (paths, intent);
         Err(unsupported())
     }
 }
@@ -203,13 +228,33 @@ pub(crate) fn clear(change_count: i64) -> CommandResult<()> {
         });
         Ok(())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        native_windows::clear(change_count)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = change_count;
         Err(unsupported())
     }
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn unsupported() -> AppError {
     AppError::new("unsupported", "errors.commandNotImplemented", None, true)
+}
+
+#[test]
+fn native_clipboard_contract_preserves_intent_and_windows_paths() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../src/tauri/fixtures/contract.json")).unwrap();
+    let value = FileClipboard {
+        change_count: 42,
+        intent: ClipboardIntent::Move,
+        paths: vec![r"C:\fixture\한글 space.txt".to_owned()],
+        entries: vec![],
+    };
+    assert_eq!(
+        serde_json::to_value(value).unwrap(),
+        fixture["fileClipboard"]
+    );
 }

@@ -200,12 +200,15 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 | 명령 | 입력 | 응답·정책 |
 | --- | --- | --- |
-| `read_file_clipboard` | `{ resolve: boolean }` | `{ changeCount, paths, entries }`; macOS `public.file-url`만 수용, `resolve=true`에서 실제 항목 조회 |
-| `write_file_clipboard` | `{ paths: string[] }` | 클립보드 변경 번호; 전체 원본 확인 후 기록, 링크 자체 경로 보존 |
+| `read_file_clipboard` | `{ resolve: boolean }` | `{ changeCount, paths, entries, intent }`; macOS 파일 URL·Windows `CF_HDROP` 수용, `intent`는 `copy` 또는 `move`, `resolve=true`에서 실제 항목 조회 |
+| `write_file_clipboard` | `{ paths: string[], intent: "copy" | "move" }` | 클립보드 변경 번호; 전체 원본 확인 후 기록, 링크 자체 경로 보존 |
 | `clear_file_clipboard` | `{ changeCount: number }` | 해당 변경 번호가 아직 최신인 경우에만 해제 |
 | `preview_bulk_rename` | `{ sources, rules }` | `{ item: { source, newName, stamp }, changed, error }[]`; 파일 변경 없는 사전 검증 |
 | `start_bulk_rename` | `{ items: { source, newName, stamp }[] }` | `OperationStarted(kind=rename)`; 기존 진행률·취소·완료 이벤트 사용 |
 
+- Windows 파일 목록: UTF-16·ANSI `DROPFILES` 경계 검사, 최대 16MiB의 클립보드 블록, 절대 경로·실제 원본 검증, `Preferred DropEffect`의 명시 이동 값만 이동으로 수용
+- 클립보드 수명주기: 읽기 잠금 해제 후 원본 조회와 변경 번호 재검사, 버전 조회와 원본 조회 사이 변경 시 실행 거부, 부분 이동 뒤 기존 버전만 해제
+- 클립보드 OS 호출과 원본 조회는 blocking worker에서 실행, 가상 압축 항목은 내부 snapshot 유지
 - `rules`: `find`·`replacement`·`prefix` 문자열, `numbering`·`preserveExtension` 불리언, `start`·`padding` 정수
 - 치환은 리터럴 전체 치환, 번호는 표시 순서대로 `_001` 형식 추가, 확장자 유지 기본값 참
 - 다중 이름 변경은 최대 10,000개, 기존 대상·중복 대상·폴더와 그 자손의 동시 변경 거부
