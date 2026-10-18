@@ -284,3 +284,51 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - Windows 실기 잔여: 실제 Recycle Bin 왕복·휴지통 비움·부모 교체·큰 폴더 취소·UNC/외부 볼륨 미지원 오류·긴 경로 확인 필요, Mac 성공을 Windows 실행 증거로 대체 금지
 - API 근거: [삭제 전 중단](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperationprogresssink-predeleteitem), [삭제 결과의 휴지통 항목](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperationprogresssink-postdeleteitem), [Shell 작업 플래그](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperation-setoperationflags)
 - W3~W5 통합 회귀: `BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES=1 BOKSLDIRGUI_REQUIRE_PROVIDERS=1 npm run rust:test` 통과, Windows ZIP 구현 경로를 Mac의 실제 동봉 도구로 실행하여 Rust 121개 통과·Mac 휴지통 1개 명시 제외 확인
+
+## 9. W3~W5 완료 판정과 Windows 인계
+
+- 대조 기준: [W3~W5 계획](windows-support-plan.md)의 구현 항목과 플랫폼별 완료 기준, 로컬 구현 커밋 `8f97bb1`~`ca34f30`
+- 현재 판정: 주요 구현·Mac 회귀·Windows 대상 컴파일/링크 완료, Windows 네이티브 실행과 설치본 검증 미완료
+- 지원 완료 판정 제한: 아래 미실행 항목을 Mac 테스트·Windows 실행 파일 생성으로 대체 금지
+
+| 계획 범위 | 확보한 근거 | 아직 필요한 근거 |
+| --- | --- | --- |
+| W3 도구 선정·동봉·버전·탐색 | 고정 해시 준비 스크립트·라이선스 고지·Mac 앱 번들 검사 | 개발 도구 없는 Windows 설치본의 동봉 도구 실행 |
+| W3 포맷·암호·선택 추출·추가 | 포맷별 실제 왕복·Mac의 Windows ZIP 경로 회귀 | Windows 실제 포맷별 왕복·긴 경로·암호 처리 |
+| W3 경로 이탈·실패·취소 | 공통 안전성 회귀·손상/악성 항목 거부·임시 파일 및 원본 보존 테스트 | Windows 재파싱 지점·파일 잠금·Job Object 실제 취소 |
+| W4 공통 액션·입력 계약 | 명칭/DTO 정합성·등록 앱 식별자·명령 파서·필수 확인 토큰 회귀 | Windows 기본 앱/등록 앱·Explorer·터미널 실제 결과 |
+| W4 진행·출력·시간 제한 | 공통 작업 UI·실제 자식 프로세스·대량 출력·취소·시간 제한 테스트 | Windows 자식 트리 종료·OEM 출력·UNC/긴 경로 실행 |
+| W5 파일 클립보드 | 공통 DTO·형식/메모리 검사·copy/cut 의도·버전/대상/부분 완료 회귀 | Explorer 양방향 파일 복사/이동·클립보드 점유·실제 native 왕복 |
+| W5 휴지통 식별자·복원 | Shell ID/파일 ID 경계·실제 Mac 왕복·공통 충돌/부모 교체/부분 취소/복구 위치 회귀 | 일반 사용자 Windows Recycle Bin 왕복·네트워크/외부 볼륨 오류·실제 취소 |
+| W5 Ctrl+Z·최근 20개 이력 | Windows 단축키/메뉴/도움말·입력 Undo·세션 이력 회귀 | Windows 실제 앱에서 삭제 후 확인·복원·재시도 |
+
+### Windows 실행 파일 링크 검증
+
+- 명령: `cargo xwin test --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc --locked --no-run`
+- 결과: 라이브러리·앱 테스트의 PE32+ x86-64 실행 파일 링크 성공, Microsoft SDK·MSVC CRT 사용
+- manifest 검사: 두 실행 파일의 실제 `RT_MANIFEST` 리소스에서 Common Controls v6 의존성 확인
+- 경계: 실행 파일 생성과 manifest 검사만 완료, Windows 테스트 본문 실행 성공 주장 없음
+- 현재 실행 환경: macOS, 연결된 Windows 실행 환경 없음, 사용자 push 금지에 따른 새 원격 CI 미실행
+
+### Windows PC에서 수행할 검증
+
+- 사전 조건: Windows x64·Node 24·Rust 1.93 이상 MSVC toolchain·C++ Build Tools·WebView2, 일반 사용자 실행
+- 소스 전달: 현재 로컬 커밋의 소스 복사본 사용, Mac의 `node_modules`·Rust `target`·Mac용 압축 리소스 재사용 금지
+- 아래 PowerShell 명령의 각 단계 성공 확인 후 다음 단계 진행, 최초 실패 출력 보존
+
+```powershell
+npm ci
+npm run archive:prepare
+npm run verify:providers
+$env:BOKSLDIRGUI_REQUIRE_PROVIDERS = '1'
+npm run verify
+cargo test --manifest-path src-tauri/Cargo.toml --locked native_file_clipboard_round_trip_and_stale_clear -- --ignored --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml --locked native_windows_trash_roundtrip_conflicts_and_missing_items -- --ignored --nocapture
+npm run tauri:build -- --bundles nsis
+```
+
+- 클립보드 명시 테스트: 시스템 클립보드 내용 교체 포함, 보관할 클립보드가 없는 테스트 세션에서 실행 필수
+- 휴지통 명시 테스트: 테스트가 만든 임시 항목만 이동·복원·선택 제거, 전체 휴지통 비우기 없음
+- 설치본 실행: 일반 권한에서 압축 도구가 별도 설치되지 않은 환경의 포맷 왕복, 기본 앱/Explorer/터미널, Ctrl+C/X/V·Ctrl+Z 확인
+- 파일 안전성 실기: 별도 테스트 파일만 사용하여 같은 이름·부모 교체·잠금·부분 취소·UNC·외부 볼륨 확인, 실제 사용자 파일 변경 제외
+- 결과 기록: Windows 버전·소스 커밋·명령 종료 코드·최초 실패 로그·미실행 항목 구분 필수
