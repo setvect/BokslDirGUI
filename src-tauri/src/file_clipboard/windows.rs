@@ -192,6 +192,14 @@ pub(super) fn write(paths: Vec<String>, intent: ClipboardIntent) -> CommandResul
             .map_err(|error| crate::filesystem::map_io_error(error, Some(Path::new(path))))?;
     }
     // Validate and allocate both formats before replacing the current clipboard.
+    let paths: Vec<String> = paths
+        .iter()
+        .map(|path| {
+            crate::windows_shell::compatible_path(Path::new(path))
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
     let files = Block::new(&format::encode(&paths)?)?;
     let effect = Block::new(
         &(if intent == ClipboardIntent::Move {
@@ -236,7 +244,12 @@ mod tests {
             file.to_string_lossy().into_owned(),
             root.to_string_lossy().into_owned(),
         ];
-        let copied = write(paths.clone(), ClipboardIntent::Copy).unwrap();
+        // The app supplies canonical verbatim paths; Explorer requires ordinary spellings.
+        let canonical = paths
+            .iter()
+            .map(|path| std::fs::canonicalize(path).unwrap().to_string_lossy().into_owned())
+            .collect();
+        let copied = write(canonical, ClipboardIntent::Copy).unwrap();
         let data = read(true).unwrap();
         assert_eq!(data.paths, paths);
         assert_eq!(data.entries.len(), 2);

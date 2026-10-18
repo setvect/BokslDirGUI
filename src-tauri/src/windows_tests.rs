@@ -23,6 +23,31 @@ impl Drop for Fixture {
 }
 
 #[test]
+fn windows_shell_spelling_preserves_entry_identity() {
+    let f = Fixture::new();
+    let file = f.0.join("한글 space.txt");
+    fs::write(&file, "ordinary").unwrap();
+    let canonical = file.canonicalize().unwrap();
+    let compatible = crate::windows_shell::compatible_path(&canonical);
+    assert!(!compatible.to_string_lossy().starts_with(r"\\?\"));
+    assert_eq!(
+        platform::entry_identity(&compatible).unwrap(),
+        platform::entry_identity(&canonical).unwrap()
+    );
+
+    // Stripping the prefix would point to the other file: do not silently normalize it.
+    let dotted = f.0.canonicalize().unwrap().join("한글 space.txt.");
+    fs::write(&dotted, "distinct verbatim entry").unwrap();
+    assert_ne!(
+        platform::entry_identity(&dotted).unwrap(),
+        platform::entry_identity(&file).unwrap()
+    );
+    assert_eq!(crate::windows_shell::compatible_path(&dotted), dotted);
+    let missing = f.0.canonicalize().unwrap().join("missing.txt");
+    assert_eq!(crate::windows_shell::compatible_path(&missing), missing);
+}
+
+#[test]
 fn windows_archive_targets_reject_ads_and_reserved_names_before_writing() {
     use crate::contracts::{ConflictDecision, OperationState};
     let f = Fixture::new();

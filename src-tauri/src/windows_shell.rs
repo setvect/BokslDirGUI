@@ -1,7 +1,7 @@
 //! Shell COM objects stay on one initialized apartment, including their destruction.
 use crate::contracts::{AppError, CommandResult};
 use std::os::windows::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use windows::core::{HSTRING, PCWSTR, PWSTR};
 use windows::Win32::System::Com::{
     CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED,
@@ -56,10 +56,19 @@ pub(crate) fn item(path: &Path) -> windows::core::Result<IShellItem> {
     if parsed.is_ok() {
         return parsed;
     }
-    // Some Shell providers reject Rust's verbatim spelling. Only retry an ordinary spelling
-    // when it resolves to the exact same entry (without following a symbolic link).
-    let Some(text) = path.to_str() else {
+    let fallback = compatible_path(path);
+    if fallback == path {
         return parsed;
+    }
+    let wide: Vec<u16> = fallback.as_os_str().encode_wide().chain(Some(0)).collect();
+    unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) }
+}
+
+// Explorer's CF_HDROP consumer and some Shell providers reject verbatim paths. Use an
+// ordinary spelling only when it identifies the same entry without following links.
+pub(crate) fn compatible_path(path: &Path) -> PathBuf {
+    let Some(text) = path.to_str() else {
+        return path.to_owned();
     };
     let fallback = if let Some(tail) = text.strip_prefix(r"\\?\UNC\") {
         Some(format!(r"\\{tail}"))
@@ -69,18 +78,16 @@ pub(crate) fn item(path: &Path) -> windows::core::Result<IShellItem> {
             .map(str::to_owned)
     };
     let Some(fallback) = fallback else {
-        return parsed;
+        return path.to_owned();
     };
     let fallback = Path::new(&fallback);
     match (
         crate::platform::entry_identity(path),
         crate::platform::entry_identity(fallback),
     ) {
-        (Ok(original), Ok(alternative)) if original == alternative => {}
-        _ => return parsed,
+        (Ok(original), Ok(alternative)) if original == alternative => fallback.to_owned(),
+        _ => path.to_owned(),
     }
-    let wide: Vec<u16> = fallback.as_os_str().encode_wide().chain(Some(0)).collect();
-    unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) }
 }
 
 pub(crate) unsafe fn take_string(value: PWSTR) -> windows::core::Result<String> {
