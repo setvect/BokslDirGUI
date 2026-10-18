@@ -14,6 +14,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+#[cfg(windows)]
+#[path = "trash_windows.rs"]
+mod windows;
+
 const HISTORY_LIMIT: usize = 20;
 static HISTORY: OnceLock<Mutex<History>> = OnceLock::new();
 #[derive(Default)]
@@ -25,14 +29,17 @@ struct Batch {
     id: String,
     receipts: Vec<Receipt>,
 }
+#[derive(Clone)]
 struct Receipt {
     entry: FileEntry,
     trashed: PathBuf,
+    #[cfg(windows)]
+    recycle_id: Option<Vec<u8>>,
     identity: Identity,
     parent: PathBuf,
     parent_identity: Identity,
 }
-#[derive(PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Identity {
     #[cfg(windows)]
     entry_id: String,
@@ -135,10 +142,12 @@ impl TrashRecorder {
             .canonicalize()
             .map_err(|e| map_io_error(e, Some(source)))?;
         let parent_identity = Identity::read(&parent)?;
-        if let Some(trashed) = move_to_trash(source)? {
+        if let Some(trashed) = move_to_trash(source, &self.0.id, &identity)? {
             self.0.receipts.push(Receipt {
                 entry,
-                trashed,
+                trashed: trashed.path,
+                #[cfg(windows)]
+                recycle_id: trashed.recycle_id,
                 identity,
                 parent,
                 parent_identity,
@@ -155,14 +164,36 @@ impl Drop for TrashRecorder {
         });
     }
 }
-fn move_to_trash(source: &Path) -> CommandResult<Option<PathBuf>> {
+struct TrashDestination {
+    path: PathBuf,
+    #[cfg(windows)]
+    recycle_id: Option<Vec<u8>>,
+}
+impl TrashDestination {
+    #[cfg(any(test, target_os = "macos"))]
+    fn path(path: PathBuf) -> Self {
+        Self {
+            path,
+            #[cfg(windows)]
+            recycle_id: None,
+        }
+    }
+}
+fn move_to_trash(
+    source: &Path,
+    operation_id: &str,
+    identity: &Identity,
+) -> CommandResult<Option<TrashDestination>> {
+    super::runtime::check_cancelled(operation_id, source)?;
+    #[cfg(not(windows))]
+    let _ = identity;
     #[cfg(test)]
     if let Some(path) = std::env::var_os("BOKSLDIRGUI_TRASH_DIR") {
         let trash = PathBuf::from(path);
         fs::create_dir_all(&trash).map_err(|e| map_io_error(e, Some(&trash)))?;
         let target = super::file_io::unique_temp_target(&trash, source);
         rename_no_replace(source, &target).map_err(|e| map_io_error(e, Some(source)))?;
-        return Ok(Some(target));
+        return Ok(Some(TrashDestination::path(target)));
     }
     #[cfg(target_os = "macos")]
     {
@@ -180,10 +211,14 @@ fn move_to_trash(source: &Path) -> CommandResult<Option<PathBuf>> {
             // The OS may rename the item in Trash; never infer its path from the basename.
             Ok(result
                 .and_then(|url| url.path())
-                .map(|path| PathBuf::from(path.to_string())))
+                .map(|path| TrashDestination::path(PathBuf::from(path.to_string()))))
         });
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        windows::trash(source, operation_id, identity).map(Some)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         trash::delete(source).map_err(|e| {
             AppError::new("trash_failed", "errors.trashFailed", Some(source), true)
@@ -217,7 +252,7 @@ pub(crate) fn start(app: Option<&tauri::AppHandle>, id: String) -> CommandResult
     }
     Ok(started)
 }
-fn restore(receipt: &Receipt) -> CommandResult<()> {
+fn validate_restore(receipt: &Receipt) -> CommandResult<()> {
     let target = Path::new(&receipt.entry.path);
     // Refuse a replaced item or moved/replaced parent, including a new symlink at that path.
     let identity = Identity::read(&receipt.trashed).map_err(|error| {
@@ -250,6 +285,59 @@ fn restore(receipt: &Receipt) -> CommandResult<()> {
             true,
         ));
     }
+    match fs::symlink_metadata(target) {
+        Ok(_) => {
+            return Err(map_io_error(
+                std::io::Error::from(std::io::ErrorKind::AlreadyExists),
+                Some(target),
+            ))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(map_io_error(error, Some(target))),
+    }
+    Ok(())
+}
+// Shell may choose a safe alternative name if a collision appears after its preflight.
+// Keep that actual location in the same receipt before reporting the incomplete restoration.
+#[cfg(any(windows, test))]
+fn accept_restored_location(receipt: &mut Receipt, location: PathBuf) -> CommandResult<()> {
+    receipt.trashed = location;
+    #[cfg(windows)]
+    {
+        receipt.recycle_id = None;
+    }
+    let target = Path::new(&receipt.entry.path);
+    let same_target = receipt
+        .trashed
+        .canonicalize()
+        .ok()
+        .zip(target.canonicalize().ok())
+        .is_some_and(|(actual, target)| actual == target);
+    if !same_target
+        || Identity::read(&receipt.trashed).ok().as_ref() != Some(&receipt.identity)
+        || Identity::read(&receipt.parent).ok().as_ref() != Some(&receipt.parent_identity)
+    {
+        return Err(AppError::new(
+            "trash_restore_conflict",
+            "errors.trashUndoRecovered",
+            Some(&receipt.trashed),
+            true,
+        )
+        .with_detail(
+            "recoveryPath",
+            crate::path_text::display_path(&receipt.trashed),
+        ));
+    }
+    Ok(())
+}
+fn restore(receipt: &mut Receipt, operation_id: &str) -> CommandResult<()> {
+    validate_restore(receipt)?;
+    super::runtime::check_cancelled(operation_id, Path::new(&receipt.entry.path))?;
+    #[cfg(windows)]
+    if receipt.recycle_id.is_some() {
+        return windows::restore(receipt, operation_id);
+    }
+    let target = Path::new(&receipt.entry.path);
     rename_no_replace(&receipt.trashed, target).map_err(|e| map_io_error(e, Some(target)))
 }
 fn run_restore(
@@ -264,7 +352,7 @@ fn run_restore(
         receipts: vec![],
     };
     let mut cancelled = false;
-    for receipt in batch.receipts {
+    for mut receipt in batch.receipts {
         if cancelled || is_cancelled(id) || cancel_after.is_some_and(|n| stats.completed_files >= n)
         {
             cancelled = true;
@@ -279,9 +367,14 @@ fn run_restore(
             &stats,
             Some(Path::new(&receipt.entry.path)),
         );
-        match restore(&receipt) {
+        match restore(&mut receipt, id) {
             Ok(()) => stats.completed_files += 1,
             Err(error) => {
+                if error.code == "operation_cancelled" {
+                    cancelled = true;
+                    remaining.receipts.push(receipt);
+                    continue;
+                }
                 stats.failed_files += 1;
                 let lost =
                     error.code == "trash_item_missing" || error.code == "trash_item_replaced";
@@ -333,6 +426,8 @@ mod tests {
                 parent,
                 parent_identity,
                 trashed,
+                #[cfg(windows)]
+                recycle_id: None,
             }
         }
         fn file(&self, name: &str) -> Receipt {
@@ -509,5 +604,118 @@ mod tests {
             fs::read_to_string(source).unwrap(),
             "native trash roundtrip"
         );
+    }
+
+    #[test]
+    fn safely_renamed_shell_result_retains_a_retryable_recovery_location() {
+        let fixture = Fixture::new();
+        let mut receipt = fixture.file("same");
+        let target = PathBuf::from(&receipt.entry.path);
+        fs::write(&target, "racing new content").unwrap();
+        let recovery = fixture.0.join("original/same (2)");
+        fs::rename(&receipt.trashed, &recovery).unwrap();
+        let error = super::accept_restored_location(&mut receipt, recovery.clone()).unwrap_err();
+        assert_eq!(error.code, "trash_restore_conflict");
+        assert_eq!(receipt.trashed, recovery);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "racing new content");
+        let (summary, remaining) = run_restore(
+            None,
+            "retry-conflict",
+            batch("recovery", vec![receipt]),
+            None,
+        );
+        assert_eq!(summary.completed_files, 0);
+        assert_eq!(remaining.receipts.len(), 1);
+        assert!(recovery.exists());
+        fs::remove_file(&target).unwrap();
+        let (summary, remaining) = run_restore(None, "retry-recovery", remaining, None);
+        assert_eq!(summary.completed_files, 1);
+        assert!(remaining.receipts.is_empty());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "original content");
+        assert!(!recovery.exists());
+    }
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "실제 Windows 휴지통의 임시 항목 왕복·선택 제거: 폐기 가능한 테스트 세션에서 명시 실행"]
+    fn native_windows_trash_roundtrip_conflicts_and_missing_items() {
+        use crate::operation::trash_restore::{windows, TrashRecorder};
+        let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+        assert!(std::env::var_os("BOKSLDIRGUI_TRASH_DIR").is_none());
+        struct Cleanup(Vec<Receipt>);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                for receipt in &self.0 {
+                    let _ = windows::purge_fixture(receipt);
+                }
+            }
+        }
+        let fixture = Fixture::new();
+        let mut cleanup = Cleanup(vec![]);
+        let mut recorder = TrashRecorder::new("native-windows-trash");
+        let source = fixture.0.join("original/한글 # % 📁.txt");
+        fs::write(&source, "original content").unwrap();
+        recorder.trash(&source.canonicalize().unwrap()).unwrap();
+        assert!(!source.exists());
+        cleanup.0.extend(recorder.0.receipts.iter().cloned());
+        assert!(recorder.0.receipts[0].recycle_id.is_some());
+        assert_eq!(
+            Identity::read(&recorder.0.receipts[0].trashed).unwrap(),
+            recorder.0.receipts[0].identity
+        );
+        fs::write(&source, "conflicting content").unwrap();
+        let (summary, remaining) = run_restore(
+            None,
+            "native-conflict",
+            batch("native", std::mem::take(&mut recorder.0.receipts)),
+            None,
+        );
+        assert_eq!(summary.completed_files, 0);
+        assert_eq!(remaining.receipts.len(), 1);
+        assert_eq!(fs::read_to_string(&source).unwrap(), "conflicting content");
+        fs::remove_file(&source).unwrap();
+        let (summary, remaining) = run_restore(None, "native-retry", remaining, None);
+        assert_eq!(summary.completed_files, 1, "{:?}", summary.errors);
+        assert!(remaining.receipts.is_empty());
+        assert_eq!(fs::read_to_string(&source).unwrap(), "original content");
+
+        let folder = fixture.0.join("original/folder");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("child.txt"), "child").unwrap();
+        recorder.trash(&folder.canonicalize().unwrap()).unwrap();
+        cleanup.0.extend(recorder.0.receipts.iter().cloned());
+        let (summary, remaining) = run_restore(
+            None,
+            "native-folder",
+            batch("folder", std::mem::take(&mut recorder.0.receipts)),
+            None,
+        );
+        assert_eq!(summary.completed_files, 1, "{:?}", summary.errors);
+        assert!(remaining.receipts.is_empty());
+        assert_eq!(
+            fs::read_to_string(folder.join("child.txt")).unwrap(),
+            "child"
+        );
+
+        // Shell connected HTML assets must not be deleted outside the selected sources.
+        let html = fixture.0.join("original/page.html");
+        let assets = fixture.0.join("original/page_files");
+        fs::write(&html, "html").unwrap();
+        fs::create_dir(&assets).unwrap();
+        fs::write(assets.join("kept.txt"), "keep").unwrap();
+        recorder.trash(&html.canonicalize().unwrap()).unwrap();
+        cleanup.0.extend(recorder.0.receipts.iter().cloned());
+        assert!(assets.join("kept.txt").exists());
+        let receipt = recorder.0.receipts.pop().unwrap();
+        windows::purge_fixture(&receipt).unwrap(); // Remove only our item, never empty the user's bin.
+        let (summary, remaining) = run_restore(
+            None,
+            "native-missing",
+            batch("missing", vec![receipt]),
+            None,
+        );
+        assert_eq!(summary.errors[0].code, "trash_item_missing");
+        assert!(remaining.receipts.is_empty());
+        assert!(!html.exists());
+        assert!(assets.join("kept.txt").exists());
     }
 }

@@ -52,6 +52,34 @@ pub(crate) fn run_sta<T: Send + 'static>(
 
 pub(crate) fn item(path: &Path) -> windows::core::Result<IShellItem> {
     let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let parsed = unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) };
+    if parsed.is_ok() {
+        return parsed;
+    }
+    // Some Shell providers reject Rust's verbatim spelling. Only retry an ordinary spelling
+    // when it resolves to the exact same entry (without following a symbolic link).
+    let Some(text) = path.to_str() else {
+        return parsed;
+    };
+    let fallback = if let Some(tail) = text.strip_prefix(r"\\?\UNC\") {
+        Some(format!(r"\\{tail}"))
+    } else {
+        text.strip_prefix(r"\\?\")
+            .filter(|tail| tail.as_bytes().get(1) == Some(&b':'))
+            .map(str::to_owned)
+    };
+    let Some(fallback) = fallback else {
+        return parsed;
+    };
+    let fallback = Path::new(&fallback);
+    match (
+        crate::platform::entry_identity(path),
+        crate::platform::entry_identity(fallback),
+    ) {
+        (Ok(original), Ok(alternative)) if original == alternative => {}
+        _ => return parsed,
+    }
+    let wide: Vec<u16> = fallback.as_os_str().encode_wide().chain(Some(0)).collect();
     unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) }
 }
 

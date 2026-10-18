@@ -48,7 +48,7 @@
 | `tab.list` | panel | tt | `t t` | View > Tab List | none | UI state |
 | `selection.toggle` | selection | Space | `Space` | Edit > Select | none | UI state |
 | `selection.all` | selection | Ctrl+A | `Ctrl+A` | Edit > Select All | none | UI state |
-| `file.undoTrash` | file | Cmd+Z | `Cmd+Z` | Edit > Undo Move to Trash | safe | preview_trash_undo/start_trash_undo |
+| `file.undoTrash` | file | Cmd+Z | `Cmd+Z`, `Ctrl+Z` | Edit > Undo Move to Trash | safe | preview_trash_undo/start_trash_undo |
 | `file.clipboardCopy` | file | Cmd+C | `Cmd+C`, `Ctrl+C` | Edit > Copy | safe | macOS/Windows write_file_clipboard / UI clipboard state |
 | `file.clipboardCut` | file | Ctrl+X | `Ctrl+X` | Edit > Cut | safe | Windows write_file_clipboard / UI clipboard state |
 | `file.clipboardPaste` | file | Cmd+V | `Cmd+V`, `Ctrl+V` | Edit > Paste | safe | start_copy/start_move/archive_extract/archive_add |

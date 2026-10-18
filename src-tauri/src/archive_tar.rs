@@ -269,18 +269,21 @@ mod tests {
     use super::{create, extract, list};
     use std::{fs, fs::File, path::PathBuf};
     use std::cell::Cell;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
     struct Fixture(PathBuf);
     impl Fixture {
         fn new() -> Self {
             let root = std::env::temp_dir().join(format!(
-                "boksldir-tar-{}-{}",
+                "boksldir-tar-{}-{}-{}",
                 std::process::id(),
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
-                    .as_nanos()
+                    .as_nanos(),
+                FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed)
             ));
             fs::create_dir(&root).unwrap();
             Self(root)

@@ -260,3 +260,27 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - Windows 실기 확인: Explorer 양방향 복사·잘라내기, 텍스트 복사로 선택 해제, 클립보드 점유·한글/긴/UNC 경로·부분 이동 후 재복사 확인 필요
 - 다음 구현: W5 휴지통 삭제 결과 식별·Windows 복원 API·Ctrl+Z 연결
 - API 근거: [Shell 클립보드 형식](https://learn.microsoft.com/en-us/windows/win32/shell/clipboard), [메모리 소유권 이전](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setclipboarddata), [변경 번호](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipboardsequencenumber)
+
+### W5 Windows 휴지통 복원
+
+- 삭제 영수증: Windows `IFileOperation`의 실제 `PostDeleteItem` 결과에서 Shell 항목 ID·휴지통 경로 수집, 원래 파일·부모 폴더의 볼륨/파일 ID·생성 시각과 함께 Rust 세션 이력에 보관
+- 삭제 안전성: 휴지통 전용 플래그와 `PreDeleteItem`의 재활용 가능 플래그 검사, 영구 삭제 fallback 거부, 원본 교체·취소 재검사, 선택하지 않은 HTML 연결 리소스 동반 삭제 방지
+- 복원 경계: 기록한 Shell 항목 ID로 `IFileOperation.MoveItem` 실행, `$Recycle.Bin` 내부 파일의 직접 rename과 메타데이터 잔류 방지
+- 복원 안전성: 실행 직전 원본·부모 동일성·대상 존재 재검사, 덮어쓰기 플래그 거부와 충돌 이름 변경 플래그 적용
+- 경합 복구: 검사 뒤 새 이름 충돌로 다른 보관 위치가 생성되면 그 실제 위치를 이력에 먼저 반영, 보관 경로 안내와 기존 원자적 no-replace 이동을 통한 재시도 유지
+- 취소·상태: 공통 작업 레지스트리·진행·취소·요약과 최근 20개 세션 이력 유지, native callback 구독 해제와 COM STA 수명주기 관리, 늦은 취소 뒤 실제 완료 영수증 보존
+- 경로 호환: Shell이 확장 경로 표기를 거부한 경우에만 일반 표기로 재시도, 변환 전후의 링크 자체 파일 ID 일치 검사로 다른 항목 대체 방지
+- UI 연결: Windows `Ctrl+Z`와 메뉴·도움말 노출, backend 기능 지원 정보 공유, 기존 macOS `Cmd+Z`와 입력 필드의 자체 Undo 유지
+- 의존성: COM callback 매크로가 직접 참조하는 `windows-core 0.61.2`를 기존 잠금 버전으로 명시, 새 바인딩 버전 추가 없음
+- 공통 회귀: 파일/폴더/링크 복원·충돌 후 재시도·부모 교체·휴지통 항목 소실/교체·부분 취소·20개 이력·경합 보관 위치 재시도 통과
+- Mac 전체 검증: `BOKSLDIRGUI_REQUIRE_PROVIDERS=1 npm run verify` 통과, 프론트 354개·도구 16개·Rust 121개·스모크 261개 통과
+- Mac 네이티브 검증: 명시 실행 `native_macos_trash_roundtrip -- --ignored` 통과, 테스트 임시 파일의 실제 휴지통 이동·복원 확인, 기존 사용자 파일·휴지통 항목 변경 없음
+- Windows 컴파일: 제품·테스트 코드의 MSVC 대상 `cargo xwin check --tests --locked` 통과, Windows 실제 실행과 구분
+- Windows 네이티브 테스트: 확장 경로의 한글 파일·폴더 왕복, 기존 대상 보존·재시도, 연결 HTML 리소스 보존, 테스트가 만든 휴지통 항목만 선택 제거 후 소실 오류 확인 추가
+- Windows callback 테스트: 휴지통 플래그 없는 삭제·실행 전 취소를 OS 변경 전에 거부하는 회귀 추가, native 왕복 테스트는 일반 로컬 실행에서 명시 제외
+- CI 연결: 임시 Windows runner에서 휴지통 왕복 테스트 별도 실행, 사용자 push 금지에 따른 이번 원격 CI 미실행
+- 검증 중 수정: 병렬 TAR 테스트의 같은 시각 임시 폴더 충돌 재현, 시각·프로세스 ID에 원자적 순번 추가 후 전체 검증 통과
+- 변경 검토: 영수증·이력의 기존 소유권과 command DTO 유지, Windows Shell callback 모듈에 OS 실행 책임 제한, 취소·부분 완료·복구 위치·COM 자원 해제 확인
+- Windows 실기 잔여: 실제 Recycle Bin 왕복·휴지통 비움·부모 교체·큰 폴더 취소·UNC/외부 볼륨 미지원 오류·긴 경로 확인 필요, Mac 성공을 Windows 실행 증거로 대체 금지
+- API 근거: [삭제 전 중단](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperationprogresssink-predeleteitem), [삭제 결과의 휴지통 항목](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperationprogresssink-postdeleteitem), [Shell 작업 플래그](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperation-setoperationflags)
+- W3~W5 통합 회귀: `BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES=1 BOKSLDIRGUI_REQUIRE_PROVIDERS=1 npm run rust:test` 통과, Windows ZIP 구현 경로를 Mac의 실제 동봉 도구로 실행하여 Rust 121개 통과·Mac 휴지통 1개 명시 제외 확인

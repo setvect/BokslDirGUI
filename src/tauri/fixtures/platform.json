@@ -16,7 +16,7 @@
       "currentFolderManager": true,
       "currentFolderTerminal": true,
       "nativeFileClipboard": true,
-      "trashUndo": false
+      "trashUndo": true
     }
   }
 ]

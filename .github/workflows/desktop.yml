@@ -43,6 +43,10 @@ jobs:
         if: runner.os == 'Windows'
         # Hosted runner clipboard is disposable; this test is never part of the default local suite.
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked native_file_clipboard_round_trip_and_stale_clear -- --ignored --nocapture
+      - name: Windows native Recycle Bin round trip
+        if: runner.os == 'Windows'
+        # Only this test's temporary entries are recycled/restored/purged.
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked native_windows_trash_roundtrip_conflicts_and_missing_items -- --ignored --nocapture
       - name: Windows archive backend regression on macOS
         if: runner.os == 'macOS'
         env:

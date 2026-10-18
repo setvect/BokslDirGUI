@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
-import { ACTION_BY_ID, actionsForMenu, isActionAvailable, matchKeyboardShortcut } from '../actions/registry';
-import type { TrashUndoPreview } from '../domain/types';
+import { afterEach, expect, it, vi } from 'vitest';
+import { ACTION_BY_ID, actionsForMenu, fileShortcutPlatform, isActionAvailable, matchKeyboardShortcut, shortcutLabelForAction, shortcutHelpLabelForAction } from '../actions/registry';
+import type { PlatformInfo, TrashUndoPreview } from '../domain/types';
 import { useOperationStore } from '../operations/operationStore';
 import { createActionContext } from './actionContext';
 import { createFixturePanelDataSource } from './panelDataSource';
@@ -10,7 +10,8 @@ import { renderCommander } from './testing/commanderTestSupport';
 import { testEntry } from './testing/fileEntryFixture';
 import { useTrashUndo } from './useTrashUndo';
 import './testing/commanderTestSetup';
-vi.mock('../actions/registry', async original => ({ ...await original<object>(), fileShortcutPlatform: () => 'mac' }));
+vi.mock('../actions/registry', async original => ({ ...await original<object>(), fileShortcutPlatform: vi.fn(() => 'mac') }));
+afterEach(() => vi.mocked(fileShortcutPlatform).mockReturnValue('mac'));
 const entry = testEntry('/original', 'deleted.json');
 const setup = () => {
   const preview: TrashUndoPreview = { id: 'deleted-batch', entries: [entry] };
@@ -120,4 +121,34 @@ it('refreshes undo receipts after a deletion completes within one render batch',
   fireEvent.keyDown(shell, { key: 'z', code: 'KeyZ', metaKey: true });
   expect(await screen.findByRole('dialog', { name: '휴지통에서 복원' })).toBeTruthy();
   expect(useOperationStore.getState().dialog?.sources).toEqual([entry]);
+});
+
+it('connects Windows Ctrl+Z, menu and help to the same receipt confirmation while preserving input undo', async () => {
+  vi.mocked(fileShortcutPlatform).mockReturnValue('other');
+  const platform: PlatformInfo = { os: 'windows', features: { trashUndo: true, nativeFileClipboard: true,
+    openWith: true, currentFolderManager: true, currentFolderTerminal: true } };
+  const { mutationClient, operationClient } = setup();
+  const client = { ...mutationClient, getPlatformInfo: vi.fn(async () => ({ ok: true as const, data: platform })) };
+  renderCommander(createFixturePanelDataSource(), client, operationClient);
+  await waitFor(() => expect(mutationClient.previewTrashUndo).toHaveBeenCalled());
+  await act(async () => {});
+  const action = ACTION_BY_ID.get('file.undoTrash')!;
+  expect(actionsForMenu('Edit', 'other', platform)).toContain(action);
+  expect(shortcutLabelForAction(action, 'other')).toBe('Ctrl+Z');
+  expect(shortcutHelpLabelForAction(action, 'other')).toBe('Ctrl+Z');
+  const input = document.createElement('input');
+  document.body.append(input);
+  input.focus();
+  const inputUndo = new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true, cancelable: true });
+  input.dispatchEvent(inputUndo);
+  expect(inputUndo.defaultPrevented).toBe(false);
+  expect(useOperationStore.getState().dialog).toBeNull();
+  input.remove();
+  const shell = screen.getByRole('application');
+  shell.focus();
+  fireEvent.keyDown(shell, { key: 'z', code: 'KeyZ', ctrlKey: true });
+  await screen.findByRole('dialog', { name: '휴지통에서 복원' });
+  expect(operationClient.startTrashUndo).not.toHaveBeenCalled();
+  await act(async () => useOperationStore.getState().confirmDialog());
+  expect(operationClient.startTrashUndo).toHaveBeenCalledExactlyOnceWith({ id: 'deleted-batch' });
 });
