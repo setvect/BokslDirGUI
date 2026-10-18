@@ -39,7 +39,7 @@ if (await preparedToolsValid(destination, platform, arch)) {
     await writeFile(join(temporary, 'NOTICE.txt'), notice);
     const names = [binary, 'License.txt', 'NOTICE.txt'];
     const files = Object.fromEntries(await Promise.all(names.map(async name => [name, sha256(await readFile(join(temporary, name)))])));
-    const staging = `${destination.replace(/\/$/, '')}.preparing`;
+    const staging = fileURLToPath(new URL('../src-tauri/resources/archive-tools.preparing/', import.meta.url));
     await rm(staging, { recursive: true, force: true });
     await mkdir(staging, { recursive: true });
     for (const name of names) await copyFile(join(temporary, name), join(staging, name));
