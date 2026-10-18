@@ -123,7 +123,7 @@ fn windows_settings_save_twice_and_contract() {
     std::env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
     let info = serde_json::to_value(commands::get_platform_info()).unwrap();
     assert_eq!(info["os"], "windows");
-    assert_eq!(info["features"]["trashUndo"], false);
+    assert_eq!(info["features"]["trashUndo"], true);
 }
 
 #[test]

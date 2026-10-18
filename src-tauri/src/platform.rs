@@ -228,7 +228,7 @@ mod tests {
         assert_eq!(value["os"], std::env::consts::OS);
         assert_eq!(
             value["features"]["nativeFileClipboard"],
-            cfg!(target_os = "macos")
+            cfg!(any(target_os = "macos", windows))
         );
         let fixtures: serde_json::Value =
             serde_json::from_str(include_str!("../../src/tauri/fixtures/platform.json")).unwrap();
