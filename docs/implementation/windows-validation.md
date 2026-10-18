@@ -6,6 +6,7 @@
 - ARM64·다른 Windows 버전: 지원 판정 전 별도 실행 증거 필요, 현재 미검증
 - W0~W2 후속 상태: `933d8ac`의 Mac·Windows CI 테스트와 앱·NSIS 빌드 통과, 실제 Windows 데스크톱 수동 검증 미실행
 - 전체 계획: [Windows 지원 분석과 작업 계획](windows-support-plan.md)
+- 1~9절: 각 구현 시점의 기록 유지, 후속 Windows VM 실행 결과와 현재 남은 검증은 10절 참조
 
 ## 1. 이번 구현 범위
 
@@ -332,3 +333,91 @@ npm run tauri:build -- --bundles nsis
 - 설치본 실행: 일반 권한에서 압축 도구가 별도 설치되지 않은 환경의 포맷 왕복, 기본 앱/Explorer/터미널, Ctrl+C/X/V·Ctrl+Z 확인
 - 파일 안전성 실기: 별도 테스트 파일만 사용하여 같은 이름·부모 교체·잠금·부분 취소·UNC·외부 볼륨 확인, 실제 사용자 파일 변경 제외
 - 결과 기록: Windows 버전·소스 커밋·명령 종료 코드·최초 실패 로그·미실행 항목 구분 필수
+
+## 10. 2026-10-18 Windows VM 설치본 검증
+
+### 환경과 증거
+
+- 호스트: Apple M4 Mac, VirtualBox 7.2.20·Guest Additions 7.2.20
+- 게스트: Windows 11 Home ARM64, 빌드 `26300.9711`, 일반 사용자 실행
+- 실행 대상: x64 앱의 Windows ARM 에뮬레이션, Intel/AMD x64 네이티브 검증 및 ARM64 전용 빌드와 구분
+- 설치본 기준: `9461f8a077e021d40943c134d83f3b916fe03625`, [Mac·Windows 성공 CI](https://github.com/setvect/BokslDirGUI/actions/runs/39088071984)의 `desktop-windows-2022` 산출물
+- 설치 파일: `BokslDir_0.1.0_x64-setup.exe`, SHA-256 `a680fd35a927c8b8d9a61ecac8b6df8d1949b6b644215f4372ec2c1c347093a4`
+- 작업 전 스냅샷: `before-boksldirgui-test-20261018`, UUID `3ccde92c-b22e-410c-9dac-27ed30e89226`
+- 테스트 범위: `C:\BokslDirGUI-Test\run-20261018-9461f8a`의 폐기 가능한 파일, OneDrive·사용자 실제 문서 변경 없음
+- 환경 격리: Mac 공유 폴더·공유 클립보드 비활성 유지, 읽기 전용 ISO로 설치 파일과 테스트 도구 전달
+- 검증 도구: VirtualBox 공식 CLI·SDK의 게스트 입력·스크린샷, 게스트 PowerShell의 파일 해시·테스트 종료 코드 수집
+- 로컬 증거: `temp/verification/windows-vm-20261018/`의 환경·해시 JSON·스크린샷·로그, Git 추적 제외
+
+### 설치본 실행 결과
+
+| 항목 | 결과와 근거 |
+| --- | --- |
+| NSIS 설치·실행 | 개발 도구·별도 7-Zip 설치 없이 일반 사용자 설치·첫 실행 통과 |
+| 기본 탐색 | 경로 입력·Tab 패널 전환·Enter 하위 폴더 진입·Backspace 상위 이동 통과 |
+| 파일 복사 | 폴더 포함 네 파일 복사, 원본 유지 및 대상 SHA-256 전부 일치 |
+| 이름 변경 | `alpha.txt` → `ALPHA.txt` 통과, 예약 이름 `CON` 거부 |
+| 이름 충돌 | 대소문자 차이의 기존 파일 충돌 표시·취소 통과, 원본/대상 해시 유지 |
+| 휴지통·복원 | 한글·공백 이름 파일 삭제 확인·목록 제거·Ctrl+Z 복원 확인·원본 해시 일치 |
+| ZIP | 폴더·한글·공백·바이너리 파일 생성·목록 탐색·자동 해제 통과, 네 파일 해시 일치 |
+| 7z | 폴더 압축 생성·자동 해제 통과, 하위 파일 해시 일치 |
+| 탐색기 → 앱 | 탐색기에서 잘라내기·앱 붙여넣기의 대상 경로 확인·이동 실행 통과, 원본 제거와 대상 해시 일치 |
+| 앱 → 탐색기 | 최초 설치본에서 실패 재현, 아래 수정본에서 영문·한글 파일 복사 및 바이너리 파일 잘라내기 재검증 통과 |
+| 기본 앱 | 테스트 텍스트 파일의 메모장 실행과 내용 표시 통과 |
+| 터미널 | 현재 테스트 폴더에서 PowerShell 실행·`pwd` 경로 확인 통과 |
+| 재시작 | 정상 종료·재실행 후 양쪽 경로·왼쪽 두 탭 복원 확인 |
+| 물리 키보드·IME·Mac 전환 | 사용자 직접 확인: Tab·방향키·Space, 이름 입력창 한글 입력·Esc 취소, 오른쪽 Command 해제 후 Finder의 Rectangle 단축키 모두 정상 |
+
+### 클립보드 결함과 보완
+
+- 재현: 앱의 Ctrl+C 후 탐색기 Ctrl+V 및 붙여넣기 버튼 모두 파일 생성 없음
+- 관측: Windows `DragQueryFile`에서 `\\?\C:\...\left\alpha.txt` 확인, Windows Forms 파일 드롭 목록은 빈 목록
+- 비교: 동일 파일을 일반 `C:\...` 경로로 전달하면 탐색기 붙여넣기 성공
+- 수정 경계: Windows 파일 클립보드에 게시하는 경로만 Shell 호환 표기로 변환
+- 안전성: 기존 `windows_shell`의 링크 자체 파일 ID 비교 재사용, 같은 항목으로 확인된 경우에만 접두사 변환
+- 회귀: 끝 점 때문에 다른 파일을 가리키는 경로·존재하지 않는 경로의 원문 유지, 실제 클립보드 테스트의 canonical 경로 입력 추가
+- 초기 재검증 빌드: 동적 CRT 로컬 테스트 실행 파일이 `0xC0000135`로 본문 실행 전 종료, 테스트 통과 집계에서 제외
+- 수정본 빌드: Mac의 `cargo xwin`·Microsoft SDK, `-C target-feature=+crt-static` 및 `tauri/custom-protocol` 적용, VM 개발 도구·런타임 추가 설치 없음
+- 수정본 분리: 설치 원본 보존, 테스트 루트의 `patched-app`에서 별도 debug 실행 파일 검증, 정식 NSIS 재빌드 통과 주장 없음
+- 수정 앱 SHA-256: `e063a9dec2c8485f70b8f485235fa8bda21bf55d58252aa9966d5cddfbc54270`, 게스트 복사 후 동일 해시 확인
+- Windows VM 테스트: 파일 ID 경로 회귀 1개·실제 클립보드 명시 회귀 1개·형식/계약 5개 통과, 세 실행의 종료 코드 모두 0
+- 수정본 GUI: 앱 Ctrl+C → 탐색기 Ctrl+V의 영문·한글 파일 복사, 앱 Ctrl+X → 탐색기 Ctrl+V의 바이너리 파일 이동 성공
+- 수정본 파일 상태: 탐색기 대상 세 파일의 SHA-256 원본 일치, 이동한 원본 경로 제거 확인
+- Mac 회귀: `cargo test --manifest-path src-tauri/Cargo.toml --locked file_clipboard -- --nocapture` 6개 통과, 일반 클립보드 대신 테스트 전용 pasteboard 사용
+- 추가 검사: `npm run build`의 TypeScript·프런트 빌드, `npm run docs:check`, `git diff --check` 통과
+- 변경 검토: `change-review` 기준으로 Windows Shell/클립보드 경계·파일 ID 비교·입력 검증·clipboard 소유권 확인, 공통 operation 상태·Mac 구현 변경 없음
+- 최초 VM 검증 종료 시점의 커밋·push·새 원격 CI: 미수행, 이후 로컬 커밋과 통합 검증은 아래 후속 기록 참조
+
+### 아직 별도 확인이 필요한 범위
+
+- 이번 사용자 확인 외의 Command/Option 조합·외부 키보드·다양한 IME 설정
+- 실제 Intel/AMD Windows x64 PC, ARM64 전용 앱 빌드
+- UNC 공유·다른 볼륨 이동·긴 경로·링크/재파싱 지점·잠긴 파일·권한 부족의 실제 GUI 실패 경로
+- 대용량 작업 중 취소·전원 중단·외부 프로세스 트리 종료·외부 앱과 드래그 앤 드롭
+- 압축 암호·나머지 포맷·손상 압축·압축 작업 취소의 설치본 GUI 검증
+- 설치 제거·재설치·업데이트, 다양한 화면 배율·모니터 구성
+- 작은 화면 관측: 1280×800 게스트에서 초기 1280×820 창 하단 일부 가림, 최대화 후 검증 수행, 화면 작업 영역에 맞춘 초기 크기 보완은 후속 항목
+- 위 미검증 항목의 CI 자동 테스트 또는 이번 소규모 파일 왕복으로 대체 금지
+
+## 11. Windows 패널 주소 표시 보완
+
+- 재현: 주소 표시줄에 내부 canonical 접두사 `\\?\` 노출
+- 변경 범위: 패널 주소 표시줄과 전체 경로 툴팁의 표시 전용 변환
+- 표시 형식: `\\?\C:\...` → `C:\...`, `\\?\UNC\server\share\...` → `\\server\share\...`
+- 보존 범위: 패널 상태·탐색 요청·파일 작업 경로 원문 유지, Mac 경로·알 수 없는 Windows namespace 표시 유지
+- 자동 검증: `PanelHeader.test.tsx`·`CommanderShell.navigation.test.tsx` 30개 및 `npm run build` 통과
+- VM 검증: 별도 `display-app` 검증용 빌드에서 `C:\Windows`·`C:\BokslDirGUI-Test\...` 표시와 기존 목록 복원 확인, 실제 UNC 공유 실행은 미검증 유지
+- 수정 앱 SHA-256: `e091931d1756c3c075aec990c44434d6bb11c5daf74742b1c519464380c62ab5`, 게스트 복사 후 동일 해시 확인
+- 변경 검토: 표시 전용 순수 함수와 기존 패널 상태의 경계 확인, 탐색 콜백·파일 작업·상태 소유권 변경 없음, 추가 구조 정리 불필요
+
+## 12. W3~W5 구현 및 VM 보완의 통합 확인
+
+- 대조 범위: 최초 W3~W5 계획, 8~9절의 구현 기록, 현재 압축 provider·프로세스·Shell·클립보드·휴지통 코드와 CI 구성
+- 구현 판정: W3 압축 도구/코덱·취소, W4 앱 연동/명령 실행, W5 클립보드/휴지통 복원 구현 완료
+- 후속 결함 수정: VM에서 재현한 탐색기 붙여넣기 결함의 로컬 커밋 `3764f40`, 패널 주소 표시 보완과 검증 기록의 별도 커밋
+- 최종 Mac 검증: `BOKSLDIRGUI_REQUIRE_PROVIDERS=1 npm run verify` 종료 코드 0, 프론트 358개·도구 16개·Rust 121개·스모크 261개 통과
+- 명시 제외: 일반 회귀 실행의 실제 macOS 휴지통 테스트 1개, 위 과거 명시 실행 결과와 구분
+- 검토 결과: 기존 `change-review` 기록과 최종 변경의 일치 확인, 공통 operation 상태·파일 동일성·OS 메모리 소유권 보존, 관련 없는 정리 없음
+- 지원 완료 판정: 구현 완료와 전체 Windows 환경 검증의 구분 유지, 10절의 미검증 항목은 별도 후속 검증 대상
+- 배포 상태: 이번 로컬 수정의 push·새 GitHub Actions 실행 없음, VM의 별도 검증용 앱 사용 유지, 수정된 정식 설치본 검증은 후속 작업
+- 변경 검토: `change-review` 기준의 표시/실행 경계 확인, 상태 소유권·파일 작업 계약 변경 없음, 커밋·push 미수행

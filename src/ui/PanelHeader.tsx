@@ -3,6 +3,7 @@ import {
   COMMANDER_UI_TEXT
 } from '../i18n-resources';
 import { panelIdLabel } from './panelPresentation';
+import { displayPath } from './textLayout';
 import {
   panelCanGoBack,
   panelCanGoForward,
@@ -31,6 +32,7 @@ export function PanelHeader({
   onRestoreFocus(): void;
 }) {
   const labels = COMMANDER_UI_TEXT[language];
+  const pathLabel = displayPath(panel.path);
   const runNavigation = (callback: () => void) => {
     callback();
     window.requestAnimationFrame(() => onRestoreFocus());
@@ -41,7 +43,7 @@ export function PanelHeader({
       <button type="button" aria-label={labels.back} disabled={!panelCanGoBack(panel)} onClick={() => runNavigation(onNavigateBack)}>◀</button>
       <button type="button" aria-label={labels.forward} disabled={!panelCanGoForward(panel)} onClick={() => runNavigation(onNavigateForward)}>▶</button>
       <button type="button" aria-label={labels.up} onClick={() => runNavigation(onNavigateUp)}>↑</button>
-      <span className="path-input" title={panel.path}>{panel.path}</span>
+      <span className="path-input" title={pathLabel}>{pathLabel}</span>
       <button type="button" aria-label={labels.gotoPath} onClick={onGotoPath}>⌘</button>
       <div className="panel-header-status">
         {panel.filter ? (

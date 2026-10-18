@@ -5,6 +5,23 @@ import { PanelHeader } from './PanelHeader';
 import { createDirectoryListing, createPanelStateFromListing } from './panelState';
 
 describe('PanelHeader', () => {
+  it.each([
+    [String.raw`\\?\C:\한글 폴더\file`, String.raw`C:\한글 폴더\file`],
+    [String.raw`\\?\UNC\server\share\folder`, String.raw`\\server\share\folder`],
+    [String.raw`\\?\Volume{abc}\folder`, String.raw`\\?\Volume{abc}\folder`],
+    ['/Users/test/한글 폴더', '/Users/test/한글 폴더'],
+  ])('shows a familiar path without changing navigation state: %s', (path, label) => {
+    const panel = createPanelStateFromListing(createDirectoryListing('right', path));
+    const noop = () => {};
+    const { container } = render(<PanelHeader panel={panel} tabCount={1} language="ko"
+      onClearFilter={noop} onNavigateBack={noop} onNavigateForward={noop}
+      onNavigateUp={noop} onGotoPath={noop} onRestoreFocus={noop} />);
+    const address = container.querySelector('.path-input');
+    expect(address?.textContent).toBe(label);
+    expect(address?.getAttribute('title')).toBe(label);
+    expect(panel.path).toBe(path);
+  });
+
   it('keeps the right-side status layout stable while a directory loads', () => {
     const panel = createPanelStateFromListing(createDirectoryListing('right', '/tmp/project'));
     const props = {
