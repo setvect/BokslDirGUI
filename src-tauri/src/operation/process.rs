@@ -187,5 +187,8 @@ pub(super) fn run_external_command_capture_observed(
 }
 
 pub(super) fn external_binary(name: &str) -> Option<String> {
+    if matches!(name, "7zz" | "7z") {
+        return crate::archive_provider::seven_zip();
+    }
     crate::platform::find_executable(name)
 }

@@ -6,12 +6,43 @@ import { spawnSync } from 'node:child_process';
 import { generatedDocSections, replaceGeneratedSections, syncGeneratedDocs } from './generated-docs.mjs';
 import { test } from 'node:test';
 import { loadFeatureMetadata, projectRoot } from './load-feature-metadata.mjs';
+import { preparedToolsValid, sha256, toolName, verifyDownload, version } from './archive-tools.mjs';
 
 const metadata = await loadFeatureMetadata();
 const { validateRustCommands } = metadata.validation;
 const lib = await readFile(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8');
 const commands = await readFile(new URL('../src-tauri/src/commands.rs', import.meta.url), 'utf8');
 const names = Object.values(metadata.commands);
+
+test('압축 도구 다운로드 변조와 지원하지 않는 CPU를 거부', () => {
+  const bytes = Buffer.from('official fixture');
+  assert.equal(verifyDownload(bytes, { name: 'fixture', sha256: sha256(bytes) }), bytes);
+  assert.throws(() => verifyDownload(Buffer.from('modified'), { name: 'fixture', sha256: sha256(bytes) }), /SHA-256/);
+  assert.equal(toolName('win32', 'x64'), '7za.exe');
+  assert.equal(toolName('darwin', 'arm64'), '7zz');
+  assert.throws(() => toolName('win32', 'arm64'), /미지원/);
+});
+
+test('준비된 압축 도구의 손상·구버전·다른 플랫폼 리소스를 재사용하지 않음', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'archive-tool-test-'));
+  try {
+    const files = {};
+    for (const name of ['7za.exe', 'License.txt', 'NOTICE.txt']) {
+      const bytes = Buffer.from(name);
+      await writeFile(join(directory, name), bytes);
+      files[name] = sha256(bytes);
+    }
+    const manifest = { version, platform: 'win32', arch: 'x64', files };
+    await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest));
+    assert.equal(await preparedToolsValid(directory, 'win32', 'x64'), true);
+    assert.equal(await preparedToolsValid(directory, 'darwin', 'arm64'), false);
+    await writeFile(join(directory, 'manifest.json'), JSON.stringify({ ...manifest, version: 'old' }));
+    assert.equal(await preparedToolsValid(directory, 'win32', 'x64'), false);
+    await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest));
+    await writeFile(join(directory, '7za.exe'), 'modified');
+    assert.equal(await preparedToolsValid(directory, 'win32', 'x64'), false);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test('프론트 명령을 실제 Rust 등록과 구현에 대조', () => {
   assert.deepEqual(validateRustCommands(names, lib, commands), []);

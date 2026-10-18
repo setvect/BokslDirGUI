@@ -19,7 +19,8 @@
     "verify:scope": "node scripts/verify-full-scope.mjs",
     "verify": "npm run typecheck && npm test && npm run build && npm run check && npm run rust:test && npm run verify:scope && npm run docs:check",
     "docs:generate": "node scripts/generate-docs.mjs",
-    "docs:check": "node scripts/generate-docs.mjs --check"
+    "docs:check": "node scripts/generate-docs.mjs --check",
+    "archive:prepare": "node scripts/prepare-archive-tools.mjs"
   },
   "dependencies": {
     "@crabnebula/tauri-plugin-drag": "^2.1.0",

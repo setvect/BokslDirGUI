@@ -6,6 +6,7 @@ mod preview;
 mod image_metadata;
 
 mod archive;
+mod archive_provider;
 mod commands;
 mod contracts;
 mod external;
@@ -29,6 +30,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_drag::init())
         .setup(|app| {
+            archive_provider::set_resource_directory(app.path().resource_dir()?);
             window_session::restore(app.handle());
             Ok(())
         })

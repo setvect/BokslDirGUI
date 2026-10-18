@@ -4,7 +4,7 @@
 - 작업 전 태그: `before-windows-w0-w2-20261017`, 기준 커밋 `4969651`
 - 기본 검증 대상: Windows 11 x64 사용자 환경, CI 빌드 대상은 Windows Server 2022 x64 runner
 - ARM64·다른 Windows 버전: 지원 판정 전 별도 실행 증거 필요, 현재 미검증
-- 상태: Mac에서 가능한 구현·회귀 검증 수행, Windows 실제 빌드·동작 판정 대기
+- W0~W2 후속 상태: `933d8ac`의 Mac·Windows CI 테스트와 앱·NSIS 빌드 통과, 실제 Windows 데스크톱 수동 검증 미실행
 - 전체 계획: [Windows 지원 분석과 작업 계획](windows-support-plan.md)
 
 ## 1. 이번 구현 범위
@@ -155,3 +155,21 @@ Remove-Item Env:BOKSLDIRGUI_REQUIRE_PROVIDERS
 - 후속 검증: UTC `npm run verify` 통과, 프론트 328개·도구 14개·Rust 97개 통과·실제 macOS 휴지통 1개 명시 제외, 스모크 261개 통과
 - 엄격 provider 검증: `npm run verify:providers` 및 `BOKSLDIRGUI_REQUIRE_PROVIDERS=1 cargo test --manifest-path src-tauri/Cargo.toml --locked -- --nocapture` 통과, 7z 실제 목록·추가·덮어쓰기·추출·암호·대용량 목록 포함
 - 변경 검토: 기존 플랫폼 파일 식별 경계와 압축 가상 경로 계약 재사용, 추가 상태 소유자·우회 실행 경로·관련 없는 구조 정리 없음
+- 최종 W0~W2 [CI 실행](https://github.com/setvect/BokslDirGUI/actions/runs/39077724386): Mac·Windows 성공, 프론트 각 328개·Rust Mac 97개/Windows 86개 통과, 각 1개 명시 제외
+- 같은 실행의 Windows 압축 제한: `zip` 도구 부재에 따른 일부 테스트 조기 반환, W3에서 도구 배포와 실제 실행 검증 보완 필요
+
+## 8. W3~W5 후속 구현
+
+- 작업 범위: 압축 도구·외부 프로세스, Windows 앱 연동, OS 파일 클립보드·휴지통 복원
+- 커밋 정책: 주요 구현 지점의 관련 테스트·전체 회귀·변경 검토 후 로컬 커밋, 사용자 지시에 따른 push 금지
+- 압축 도구 선정: 공식 7-Zip 26.04 독립 실행 파일, Windows x64 `7za.exe`·macOS universal `7zz` 동봉
+- 선정 근거: 기존 7z 프로세스·진행률·취소 경계 재사용, ZIP 암호와 7z 호환성 유지, 버전·SHA-256 고정으로 설치 환경 의존 축소
+- Rust 압축 라이브러리 일괄 교체 대안: ZIP·7z 암호 호환성과 진행률 계약의 동시 변경 부담으로 미선정, TAR 계열의 별도 구현 검토 유지
+- 도구 준비: `npm run archive:prepare`, 공식 배포본 해시 검사 후 실행 파일·원본 라이선스·원본 소스 위치 고지 동봉
+- 배포 출처: [7-Zip 공식 다운로드](https://www.7-zip.org/download.html), [고정 버전 원본 소스](https://github.com/ip7z/7zip/releases/download/26.04/7z2604-src.tar.xz)
+- 지원 대상: Windows x64·macOS arm64/x64, Windows ARM64의 잘못된 바이너리 자동 대체 금지
+- 탐색 경계: 앱 리소스 절대 경로 우선, Windows 배포판의 현재 작업 폴더·PATH 의존 제거, 개발·테스트의 저장소 리소스 사용 허용
+- 도구 동봉 검증: `npm run verify` 통과, 프론트 328개·도구 16개·Rust 97개 통과·1개 명시 제외, 스모크 261개 통과
+- 실제 번들 검증: `npm run tauri:build -- --bundles app` 성공, 앱 내부 `archive-tools/7zz` 26.04 실행 및 라이선스·소스 안내·manifest 포함 확인
+- 도구 경계 변경 검토: 기존 프로세스 취소·작업 상태 유지, 배포 리소스 위치만 공통화, Windows 도구 준비 스크립트의 네이티브 실행은 미검증
+- 아직 남은 W3 작업: Windows ZIP 경로 연결, TAR 계열 도구 독립 처리, 압축 해제 안전성·취소·엄격 provider 테스트, Windows 네이티브 실행 증거

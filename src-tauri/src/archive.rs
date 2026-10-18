@@ -521,6 +521,9 @@ fn permission_text_from_7z_attributes(attributes: Option<&str>) -> Option<String
 }
 
 fn find_binary(name: &str) -> Option<String> {
+    if matches!(name, "7zz" | "7z") {
+        return crate::archive_provider::seven_zip();
+    }
     crate::platform::find_executable(name)
 }
 

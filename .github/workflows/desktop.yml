@@ -21,6 +21,7 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@1.93.0
       - run: npm ci
+      - run: npm run archive:prepare
       - name: Provider availability (not feature completion)
         run: npm run verify:providers -- --report-only
       - name: TypeScript, frontend and contract checks

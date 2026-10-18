@@ -40,3 +40,7 @@ release/
 
 # Tauri generated schemas
 src-tauri/gen/
+
+# 검증된 공식 배포본으로 빌드 전에 준비하는 압축 도구
+src-tauri/resources/archive-tools/
+src-tauri/resources/archive-tools.preparing/
