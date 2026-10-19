@@ -13,6 +13,7 @@ import { createFixturePanelDataSource } from './panelDataSource';
 import { useOperationStore } from '../operations/operationStore';
 import './testing/commanderTestSetup';
 import { useFileClipboard } from './useFileClipboard';
+import type { TauriResult } from '../tauri/client';
 vi.mock('../tauri/client', async importOriginal => ({ ...await importOriginal<object>(), isTauriRuntime: () => true }));
 vi.mock('../actions/registry', async importOriginal => ({ ...await importOriginal<object>(), fileShortcutPlatform: () => 'mac' }));
 afterEach(cleanup);
@@ -20,7 +21,7 @@ const file = testEntry('/finder', 'sample.json');
 const setup = (platformInfo?: PlatformInfo) => {
   let content: NativeFileClipboard = { changeCount: 10, intent: 'copy', paths: [file.path], entries: [file] };
   const client = { createDir: vi.fn(), renameEntry: vi.fn(),
-    readFileClipboard: vi.fn(async (_: { resolve: boolean }) => ({ ok: true as const, data: content })),
+    readFileClipboard: vi.fn(async (_: { resolve: boolean }): Promise<TauriResult<NativeFileClipboard>> => ({ ok: true, data: content })),
     writeFileClipboard: vi.fn(async (_: { paths: string[]; intent: 'copy' | 'move' }) => ({ ok: true as const, data: content.changeCount })),
     clearFileClipboard: vi.fn(async (_: { changeCount: number }) => ({ ok: true as const, data: undefined })),
   };
@@ -28,6 +29,44 @@ const setup = (platformInfo?: PlatformInfo) => {
     setStatusMessage: vi.fn(), runtimeBackendAvailable: true, dispatch: vi.fn(), mutationClient: client, operationBusy: false };
   return { client, dependencies, replace: (next: NativeFileClipboard) => { content = next; } };
 };
+it('coalesces startup, focus, visibility and timer polls until the native read finishes', async () => {
+  vi.useFakeTimers();
+  const { dependencies, client } = setup();
+  let finish!: (value: Awaited<ReturnType<typeof client.readFileClipboard>>) => void;
+  client.readFileClipboard.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const { result, unmount } = renderHook(() => useFileClipboard(dependencies));
+  await act(async () => {
+    fireEvent.focus(window);
+    fireEvent(document, new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(client.readFileClipboard).toHaveBeenCalledTimes(1);
+  await act(async () => finish({ ok: true, data: { changeCount: 10, intent: 'copy', paths: [file.path], entries: [] } }));
+  expect(result.current.clipboardCount).toBe(1);
+  await act(async () => { fireEvent.focus(window); });
+  expect(client.readFileClipboard).toHaveBeenCalledTimes(2);
+  unmount();
+  await act(async () => {
+    fireEvent.focus(window);
+    fireEvent(document, new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(client.readFileClipboard).toHaveBeenCalledTimes(2);
+});
+
+it('releases the polling slot after a native error so a later focus can recover', async () => {
+  const { dependencies, client } = setup();
+  client.readFileClipboard.mockResolvedValueOnce({ ok: false, error: {
+    code: 'clipboard_changed', messageKey: 'errors.fileClipboardChanged', path: null, details: null, recoverable: true,
+  } });
+  const { result } = renderHook(() => useFileClipboard(dependencies));
+  await act(async () => {});
+  expect(result.current.clipboardCount).toBe(0);
+  await act(async () => { fireEvent.focus(window); });
+  expect(client.readFileClipboard).toHaveBeenCalledTimes(2);
+  expect(result.current.clipboardCount).toBe(1);
+});
+
 it('reads Finder files and dispatches paste through the existing copy action with the requested destination', async () => {
   const { dependencies, client } = setup();
   const { result } = renderHook(() => useFileClipboard(dependencies));

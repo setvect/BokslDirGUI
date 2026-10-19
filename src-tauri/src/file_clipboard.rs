@@ -35,7 +35,30 @@ mod native {
     use objc2_foundation::{NSArray, NSString, NSURL};
     use std::path::Path;
 
-    pub(super) fn read(board: &NSPasteboard, resolve: bool) -> CommandResult<FileClipboard> {
+    // General NSPasteboard is shared with WebKit. A worker-side mutex cannot
+    // synchronize WebKit's access, so all native access must run on the UI thread.
+    pub(super) fn with_general<T: Send + 'static>(
+        app: &tauri::AppHandle,
+        action: impl FnOnce(&NSPasteboard) -> CommandResult<T> + Send + 'static,
+    ) -> CommandResult<T> {
+        if objc2::MainThreadMarker::new().is_some() {
+            return access_general(action);
+        }
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        app.run_on_main_thread(move || {
+            let _ = sender.send(access_general(action));
+        }).map_err(|_| changed())?;
+        // Called by the command's blocking worker, never by the UI thread.
+        receiver.recv().map_err(|_| changed())?
+    }
+
+    fn access_general<T>(action: impl FnOnce(&NSPasteboard) -> CommandResult<T>) -> CommandResult<T> {
+        // Fail safely if a future caller bypasses the main-thread dispatcher.
+        let _main_thread = objc2::MainThreadMarker::new().ok_or_else(changed)?;
+        objc2::rc::autoreleasepool(|_| action(&NSPasteboard::generalPasteboard()))
+    }
+
+    pub(super) fn read(board: &NSPasteboard) -> CommandResult<FileClipboard> {
         let version = board.changeCount() as i64;
         let mut paths = Vec::new();
         if let Some(items) = board.pasteboardItems() {
@@ -62,14 +85,6 @@ mod native {
                 }
             }
         }
-        let entries = if resolve {
-            paths
-                .iter()
-                .map(|path| crate::filesystem::file_entry_from_path(Path::new(path), false))
-                .collect::<CommandResult<Vec<_>>>()?
-        } else {
-            Vec::new()
-        };
         if board.changeCount() as i64 != version {
             return Err(changed());
         }
@@ -77,16 +92,15 @@ mod native {
             intent: super::ClipboardIntent::Copy,
             change_count: version,
             paths,
-            entries,
+            entries: Vec::new(),
         })
     }
 
-    pub(super) fn write(board: &NSPasteboard, paths: Vec<String>) -> CommandResult<i64> {
+    pub(super) fn validate_paths(paths: &[String]) -> CommandResult<()> {
         if paths.is_empty() {
             return Err(changed());
         }
         // 모든 경로 확인 후에만 기존 클립보드 교체. 링크 자체를 보존하기 위해 대상 canonicalize 금지.
-        let mut items = Vec::new();
         for path in paths {
             let raw = Path::new(&path);
             if !raw.is_absolute() || path.contains('\0') {
@@ -99,6 +113,13 @@ mod native {
             }
             std::fs::symlink_metadata(raw)
                 .map_err(|e| crate::filesystem::map_io_error(e, Some(raw)))?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn write(board: &NSPasteboard, paths: Vec<String>) -> CommandResult<i64> {
+        let mut items = Vec::new();
+        for path in paths {
             let url = NSURL::fileURLWithPath(&NSString::from_str(&path));
             let item = NSPasteboardItem::new();
             let value = url.absoluteString().ok_or_else(changed)?;
@@ -125,13 +146,26 @@ mod native {
         }
     }
 
-    fn changed() -> AppError {
+    pub(super) fn changed() -> AppError {
         AppError::new(
             "clipboard_changed",
             "errors.fileClipboardChanged",
             None,
             true,
         )
+    }
+
+    #[test]
+    fn general_clipboard_rejects_worker_access_before_touching_appkit() {
+        std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..8).map(|_| scope.spawn(|| {
+                let result = access_general(|_| -> CommandResult<()> {
+                    panic!("general pasteboard must not be accessed on a worker");
+                });
+                assert!(result.is_err());
+            })).collect();
+            for worker in workers { worker.join().unwrap(); }
+        });
     }
 
     #[test]
@@ -153,8 +187,10 @@ mod native {
                 link.to_string_lossy().into_owned(),
                 dir.to_string_lossy().into_owned(),
             ];
+            validate_paths(&paths).unwrap();
             let version = write(&board, paths.clone()).unwrap();
-            let result = read(&board, true).unwrap();
+            let mut result = read(&board).unwrap();
+            super::resolve_entries(&mut result).unwrap();
             assert_eq!(result.paths.len(), paths.len());
             assert_eq!(std::fs::read(&result.paths[0]).unwrap(), b"{}");
             assert_eq!(result.entries.len(), 3);
@@ -172,22 +208,35 @@ mod native {
                     .to_string(),
                 "plain text"
             );
-            assert!(read(&board, true).unwrap().paths.is_empty());
+            assert!(read(&board).unwrap().paths.is_empty());
             write(&board, paths).unwrap();
             std::fs::remove_file(&file).unwrap();
-            assert!(read(&board, true).is_err());
+            assert!(super::resolve_entries(&mut read(&board).unwrap()).is_err());
             board.clearContents();
             std::fs::remove_dir_all(dir).unwrap();
         });
     }
 }
 
-pub(crate) fn read(resolve: bool) -> CommandResult<FileClipboard> {
+#[cfg(target_os = "macos")]
+fn resolve_entries(clipboard: &mut FileClipboard) -> CommandResult<()> {
+    clipboard.entries = clipboard.paths.iter()
+        .map(|path| crate::filesystem::file_entry_from_path(std::path::Path::new(path), false))
+        .collect::<CommandResult<Vec<_>>>()?;
+    Ok(())
+}
+
+pub(crate) fn read(_app: &tauri::AppHandle, resolve: bool) -> CommandResult<FileClipboard> {
     #[cfg(target_os = "macos")]
     {
-        objc2::rc::autoreleasepool(|_| {
-            native::read(&objc2_app_kit::NSPasteboard::generalPasteboard(), resolve)
-        })
+        let mut clipboard = native::with_general(_app, native::read)?;
+        if resolve {
+            // Filesystem access may block on network volumes; keep it off the UI thread.
+            resolve_entries(&mut clipboard)?;
+            let version = native::with_general(_app, |board| Ok(board.changeCount() as i64))?;
+            if version != clipboard.change_count { return Err(native::changed()); }
+        }
+        Ok(clipboard)
     }
     #[cfg(windows)]
     {
@@ -199,13 +248,12 @@ pub(crate) fn read(resolve: bool) -> CommandResult<FileClipboard> {
         Err(unsupported())
     }
 }
-pub(crate) fn write(paths: Vec<String>, intent: ClipboardIntent) -> CommandResult<i64> {
+pub(crate) fn write(_app: &tauri::AppHandle, paths: Vec<String>, intent: ClipboardIntent) -> CommandResult<i64> {
     #[cfg(target_os = "macos")]
     {
         let _ = intent; // Finder exposes copy; the app owns its Move Here intent.
-        objc2::rc::autoreleasepool(|_| {
-            native::write(&objc2_app_kit::NSPasteboard::generalPasteboard(), paths)
-        })
+        native::validate_paths(&paths)?;
+        native::with_general(_app, move |board| native::write(board, paths))
     }
     #[cfg(windows)]
     {
@@ -217,16 +265,13 @@ pub(crate) fn write(paths: Vec<String>, intent: ClipboardIntent) -> CommandResul
         Err(unsupported())
     }
 }
-pub(crate) fn clear(change_count: i64) -> CommandResult<()> {
+pub(crate) fn clear(_app: &tauri::AppHandle, change_count: i64) -> CommandResult<()> {
     #[cfg(target_os = "macos")]
     {
-        objc2::rc::autoreleasepool(|_| {
-            native::clear(
-                &objc2_app_kit::NSPasteboard::generalPasteboard(),
-                change_count,
-            )
-        });
-        Ok(())
+        native::with_general(_app, move |board| {
+            native::clear(board, change_count);
+            Ok(())
+        })
     }
     #[cfg(windows)]
     {

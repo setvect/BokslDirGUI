@@ -53,9 +53,12 @@ jobs:
           BOKSLDIRGUI_REQUIRE_PROVIDERS: '1'
           BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES: '1'
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
-      - name: macOS application build
+      - name: macOS application and DMG build
         if: runner.os == 'macOS'
-        run: npm run tauri:build -- --bundles app
+        env:
+          # Skip Finder-only DMG window decoration on the hosted runner.
+          CI: 'true'
+        run: npm run tauri:build -- --bundles app,dmg
       - name: Windows NSIS build
         if: runner.os == 'Windows'
         run: npm run tauri:build -- --bundles nsis

@@ -212,7 +212,10 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 - Windows 파일 목록: UTF-16·ANSI `DROPFILES` 경계 검사, 최대 16MiB의 클립보드 블록, 절대 경로·실제 원본 검증, `Preferred DropEffect`의 명시 이동 값만 이동으로 수용
 - 클립보드 수명주기: 읽기 잠금 해제 후 원본 조회와 변경 번호 재검사, 버전 조회와 원본 조회 사이 변경 시 실행 거부, 부분 이동 뒤 기존 버전만 해제
-- 클립보드 OS 호출과 원본 조회는 blocking worker에서 실행, 가상 압축 항목은 내부 snapshot 유지
+- macOS 일반 클립보드 접근: WebKit과 공유하는 `NSPasteboard`를 Tauri 메인 스레드에서 생성·읽기·쓰기·해제, worker 직접 접근 차단
+- 원본 검증·메타데이터 조회와 Windows 클립보드 OS 호출: blocking worker에서 실행, macOS 원본 조회 뒤 메인 스레드에서 변경 번호 재검사
+- 자동 클립보드 확인: 시작·포커스·표시 상태·주기 요청이 겹쳐도 진행 중인 읽기는 1개로 제한, 완료·오류 후 다음 확인 허용
+- 가상 압축 항목: 기존 내부 snapshot 유지
 - `rules`: `find`·`replacement`·`prefix` 문자열, `numbering`·`preserveExtension` 불리언, `start`·`padding` 정수
 - 치환은 리터럴 전체 치환, 번호는 표시 순서대로 `_001` 형식 추가, 확장자 유지 기본값 참
 - 다중 이름 변경은 최대 10,000개, 기존 대상·중복 대상·폴더와 그 자손의 동시 변경 거부

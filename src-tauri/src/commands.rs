@@ -290,16 +290,16 @@ pub(crate) fn show_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub(crate) async fn read_file_clipboard(resolve: bool) -> CommandResult<crate::file_clipboard::FileClipboard> {
-    run_external_service(move || crate::file_clipboard::read(resolve)).await
+pub(crate) async fn read_file_clipboard(app: tauri::AppHandle, resolve: bool) -> CommandResult<crate::file_clipboard::FileClipboard> {
+    run_external_service(move || crate::file_clipboard::read(&app, resolve)).await
 }
 #[tauri::command]
-pub(crate) async fn write_file_clipboard(paths: Vec<String>, intent: crate::file_clipboard::ClipboardIntent) -> CommandResult<i64> {
-    run_external_service(move || crate::file_clipboard::write(paths, intent)).await
+pub(crate) async fn write_file_clipboard(app: tauri::AppHandle, paths: Vec<String>, intent: crate::file_clipboard::ClipboardIntent) -> CommandResult<i64> {
+    run_external_service(move || crate::file_clipboard::write(&app, paths, intent)).await
 }
 #[tauri::command]
-pub(crate) async fn clear_file_clipboard(change_count: i64) -> CommandResult<()> {
-    run_external_service(move || crate::file_clipboard::clear(change_count)).await
+pub(crate) async fn clear_file_clipboard(app: tauri::AppHandle, change_count: i64) -> CommandResult<()> {
+    run_external_service(move || crate::file_clipboard::clear(&app, change_count)).await
 }
 
 #[tauri::command]

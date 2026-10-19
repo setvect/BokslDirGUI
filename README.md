@@ -97,6 +97,19 @@ npm run build
 npm run tauri:build
 ```
 
+- macOS 기본 결과물: `src-tauri/target/release/bundle/macos/BokslDir.app`, `src-tauri/target/release/bundle/dmg/*.dmg`
+- DMG 생성 중 `bundle_dmg.sh` 실패 시 상세 원인 확인: `npm run tauri:build -- --verbose`
+- `Finder에 Apple 이벤트를 보낼 권한이 없습니다. (-1743)` 발생 시 아래 명령으로 Finder 자동화 없이 빌드 가능
+
+```bash
+CI=true npm run tauri:build
+```
+
+- 위 명령의 차이: DMG 창 배경·아이콘 위치 꾸미기 생략, 앱과 Applications 바로가기 포함 유지
+- 현재 Tauri 버전의 `--ci` 옵션만으로는 위 꾸미기 단계 생략 불가, `CI=true` 환경 변수 사용 필수
+- DMG 창 꾸미기 필요 시 macOS 시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 빌드 실행 터미널의 Finder 제어 허용 필요
+- GitHub Actions 빌드 범위: macOS `.app`·`.dmg`, Windows NSIS `.exe` 생성 및 결과물 업로드
+
 ## 검증
 
 - 전체 검증:

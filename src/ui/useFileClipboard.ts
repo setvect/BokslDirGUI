@@ -30,6 +30,7 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
   const sequence = useRef(0);
   const writeQueue = useRef(Promise.resolve());
   const writing = useRef(0);
+  const polling = useRef(false);
   const pasteRequest = useRef(0);
   const native = isTauriRuntime() && dependencies.runtimeBackendAvailable && (dependencies.platformInfo?.features.nativeFileClipboard ?? fileShortcutPlatform() === 'mac')
     && Boolean(dependencies.mutationClient.readFileClipboard && dependencies.mutationClient.writeFileClipboard);
@@ -39,14 +40,19 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
     if (!native) return () => { alive.current = false; };
     let pollRequest = 0;
     const refresh = async () => {
-      if (writing.current || document.visibilityState === 'hidden') return;
+      if (polling.current || writing.current || document.visibilityState === 'hidden') return;
+      polling.current = true;
       const revision = sequence.current, request = ++pollRequest;
-      const result = await latest.current.mutationClient.readFileClipboard!({ resolve: false });
-      if (!alive.current || writing.current || revision !== sequence.current || request !== pollRequest) return;
-      if (!result.ok) { setNativeCount(0); return; }
-      setNativeCount(result.data.paths.length);
-      setNativeIntent(result.data.intent);
-      if (local.current && local.current.nativeVersion !== result.data.changeCount) setLocal(null);
+      try {
+        const result = await latest.current.mutationClient.readFileClipboard!({ resolve: false });
+        if (!alive.current || writing.current || revision !== sequence.current || request !== pollRequest) return;
+        if (!result.ok) { setNativeCount(0); return; }
+        setNativeCount(result.data.paths.length);
+        setNativeIntent(result.data.intent);
+        if (local.current && local.current.nativeVersion !== result.data.changeCount) setLocal(null);
+      } finally {
+        polling.current = false;
+      }
     };
     void refresh();
     const onFocus = () => { void refresh(); };
