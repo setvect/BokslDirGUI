@@ -60,7 +60,7 @@
 | `file.mkdir` | file | a/F7 | `a`, `F7` | File > New Folder | safe | create_dir |
 | `file.rename` | file | r/F2 | `r`, `F2` | File > Rename | destructive | rename_entry |
 | `file.bulkRename` | file | 없음 | 없음 | File > Bulk Rename | destructive | preview_bulk_rename/start_bulk_rename |
-| `app.quit` | file | Cmd+Q | `Cmd+Q` | File > Quit | none | getCurrentWindow().close safety-gated by explicit menu/Cmd+Q |
+| `app.quit` | file | Cmd+Q | `Cmd+Q` | File > Quit | none | getCurrentWindow().close via explicit menu/platform quit shortcut |
 | `file.properties` | file | i | `i` | View > File Info | safe | get_metadata |
 | `file.quickView` | file | F3 | `F3` | View > Quick View | safe | preview_file |
 | `archive.list` | archive | Enter on archive | 없음 | Archive > Open Archive | safe | archive_list virtual-directory |
@@ -111,7 +111,11 @@
 
 - `external.openWith`: macOS 단일 파일의 연결 앱 조회 후 선택한 앱으로 한 번 열기
 - `file.copy`: 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add`로 실행
-- `app.quit`: 현재 Tauri 창의 종료 안전 정책 적용
+- `app.quit`: macOS `Cmd+Q`, Windows `Alt+F4`로 현재 Tauri 창 종료 요청
+- 플랫폼 단축키: 기본 액션 표의 macOS 표시값에 `WINDOWS_SHORTCUTS`의 Windows 표시·실행 바인딩 적용
+- Windows 복사·잘라내기·붙여넣기·휴지통 이동 취소: `Ctrl+C`·`Ctrl+X`·`Ctrl+V`·`Ctrl+Z` 유지
+- Windows의 `Cmd` 바인딩·Mac 전용 이동 붙여넣기 안내 제외, 메뉴·도움말·하단 안내·접근성·키 매칭에 공통 조회 사용
+- 종료 검증 경계: 프론트엔드로 전달된 종료 키의 작업 중 차단 회귀 포함, OS가 직접 처리하는 `Alt+F4`의 실제 VM 입력 확인은 별도 필요
 - `bookmark.delete`: 북마크 목록의 지정 항목 삭제 버튼으로 실행, 현재 경로 기준 삭제 메뉴 미노출
 
 - `ActionContext`는 active panel, focused entry, selected entries, opposite panel path, operation state, settings 포함

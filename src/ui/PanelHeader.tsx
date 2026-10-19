@@ -44,7 +44,7 @@ export function PanelHeader({
       <button type="button" aria-label={labels.forward} disabled={!panelCanGoForward(panel)} onClick={() => runNavigation(onNavigateForward)}>▶</button>
       <button type="button" aria-label={labels.up} onClick={() => runNavigation(onNavigateUp)}>↑</button>
       <span className="path-input" title={pathLabel}>{pathLabel}</span>
-      <button type="button" aria-label={labels.gotoPath} onClick={onGotoPath}>⌘</button>
+      <button type="button" aria-label={labels.gotoPath} onClick={onGotoPath}>↗</button>
       <div className="panel-header-status">
         {panel.filter ? (
           <button type="button" className="filter-chip" title={panel.filter} aria-label={`${labels.filter} ${panel.filter} ${labels.target}`} onClick={onClearFilter}>

@@ -12,6 +12,7 @@ import {
   fileShortcutPlatform,
   isActionAvailable,
   keyboardBindingCollisions,
+  keyboardBindingsForAction,
   labelForAction,
   matchKeyboardShortcut,
   menuRootAcceleratorFromRegistry,
@@ -302,4 +303,44 @@ it('shows supported Windows desktop actions consistently with backend capabiliti
   expect(actionVisibleOnPlatform(ACTION_BY_ID.get('external.openWith')!, 'mac', {
     ...platformInfo, features: { ...platformInfo.features, openWith: false },
   })).toBe(false);
+});
+
+
+describe('platform keyboard coverage', () => {
+  it.each(['mac', 'other'] as const)('dispatches every registered %s binding without collisions', platform => {
+    expect(keyboardBindingCollisions(platform)).toEqual([]);
+    for (const action of ACTIONS) {
+      for (const binding of keyboardBindingsForAction(action, platform)) {
+        let sequence: readonly string[] = [];
+        let result: ReturnType<typeof matchKeyboardShortcut> | undefined;
+        for (const token of binding.split(' ')) {
+          const parts = token.split('+');
+          const name = parts.at(-1)!;
+          result = matchKeyboardShortcut(key(name === 'Space' ? ' ' : name, {
+            ctrlKey: parts.includes('Ctrl'), metaKey: parts.includes('Cmd'),
+            altKey: parts.includes('Alt'), shiftKey: parts.includes('Shift'),
+          }), sequence, platform);
+          sequence = result.sequence;
+        }
+        expect(result?.action?.id, `${platform}: ${binding}`).toBe(action.id);
+      }
+    }
+  });
+
+  it('keeps Windows labels, accessibility hints and bindings free of Mac-only modifiers', () => {
+    for (const action of ACTIONS) {
+      expect(keyboardBindingsForAction(action, 'other').join(' ')).not.toMatch(/Cmd|Meta/);
+      if (actionVisibleOnPlatform(action, 'other')) {
+        expect(shortcutLabelForAction(action, 'other')).not.toMatch(/Cmd|Opt|⌘|⌥/);
+        expect(shortcutHelpLabelForAction(action, 'other')).not.toMatch(/Cmd|Opt|⌘|⌥/);
+      }
+    }
+    expect(ariaKeyShortcutsFromRegistry('other')).toContain('Alt+F4');
+    expect(ariaKeyShortcutsFromRegistry('other')).not.toContain('Meta');
+    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('app.quit')!, 'other')).toBe('Alt+F4');
+    expect(actionForKeyboardShortcut(key('q', { metaKey: true }), [], 'other')).toBeNull();
+    expect(actionForKeyboardShortcut(key('v', { metaKey: true, altKey: true }), [], 'other')).toBeNull();
+    expect(actionForKeyboardShortcut(key('F4', { altKey: true }), [], 'mac')).toBeNull();
+    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('app.quit')!, 'mac')).toBe('Cmd+Q');
+  });
 });

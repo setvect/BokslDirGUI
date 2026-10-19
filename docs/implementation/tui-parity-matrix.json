@@ -1397,7 +1397,8 @@
         "app.quit"
       ],
       "guiShortcutLabels": [
-        "Cmd+Q"
+        "Cmd+Q",
+        "Alt+F4"
       ],
       "guiMenuPaths": [
         [
@@ -1406,10 +1407,10 @@
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: app.quit File/Quit Cmd+Q, no bare q binding",
+        "src/actions/registry.ts: app.quit File/Quit macOS Cmd+Q / Windows Alt+F4, no bare q binding",
         "src/ui/CommanderShell.clipboard.test.tsx: uses an explicit Cmd+Q/File Quit policy instead of a bare q shortcut"
       ],
-      "notes": "일반 q는 파일명 타이핑 충돌 방지를 위해 사용하지 않고, File > Quit/Cmd+Q만 Tauri current window close 정책으로 연결한다.",
+      "notes": "일반 q는 파일명 타이핑 충돌 방지를 위해 미사용, File > Quit·macOS Cmd+Q·Windows Alt+F4를 종료 요청으로 연결",
       "tuiId": "quit",
       "tuiLabel": "Quit",
       "tuiCategory": "System",

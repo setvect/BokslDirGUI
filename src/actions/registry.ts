@@ -129,7 +129,7 @@ export const ACTIONS = [
   action({ id: 'file.mkdir', dialogKind: 'createDir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutateFilesystem }),
   action({ id: 'file.rename', requiresConcreteSources: true, dialogKind: 'rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutateFilesystem(c) }),
   action({ id: 'file.bulkRename', requiresConcreteSources: true, dialogKind: 'bulkRename', category: 'file', displayLabel: 'Bulk Rename', menuPath: ['File', 'Bulk Rename'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startBulkRename, runPath: 'preview_bulk_rename/start_bulk_rename', isEnabled: (c) => c.effectiveTargetCount > 0 && canMutateFilesystem(c) }),
-  action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Cmd+Q', keyboardBindings: ['Cmd+Q'], menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close safety-gated by explicit menu/Cmd+Q' }),
+  action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Cmd+Q', keyboardBindings: ['Cmd+Q'], menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close via explicit menu/platform quit shortcut' }),
   action({ id: 'file.properties', requiresConcreteSources: true, dialogKind: 'properties', category: 'file', displayLabel: 'File Info', hotkeyLabel: 'Info', shortcutLabel: 'i', keyboardBindings: ['i'], menuPath: ['View', 'File Info'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.getMetadata, runPath: 'get_metadata', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
   action({ id: 'file.quickView', requiresConcreteSources: true, category: 'file', displayLabel: 'Quick View', hotkeyLabel: 'View', shortcutLabel: 'F3', keyboardBindings: ['F3'], menuPath: ['View', 'Quick View'], contextScopes: ['file', 'archive'], dangerLevel: 'safe', command: COMMANDS.previewFile, runPath: 'preview_file', isEnabled: (c) => hasConcreteFocus(c) && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'archive.list', requiresConcreteSources: true, category: 'archive', shortcutLabel: 'Enter on archive', menuPath: ['Archive', 'Open Archive'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list virtual-directory', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
@@ -301,11 +301,26 @@ export const menuRootLabelFromRegistry = (root: string, language: SupportedLangu
 export const menuRootAcceleratorFromRegistry = (root: string) =>
   MENU_ROOT_ACCELERATORS.get(root) ?? null;
 
+// Keep platform labels and dispatch bindings together so every UI surface agrees.
+const WINDOWS_SHORTCUTS: Readonly<Record<string, { label: string; bindings: readonly string[] }>> = {
+  'app.quit': { label: 'Alt+F4', bindings: ['Alt+F4'] },
+  'file.undoTrash': { label: 'Ctrl+Z', bindings: ['Ctrl+Z'] },
+  'file.clipboardCopy': { label: 'Ctrl+C', bindings: ['Ctrl+C'] },
+  'file.clipboardPaste': { label: 'Ctrl+V', bindings: ['Ctrl+V'] },
+};
+
+export const keyboardBindingsForAction = (action: AppAction, platform = fileShortcutPlatform()): readonly string[] => {
+  if (platform === 'other') {
+    return WINDOWS_SHORTCUTS[action.id]?.bindings
+      ?? (action.keyboardBindings ?? []).filter(binding => !binding.includes('Cmd+'));
+  }
+  return action.keyboardBindings ?? [];
+};
+
 const platformShortcutLabel = (action: AppAction, platform = fileShortcutPlatform()) => {
   if (platform === 'other') {
-    if (action.id === 'file.undoTrash') return 'Ctrl+Z';
-    if (action.id === 'file.clipboardCopy') return 'Ctrl+C';
-    if (action.id === 'file.clipboardPaste') return 'Ctrl+V';
+    if (action.id === 'file.clipboardMovePaste') return '';
+    return WINDOWS_SHORTCUTS[action.id]?.label ?? action.shortcutLabel;
   }
   return action.shortcutLabel;
 };
@@ -314,12 +329,12 @@ export const shortcutLabelForAction = (action: AppAction, platform = fileShortcu
   const label = platformShortcutLabel(action, platform);
   return label
     ? (label === '/' ? '/' : label.split('/')[0])
-    : action.keyboardBindings?.[0]?.replace(/\s+/g, '') ?? '·';
+    : keyboardBindingsForAction(action, platform)[0]?.replace(/\s+/g, '') ?? '·';
 };
 
 export const shortcutHelpLabelForAction = (action: AppAction, platform = fileShortcutPlatform()) =>
   platformShortcutLabel(action, platform)
-  ?? action.keyboardBindings?.map((binding) => binding.replace(/\s+/g, '')).join('/')
+  ?? keyboardBindingsForAction(action, platform).map((binding) => binding.replace(/\s+/g, '')).join('/')
   ?? '';
 
 export type KeyboardShortcutEvent = Pick<
@@ -335,14 +350,15 @@ export type KeyboardShortcutMatch =
 export const matchKeyboardShortcut = (
   event: KeyboardShortcutEvent,
   previousSequence: readonly string[] = [],
+  platform = fileShortcutPlatform(),
 ): KeyboardShortcutMatch => {
   const keyToken = eventToBindingToken(event);
-  const withPrevious = matchKeyboardSequence([...previousSequence, keyToken]);
+  const withPrevious = matchKeyboardSequence([...previousSequence, keyToken], platform);
   if (withPrevious.status !== 'none') {
     return withPrevious;
   }
   if (previousSequence.length > 0) {
-    return matchKeyboardSequence([keyToken]);
+    return matchKeyboardSequence([keyToken], platform);
   }
   return { status: 'none', action: null, sequence: [] };
 };
@@ -350,20 +366,21 @@ export const matchKeyboardShortcut = (
 export const actionForKeyboardShortcut = (
   event: KeyboardShortcutEvent,
   previousSequence: readonly string[] = [],
+  platform = fileShortcutPlatform(),
 ) => {
-  const match = matchKeyboardShortcut(event, previousSequence);
+  const match = matchKeyboardShortcut(event, previousSequence, platform);
   return match.status === 'matched' ? match.action : null;
 };
 
-export const ariaKeyShortcutsFromRegistry = () =>
-  [...new Set(ACTIONS.flatMap((action) => action.keyboardBindings ?? []).filter((binding) => !binding.includes(' ')))]
+export const ariaKeyShortcutsFromRegistry = (platform = fileShortcutPlatform()) =>
+  [...new Set(ACTIONS.flatMap((action) => keyboardBindingsForAction(action, platform)).filter((binding) => !binding.includes(' ')))]
     .map(toAriaKeyShortcut)
     .join(' ');
 
-export const keyboardBindingCollisions = () => {
+export const keyboardBindingCollisions = (platform = fileShortcutPlatform()) => {
   const bindingsByToken = new Map<string, AppAction[]>();
   for (const action of ACTIONS) {
-    for (const binding of action.keyboardBindings ?? []) {
+    for (const binding of keyboardBindingsForAction(action, platform)) {
       const normalized = bindingToTokens(binding).join(' ');
       bindingsByToken.set(normalized, [...(bindingsByToken.get(normalized) ?? []), action]);
     }
@@ -373,15 +390,15 @@ export const keyboardBindingCollisions = () => {
     .map(([binding, actions]) => ({ binding, actionIds: actions.map((action) => action.id) }));
 };
 
-const matchKeyboardSequence = (sequence: readonly string[]): KeyboardShortcutMatch => {
+const matchKeyboardSequence = (sequence: readonly string[], platform: FileShortcutPlatform): KeyboardShortcutMatch => {
   const normalizedSequence = sequence.map(normalizeBindingToken);
   const exact = ACTIONS.find((action) =>
-    action.keyboardBindings?.some((binding) => bindingToTokens(binding).every((token, index) =>
+    keyboardBindingsForAction(action, platform).some((binding) => bindingToTokens(binding).every((token, index) =>
       token === normalizedSequence[index],
     ) && bindingToTokens(binding).length === normalizedSequence.length),
   );
   const hasLongerCandidate = ACTIONS.some((action) =>
-    action.keyboardBindings?.some((binding) => {
+    keyboardBindingsForAction(action, platform).some((binding) => {
       const tokens = bindingToTokens(binding);
       return tokens.length > normalizedSequence.length && normalizedSequence.every((token, index) => token === tokens[index]);
     }),

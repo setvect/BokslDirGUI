@@ -134,7 +134,7 @@ export function useCommanderKeyboard(dependencies: CommanderKeyboardDependencies
       const onlyTopMenuOwnsKeyboard = activeKeyboardOwners.length === 0
         || activeKeyboardOwners.every((owner) => owner === 'menu-popover');
 
-      const topMenuGlobalShortcutMatch = topMenuOpen && onlyTopMenuOwnsKeyboard && (event.ctrlKey || event.metaKey)
+      const topMenuGlobalShortcutMatch = topMenuOpen && onlyTopMenuOwnsKeyboard && (event.ctrlKey || event.metaKey || event.altKey)
         ? matchKeyboardShortcut(event, [])
         : null;
       if (
