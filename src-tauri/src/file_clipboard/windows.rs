@@ -251,7 +251,17 @@ mod tests {
             .collect();
         let copied = write(canonical, ClipboardIntent::Copy).unwrap();
         let data = read(true).unwrap();
-        assert_eq!(data.paths, paths);
+        // TEMP can use an 8.3 alias (RUNNER~1); canonicalize expands it. Compare the
+        // entries, while still requiring Explorer-compatible, non-verbatim paths.
+        assert_eq!(data.paths.len(), paths.len());
+        for (actual, original) in data.paths.iter().zip(&paths) {
+            assert!(std::path::Path::new(actual).is_absolute());
+            assert!(!actual.starts_with(r"\\?\"), "{actual}");
+            assert_eq!(
+                crate::platform::entry_identity(std::path::Path::new(actual)).unwrap(),
+                crate::platform::entry_identity(std::path::Path::new(original)).unwrap()
+            );
+        }
         assert_eq!(data.entries.len(), 2);
         assert_eq!(data.intent, ClipboardIntent::Copy);
         assert_eq!(data.change_count, copied);
