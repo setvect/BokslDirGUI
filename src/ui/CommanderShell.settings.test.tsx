@@ -472,6 +472,18 @@ describe('CommanderShell settings', () => {
     expect(document.body.dataset.theme).toBe('highContrast');
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /^Mdir$/ }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { theme: 'mdir' } }));
+    expect(shell.getAttribute('data-theme')).toBe('mdir');
+    expect(document.body.dataset.theme).toBe('mdir');
+    expect(await screen.findByText('테마 · Mdir')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '설정(S)' }));
+    fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
+    expect((await screen.findByRole('menuitem', { name: /^Mdir$/ })).getAttribute('data-checked')).toBe('true');
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: '설정(S)' }));
     const languageSubmenu = await screen.findByRole('menuitem', { name: /언어/ });
     expect(languageSubmenu.querySelector('.menu-checkmark')).toBeNull();
     fireEvent.mouseEnter(languageSubmenu);

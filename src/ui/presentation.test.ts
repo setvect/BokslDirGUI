@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { hotkeyStripActionsForWidth } from './hotkeyStripLayout';
-import { columnLayoutForPanelWidth, pageMovementForViewport } from './panelPresentation';
+import { columnLayoutForPanelWidth, fileColorGroup, pageMovementForViewport } from './panelPresentation';
 import { zoomPercentForStep, zoomScaleForStep } from './settingsModel';
 import { testEntry } from './testing/fileEntryFixture';
 import { splitMiddleEllipsisParts } from './textLayout';
@@ -113,4 +113,27 @@ it('clamps page focus and scrolling at list boundaries and supports tiny or empt
   expect(pageMovementForViewport({ ...view, focusedIndex: 0, viewportHeight: 20, scrollTop: 0 })).toEqual({ focusedIndex: 1, scrollTop: 25 });
   expect(pageMovementForViewport({ ...view, rowCount: 0 })).toBeNull();
   expect(pageMovementForViewport({ ...view, viewportHeight: 0 })).toBeNull();
+});
+
+it('classifies display colors without changing filesystem kinds or following link suffixes', () => {
+  const cases = [
+    ['사진.PNG', 'file', 'image'], ['.photo.JpEg', 'file', 'image'],
+    ['report.DOCX', 'file', 'document'], ['한글.hwpx', 'file', 'document'],
+    ['table.xlsx', 'file', 'document'], ['notes.md', 'file', 'document'],
+    ['tool.EXE', 'file', 'executable'], ['run', 'executable', 'executable'],
+    ['START.BAT', 'executable', 'script'], ['deploy.ps1', 'file', 'script'],
+    ['backup.tar.gz', 'file', 'archive'], ['backup.ZIP', 'archive', 'archive'],
+    ['track.flac', 'file', 'media'], ['movie.MP4', 'file', 'media'],
+    ['app.tsx', 'file', 'source'],
+    ['image.png', 'symlink', 'symlink'], ['archive.zip', 'symlink', 'symlink'],
+    ['folder.pdf', 'directory', 'directory'], ['..', 'directory', 'directory'],
+    ['program.png', 'executable', 'executable'],
+    ['file.unknown', 'file', 'file'], ['no-extension', 'unknown', 'file'],
+    ['.png', 'file', 'file'], ['document.txt.exe', 'file', 'executable'],
+  ] as const;
+  for (const [name, kind, expected] of cases) {
+    const entry = Object.freeze({ name, kind });
+    expect(fileColorGroup(entry), `${kind}: ${name}`).toBe(expected);
+    expect(entry).toEqual({ name, kind });
+  }
 });

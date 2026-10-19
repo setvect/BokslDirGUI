@@ -96,7 +96,7 @@ fn validate_settings(settings: &Settings, path: &Path) -> CommandResult<()> {
                 .with_detail("field", "window"));
         }
     }
-    if !["dark", "light", "highContrast"].contains(&settings.theme.as_str()) {
+    if !["dark", "light", "highContrast", "mdir"].contains(&settings.theme.as_str()) {
         return Err(AppError::new(
             "invalid_settings",
             "errors.settingsInvalid",

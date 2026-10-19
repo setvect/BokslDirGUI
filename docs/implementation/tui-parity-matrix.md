@@ -90,6 +90,7 @@
 | `panel.copyPathToOther` | GUI 듀얼 패널 편의 기능: 활성 경로를 반대 패널에서 열기 |
 | `panel.compareDirectories` | GUI 듀얼 패널 편의 기능: 현재 좌우 목록의 이름·종류·크기·수정일 차이를 시각화 |
 | `file.clipboardPaste` | GUI 확장 기능: 복사 목록의 항목을 활성 패널 현재 폴더에 붙여넣기 |
+| `settings.themeMdir` | 사용자 요청의 Mdir 색상 테마 추가, 기존 설정 저장·복원 경로 사용 |
 <!-- END GENERATED:parity-gui-extensions -->
 
 ## 전체 matrix

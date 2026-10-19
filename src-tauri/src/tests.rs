@@ -815,6 +815,16 @@ fn load_and_save_settings_persist_bookmarks_and_layout() {
     );
     assert!(settings_path.is_file());
 
+    // Every built-in theme survives disk round-trip; invalid names cannot replace it.
+    for theme in ["dark", "light", "highContrast", "mdir"] {
+        save_settings(serde_json::json!({ "theme": theme })).expect("built-in theme should save");
+        let loaded = load_settings().expect("saved theme should reload");
+        assert_eq!(loaded.theme, theme);
+        assert_eq!(loaded.bookmarks, saved.bookmarks);
+    }
+    assert!(save_settings(serde_json::json!({ "theme": "unknown" })).is_err());
+    assert_eq!(load_settings().unwrap().theme, "mdir");
+
     let locations = list_locations().expect("locations should load bookmark settings");
     assert!(locations
         .bookmarks

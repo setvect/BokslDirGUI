@@ -24,7 +24,7 @@ import { MiddleEllipsisEntryName } from './EntryName';
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
 import { BlankContextMenuContent, EntryContextMenuContent } from './PanelContextMenus';
 import { PanelHeader } from './PanelHeader';
-import { columnLayoutForPanelWidth, fileEntryAccessibleLabel, fileEntryTooltip, metadataColumnWidthsForEntries, pageMovementForViewport, rowDomId, sortMarker } from './panelPresentation';
+import { columnLayoutForPanelWidth, fileColorGroup, fileEntryAccessibleLabel, fileEntryTooltip, metadataColumnWidthsForEntries, pageMovementForViewport, rowDomId, sortMarker } from './panelPresentation';
 import {
   type PanelNavigationState
 } from './panelState';
@@ -341,6 +341,7 @@ export function FilePanel({
                             aria-rowindex={virtualRow.index + 1}
                             aria-selected={selected}
                             aria-current={focused ? 'true' : undefined}
+                            data-color-group={fileColorGroup(entry)}
                             className={`file-table-row file-row ${columnLayout.cssClass} entry-row-kind-${entry.kind} ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''} ${comparisonState ? `is-compare-${comparisonState}` : ''}`}
                             data-compare-state={comparisonState ?? undefined}
                             style={{ transform: `translateY(${virtualRow.start}px)` }}

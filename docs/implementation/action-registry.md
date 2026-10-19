@@ -95,6 +95,7 @@
 | `settings.themeDark` | settings | 없음 | 없음 | Settings > Theme > Dark | none | save_settings |
 | `settings.themeLight` | settings | 없음 | 없음 | Settings > Theme > Light | none | save_settings |
 | `settings.themeHighContrast` | settings | 없음 | 없음 | Settings > Theme > High Contrast | none | save_settings |
+| `settings.themeMdir` | settings | 없음 | 없음 | Settings > Theme > Mdir | none | save_settings |
 | `settings.languageEn` | settings | 없음 | 없음 | Settings > Language > English | none | save_settings |
 | `settings.languageKo` | settings | 없음 | 없음 | Settings > Language > Korean | none | save_settings |
 | `settings.toggleIcons` | settings | 없음 | 없음 | Settings > Toggle Icons | none | save_settings |

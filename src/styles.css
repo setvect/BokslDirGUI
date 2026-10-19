@@ -816,7 +816,7 @@ button {
 .menu-item:hover,
 .menu-item.is-focused,
 .context-item[data-highlighted] {
-  background: var(--blue);
+  background: var(--menu-focus-bg, var(--blue));
   color: var(--menu-focus-text);
   outline: none;
 }
@@ -1819,6 +1819,166 @@ button {
 .conflict-actions button:hover {
   border-color: var(--cyan);
   color: var(--button-text);
+}
+
+/* Mdir III palette: black lists, cyan chrome, gray paths, red cursor. */
+.commander-shell[data-theme="mdir"],
+body[data-theme="mdir"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #000000;
+  --surface-raised: #005555;
+  --line: #00aaaa;
+  --line-strong: #55ffff;
+  --text: #ffffff;
+  --muted: #aaaaaa;
+  --blue: #ff5555;
+  --blue-dim: #005555;
+  --cyan: #55ffff;
+  --green: #55ff55;
+  --danger: #ffaaaa;
+  --top-menu-bg: #00aaaa;
+  --top-menu-text: #000000;
+  --top-menu-active-bg: #005555;
+  --top-menu-active-text: #ffffff;
+  --top-menu-focused-bg: #55ffff;
+  --top-menu-focused-text: #000000;
+  --top-menu-focused-outline: #005555;
+  --clock-text: #000000;
+  --panel-zone-bg: #000000;
+  --panel-bg: #000000;
+  --active-outline: #55ffff;
+  --line-subtle: #005555;
+  --line-muted: #005555;
+  --header-text: #ffffff;
+  --filter-chip-bg: #005555;
+  --filter-chip-text: #ffff55;
+  --control-disabled-border: #777777;
+  --control-disabled-text: #555555;
+  --path-controls-bg: #aaaaaa;
+  --control-border: #555555;
+  --control-bg: #aaaaaa;
+  --control-text: #000000;
+  --control-hover-text: #000000;
+  --path-text: #000000;
+  --table-heading-text: #55ffff;
+  --scrollbar-thumb: #00aaaa;
+  --scrollbar-track: #002b2b;
+  --row-text: #aaaaaa;
+  --row-meta-text: #aaaaaa;
+  --row-directory-text: #ff5555;
+  --row-hover-bg: #002b2b;
+  --row-focused-bg: #aaaaaa;
+  --row-focused-text: #000000;
+  --row-selected-bg: #003333;
+  --row-selected-text: #ffff55;
+  --row-selected-marker: #ffff55;
+  --row-executable-text: #55ff55;
+  --row-symlink-text: #55aaff;
+  --row-archive-text: #ffaa00;
+  --row-document-text: #55ffff;
+  --row-script-text: #ffff55;
+  --row-image-text: #ff55ff;
+  --row-media-text: #aaaaff;
+  --row-source-text: #ffffff;
+  --filter-match-bg: #ffff55;
+  --filter-match-text: #000000;
+  --panel-status-bg: #aaaaaa;
+  --panel-status-text: #000000;
+  --status-bg: #aaaaaa;
+  --status-text: #000000;
+  --status-message-text: #000000;
+  --hotkey-bg: #005555;
+  --hotkey-text: #ffffff;
+  --hotkey-border: #00aaaa;
+  --hotkey-more-text: #aaaaaa;
+  --menu-bg: #005555;
+  --menu-submenu-bg: #005555;
+  --menu-text: #ffffff;
+  --menu-label-text: #55ffff;
+  --menu-focus-bg: #55ffff;
+  --menu-focus-text: #000000;
+  --menu-focus-kbd: #000000;
+  --menu-disabled-text: #aaaaaa;
+  --menu-disabled-kbd: #aaaaaa;
+  --overlay-title-text: #ffffff;
+  --input-bg: #000000;
+  --input-text: #ffffff;
+  --button-border: #55ffff;
+  --button-bg: #005555;
+  --button-text: #ffffff;
+  --dialog-backdrop: rgba(0, 0, 0, 0.55);
+  --dialog-bg: #005555;
+  --dialog-title-text: #ffffff;
+  --dialog-muted-text: #ffffff;
+  --dialog-section-bg: #003333;
+  --dialog-section-border: #00aaaa;
+  --pre-bg: #000000;
+  --nav-item-bg: #003333;
+  --nav-item-border: #00aaaa;
+  --about-text: #ffffff;
+  --warning-border: #ffff55;
+  --warning-bg: #333300;
+  --warning-text: #ffff55;
+  --field-bg: #003333;
+  --field-input-bg: #000000;
+  --field-input-text: #ffffff;
+  --error-border: #ff5555;
+  --error-bg: #550000;
+  --progress-border: #00aaaa;
+  --progress-bg: #000000;
+  --operation-status-bg: #005555;
+  --operation-path-text: #ffffff;
+  --shadow-popover: 6px 6px 0 rgba(0, 0, 0, 0.65);
+  --shadow-dialog: 8px 8px 0 rgba(0, 0, 0, 0.65);
+  --shadow-surface: 6px 6px 0 rgba(0, 0, 0, 0.65);
+  --dialog-button-border: #55ffff;
+  --dialog-button-text: #ffffff;
+  --dialog-button-secondary-bg: #005555;
+  --danger-border: #ff5555;
+  --danger-bg: #550000;
+  --danger-button-text: #ffffff;
+  --focus-ring: #ffff55;
+  --runtime-warning-border: #ffff55;
+  --runtime-warning-bg: #333300;
+  --runtime-warning-text: #ffff55;
+}
+
+/* Keep disabled labels readable when keyboard focus or hover highlights them. */
+.commander-shell[data-theme="mdir"] .menu-item:disabled:is(:hover, .is-focused),
+.commander-shell[data-theme="mdir"] .menu-item:disabled:is(:hover, .is-focused) kbd {
+  color: #555555;
+}
+
+/* Mdir cursor swaps the entry's normal foreground and black background. */
+.commander-shell[data-theme="mdir"] .file-row {
+  --entry-color: var(--row-text);
+  --row-focused-bg: var(--entry-color);
+  --row-focused-text: var(--panel-bg);
+}
+
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="directory"] { --entry-color: var(--row-directory-text); }
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="executable"] { --entry-color: var(--row-executable-text); }
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="symlink"] { --entry-color: var(--row-symlink-text); }
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="archive"] { --entry-color: var(--row-archive-text); }
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="document"] { --entry-color: var(--row-document-text); }
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="script"] { --entry-color: var(--row-script-text); }
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="image"] { --entry-color: var(--row-image-text); }
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="media"] { --entry-color: var(--row-media-text); }
+.commander-shell[data-theme="mdir"] .file-row[data-color-group="source"] { --entry-color: var(--row-source-text); }
+
+.commander-shell[data-theme="mdir"] .file-row:not(.is-focused):not(.is-selected) .file-cell-name {
+  color: var(--entry-color);
+}
+
+.commander-shell[data-theme="mdir"] .file-row.is-focused.is-selected {
+  --row-selected-marker: var(--row-focused-text);
+}
+
+.commander-shell[data-theme="mdir"] .file-row.is-focused .filter-match {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
 }
 
 .commander-shell[data-theme="light"],

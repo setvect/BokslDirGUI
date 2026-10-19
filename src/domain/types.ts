@@ -232,7 +232,7 @@ export interface SavedPanelTabs {
 export interface Settings {
   window?: { width: number; height: number; maximized: boolean };
   schemaVersion: number;
-  theme: 'dark' | 'light' | 'highContrast';
+  theme: 'dark' | 'light' | 'highContrast' | 'mdir';
   language: 'ko' | 'en';
   sizeFormat: 'binary' | 'decimal';
   external: {

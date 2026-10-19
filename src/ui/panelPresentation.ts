@@ -8,6 +8,34 @@ import {
 import { formatDate, formatOwnerGroup, formatSize } from './format';
 import { textDisplayWidth } from './textLayout';
 
+// Display-only classification: never infer filesystem kind or launch behavior from a suffix.
+const FILE_COLOR_EXTENSIONS = {
+  script: new Set(['bat', 'cmd', 'ps1', 'psm1', 'sh', 'bash', 'zsh', 'fish']),
+  executable: new Set(['exe', 'com', 'msi', 'msix', 'appx', 'appimage']),
+  document: new Set(['txt', 'md', 'markdown', 'rst', 'rtf', 'doc', 'docx', 'odt', 'pdf', 'hwp', 'hwpx', 'xls', 'xlsx', 'ods', 'csv', 'tsv', 'ppt', 'pptx', 'odp', 'epub']),
+  image: new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'icns', 'tif', 'tiff', 'heic', 'heif', 'avif', 'psd']),
+  archive: new Set(['zip', '7z', 'rar', 'tar', 'gz', 'bz2', 'xz', 'tgz', 'tbz2', 'txz', 'zst', 'lz', 'lzma', 'cab', 'iso', 'dmg']),
+  media: new Set(['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'opus', 'mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv', 'm4v']),
+  source: new Set(['c', 'h', 'cpp', 'hpp', 'cs', 'rs', 'go', 'java', 'kt', 'swift', 'py', 'rb', 'php', 'js', 'jsx', 'ts', 'tsx', 'html', 'htm', 'css', 'scss', 'sql']),
+};
+
+export type FileColorGroup = keyof typeof FILE_COLOR_EXTENSIONS | 'directory' | 'symlink' | 'file';
+
+export const fileColorGroup = (entry: Pick<FileEntry, 'name' | 'kind'>): FileColorGroup => {
+  // A link named photo.jpg stays a link, and a directory named backup.zip stays a directory.
+  if (entry.kind === 'symlink' || entry.kind === 'directory') return entry.kind;
+  if (entry.kind === 'archive') return 'archive';
+  const dot = entry.name.lastIndexOf('.');
+  const extension = dot > 0 ? entry.name.slice(dot + 1).toLowerCase() : '';
+  // Batch/shell scripts keep their DOS yellow even when the OS reports them executable.
+  if (FILE_COLOR_EXTENSIONS.script.has(extension)) return 'script';
+  if (entry.kind === 'executable') return 'executable';
+  for (const group of Object.keys(FILE_COLOR_EXTENSIONS) as (keyof typeof FILE_COLOR_EXTENSIONS)[]) {
+    if (FILE_COLOR_EXTENSIONS[group].has(extension)) return group;
+  }
+  return 'file';
+};
+
 export interface PanelColumnLayout {
   showModified: boolean;
   showSize: boolean;
