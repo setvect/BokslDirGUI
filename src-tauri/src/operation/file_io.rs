@@ -406,20 +406,7 @@ pub(super) fn collect_source_paths(paths: &[String]) -> CommandResult<Vec<PathBu
         .collect()
 }
 
-pub(super) fn canonical_existing_entry(path: &str) -> CommandResult<PathBuf> {
-    let raw = PathBuf::from(path);
-    crate::platform::validate_path_input(&raw)?;
-    let parent = raw
-        .parent()
-        .ok_or_else(|| AppError::new("invalid_path", "errors.invalidPath", Some(&raw), true))?;
-    let name = raw
-        .file_name()
-        .ok_or_else(|| AppError::new("invalid_path", "errors.invalidPath", Some(&raw), true))?;
-    let parent = navigation::canonical_existing_path(&parent.to_string_lossy())?;
-    let entry = parent.join(name);
-    fs::symlink_metadata(&entry).map_err(|error| map_io_error(error, Some(&entry)))?;
-    Ok(entry)
-}
+pub(super) use crate::navigation::canonical_existing_entry;
 
 pub(super) fn canonical_existing_directory(path: &str) -> CommandResult<PathBuf> {
     let path = navigation::canonical_existing_path(path)?;

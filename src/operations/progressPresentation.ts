@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import type {
   OperationProgress,
   OperationState,
@@ -39,7 +40,7 @@ export const progressWidth = (progress: OperationProgress) => `${operationProgre
 export const progressPercentLabel = (progress: OperationProgress) => Math.round(operationProgressPercent(progress));
 
 export const splitOperationProgressPath = (path: string | null, maxChars = OPERATION_PROGRESS_PATH_MAX_CHARS) => {
-  const full = path ?? '—';
+  const full = path === null ? '—' : displayPath(path);
   const chars = Array.from(full);
   if (chars.length <= maxChars) {
     return { full, start: full, end: null };

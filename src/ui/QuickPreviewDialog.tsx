@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ACTION_BY_ID, actionForKeyboardShortcut, labelForAction, shortcutLabelForAction } from '../actions/registry';
 import type { FileMetadata, FilePreview } from '../domain/types';
@@ -66,7 +67,7 @@ export function QuickPreviewDialog({ language, preview, loading, getMetadata, on
       {loading ? <p>{text.previewLoading}</p> : null}
       {!loading && preview ? <>
         <div className="quick-preview-meta">
-          <strong title={preview.path}>{preview.name}</strong>
+          <strong title={displayPath(preview.path)}>{preview.name}</strong>
           <span>{preview.sizeBytes.toLocaleString()} {text.bytes}</span>
           {preview.mimeType ? <span>{preview.mimeType}</span> : null}
         </div>

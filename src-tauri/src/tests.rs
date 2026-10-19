@@ -246,6 +246,24 @@ fn get_metadata_does_not_follow_links_or_count_sockets() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn metadata_preserves_selected_links_including_dangling_entries() {
+    let fixture = TempFixture::new();
+    let target = fixture.root.join("metadata-target");
+    fs::create_dir(&target).unwrap();
+    fs::write(target.join("keep.txt"), b"keep").unwrap();
+    for (name, destination) in [("folder-link", target.clone()), ("broken-link", fixture.root.join("absent"))] {
+        let link = fixture.root.join(name);
+        std::os::unix::fs::symlink(destination, &link).unwrap();
+        let metadata = crate::navigation::get_metadata(&display_path(&link)).unwrap();
+        assert_eq!(metadata.absolute_path, display_path(&link.parent().unwrap().canonicalize().unwrap().join(name)));
+        assert_eq!(metadata.entry.kind, EntryKind::Symlink);
+        assert_eq!(metadata.entry.name, name);
+        assert_eq!(metadata.directory_stats, None);
+    }
+}
+
 #[test]
 fn preview_file_limits_text_and_never_executes_unsupported_content() {
     let fixture = TempFixture::new();
@@ -826,6 +844,10 @@ fn workspace_tabs_and_window_round_trip_and_reject_invalid_indices() {
     let patched = save_settings(serde_json::json!({ "theme": "light" })).unwrap();
     assert_eq!(patched.session, saved.session);
     assert_eq!(patched.window, saved.window);
+    // High-DPI work areas may fit fewer logical pixels than the default window.
+    let compact = save_settings(serde_json::json!({ "window": { "width": 944, "height": 453, "maximized": false } })).unwrap();
+    assert_eq!(load_settings().unwrap().window, compact.window);
+    assert!(save_settings(serde_json::json!({ "window": { "height": 399 } })).is_err());
     env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
 }
 

@@ -109,6 +109,7 @@ export function CommanderShell({
     get settings() { return settings; },
     get mutationClient() { return mutationClient; },
     get panelState() { return panelState; },
+    get refreshPanel() { return refreshPanel; },
   });
   const { settings, settingsRef, saveSettingsPatch, applyLayout, applyDirectSetting, applyZoom, settingsLoaded } = useCommanderSettings({
     get mutationClient() { return mutationClient; },

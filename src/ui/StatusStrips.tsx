@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import { useMemo, useRef } from 'react';
 import {
   hotkeyLabelForAction,
@@ -34,7 +35,7 @@ export function BottomStatusStrip({
   return (
     <footer className="bottom-status" aria-label={labels.activePanelStatus}>
       {focusedEntry ? (
-        <span className="status-focused-entry" title={focusedEntry.path}>
+        <span className="status-focused-entry" title={displayPath(focusedEntry.path)}>
           {focusedEntry.name} · {METADATA_KIND_LABELS[language][focusedEntry.kind]}{formatSize(focusedEntry, sizeFormat) ? ` · ${formatSize(focusedEntry, sizeFormat)}` : ''}
         </span>
       ) : null}

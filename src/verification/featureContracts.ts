@@ -2,7 +2,7 @@
 export const NATIVE_ONLY_COMMANDS = {
   health_check: '네이티브 상태 확인',
   show_drop_overlay: '드래그 오버레이 전용 호출',
-  hide_drop_overlay: '드래그 오버레이 전용 호출',
+  prepare_native_file_drag: 'Windows 네이티브 드래그 원본 검증·링크 보존 전용 호출',
 };
 
 export function validateRustCommands(commandNames: readonly string[], libSource: string, commandSource: string): string[] {

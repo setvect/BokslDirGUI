@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import type {
   ConflictDecision,
   ConflictPrompt
@@ -81,7 +82,7 @@ function ConflictEntryDetails({
     <section className="conflict-entry" aria-label={label}>
       <h4>{label}</h4>
       <dl>
-        <div><dt>{text.path}</dt><dd><code title={entry.path}>{entry.path}</code></dd></div>
+        <div><dt>{text.path}</dt><dd><code title={displayPath(entry.path)}>{displayPath(entry.path)}</code></dd></div>
         <div><dt>{text.size}</dt><dd>{entry.sizeBytes === null ? '—' : formatBytes(entry.sizeBytes)}</dd></div>
         <div><dt>{text.modified}</dt><dd>{formatDateTime(entry.modifiedAt) || '—'}</dd></div>
       </dl>

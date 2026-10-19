@@ -34,7 +34,9 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 ### 2.2 FileMetadata / DirectoryStats
 
 - 파일 정보 응답은 FileEntry 필드에 절대 경로, 확장자, MIME 종류, 읽기 전용 여부와 directoryStats를 추가
-- 일반 파일의 directoryStats는 null
+- 일반 파일·심볼릭 링크·junction의 directoryStats는 null
+- 선택 항목의 마지막 링크 자체와 끊긴 링크 보존, 부모만 정규화하여 absolutePath 반환
+- 탐색용 list_dir/goto_path의 링크 대상 진입 동작과 속성 조회의 항목 자체 보존 구분
 
 | directoryStats 필드 | 타입 | 설명 |
 | --- | --- | --- |
@@ -92,6 +94,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | --- | --- | --- | --- |
 | `list_dir` | `{ panelId, path, showHidden, sort, filter }` | `DirectoryListing` | 읽기 전용 |
 | `get_metadata` | `{ path }` | `FileMetadata` | 속성/preview; 폴더는 내부 파일 크기·파일 수·하위 폴더 수를 조회 시 계산 |
+| `prepare_native_file_drag` | `{ paths: string[] }` | `string[]` | Windows 내부 드래그 준비용; 별도 스레드에서 전체 원본·재파싱 지점 검증 후 링크 자체를 보존한 Shell 호환 경로 반환, 다른 OS 미지원 |
 | `watch_path` | `{ panelId, path }` | `WatchAck` | 현재: 경로 검증/version ACK; 실제 변경 이벤트 구독은 미구현 |
 | `goto_path` | `{ panelId, path }` | `DirectoryListing` | 주소 입력/북마크/히스토리 이동 |
 | `list_locations` | `{}` | `LocationList` | 홈/드라이브/마운트 quick access |
@@ -155,6 +158,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - `shellCommand` 작업은 기존 `cancel_operation`과 operation 이벤트 사용, 별도 취소 레지스트리·UI store 생성 없음
 - `OperationSummary.commandResult?`: 명령 실행 시 `{ workingDir, exitCode, stdout, stderr, timedOut, truncated }`, 다른 작업은 필드 생략
 - 명령 실행 상한: 5분, stdout/stderr 각각 최초 16 KiB만 보관하며 초과 출력도 계속 배출, 표준 입력은 닫힘
+- Windows 긴 작업 위치: 프로세스 시작 오류 87/267과 UTF-16 경로 260자 이상 조건에서 `working_directory_too_long` 반환, 짧은 폴더 경로로 재시도 안내·실행 위치의 임의 대체 금지
 - 출력 해석: UTF-8·UTF-8 BOM·UTF-16 BOM, Windows의 비 UTF-8 출력은 OS OEM 코드페이지 fallback, 임의 프로그램의 모든 인코딩 자동 판별 보장 없음
 - 성공·실패·취소 명령의 출력 요약은 사용자가 닫을 때까지 유지, 진행 표시의 임의 백분율·파일 개수 표시 제외
 - renderer 권한은 command invocation에 필요한 범위로 제한

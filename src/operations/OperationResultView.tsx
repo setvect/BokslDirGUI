@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import type {
   ArchiveListing,
   FileMetadata,
@@ -26,7 +27,7 @@ export function OperationResultView({
     return (
       <div className="operation-result-stack">
         <dl className="operation-result-list">
-          <div><dt>{text.currentLocation}</dt><dd><code title={value.archivePath}>{value.archivePath}</code></dd></div>
+          <div><dt>{text.currentLocation}</dt><dd><code title={displayPath(value.archivePath)}>{displayPath(value.archivePath)}</code></dd></div>
           <div><dt>{text.encrypted}</dt><dd>{value.encrypted ? text.yes : text.no}</dd></div>
         </dl>
         <div>
@@ -51,7 +52,7 @@ export function OperationResultView({
     return (
       <div className="operation-result-stack">
         <dl className="operation-result-list">
-          <div><dt>{text.currentLocation}</dt><dd><code>{value.workingDir}</code></dd></div>
+          <div><dt>{text.currentLocation}</dt><dd><code>{displayPath(value.workingDir)}</code></dd></div>
           <div><dt>{text.exitCode}</dt><dd>{value.exitCode ?? '—'}</dd></div>
         </dl>
         {value.truncated ? <p className="operation-muted">{text.commandTruncated}</p> : null}

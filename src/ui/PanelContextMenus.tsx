@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import {
   labelForAction,
@@ -40,7 +41,7 @@ export function BlankContextMenuContent({ language, listing, operationBusy, back
 
   return (
     <ContextMenu.Content className="context-menu" {...keyboardBoundaryProps}>
-      <ContextMenu.Label className="context-label">{listing.path}</ContextMenu.Label>
+      <ContextMenu.Label className="context-label">{displayPath(listing.path)}</ContextMenu.Label>
       {actions.map((action) => (
         <ContextMenu.Item
           key={action.id}

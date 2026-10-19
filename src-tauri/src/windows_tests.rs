@@ -174,6 +174,12 @@ fn windows_junction_is_rejected_without_traversing_its_target() {
         fs::read_to_string(f.0.join("target/keep.txt")).unwrap(),
         "keep"
     );
+    let listed = crate::navigation::get_metadata(&junction.to_string_lossy()).unwrap();
+    assert_eq!(listed.entry.name, "junction");
+    assert_eq!(listed.entry.kind, crate::contracts::EntryKind::Symlink);
+    assert!(listed.directory_stats.is_none());
+    let drag_error = crate::native_drop::prepare_paths(vec![junction.to_string_lossy().into_owned()]).unwrap_err();
+    assert_eq!(drag_error.message_key, "errors.reparsePointUnsupported");
     fs::remove_dir(&junction).unwrap();
 }
 
@@ -239,6 +245,14 @@ fn windows_symlink_policy_preserves_link_identity() {
     symlink_file(f.0.join("target/keep.txt"), &file_link).unwrap();
     for link in [&directory_link, &file_link] {
         platform::validate_reparse_point(link, &fs::symlink_metadata(link).unwrap()).unwrap();
+    }
+    for link in [&directory_link, &file_link] {
+        let metadata = crate::navigation::get_metadata(&link.to_string_lossy()).unwrap();
+        assert_eq!(metadata.entry.kind, crate::contracts::EntryKind::Symlink);
+        assert!(metadata.directory_stats.is_none());
+        let drag_paths = crate::native_drop::prepare_paths(vec![link.to_string_lossy().into_owned()]).unwrap();
+        assert_eq!(platform::entry_identity(std::path::Path::new(&drag_paths[0])).unwrap(), platform::entry_identity(link).unwrap());
+        assert!(fs::symlink_metadata(&drag_paths[0]).unwrap().file_type().is_symlink());
     }
     let target = f.0.join("copies");
     fs::create_dir(&target).unwrap();

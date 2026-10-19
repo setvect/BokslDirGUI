@@ -10,6 +10,28 @@ use std::time::{Duration, Instant};
 
 const FIXTURE_TEST: &str = "operation::process::tests::process_fixture_entry";
 
+#[cfg(windows)]
+#[test]
+fn long_working_directory_spawn_failure_has_a_specific_recovery_hint() {
+    use super::spawn_error;
+    use std::io::Error;
+    use std::path::Path;
+
+    let directory = PathBuf::from(format!(r"C:\{}", "한글😀".repeat(70)));
+    for code in [87, 267] {
+        let error = spawn_error(Error::from_raw_os_error(code), Some(&directory), None);
+        assert_eq!(error.code, "working_directory_too_long");
+        assert_eq!(error.message_key, "errors.workingDirectoryTooLong");
+        assert!(error.recoverable);
+        assert!(error.path.is_some());
+    }
+    // Other failures and short/missing working directories keep their original diagnosis.
+    assert_eq!(spawn_error(Error::from_raw_os_error(5), Some(&directory), None).code, "permission_denied");
+    for directory in [None, Some(Path::new(r"C:\short"))] {
+        assert_ne!(spawn_error(Error::from_raw_os_error(267), directory, None).code, "working_directory_too_long");
+    }
+}
+
 pub(in crate::operation) fn fixture_command(mode: &str) -> Command {
     let mut command = Command::new(std::env::current_exe().unwrap());
     command

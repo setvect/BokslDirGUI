@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import {
   type OperationDialogText,
   type SupportedLanguage
@@ -31,7 +32,7 @@ export function OperationOverview({
     : CURRENT_LOCATION_DIALOGS.has(dialog.dialogKind)
       ? text.currentLocation
       : null;
-  const displayedPath = pathLabel ? dialog.targetDir : null;
+  const displayedPath = pathLabel && dialog.targetDir ? displayPath(dialog.targetDir) : null;
   const showPermanentDeleteWarning = dialog.dialogKind === 'deletePermanent';
   if (!displayedPath && !showPermanentDeleteWarning) {
     return null;

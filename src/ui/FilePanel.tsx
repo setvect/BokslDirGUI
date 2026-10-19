@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import {
   flexRender,
@@ -270,7 +271,7 @@ export function FilePanel({
       ref={panelRef}
       className={`file-panel ${active ? 'is-active' : ''} ${hiddenByLayout ? 'is-hidden-by-layout' : ''} ${dropIntent ? `is-drop-${dropIntent}` : ''}`}
       data-panel-id={listing.panelId}
-      aria-label={`${listing.panelId} panel ${listing.path}`}
+      aria-label={`${listing.panelId} panel ${displayPath(listing.path)}`}
       aria-current={active ? 'true' : undefined}
       aria-hidden={hiddenByLayout ? 'true' : undefined}
       onMouseDown={onActivate}

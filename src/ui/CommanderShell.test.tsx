@@ -97,6 +97,20 @@ describe('CommanderShell rendering', () => {
     expect(container.querySelector('.entry-kind-file')).toBeNull();
   });
 
+  it('shows conventional Windows paths in row tooltips and accessible descriptions', () => {
+    const path = String.raw`\\?\C:\BokslDirGUI-Test`;
+    const entry = { ...testEntry(path, 'drag-in.txt'), path: path + '\\drag-in.txt' };
+    const dataSource = createFixturePanelDataSource({ left: SAMPLE_LISTINGS.left,
+      right: createDirectoryListing('right', path, [entry], DEFAULT_SORT, null, 1) });
+    const { container } = renderCommander(dataSource, undefined, undefined);
+    const row = rowByText(container, 'drag-in.txt');
+    expect(row?.getAttribute('title')).toContain(String.raw`경로: C:\BokslDirGUI-Test\drag-in.txt`);
+    expect(row?.getAttribute('title')).not.toContain('\\\\?\\');
+    expect(row?.getAttribute('aria-description')).not.toContain('\\\\?\\');
+    expect(container.querySelector('.status-focused-entry')?.getAttribute('title')).toBe(String.raw`C:\BokslDirGUI-Test\drag-in.txt`);
+    expect(entry.path).toBe(path + '\\drag-in.txt');
+  });
+
   it('shows row tooltip details and uses middle ellipsis DOM for long names', async () => {
     const longEntry = {
       ...testEntry(SAMPLE_LISTINGS.right.path, 'very-long-project-configuration-file.generated.json'),

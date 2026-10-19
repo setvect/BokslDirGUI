@@ -25,6 +25,8 @@ mod mutation;
 mod navigation;
 mod operation;
 mod settings_service;
+#[cfg(any(windows, test))]
+mod native_drop;
 mod window_session;
 mod shell_command;
 #[cfg(test)]
@@ -34,6 +36,13 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    #[cfg(windows)]
+    let context = {
+        let mut context = context;
+        native_drop::configure_windows(&mut context.config_mut().app.windows);
+        context
+    };
     tauri::Builder::default()
         .plugin(tauri_plugin_drag::init())
         .setup(|app| {
@@ -42,6 +51,8 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(windows)]
+            native_drop::forward(window, event);
             window_session::observe(window, event);
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
                 if let Some(overlay) = window.app_handle().get_webview_window("drop-overlay") {
@@ -86,10 +97,10 @@ pub fn run() {
             commands::run_shell_command,
             commands::load_settings,
             commands::save_settings,
-            commands::show_drop_overlay,
-            commands::hide_drop_overlay
+            commands::prepare_native_file_drag,
+            commands::show_drop_overlay
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("failed to run BokslDirGUI Tauri application");
 }
 

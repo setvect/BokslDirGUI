@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import * as Dialog from '@radix-ui/react-dialog';
 import appPackage from '../../package.json';
 import aboutMascot from '../assets/about-mascot.png';
@@ -269,8 +270,8 @@ export function NavigationListDialog({ language, state, onChoose, onCloseTab, on
                 className="navigation-list-item"
                 onClick={() => onChoose(item)}
               >
-                <span>{item.label}</span>
-                <code>{item.path}</code>
+                <span>{displayPath(item.label)}</span>
+                <code>{displayPath(item.path)}</code>
                 <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
               </button>
             ))}
@@ -365,7 +366,7 @@ function PathNavigationListContent({ language, state, initialFocusRef, closeButt
               type="button"
               className={'navigation-path-choice' + (state.kind === 'tabs' ? ' navigation-tab-choice' : '')}
               aria-current={item.group === 'active tab' || item.group === 'current' ? 'true' : undefined}
-              title={item.path}
+              title={displayPath(item.path)}
               ref={(element) => {
                 itemRefs.current[index] = element;
                 if (index === focusedIndexRef.current) initialFocusRef.current = element;
@@ -375,15 +376,15 @@ function PathNavigationListContent({ language, state, initialFocusRef, closeButt
             >
               <span className="navigation-path-index">{index + 1}.</span>
               <span className="navigation-path-main">
-                {hasCustomLabel ? <span className="navigation-path-label">{item.label}</span> : null}
-                <span className={'navigation-path-value' + (state.kind === 'tabs' ? ' navigation-tab-path' : '') + (hasCustomLabel ? ' is-secondary' : '')}>{item.path}</span>
+                {hasCustomLabel ? <span className="navigation-path-label">{displayPath(item.label)}</span> : null}
+                <span className={'navigation-path-value' + (state.kind === 'tabs' ? ' navigation-tab-path' : '') + (hasCustomLabel ? ' is-secondary' : '')}>{displayPath(item.path)}</span>
               </span>
               <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
             </button>
             {state.kind === 'tabs' || state.kind === 'bookmarks' ? <button
               type="button"
               className={'navigation-path-remove' + (state.kind === 'tabs' ? ' navigation-tab-close' : '')}
-              aria-label={(state.kind === 'tabs' ? text.closeTab : text.deleteBookmark) + ' ' + (index + 1) + ': ' + item.path}
+              aria-label={(state.kind === 'tabs' ? text.closeTab : text.deleteBookmark) + ' ' + (index + 1) + ': ' + displayPath(item.path)}
               title={state.kind === 'tabs' ? text.closeTab : text.deleteBookmark}
               disabled={state.kind === 'tabs' && state.items.length <= 1}
               onFocus={() => { focusedIndexRef.current = index; }}
@@ -407,7 +408,7 @@ export function PathPrompt({ language, panel, onApply, onCompleted, onCancel }: 
   const text = OVERLAY_TEXT[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
-  const [value, setValue] = useState(panel.path);
+  const [value, setValue] = useState(displayPath(panel.path));
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -428,7 +429,7 @@ export function PathPrompt({ language, panel, onApply, onCompleted, onCancel }: 
     const requestId = ++requestRef.current;
     setPending(true);
     setError(null);
-    const result = await onApply(value);
+    const result = await onApply(value === displayPath(panel.path) ? panel.path : value);
     if (requestId !== requestRef.current) return;
     setPending(false);
     if (result === null) {
@@ -496,7 +497,7 @@ export function ArchivePasswordPrompt({ language, archivePath, mode = 'open', on
         event.preventDefault();
         if (value) onApply(value);
       }}>
-        <p>{archivePath}</p>
+        <p>{displayPath(archivePath)}</p>
         <label>
           <span>{text.archivePassword}</span>
           <input
@@ -540,7 +541,7 @@ export function FilterPrompt({ language, panel, onApply, onCancel }: {
     <CommanderOverlayDialog owner="filter-prompt" title={text.filter} ariaLabel={text.filter} onClose={onCancel}>
       <form className="filter-form" onSubmit={handleSubmit}>
         <label>
-          <span>{text.filter} · {panel.path}</span>
+          <span>{text.filter} · {displayPath(panel.path)}</span>
           <input
             ref={inputRef}
             aria-label={text.filterPattern}

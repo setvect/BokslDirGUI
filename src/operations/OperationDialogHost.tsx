@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
@@ -177,7 +178,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                     <ul className="operation-source-list">
                       {dialog.sources.map((source) => (
                         <li key={source.path}>
-                          <code title={source.path}>{source.path}</code>
+                          <code title={displayPath(source.path)}>{displayPath(source.path)}</code>
                         </li>
                       ))}
                     </ul>

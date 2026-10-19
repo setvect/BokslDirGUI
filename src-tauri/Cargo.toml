@@ -55,3 +55,7 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Stora
 objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSPasteboard", "NSPasteboardItem"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString", "NSURL", "NSFileManager", "NSError"] }
+
+# Windows 수신 효과 협상 보완. 원본·변경 근거는 vendor/drag/PATCH.md 참조.
+[patch.crates-io]
+drag = { path = "vendor/drag" }

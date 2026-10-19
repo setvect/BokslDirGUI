@@ -1,3 +1,4 @@
+import { displayPath } from './domain/pathDisplay';
 import type { DialogKind as OperationDialogKind } from './operations/dialogDefinitions';
 import { APP_NAME } from './foundation';
 
@@ -29,6 +30,7 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.tauriInvokeFailed': '앱 명령 실행에 실패했습니다.',
     'errors.confirmationRequired': '표시된 확인 문구를 정확히 입력하세요.',
     'errors.shellCommandTimedOut': '명령 실행이 5분 제한을 초과해 종료되었습니다.',
+    'errors.workingDirectoryTooLong': 'Windows에서 이 긴 경로를 작업 위치로 사용해 프로그램을 시작할 수 없습니다. 폴더 경로를 짧게 만든 뒤 다시 시도하세요.',
     'errors.shellCommandDisabled': '쉘 명령 실행은 기본 비활성입니다.',
     'errors.shellConfirmationInvalid': '셸 명령 실행 확인이 만료되었거나 유효하지 않습니다. 다시 실행 확인을 눌러주세요.',
     'errors.invalidShellCommand': '실행할 쉘 명령을 입력해야 합니다.',
@@ -81,6 +83,7 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.tauriInvokeFailed': 'The app command failed.',
     'errors.confirmationRequired': 'Type the displayed confirmation phrase exactly.',
     'errors.shellCommandTimedOut': 'The command exceeded the five-minute limit and was terminated.',
+    'errors.workingDirectoryTooLong': 'Windows cannot start a program with this long working directory. Shorten the folder path and retry.',
     'errors.shellCommandDisabled': 'Shell command execution is disabled by default.',
     'errors.shellConfirmationInvalid': 'Shell command confirmation expired or is invalid. Confirm the command again.',
     'errors.invalidShellCommand': 'Enter a shell command to run.',
@@ -133,7 +136,7 @@ export const formatUserErrorMessage = (
   error: { messageKey: string; path?: string | null },
 ) => {
   const message = translateUserMessageKey(language, error.messageKey);
-  return error.path ? `${message} · ${error.path}` : message;
+  return error.path ? `${message} · ${displayPath(error.path)}` : message;
 };
 
 export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, string>> = {
@@ -668,15 +671,15 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
   ko: {
     listFailed: (error) => `목록 읽기 실패: ${error}`,
     gotoFailed: (error) => `직접 이동 실패: ${error}`,
-    gotoCompleted: (path) => `이동 완료: ${path}`,
+    gotoCompleted: (path) => `이동 완료: ${displayPath(path)}`,
     noBackHistory: '뒤로 이동할 기록이 없습니다.',
     noForwardHistory: '앞으로 이동할 기록이 없습니다.',
     virtualEntryNotSelectable: '가상 항목은 선택 대상으로 표시하지 않습니다.',
     settingsLoadFailed: (error) => `설정 읽기 실패: ${error}`,
     settingsSaveFailed: (error) => `설정 저장 실패: ${error}`,
     bookmarkAdded: (label) => `북마크 추가: ${label}`,
-    sessionRestoreUnavailable: (paths) => `복원하지 못한 위치: ${paths.join(', ')}. 접근 가능한 위치로 이동하거나 새로고침하세요.`,
-    bookmarkRenamed: (path) => `북마크 이름 변경: ${path}`,
+    sessionRestoreUnavailable: (paths) => `복원하지 못한 위치: ${paths.map(displayPath).join(', ')}. 접근 가능한 위치로 이동하거나 새로고침하세요.`,
+    bookmarkRenamed: (path) => `북마크 이름 변경: ${displayPath(path)}`,
     bookmarkDeleted: (label) => `북마크 삭제: ${label}`,
     bookmarkNotFound: '현재 위치에 등록된 북마크가 없습니다.',
     themeChanged: (theme) => `테마 · ${theme === 'dark' ? '다크' : theme === 'light' ? '라이트' : '고대비'}`,
@@ -684,7 +687,7 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     zoom: (percent) => `화면 배율 · ${percent}%`,
     locationsLoading: '위치 목록을 불러오는 중…',
     locationsFailed: (error) => `위치 목록 실패: ${error}`,
-    archiveEntry: (path) => `압축 항목 · ${path}`,
+    archiveEntry: (path) => `압축 항목 · ${displayPath(path)}`,
     sizeFormat: (format) => `크기 형식 · ${format === 'bytes' ? '바이트' : '자동'}`,
     icons: (enabled) => `아이콘 · ${enabled ? '켜짐' : '꺼짐'}`,
     externalDropPathRequired: '외부 드롭은 OS 파일 경로가 확인될 때만 가져올 수 있습니다.',
@@ -708,7 +711,7 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     quitPreviewUnavailable: '브라우저 미리보기에서는 앱 종료를 실행할 수 없습니다.',
     quitRequested: '종료를 요청했습니다.',
     quitFailed: (error) => `종료 실패: ${error}`,
-    tabAdded: (panel, path) => `탭 추가: ${panel} · ${path}`,
+    tabAdded: (panel, path) => `탭 추가: ${panel} · ${displayPath(path)}`,
     tabClosed: (panel) => `탭 닫기: ${panel}`,
     virtualOperationTargetUnavailable: (action) => `${action} · 가상 항목은 파일 작업 대상이 될 수 없습니다.`,
     operationTargetChanged: (action) => `${action} 대상이 현재 목록과 달라 새로고침했습니다.`,
@@ -729,15 +732,15 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
   en: {
     listFailed: (error) => `Failed to read listing: ${error}`,
     gotoFailed: (error) => `Go to path failed: ${error}`,
-    gotoCompleted: (path) => `Moved to: ${path}`,
+    gotoCompleted: (path) => `Moved to: ${displayPath(path)}`,
     noBackHistory: 'No back history.',
     noForwardHistory: 'No forward history.',
     virtualEntryNotSelectable: 'Virtual entries cannot be selected as operation targets.',
     settingsLoadFailed: (error) => `Settings load failed: ${error}`,
     settingsSaveFailed: (error) => `Settings save failed: ${error}`,
     bookmarkAdded: (label) => `Bookmark added: ${label}`,
-    sessionRestoreUnavailable: (paths) => `Could not restore: ${paths.join(', ')}. Choose an available location or refresh.`,
-    bookmarkRenamed: (path) => `Bookmark renamed: ${path}`,
+    sessionRestoreUnavailable: (paths) => `Could not restore: ${paths.map(displayPath).join(', ')}. Choose an available location or refresh.`,
+    bookmarkRenamed: (path) => `Bookmark renamed: ${displayPath(path)}`,
     bookmarkDeleted: (label) => `Bookmark deleted: ${label}`,
     bookmarkNotFound: 'There is no bookmark for the current location.',
     themeChanged: (theme) => `Theme · ${theme === 'dark' ? 'Dark' : theme === 'light' ? 'Light' : 'High Contrast'}`,
@@ -745,7 +748,7 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     zoom: (percent) => `Zoom · ${percent}%`,
     locationsLoading: 'Loading locations…',
     locationsFailed: (error) => `Locations failed: ${error}`,
-    archiveEntry: (path) => `Archive entry · ${path}`,
+    archiveEntry: (path) => `Archive entry · ${displayPath(path)}`,
     sizeFormat: (format) => `Size format · ${format}`,
     icons: (enabled) => `Icons · ${enabled ? 'on' : 'off'}`,
     externalDropPathRequired: 'External drops are allowed only when OS file paths are available.',
@@ -769,7 +772,7 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     quitPreviewUnavailable: 'App quit is not available in browser preview.',
     quitRequested: 'Quit requested',
     quitFailed: (error) => `Quit failed: ${error}`,
-    tabAdded: (panel, path) => `Tab added: ${panel} · ${path}`,
+    tabAdded: (panel, path) => `Tab added: ${panel} · ${displayPath(path)}`,
     tabClosed: (panel) => `Tab closed: ${panel}`,
     virtualOperationTargetUnavailable: (action) => `${action} · Virtual entries cannot be file operation targets.`,
     operationTargetChanged: (action) => `${action} target is no longer in the current listing. Refreshed.`,
@@ -804,22 +807,22 @@ export const COMMANDER_NAVIGATION_TEXT: Record<SupportedLanguage, CommanderNavig
   ko: {
     bookmarksTitle: '북마크',
     historyTitle: (panelLabel) => `${panelLabel} 히스토리`,
-    currentPathLabel: (path) => `현재 · ${path}`,
+    currentPathLabel: (path) => `현재 · ${displayPath(path)}`,
     tabsTitle: (panelLabel) => `${panelLabel} 탭`,
     locationsTitle: '위치 목록',
     locationHome: 'Home',
-    locationRoot: (path) => `루트 · ${path}`,
-    locationRecent: (path) => `최근 · ${path}`,
+    locationRoot: (path) => `루트 · ${displayPath(path)}`,
+    locationRecent: (path) => `최근 · ${displayPath(path)}`,
   },
   en: {
     bookmarksTitle: 'Bookmarks',
     historyTitle: (panelLabel) => `${panelLabel} History`,
-    currentPathLabel: (path) => `Current · ${path}`,
+    currentPathLabel: (path) => `Current · ${displayPath(path)}`,
     tabsTitle: (panelLabel) => `${panelLabel} Tabs`,
     locationsTitle: 'Locations',
     locationHome: 'Home',
-    locationRoot: (path) => `Root · ${path}`,
-    locationRecent: (path) => `Recent · ${path}`,
+    locationRoot: (path) => `Root · ${displayPath(path)}`,
+    locationRecent: (path) => `Recent · ${displayPath(path)}`,
   },
 };
 

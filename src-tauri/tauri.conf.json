@@ -18,8 +18,8 @@
         "title": "복슬Dir",
         "width": 1280,
         "height": 820,
-        "minWidth": 1080,
-        "minHeight": 680,
+        "minWidth": 800,
+        "minHeight": 400,
         "resizable": true,
         "fullscreen": false,
         "dragDropEnabled": false
@@ -50,6 +50,11 @@
     "macOS": {
       "infoPlist": "Info.plist"
     },
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/installer-hooks.nsh"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -58,7 +63,10 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "resources/archive-tools/": "archive-tools/"
+      "resources/archive-tools/": "archive-tools/",
+      "vendor/drag/LICENSE_APACHE-2.0": "licenses/drag/LICENSE_APACHE-2.0",
+      "vendor/drag/LICENSE_MIT": "licenses/drag/LICENSE_MIT",
+      "vendor/drag/PATCH.md": "licenses/drag/PATCH.md"
     }
   }
 }

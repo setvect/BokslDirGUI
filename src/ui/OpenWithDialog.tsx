@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import { useEffect, useRef, useState } from 'react';
 import type { FileEntry, OpenWithApp } from '../domain/types';
 import { formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
@@ -81,7 +82,7 @@ export function OpenWithDialog({ entry, language, client, onClose }: {
     <CommanderOverlayDialog owner="open-with" title={text.title} ariaLabel={text.title} onClose={onClose}
       className="open-with-dialog" onOpenAutoFocus={(event) => { event.preventDefault(); searchRef.current?.focus(); }}>
       <div className="filter-form">
-        <p className="open-with-target" title={entry.path}>{entry.path}</p>
+        <p className="open-with-target" title={displayPath(entry.path)}>{displayPath(entry.path)}</p>
         <input ref={searchRef} aria-label={text.search} placeholder={text.search} value={query} disabled={opening}
           onChange={(event) => setQuery(event.currentTarget.value)}
           onKeyDown={(event) => {
@@ -101,7 +102,7 @@ export function OpenWithDialog({ entry, language, client, onClose }: {
             <button className="navigation-list-item open-with-app" type="button" key={app.id} disabled={opening}
               onClick={() => { void open(app); }}>
               <span>{app.name}{app.isDefault ? ` (${text.default})` : ''}</span>
-              {app.path ? <small title={app.path}>{app.path}</small> : null}
+              {app.path ? <small title={displayPath(app.path)}>{displayPath(app.path)}</small> : null}
             </button>
           ))}
           {!loading && !error && visibleApps.length === 0 ? <p className="dialog-empty">{apps.length ? text.noMatch : text.empty}</p> : null}

@@ -119,7 +119,7 @@ export const normalizeInvokeError = (error: unknown, command: TauriCommandName):
   };
 };
 
-const isAppError = (value: unknown): value is AppError => {
+export const isAppError = (value: unknown): value is AppError => {
   if (!value || typeof value !== 'object') {
     return false;
   }

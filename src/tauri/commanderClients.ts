@@ -38,11 +38,11 @@ export const TAURI_NATIVE_FILE_DROP_CLIENT: NativeFileDropClient = {
 };
 
 export const TAURI_NATIVE_FILE_DRAG_CLIENT: NativeFileDragClient = {
-  start: (paths, mode, preview, onResult) => startDrag({
-    item: paths,
-    icon: preview,
-    mode,
-  }, ({ result }) => onResult({ result })),
+  start: async (paths, mode, preview, onResult) => {
+    const items = navigator.platform.startsWith('Win')
+      ? await invoke<string[]>('prepare_native_file_drag', { paths }) : paths;
+    await startDrag({ item: items, icon: preview, mode }, ({ result }) => onResult({ result }));
+  },
 };
 
 export interface SafeMutationClient {

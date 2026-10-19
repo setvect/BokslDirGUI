@@ -256,6 +256,21 @@ pub(crate) fn save_settings(patch: serde_json::Value) -> CommandResult<Settings>
 }
 
 #[tauri::command]
+pub(crate) async fn prepare_native_file_drag(paths: Vec<String>) -> CommandResult<Vec<String>> {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || crate::native_drop::prepare_paths(paths))
+            .await.map_err(|error| AppError::new("io_error", "errors.io", None, false)
+                .with_detail("message", error.to_string()))?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = paths;
+        Err(AppError::new("unsupported", "errors.commandNotImplemented", None, true))
+    }
+}
+
+#[tauri::command]
 pub(crate) fn show_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
     let main = app
         .get_webview_window("main")
@@ -272,14 +287,6 @@ pub(crate) fn show_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
         .set_size(tauri::Size::Physical(size))
         .map_err(|error| error.to_string())?;
     overlay.show().map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub(crate) fn hide_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
-    let overlay = app
-        .get_webview_window("drop-overlay")
-        .ok_or_else(|| "drop overlay window is unavailable".to_string())?;
-    overlay.hide().map_err(|error| error.to_string())
 }
 
 #[tauri::command]

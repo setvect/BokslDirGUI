@@ -2,8 +2,9 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { NavigationListDialog, type NavigationListState } from './CommanderOverlays';
+import { NavigationListDialog, PathPrompt, type NavigationListState } from './CommanderOverlays';
 import './testing/commanderTestSetup';
+import { createDirectoryListing, createPanelStateFromListing } from './panelState';
 
 function renderNavigationList(state: NavigationListState) {
   const onChoose = vi.fn();
@@ -31,6 +32,30 @@ function renderNavigationList(state: NavigationListState) {
 }
 
 describe('navigation list dialogs', () => {
+  it('displays Windows tab paths without changing the navigation target', async () => {
+    const item = { id: 'windows', label: '1', path: String.raw`\\?\C:\한글 폴더`, group: 'active tab' };
+    const { choices, onChoose } = renderNavigationList({ kind: 'tabs', panelId: 'right', title: '탭', items: [item] });
+    expect(choices[0].title).toBe(String.raw`C:\한글 폴더`);
+    expect(choices[0].textContent).not.toContain('\\\\?\\');
+    await userEvent.click(choices[0]);
+    expect(onChoose).toHaveBeenCalledWith(item);
+  });
+
+  it('shows an editable normal path while preserving an unchanged extended path on submit', async () => {
+    const path = String.raw`\\?\C:\한글 폴더\name. `;
+    const onApply = vi.fn(async () => '다시 시도');
+    render(<PathPrompt language="ko" panel={createPanelStateFromListing(createDirectoryListing('right', path))}
+      onApply={onApply} onCompleted={vi.fn()} onCancel={vi.fn()} />);
+    const input = screen.getByRole('textbox', { name: '경로' });
+    expect((input as HTMLInputElement).value).toBe(String.raw`C:\한글 폴더\name. `);
+    await userEvent.keyboard('{Enter}');
+    await screen.findByText('다시 시도');
+    expect(onApply).toHaveBeenLastCalledWith(path);
+    await userEvent.clear(input);
+    await userEvent.type(input, 'D:\\other{Enter}');
+    expect(onApply).toHaveBeenLastCalledWith('D:\\other');
+  });
+
   it('shows bookmark names and full paths without duplicate columns and selects by keyboard', async () => {
     const user = userEvent.setup();
     const state: NavigationListState = {

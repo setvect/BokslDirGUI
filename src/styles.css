@@ -138,8 +138,8 @@ body,
 }
 
 body {
-  min-width: 1080px;
-  min-height: 680px;
+  min-width: 800px;
+  min-height: 400px;
   overflow: hidden;
   background: var(--bg);
 }

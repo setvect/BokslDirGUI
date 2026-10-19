@@ -48,6 +48,23 @@ describe('OperationDialogHost', () => {
     });
   });
 
+  it.each(['file.copy', 'file.move'] as const)('displays conventional paths but executes %s with original paths', async (actionId) => {
+    const source = { ...sampleEntry, path: String.raw`\\?\C:\원본\source.txt` };
+    const targetDir = String.raw`\\?\UNC\server\share\대상`;
+    const execute = vi.fn(async (_draft: import('./operationTypes').OperationDialogDraft) => ({ ok: true as const, data: {
+      operationId: 'windows-path', kind: actionId === 'file.copy' ? 'copy' as const : 'move' as const, state: 'queued' as const,
+    } }));
+    useOperationStore.getState().openDialog({ action: ACTION_BY_ID.get(actionId)!, panelId: 'right',
+      sources: [source], targetDir, workingDir: String.raw`\\?\C:\원본`, longRunningExecutor: execute });
+    render(<OperationDialogHost language="ko" />);
+    expect(screen.getByTitle(String.raw`C:\원본\source.txt`).textContent).toBe(String.raw`C:\원본\source.txt`);
+    expect(screen.getByTitle(String.raw`\\server\share\대상`).textContent).toBe(String.raw`\\server\share\대상`);
+    expect(screen.getByRole('dialog').textContent).not.toContain('\\\\?\\');
+    await userEvent.click(screen.getByRole('button', { name: actionId === 'file.copy' ? '복사' : '이동' }));
+    await waitFor(() => expect(execute).toHaveBeenCalled());
+    expect(execute.mock.calls[0][0]).toEqual(expect.objectContaining({ sources: [source], targetDir }));
+  });
+
   it('cancels a running command through the shared controller and retains its output summary', async () => {
     const cancel = vi.fn(async () => undefined);
     useOperationStore.getState().openDialog({ action: ACTION_BY_ID.get('external.runShellCommand')!,

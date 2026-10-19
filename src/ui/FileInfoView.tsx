@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import type { FileMetadata } from '../domain/types';
 import { METADATA_KIND_LABELS, OPERATION_DIALOG_TEXT, type SupportedLanguage } from '../i18n-resources';
 import { formatBytes } from '../operations/progressPresentation';
@@ -60,7 +61,7 @@ export function FileInfoView({ metadata: value, language }: { metadata: FileMeta
   return <div className="operation-result-stack file-info-view">
     <dl className="operation-result-list">
       <div><dt>{text.fileInfo}</dt><dd>{value.name}</dd></div>
-      <div><dt>{text.currentLocation}</dt><dd><code title={value.absolutePath}>{value.absolutePath}</code></dd></div>
+      <div><dt>{text.currentLocation}</dt><dd><code title={displayPath(value.absolutePath)}>{displayPath(value.absolutePath)}</code></dd></div>
       <div><dt>{text.type}</dt><dd>{METADATA_KIND_LABELS[language][value.kind] ?? value.kind}</dd></div>
       {value.extension ? <div><dt>{info.extension}</dt><dd>{value.extension}</dd></div> : null}
       {value.mimeType ? <div><dt>MIME</dt><dd>{value.mimeType}</dd></div> : null}

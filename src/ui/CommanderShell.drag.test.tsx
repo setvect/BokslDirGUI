@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { NativeFileDropEvent } from '../tauri/commanderClients';
 import type { PanelId } from '../domain/types';
 import { useOperationStore } from '../operations/operationStore';
 import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './commanderFixture';
@@ -20,16 +21,28 @@ describe('CommanderShell drag', () => {
     const setupDrag = (selectedLeft: string[] = [], listings = SAMPLE_LISTINGS) => {
       let finishNative: ((completion: { result: 'Dropped' | 'Cancelled'; clientPosition?: { x: number; y: number } | null }) => void) | undefined;
       const nativeFileDragClient = { start: vi.fn(async (_paths: string[], _mode: 'copy' | 'move', _preview: string, done: NonNullable<typeof finishNative>) => { finishNative = done; }) };
+      let nativeDropHandler: ((event: NativeFileDropEvent) => void) | undefined;
+      const nativeFileDropClient = { listen: vi.fn(async (handler: (event: NativeFileDropEvent) => void) => {
+        nativeDropHandler = handler; return () => {};
+      }) };
+      const getMetadata = vi.fn(async ({ path }: { path: string }) => {
+        const entry = [...listings.left.entries, ...listings.right.entries].find(candidate => candidate.path.replace(/^\\\\\?\\/, '') === path)!;
+        return { ok: true as const, data: { ...entry, absolutePath: entry?.path ?? path, extension: null,
+          mimeType: null, readonly: false, directoryStats: null } };
+      });
       const operationClient = {
         startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'drag-copy', kind: 'copy' as const, state: 'queued' as const } })),
         startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'drag-move', kind: 'move' as const, state: 'queued' as const } })),
         startDelete: vi.fn(), cancelOperation: vi.fn(), resolveConflict: vi.fn(),
       };
+      const dataSource = createFixturePanelDataSource(listings);
+      const listDir = vi.spyOn(dataSource, 'listDir');
       const rendered = render(<CommanderShell
-        dataSource={createFixturePanelDataSource(listings)}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }}
+        dataSource={dataSource}
+        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), getMetadata }}
         operationClient={operationClient}
         nativeFileDragClient={nativeFileDragClient}
+        nativeFileDropClient={nativeFileDropClient}
         initialFocusIndex={INITIAL_FOCUS_INDEX}
         initialSelectedPaths={{ ...INITIAL_SELECTED_PATHS, left: selectedLeft }}
         runtimeBackendAvailable
@@ -50,7 +63,7 @@ describe('CommanderShell drag', () => {
       const down = (panel: PanelId) => fireEvent.pointerDown(rows[panel], { pointerId: 7, button: 0, clientX: x(panel), clientY: 200 });
       const move = (panel: PanelId, shiftKey = false) => fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: x(panel) + 10, clientY: 210, shiftKey });
       const up = (panel: PanelId, shiftKey = false) => fireEvent.pointerUp(window, { pointerId: 7, button: 0, clientX: x(panel) + 10, clientY: 210, shiftKey });
-      return { ...rendered, panels, rows, down, move, up, operationClient, nativeFileDragClient, finishNative: () => finishNative };
+      return { ...rendered, panels, rows, down, move, up, operationClient, nativeFileDragClient, finishNative: () => finishNative, nativeDrop: (event: NativeFileDropEvent) => nativeDropHandler?.(event), getMetadata, listDir };
     };
 
     it.each([
@@ -136,6 +149,84 @@ describe('CommanderShell drag', () => {
       expect(f.operationClient.startMove).not.toHaveBeenCalled();
     });
 
+    const windowsListings = () => Object.fromEntries((['left', 'right'] as const).map(panelId => {
+      const path = String.raw`\\?\C:` + '\\' + panelId;
+      return [panelId, { ...SAMPLE_LISTINGS[panelId], path,
+        entries: SAMPLE_LISTINGS[panelId].entries.map(entry => ({ ...entry, path: path + '\\' + entry.name })) }];
+    })) as typeof SAMPLE_LISTINGS;
+
+    it.each(['move', 'copy', 'cancel', 'unmount'] as const)('refreshes the source only after a completed external move: %s', async condition => {
+      const f = setupDrag([], windowsListings());
+      f.down('left');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, shiftKey: condition !== 'copy',
+        clientX: window.innerWidth + 10, clientY: 200 });
+      await waitFor(() => expect(f.nativeFileDragClient.start).toHaveBeenCalledOnce());
+      f.listDir.mockClear();
+      if (condition === 'unmount') f.unmount();
+      await act(async () => {
+        f.finishNative()?.({ result: condition === 'cancel' ? 'Cancelled' : 'Dropped' });
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      if (condition === 'move') {
+        expect(f.listDir).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ panelId: 'left', path: windowsListings().left.path }));
+      } else expect(f.listDir).not.toHaveBeenCalled();
+      expect(f.operationClient.startMove).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('preserves copy/move intent on Windows native return with Shift=%s', async shift => {
+      const listings = windowsListings(); const f = setupDrag([], listings);
+      f.down('left'); f.move('right', shift);
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200, shiftKey: shift });
+      await waitFor(() => expect(f.nativeFileDragClient.start).toHaveBeenCalledOnce());
+      const path = String.raw`C:\left\Architecture.md`;
+      act(() => {
+        f.nativeDrop({ type: 'drop', paths: [path], position: { x: 700, y: 200 } });
+        f.nativeDrop({ type: 'drop', paths: [path], position: { x: 700, y: 200 } });
+        f.finishNative()?.({ result: 'Dropped' });
+      });
+      if (shift) {
+        expect(await screen.findByRole('dialog', { name: '이동' })).toBeTruthy();
+        expect(f.operationClient.startMove).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: '이동' }));
+      }
+      const execute = shift ? f.operationClient.startMove : f.operationClient.startCopy;
+      await waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      expect(execute).toHaveBeenCalledWith({ sources: [String.raw`\\?\C:\left\Architecture.md`], targetDir: listings.right.path, policy: 'skip' });
+      expect(f.getMetadata).toHaveBeenCalledOnce();
+    });
+
+    it.each([100, 700])('does not import a return to its source or a different resolved entry (x=%s)', async x => {
+      const f = setupDrag([], windowsListings()); f.down('left'); f.move('right');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
+      await waitFor(() => expect(f.nativeFileDragClient.start).toHaveBeenCalledOnce());
+      const path = x === 100 ? String.raw`C:\left\Architecture.md` : String.raw`C:\left\different.txt`;
+      act(() => f.nativeDrop({ type: 'drop', paths: [path], position: { x, y: 200 } }));
+      await waitFor(() => expect(f.getMetadata).toHaveBeenCalledOnce());
+      await act(async () => {});
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+      expect(f.operationClient.startMove).not.toHaveBeenCalled();
+      expect(useOperationStore.getState().dialog).toBeNull();
+    });
+
+    it.each(['unmount', 'busy'] as const)('ignores delayed native metadata after %s', async condition => {
+      const f = setupDrag([], windowsListings());
+      const path = String.raw`C:\left\Architecture.md`;
+      const metadata = await f.getMetadata.getMockImplementation()!({ path });
+      let resolve!: (value: typeof metadata) => void;
+      f.getMetadata.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+      f.down('left'); f.move('right');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
+      await waitFor(() => expect(f.nativeFileDragClient.start).toHaveBeenCalledOnce());
+      act(() => f.nativeDrop({ type: 'drop', paths: [path], position: { x: 700, y: 200 } }));
+      if (condition === 'unmount') f.unmount();
+      else act(() => useOperationStore.setState({ progress: { operationId: 'other', kind: 'copy', state: 'running',
+        totalFiles: 1, completedFiles: 0, totalBytes: null, completedBytes: 0, currentPath: null,
+        bytesPerSecond: null, etaSeconds: null, recentErrorCount: 0 } }));
+      await act(async () => resolve(metadata));
+      expect(f.operationClient.startCopy).not.toHaveBeenCalled();
+      expect(f.operationClient.startMove).not.toHaveBeenCalled();
+    });
+
     it('keeps the selected source snapshot when another row becomes selected during the gesture', async () => {
       const selected = ['Architecture.md', 'PRD.md'].map((name) => `${SAMPLE_LISTINGS.left.path}/${name}`);
       const f = setupDrag(selected); f.down('left'); f.move('right');
@@ -179,6 +270,18 @@ describe('CommanderShell drag', () => {
       expect(await screen.findByText(/외부 드래그 실패:.*test native failure/)).toBeTruthy();
       f.down('left'); f.move('right'); f.up('right');
       await waitFor(() => expect(f.operationClient.startCopy).toHaveBeenCalledOnce());
+    });
+
+    it('reports a rejected source without disabling subsequent native drags', async () => {
+      const f = setupDrag();
+      f.nativeFileDragClient.start.mockRejectedValueOnce({ code: 'unsupported',
+        messageKey: 'errors.reparsePointUnsupported', path: 'C:\\junction', recoverable: true });
+      f.down('left');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
+      expect(await screen.findByText(/외부 드래그 실패:.*재파싱/)).toBeTruthy();
+      f.down('right');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
+      await waitFor(() => expect(f.nativeFileDragClient.start).toHaveBeenCalledTimes(2));
     });
 
     it('removes pending gesture listeners on unmount', () => {

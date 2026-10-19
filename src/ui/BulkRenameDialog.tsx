@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import { useEffect, useRef, useState } from 'react';
 import type { FileEntry, RenameItem, RenamePreview, RenameRules } from '../domain/types';
 import { formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
@@ -56,7 +57,7 @@ export function BulkRenameDialog({ sources, language, client, onClose, onConfirm
     <div className="bulk-rename-preview" role="region" aria-label={text.title} tabIndex={0}>
       <table><thead><tr><th>{text.before}</th><th>{text.after}</th></tr></thead><tbody>
         {(rows ?? sources.map(source => ({ item: { source: source.path, newName: '', stamp: '' }, changed: false, error: null }))).map((row, index) =>
-          <tr key={row.item.source}><td title={row.item.source}>{sources[index].name}</td><td>{row.item.newName}
+          <tr key={row.item.source}><td title={displayPath(row.item.source)}>{sources[index].name}</td><td>{row.item.newName}
             {row.error ? <span className="operation-error"> — {formatUserErrorMessage(language, row.error)}</span> : rows && !row.changed ? <small> — {text.unchanged}</small> : null}
           </td></tr>)}
       </tbody></table>

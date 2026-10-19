@@ -91,7 +91,7 @@ fn validate_settings(settings: &Settings, path: &Path) -> CommandResult<()> {
         }
     }
     if let Some(window) = &settings.window {
-        if window.width < 1080 || window.height < 680 || window.width > 16384 || window.height > 16384 {
+        if window.width < 800 || window.height < 400 || window.width > 16384 || window.height > 16384 {
             return Err(AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
                 .with_detail("field", "window"));
         }

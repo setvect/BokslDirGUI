@@ -1,3 +1,4 @@
+import { isAppError } from '../tauri/client';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import nativeFileDragIcon from '../../src-tauri/icons/32x32.png?inline';
@@ -43,6 +44,7 @@ interface FileDragDependencies {
   readonly settings: Settings;
   readonly mutationClient: SafeMutationClient;
   readonly panelState: PanelStateById;
+  readonly refreshPanel: (panelId: PanelId, background?: boolean) => void;
 }
 export function useFileDrag(runtime: FileDragDependencies) {
 
@@ -57,6 +59,8 @@ export function useFileDrag(runtime: FileDragDependencies) {
   const [pointerDragPreview, setPointerDragPreview] = useState<{ entries: FileEntry[]; point: DragPoint; mode: NativeFileDragMode } | null>(null);
 
   const nativeDropOverlayRequestedRef = useRef(false);
+  const nativeDropPendingRef = useRef(false);
+  const nativeDropGenerationRef = useRef(0);
 
   const [dragOverPanel, setDragOverPanel] = useState<{ panelId: PanelId; intent: 'copy' | 'move' | 'import' | 'blocked' } | null>(null);
 
@@ -127,7 +131,15 @@ export function useFileDrag(runtime: FileDragDependencies) {
             return;
           }
           nativeFileDragSourceRef.current = null;
+          nativeDropOverlayRequestedRef.current = false;
           setDragOverPanel(null);
+          if (result === 'Dropped' && mode === 'move') {
+            for (const panel of ['left', 'right'] as const) {
+              if (runtime.panelStateRef.current[panel].path === session.sourcePath) {
+                runtime.refreshPanel(panel, true);
+              }
+            }
+          }
           runtime.setStatusMessage(result === 'Dropped'
             ? runtime.statusText.externalDragDone(entries.length)
             : runtime.statusText.externalDragCancelled);
@@ -137,9 +149,11 @@ export function useFileDrag(runtime: FileDragDependencies) {
       if (nativeFileDragSourceRef.current === session) {
         nativeFileDragSourceRef.current = null;
       }
-      setNativeFileDragUnavailable(true);
+      nativeDropOverlayRequestedRef.current = false;
+      if (!isAppError(error)) setNativeFileDragUnavailable(true);
       setDragOverPanel(null);
-      runtime.setStatusMessage(runtime.statusText.externalDragFailed(String(error)));
+      runtime.setStatusMessage(runtime.statusText.externalDragFailed(isAppError(error)
+        ? formatUserErrorMessage(runtime.settings.language, error) : String(error)));
     });
   };
 
@@ -179,7 +193,10 @@ export function useFileDrag(runtime: FileDragDependencies) {
     });
   };
 
-  useEffect(() => () => pointerDragCleanupRef.current?.(), []);
+  useEffect(() => () => {
+    pointerDragCleanupRef.current?.();
+    nativeFileDragSourceRef.current = null;
+  }, []);
 
   // HTML drop events belong only to files arriving from outside this WebView.
   const handlePanelDrop = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
@@ -201,7 +218,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
   const handlePanelDragOver = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
     if (!Array.from(event.dataTransfer.types ?? []).includes('Files')) return;
     event.preventDefault();
-    if (nativeFileDropEnabled && isTauriRuntime() && !nativeDropOverlayRequestedRef.current) {
+    if (!navigator.platform.startsWith('Win') && nativeFileDropEnabled && isTauriRuntime() && !nativeDropOverlayRequestedRef.current) {
       nativeDropOverlayRequestedRef.current = true;
       void showNativeDropOverlay().catch((error: unknown) => {
         nativeDropOverlayRequestedRef.current = false;
@@ -212,7 +229,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
     setDragOverPanel({ panelId: targetPanel, intent: blocked ? 'blocked' : 'import' });
   };
 
-  const importNativeDroppedPaths = async (paths: string[], targetPanel: PanelId, targetDir: string) => {
+  const importNativeDroppedPaths = async (paths: string[], targetPanel: PanelId, targetDir: string, nativeSource: FileDragSource | null, generation: number) => {
     const normalizedPaths = uniqueAbsolutePaths(paths);
     if (normalizedPaths.length !== paths.length) {
       runtime.setStatusMessage(runtime.statusText.externalDropPathRequired);
@@ -220,15 +237,18 @@ export function useFileDrag(runtime: FileDragDependencies) {
     }
 
     const externalEntries: FileEntry[] = [];
+    const resolvedPaths: string[] = [];
     if (runtime.mutationClient.getMetadata) {
       const metadataResults = await Promise.all(
         normalizedPaths.map((path) => runtime.mutationClient.getMetadata!({ path })),
       );
+      if (generation !== nativeDropGenerationRef.current) return;
       for (const [index, result] of metadataResults.entries()) {
         if (!result.ok) {
           runtime.setStatusMessage(formatUserErrorMessage(runtime.settings.language, result.error));
           return;
         }
+        resolvedPaths.push(result.data.absolutePath);
         const sourcePath = normalizedPaths[index];
         externalEntries.push({
           ...result.data,
@@ -238,6 +258,24 @@ export function useFileDrag(runtime: FileDragDependencies) {
       }
     } else {
       externalEntries.push(...normalizedPaths.map(fileEntryFromExternalDropPath));
+    }
+
+    if (generation !== nativeDropGenerationRef.current
+      || runtime.panelStateRef.current[targetPanel].path !== targetDir
+      || isOperationInFlight(useOperationStore.getState()) || commanderKeyboardHasOwner()) return;
+    if (nativeSource) {
+      // Compare backend-resolved paths, never display-normalize paths for identity.
+      // Windows CF_HDROP may return C:\... while our listing retains \\?\C:\....
+      if (samePathSet(nativeSource.entries.map(entry => entry.path), resolvedPaths)) {
+        if (dragTargetBlocked(nativeSource, targetPanel)) {
+          runtime.setStatusMessage(runtime.statusText.externalDragCancelled);
+          return;
+        }
+        commitPanelDragRef.current(nativeSource, targetPanel, nativeSource.mode);
+      } else {
+        runtime.setStatusMessage(runtime.statusText.externalDropPathRequired);
+      }
+      return;
     }
 
     const action = ACTION_BY_ID.get('file.copy');
@@ -250,6 +288,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
   };
 
   const handleNativeFileDropEvent = (event: NativeFileDropEvent) => {
+    if (event.type !== 'over') traceFileDrag('native-drop', { type: event.type, own: Boolean(nativeFileDragSourceRef.current) });
     if (event.type === 'leave') {
       nativeDropOverlayRequestedRef.current = false;
       setDragOverPanel((current) => current?.intent === 'import' || current?.intent === 'blocked' ? null : current);
@@ -258,6 +297,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
 
     if (event.type === 'drop') {
       nativeDropOverlayRequestedRef.current = false;
+      if (nativeDropPendingRef.current) return;
     }
 
     const targetPanel = panelIdAtClientPosition(event.position);
@@ -291,6 +331,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
       isOwnNativeDrag && nativeDragSource?.mode === 'move' ? 'file.move' : 'file.copy',
     );
     if (blocked || event.paths.length === 0) {
+      if (isOwnNativeDrag) nativeFileDragSourceRef.current = null;
       if (blockedAction) {
         runtime.setStatusMessage(runtime.statusText.unavailableInContext(labelForAction(blockedAction, runtime.settings.language)));
       }
@@ -301,7 +342,20 @@ export function useFileDrag(runtime: FileDragDependencies) {
       commitPanelDragRef.current(nativeDragSource, targetPanel, nativeDragSource.mode);
       return;
     }
-    void importNativeDroppedPaths(event.paths, targetPanel, targetState.path);
+    // Claim this drop before resolving metadata; completion and duplicate events
+    // must not clear its source snapshot or enqueue a second file operation.
+    nativeFileDragSourceRef.current = null;
+    nativeDropPendingRef.current = true;
+    const generation = ++nativeDropGenerationRef.current;
+    void importNativeDroppedPaths(event.paths, targetPanel, targetState.path, nativeDragSource, generation)
+      .catch((error: unknown) => {
+        if (generation === nativeDropGenerationRef.current) {
+          runtime.setStatusMessage(runtime.statusText.externalDropUnavailable(String(error)));
+        }
+      })
+      .finally(() => {
+        if (generation === nativeDropGenerationRef.current) nativeDropPendingRef.current = false;
+      });
   };
 
   nativeFileDropRuntimeRef.current = {
@@ -336,6 +390,8 @@ export function useFileDrag(runtime: FileDragDependencies) {
 
     return () => {
       disposed = true;
+      nativeDropGenerationRef.current += 1;
+      nativeDropPendingRef.current = false;
       unlisten?.();
     };
   }, [runtime.nativeFileDropClient, runtime.runtimeBackendAvailable]);

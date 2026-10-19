@@ -69,3 +69,20 @@
 
 - 구조 분리 후 Shell 연결은 `useFileDrag.ts`, OS 어댑터는 `src/tauri/commanderClients.ts`, 공통 액션 요청은 `actionRequest.ts`가 담당
 - 포인터 세션과 대상 결정 정책은 유지
+
+## Windows 네이티브 수신과 복귀 — 2026-10-19
+
+- Windows 시작 설정: 주 창의 네이티브 파일 수신 활성화, 별도 `drop-overlay` 창 생성 제외
+- 근거: 보조 WebView 수신 방식에서 release 설치본의 실제 native drop 누락 재현, 배경 alpha 조정 후에도 잔류 현상 재현
+- Windows 전달 경로: 주 창 `WindowEvent::DragDrop` → `native_drop.rs` → 기존 `boksldir://native-file-drop` 이벤트 → 공통 액션
+- Mac 수신: 기존 보조 창과 JavaScript 전달 경로 유지
+- 내부 포인터 드래그: 기존 pointer 세션과 공통 복사/이동 액션 유지, 네이티브 인계 이후의 OS 이벤트만 별도 수신
+- 좌표: Windows 물리 좌표를 주 창 배율로 한 번만 변환, 원본 경로 문자열 유지
+- 자체 복귀: 백엔드 메타데이터로 원본 경로 동일성 확인, 저장된 복사/이동 의도·명시 확인·공통 작업 상태 유지
+- 비동기 경계: 메타데이터 대기 전 소스 확보, 중복 drop·unmount 후 응답·다른 작업 시작·대상 경로 변경 시 실행 방지
+- 네이티브 인계 전 검증: 부모만 정규화·미지원 재파싱 지점 차단·오류 이후 정상 재시도 허용
+- Move 협상: Wry의 복사 전용 수신 효과와 호환되도록 `drag` 로컬 패치 유지, 자체 복귀는 원래 이동 의도로 실행
+- 외부 이동 완료: 원본 폴더 표시 패널의 기존 background refresh 호출, 취소·복사·unmount 후 종료 응답 제외
+- 완료 경계: 네이티브 종료 콜백과 수신 앱의 실제 파일 전달 성공 구분 필수
+- 원본 의존성·패치 근거: `src-tauri/vendor/drag/PATCH.md` 참조
+- 실제 실행 증거와 남은 범위: [Windows 검증 기록](windows-validation.md)의 15절 이후 참조

@@ -1,3 +1,5 @@
+import { displayPath } from '../domain/pathDisplay';
+export { displayPath } from '../domain/pathDisplay';
 import { clampNumber } from './settingsModel';
 
 export const splitMiddleEllipsisParts = (name: string): { start: string; end: string | null } => {
@@ -73,17 +75,14 @@ const isCombiningMark = (value: string) => /^\p{Mark}$/u.test(value);
 const isVariationSelector = (value: string) => /^[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]$/u.test(value);
 const isEmojiModifier = (value: string) => /^\p{Emoji_Modifier}$/u.test(value);
 
-// Presentation only: keep the original path in navigation state and backend requests.
-export const displayPath = (path: string) => {
-  if (!path.startsWith('\\\\?\\')) return path;
-  const tail = path.slice(4);
-  if (/^[a-z]:\\/i.test(tail)) return tail;
-  if (/^UNC\\/i.test(tail)) return `\\\\${tail.slice(4)}`;
-  return path;
-};
-
 export const shortenPath = (path: string) => {
-  const normalized = path.replace(/\\/g, '/');
+  const label = displayPath(path);
+  if (/^[a-z]:\\/i.test(label) || label.startsWith('\\\\')) {
+    const parts = label.split('\\');
+    const rootParts = label.startsWith('\\\\') ? 4 : 1;
+    return parts.length <= rootParts + 3 ? label : [...parts.slice(0, rootParts), '…', ...parts.slice(-2)].join('\\');
+  }
+  const normalized = label.replace(/\\/g, '/');
   const parts = normalized.split('/').filter(Boolean);
   if (parts.length <= 4) {
     return normalized.startsWith('/') ? `/${parts.join('/')}` : parts.join('/');

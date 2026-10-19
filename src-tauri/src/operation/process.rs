@@ -179,6 +179,27 @@ fn spawn_managed(command: Command) -> std::io::Result<Box<dyn process_wrap::std:
     command.spawn()
 }
 
+fn spawn_error(error: std::io::Error, working_dir: Option<&Path>, path: Option<&Path>) -> AppError {
+    #[cfg(windows)]
+    if matches!(error.raw_os_error(), Some(87 | 267))
+        && working_dir.is_some_and(|directory| {
+            use std::os::windows::ffi::OsStrExt;
+            directory.as_os_str().encode_wide().count() >= 260
+        })
+    {
+        // CreateProcessW still limits the working directory even when file APIs accept long paths.
+        return AppError::new(
+            "working_directory_too_long",
+            "errors.workingDirectoryTooLong",
+            working_dir,
+            true,
+        ).with_detail("osCode", error.raw_os_error().unwrap().to_string());
+    }
+    #[cfg(not(windows))]
+    let _ = working_dir;
+    map_io_error(error, path)
+}
+
 /// One capture/cancellation boundary for archive tools and user commands.
 /// Readers keep draining after their retention limit, so full pipes cannot deadlock the child.
 pub(super) fn capture_process(
@@ -201,7 +222,9 @@ pub(super) fn capture_process(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = spawn_managed(command).map_err(|e| map_io_error(e, path))?;
+    let working_dir = command.get_current_dir().map(Path::to_path_buf);
+    let mut child = spawn_managed(command)
+        .map_err(|error| spawn_error(error, working_dir.as_deref(), path))?;
     let stdout = child.stdout().take().expect("piped stdout");
     let stderr = child.stderr().take().expect("piped stderr");
     let child_handle = Arc::new(Mutex::new(child));

@@ -70,9 +70,15 @@ pub(crate) fn list_dir(
 }
 
 pub(crate) fn get_metadata(path: &str) -> CommandResult<FileMetadata> {
-    let path = canonical_existing_path(path)?;
+    // Resolve the parent only: properties and native return matching describe
+    // the selected entry, including dangling links, rather than its target.
+    let path = if Path::new(path).file_name().is_some() {
+        canonical_existing_entry(path)?
+    } else {
+        canonical_existing_path(path)?
+    };
     let entry = file_entry_from_path(&path, false)?;
-    let readonly = fs::metadata(&path)
+    let readonly = fs::symlink_metadata(&path)
         .map_err(|error| map_io_error(error, Some(&path)))?
         .permissions()
         .readonly();
@@ -166,4 +172,19 @@ pub(crate) fn canonical_existing_path(path: &str) -> CommandResult<PathBuf> {
     crate::platform::validate_path_input(&raw)?;
     raw.canonicalize()
         .map_err(|error| map_io_error(error, Some(&raw)))
+}
+
+pub(crate) fn canonical_existing_entry(path: &str) -> CommandResult<PathBuf> {
+    let raw = PathBuf::from(path);
+    crate::platform::validate_path_input(&raw)?;
+    let parent = raw
+        .parent()
+        .ok_or_else(|| AppError::new("invalid_path", "errors.invalidPath", Some(&raw), true))?;
+    let name = raw
+        .file_name()
+        .ok_or_else(|| AppError::new("invalid_path", "errors.invalidPath", Some(&raw), true))?;
+    let parent = canonical_existing_path(&parent.to_string_lossy())?;
+    let entry = parent.join(name);
+    fs::symlink_metadata(&entry).map_err(|error| map_io_error(error, Some(&entry)))?;
+    Ok(entry)
 }

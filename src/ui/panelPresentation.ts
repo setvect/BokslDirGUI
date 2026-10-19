@@ -1,3 +1,4 @@
+import { displayPath } from '../domain/pathDisplay';
 import type { FileEntry, PanelId, Settings, SortSpec } from '../domain/types';
 import {
   FILE_ENTRY_TEXT,
@@ -197,11 +198,11 @@ export const fileEntryAccessibleLabel = (entry: FileEntry, language: Settings['l
 export const fileEntryTooltip = (entry: FileEntry, language: Settings['language']) => {
   const text = FILE_ENTRY_TEXT[language];
   if (entry.isVirtual) {
-    return `${entry.name}\n${text.moveToParentDirectory}\n${text.path}: ${entry.path}`;
+    return `${entry.name}\n${text.moveToParentDirectory}\n${text.path}: ${displayPath(entry.path)}`;
   }
   return [
     `${text.name}: ${entry.name}`,
-    `${text.path}: ${entry.path}`,
+    `${text.path}: ${displayPath(entry.path)}`,
     `${text.kind}: ${METADATA_KIND_LABELS[language][entry.kind] ?? entry.kind}`,
     `${text.size}: ${formatSize(entry) || '-'}`,
     `${text.modified}: ${formatDate(entry.modifiedAt, 'long') || '-'}`,
