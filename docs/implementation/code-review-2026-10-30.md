@@ -51,6 +51,14 @@
   - 회귀 테스트: 키보드·보기 메뉴로 연 경로 이동 창이 Esc 한 번에 닫히고 방향키 조작이 이어지는지 확인(`CommanderShell.navigation.test.tsx`)
   - 정정: 앞선 기록의 "수정 후 3회·수정 전 2회 미닫힘"은 `cliclick` 유실의 영향
 
+### 확인이 필요한 후보
+
+- D09 후보: macOS에서 만든 ZIP의 한글 이름이 Windows에서 깨질 가능성
+  - 관찰(6단계 D07 후속): macOS `/usr/bin/zip`(Info-ZIP 3.0)은 로케일과 무관하게 UTF-8 플래그(general purpose bit 11)를 설정하지 않고 이름 바이트만 UTF-8로 저장
+  - 관찰: macOS `7zz`는 같은 ZIP의 한글 이름을 정상 표시, 7zz로 만든 ZIP은 UTF-8 플래그 설정
+  - 확인 필요: Windows 앱(7-Zip 목록)과 탐색기에서 macOS 앱이 만든 ZIP의 한글 이름 표시(VM E2E)
+  - 수정 후보: macOS의 ZIP 생성 도구를 배포한 7zz로 변경, 압축 provider 변경이라 실기 결과 확인 후 결정
+
 ## 리팩토링 후보
 
 - 우선순위 순, 모두 동작 보존 정리 기준
@@ -66,6 +74,11 @@
 - 제안: TS 소비처를 `domain/archiveFormats`로 통합, Rust는 `archive_provider.rs`에 형식·provider 선택·도구 탐색 집중, 형식 표의 계약 fixture 양쪽 대조
 - 유지: 유형별 압축 알고리즘, staging, no-replace 게시 경계
 - 위험·검증: 중간(provider 선택 오류 가능), `BOKSLDIRGUI_REQUIRE_PROVIDERS=1`·`BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES=1` Rust 테스트, `verify-full-scope.mjs`의 `archiveVirtual` 문자열 검사 갱신 필요
+- 진행(6단계): TS 형식 판정 4곳을 `domain/archiveFormats`의 표 하나로 통합(가상 경로 패턴도 표에서 생성)
+- 진행(6단계): Rust 형식 판정 3벌과 도구 탐색 2벌을 `archive_provider`의 `ARCHIVE_FORMATS`·`archive_format`·`find_tool`로 통합, 도구 없음 오류 10곳은 `require_tool`
+- 진행(6단계): 형식 표 공유 fixture `src/tauri/fixtures/archive-formats.json`을 Rust·TS 테스트가 대조
+- 유지 결정: `zip_uses_seven_zip()` 분기는 작업별 진입점마다 한 번씩이라 유지, 같은 함수 두 번 찾던 `7zz`→`7z` 대체 탐색은 제거
+- 검증: `BOKSLDIRGUI_REQUIRE_PROVIDERS=1`와 `BOKSLDIRGUI_TEST_WINDOWS_ARCHIVES=1` 조합에서 압축 테스트 20개 통과
 
 ### R02 플랫폼 분기 정리
 
@@ -171,6 +184,8 @@
 - 결함 수정과 동작 보존 정리의 커밋 분리, 결함은 회귀 테스트 우선
 - Windows 전용 코드는 이 Mac에서 앱 전체 컴파일 불가 → GitHub Actions windows-2022 또는 Windows VM 확인 필수
 - macOS 외부 압축 도구(`zip`·`unzip`·`7zz`)의 생성·해제도 로케일 영향 가능 → Finder 실행 앱 기준 확인 필요(D07 후속)
+  - 확인(6단계): `LANG`·`LC_ALL` 없는 환경에서 `zip` 생성, `unzip` 해제, `tar` 생성·해제 모두 한글·악센트 이름 정상, 로케일 영향 없음(목록 표시만 영향, D07에서 수정)
+  - 별도 관찰: UTF-8 플래그 미설정은 D09 후보로 분리
 - macOS VM 키 입력: 기능 키는 `cliclick kp:` 대신 수정자 상태를 비운 CGEvent 도구 사용, 마우스 조작은 `cliclick` 유지
 
 ## 검증 기록

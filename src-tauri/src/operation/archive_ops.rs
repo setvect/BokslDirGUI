@@ -15,13 +15,14 @@ use std::time::UNIX_EPOCH;
 use std::collections::HashSet;
 
 use super::conflict::{handle_archive_conflict, handle_conflict};
+use crate::archive_provider::archive_format;
 use super::file_io::{
     collect_source_paths, copy_file_no_replace, copy_tree, copy_tree_replacing,
     copy_tree_to_destination, count_entries_and_bytes, path_is_occupied, publish_replacement,
     scan_work, unique_temp_target, ProgressTicker, SpecialFileScanPolicy,
 };
 use super::process::{
-    external_binary, redact_error_secret, run_external_command,
+    redact_error_secret, run_external_command,
     run_external_command_capture_observed, run_external_command_capture_with_secret,
     run_external_command_with_secret,
 };
@@ -117,7 +118,7 @@ pub(super) fn run_archive_create(
     }
 
     let archive_format =
-        archive_format_name(&target).unwrap_or_else(|| format.to_ascii_lowercase());
+        archive_format(&target).map(str::to_string).unwrap_or_else(|| format.to_ascii_lowercase());
     emit_progress(
         app,
         operation_id,
@@ -390,7 +391,7 @@ pub(super) fn run_archive_add(
         Err(error) => return error_summary(operation_id, kind, error),
     };
     if !matches!(
-        archive_format_name(&archive).as_deref(),
+        archive_format(&archive),
         Some("zip" | "jar" | "war" | "7z")
     ) {
         return error_summary(
@@ -686,15 +687,7 @@ pub(super) fn run_zip_create_observed(
     if crate::archive_provider::zip_uses_seven_zip() {
         return run_7z_create_observed(operation_id, target, sources, password, observer);
     }
-    let zip = external_binary("zip").ok_or_else(|| {
-        AppError::new(
-            "unsupported",
-            "errors.archiveProviderUnavailable",
-            Some(target),
-            true,
-        )
-        .with_detail("provider", "zip")
-    })?;
+    let zip = crate::archive_provider::require_tool("zip", target)?;
     let working_dir = common_source_parent(sources, target)?;
     let mut command = Command::new(zip);
     command.current_dir(&working_dir);
@@ -856,21 +849,11 @@ pub(super) fn run_7z_create_observed(
     password: Option<&str>,
     observer: Option<&mut dyn FnMut(&[u8])>,
 ) -> CommandResult<()> {
-    let seven_zip = external_binary("7zz")
-        .or_else(|| external_binary("7z"))
-        .ok_or_else(|| {
-            AppError::new(
-                "unsupported",
-                "errors.archiveProviderUnavailable",
-                Some(target),
-                true,
-            )
-            .with_detail("provider", "7z")
-        })?;
+    let seven_zip = crate::archive_provider::require_tool("7z", target)?;
     let working_dir = common_source_parent(sources, target)?;
     let mut command = Command::new(seven_zip);
     command.current_dir(&working_dir);
-    let zip = matches!(archive_format_name(target).as_deref(), Some("zip" | "jar" | "war"));
+    let zip = matches!(archive_format(target), Some("zip" | "jar" | "war"));
     command.args(["a", "-y", "-spd", "-sccUTF-8", if zip { "-tzip" } else { "-t7z" }]);
     if observer.is_some() {
         command.arg("-bsp1");
@@ -981,15 +964,7 @@ pub(super) fn run_zip_extract(
     if crate::archive_provider::zip_uses_seven_zip() {
         return run_7z_extract(operation_id, archive, target, password, policy, entries);
     }
-    let unzip = external_binary("unzip").ok_or_else(|| {
-        AppError::new(
-            "unsupported",
-            "errors.archiveProviderUnavailable",
-            Some(archive),
-            true,
-        )
-        .with_detail("provider", "unzip")
-    })?;
+    let unzip = crate::archive_provider::require_tool("unzip", archive)?;
     let mut command = Command::new(unzip);
     if let Some(password) = password {
         command.arg("-P").arg(password);
@@ -1026,17 +1001,7 @@ pub(super) fn run_7z_extract(
     policy: ConflictDecision,
     entries: Option<&[String]>,
 ) -> CommandResult<()> {
-    let seven_zip = external_binary("7zz")
-        .or_else(|| external_binary("7z"))
-        .ok_or_else(|| {
-            AppError::new(
-                "unsupported",
-                "errors.archiveProviderUnavailable",
-                Some(archive),
-                true,
-            )
-            .with_detail("provider", "7z")
-        })?;
+    let seven_zip = crate::archive_provider::require_tool("7z", archive)?;
     let mut command = Command::new(seven_zip);
     command.args(["x", "-spd", "-sccUTF-8"]);
     if let Some(password) = password {
@@ -1070,8 +1035,8 @@ pub(super) fn run_7z_extract(
 pub(super) fn run_tar_extract(
     operation_id: &str, archive: &Path, target: &Path, entries: Option<&[String]>,
 ) -> CommandResult<()> {
-    let format = archive_format_name(archive).unwrap_or_default();
-    crate::archive_tar::extract(archive, &format, target, entries, &|| is_cancelled(operation_id))
+    let format = archive_format(archive).unwrap_or_default();
+    crate::archive_tar::extract(archive, format, target, entries, &|| is_cancelled(operation_id))
         .map_err(|error| map_tar_error(error, operation_id, archive))
 }
 
@@ -1091,7 +1056,7 @@ pub(super) fn run_archive_extract_selected(
         return Ok(());
     }
     let staging = unique_archive_extract_staging_dir(operation_id)?;
-    let extract_result = match archive_format_name(archive).as_deref() {
+    let extract_result = match archive_format(archive) {
         Some("zip" | "jar" | "war") => run_zip_extract(
             operation_id,
             archive,
@@ -1317,25 +1282,6 @@ pub(super) fn normalize_archive_entry(entry: &str) -> String {
         .join("/")
 }
 
-pub(super) fn archive_format_name(path: &Path) -> Option<String> {
-    let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
-    for (suffix, format) in [
-        (".tar.gz", "tar.gz"),
-        (".tgz", "tar.gz"),
-        (".tar.zst", "tar.zst"),
-        (".tzst", "tar.zst"),
-        (".zip", "zip"),
-        (".jar", "jar"),
-        (".war", "war"),
-        (".tar", "tar"),
-        (".7z", "7z"),
-    ] {
-        if name.ends_with(suffix) {
-            return Some(format.to_string());
-        }
-    }
-    None
-}
 
 pub(super) fn unique_archive_extract_staging_dir(operation_id: &str) -> CommandResult<PathBuf> {
     let base = env::temp_dir().join(format!(
@@ -1378,17 +1324,9 @@ pub(super) fn run_archive_delete_entries(
     if entries.is_empty() {
         return Ok(());
     }
-    match archive_format_name(archive).as_deref() {
+    match archive_format(archive) {
         Some("zip" | "jar" | "war") if !crate::archive_provider::zip_uses_seven_zip() => {
-            let zip = external_binary("zip").ok_or_else(|| {
-                AppError::new(
-                    "unsupported",
-                    "errors.archiveProviderUnavailable",
-                    Some(archive),
-                    true,
-                )
-                .with_detail("provider", "zip")
-            })?;
+            let zip = crate::archive_provider::require_tool("zip", archive)?;
             let mut command = Command::new(zip);
             command.arg("-d").arg("-q").arg(archive);
             for entry in entries {
@@ -1397,17 +1335,7 @@ pub(super) fn run_archive_delete_entries(
             run_external_command(operation_id, command, Some(archive))
         }
         Some("zip" | "jar" | "war" | "7z") => {
-            let seven_zip = external_binary("7zz")
-                .or_else(|| external_binary("7z"))
-                .ok_or_else(|| {
-                    AppError::new(
-                        "unsupported",
-                        "errors.archiveProviderUnavailable",
-                        Some(archive),
-                        true,
-                    )
-                    .with_detail("provider", "7z")
-                })?;
+            let seven_zip = crate::archive_provider::require_tool("7z", archive)?;
             let mut command = Command::new(seven_zip);
             command.args(["d", "-y", "-spd", "-sccUTF-8"]).arg(archive);
             for entry in entries {
@@ -1430,17 +1358,9 @@ pub(super) fn run_archive_add_entries(
     staging: &Path,
     entries: &[String],
 ) -> CommandResult<()> {
-    match archive_format_name(archive).as_deref() {
+    match archive_format(archive) {
         Some("zip" | "jar" | "war") if !crate::archive_provider::zip_uses_seven_zip() => {
-            let zip = external_binary("zip").ok_or_else(|| {
-                AppError::new(
-                    "unsupported",
-                    "errors.archiveProviderUnavailable",
-                    Some(archive),
-                    true,
-                )
-                .with_detail("provider", "zip")
-            })?;
+            let zip = crate::archive_provider::require_tool("zip", archive)?;
             let mut command = Command::new(zip);
             command
                 .current_dir(staging)
@@ -1453,17 +1373,7 @@ pub(super) fn run_archive_add_entries(
             run_external_command(operation_id, command, Some(archive))
         }
         Some("zip" | "jar" | "war" | "7z") => {
-            let seven_zip = external_binary("7zz")
-                .or_else(|| external_binary("7z"))
-                .ok_or_else(|| {
-                    AppError::new(
-                        "unsupported",
-                        "errors.archiveProviderUnavailable",
-                        Some(archive),
-                        true,
-                    )
-                    .with_detail("provider", "7z")
-                })?;
+            let seven_zip = crate::archive_provider::require_tool("7z", archive)?;
             let mut command = Command::new(seven_zip);
             command.current_dir(staging).args(["a", "-y", "-spd", "-sccUTF-8"]).arg(archive);
             for entry in entries {
@@ -1492,7 +1402,7 @@ pub(super) fn list_archive_entry_names_for_operation(
     archive: &Path,
     password: Option<&str>,
 ) -> CommandResult<Vec<String>> {
-    match archive_format_name(archive).as_deref() {
+    match archive_format(archive) {
         Some("zip" | "jar" | "war") if !crate::archive_provider::zip_uses_seven_zip() => {
             list_zip_entries_for_operation(operation_id, archive, password)
         }
@@ -1536,17 +1446,7 @@ pub(super) fn list_7z_entries_for_operation(
     archive: &Path,
     password: Option<&str>,
 ) -> CommandResult<Vec<String>> {
-    let seven_zip = external_binary("7zz")
-        .or_else(|| external_binary("7z"))
-        .ok_or_else(|| {
-            AppError::new(
-                "unsupported",
-                "errors.archiveProviderUnavailable",
-                Some(archive),
-                true,
-            )
-            .with_detail("provider", "7z")
-        })?;
+    let seven_zip = crate::archive_provider::require_tool("7z", archive)?;
     let mut command = Command::new(seven_zip);
     command.args(["l", "-slt", "-sccUTF-8"]);
     if let Some(password) = password {
@@ -1559,8 +1459,8 @@ pub(super) fn list_7z_entries_for_operation(
 }
 
 pub(super) fn list_tar_entries_for_operation(operation_id: &str, archive: &Path) -> CommandResult<Vec<String>> {
-    let format = archive_format_name(archive).unwrap_or_default();
-    let members = crate::archive_tar::list(archive, &format, &|| is_cancelled(operation_id))
+    let format = archive_format(archive).unwrap_or_default();
+    let members = crate::archive_tar::list(archive, format, &|| is_cancelled(operation_id))
         .map_err(|error| map_tar_error(error, operation_id, archive))?;
     if let Some(member) = members.iter().find(|member| member.link || archive_entry_is_unsafe(&member.path)) {
         return Err(AppError::new("unsafe_archive_entry", "errors.archiveUnsafePath", Some(archive), true)

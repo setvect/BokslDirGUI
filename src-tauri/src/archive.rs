@@ -1,5 +1,6 @@
 use crate::contracts::{AppError, ArchiveListing, CommandResult, EntryKind, FileEntry};
-use crate::filesystem::{is_archive_path, map_io_error};
+use crate::archive_provider::is_archive_path;
+use crate::filesystem::map_io_error;
 use crate::navigation;
 use crate::path_text::display_path;
 use std::path::Path;
@@ -49,7 +50,7 @@ fn list_archive_entries(
     archive: &Path,
     password: Option<&str>,
 ) -> CommandResult<(Vec<ArchiveEntryInfo>, bool)> {
-    match archive_format_name(archive).as_deref() {
+    match crate::archive_provider::archive_format(archive) {
         Some("zip" | "jar" | "war") if crate::archive_provider::zip_uses_seven_zip() => {
             list_7z_entries_with_metadata(archive, password)
         }
@@ -128,17 +129,7 @@ fn list_7z_entries_with_metadata(
     archive: &Path,
     password: Option<&str>,
 ) -> CommandResult<(Vec<ArchiveEntryInfo>, bool)> {
-    let binary = find_binary("7zz")
-        .or_else(|| find_binary("7z"))
-        .ok_or_else(|| {
-            AppError::new(
-                "unsupported",
-                "errors.archiveProviderUnavailable",
-                Some(archive),
-                true,
-            )
-            .with_detail("provider", "7z")
-        })?;
+    let binary = crate::archive_provider::require_tool("7z", archive)?;
     let mut command = Command::new(binary);
     crate::platform::hide_console_window(&mut command);
     command.args(["l", "-slt", "-sccUTF-8"]);
@@ -157,8 +148,8 @@ fn list_7z_entries_with_metadata(
 }
 
 fn list_tar_entries_with_metadata(archive: &Path) -> CommandResult<Vec<ArchiveEntryInfo>> {
-    let format = archive_format_name(archive).unwrap_or_default();
-    let members = crate::archive_tar::list(archive, &format, &|| false)
+    let format = crate::archive_provider::archive_format(archive).unwrap_or_default();
+    let members = crate::archive_tar::list(archive, format, &|| false)
         .map_err(|error| map_io_error(error, Some(archive)))?;
     Ok(members.into_iter().map(|member| ArchiveEntryInfo {
         kind: if member.link { EntryKind::Symlink }
@@ -194,25 +185,6 @@ fn archive_provider_output_error(
         .with_detail("stderr", stderr.chars().take(512).collect::<String>())
 }
 
-fn archive_format_name(path: &Path) -> Option<String> {
-    let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
-    for (suffix, format) in [
-        (".tar.gz", "tar.gz"),
-        (".tgz", "tar.gz"),
-        (".tar.zst", "tar.zst"),
-        (".tzst", "tar.zst"),
-        (".zip", "zip"),
-        (".jar", "jar"),
-        (".war", "war"),
-        (".tar", "tar"),
-        (".7z", "7z"),
-    ] {
-        if name.ends_with(suffix) {
-            return Some(format.to_string());
-        }
-    }
-    None
-}
 
 fn parse_zip_name_output(
     output: std::process::Output,
@@ -535,14 +507,8 @@ fn permission_text_from_7z_attributes(attributes: Option<&str>) -> Option<String
         .map(str::to_string)
 }
 
-fn find_binary(name: &str) -> Option<String> {
-    if matches!(name, "7zz" | "7z") {
-        return crate::archive_provider::seven_zip();
-    }
-    crate::platform::find_executable(name)
-}
 
 #[cfg(test)]
 pub(crate) fn seven_zip_binary_for_test() -> Option<String> {
-    find_binary("7zz").or_else(|| find_binary("7z"))
+    crate::archive_provider::seven_zip()
 }

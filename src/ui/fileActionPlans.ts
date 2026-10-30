@@ -1,4 +1,4 @@
-import { archiveFileSuffix } from '../domain/archiveFormats';
+import { archiveFileSuffix, archiveFormatForName } from '../domain/archiveFormats';
 import type { FileEntry, SortSpec } from '../domain/types';
 import {
   isArchiveVirtualPath,
@@ -68,16 +68,8 @@ export const sortFieldForAction = (actionId: SortActionId): SortSpec['field'] =>
   return mapping[actionId];
 };
 
-export const archiveFormatForPath = (path: string) => {
-  const lowered = path.toLowerCase();
-  if (lowered.endsWith('.tar.gz') || lowered.endsWith('.tgz')) return 'tar.gz';
-  if (lowered.endsWith('.tar.zst') || lowered.endsWith('.tzst')) return 'tar.zst';
-  if (lowered.endsWith('.jar')) return 'jar';
-  if (lowered.endsWith('.war')) return 'war';
-  if (lowered.endsWith('.tar')) return 'tar';
-  if (lowered.endsWith('.7z')) return '7z';
-  return 'zip';
-};
+// 압축 내부 추가 대상은 이미 압축으로 판정된 경로, 형식을 알 수 없으면 기존처럼 zip 처리.
+export const archiveFormatForPath = (path: string) => archiveFormatForName(path) ?? 'zip';
 
 export { parseShellCommandInput } from '../actions/commandInput';
 

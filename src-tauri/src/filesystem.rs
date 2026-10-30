@@ -69,7 +69,7 @@ pub(crate) fn classify_entry(path: &Path, metadata: &fs::Metadata) -> EntryKind 
         return EntryKind::Directory;
     }
     if metadata.is_file() {
-        if is_archive_path(path) {
+        if crate::archive_provider::is_archive_path(path) {
             return EntryKind::Archive;
         }
         if is_executable(path, metadata) {
@@ -78,18 +78,6 @@ pub(crate) fn classify_entry(path: &Path, metadata: &fs::Metadata) -> EntryKind 
         return EntryKind::File;
     }
     EntryKind::Unknown
-}
-
-pub(crate) fn is_archive_path(path: &Path) -> bool {
-    let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-        return false;
-    };
-    let lowered = name.to_lowercase();
-    [
-        ".zip", ".jar", ".war", ".tar", ".tar.gz", ".tgz", ".tar.zst", ".tzst", ".7z",
-    ]
-    .iter()
-    .any(|suffix| lowered.ends_with(suffix))
 }
 
 #[cfg(unix)]

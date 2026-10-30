@@ -334,13 +334,6 @@ pub(super) fn capture_process(
     })
 }
 
-pub(super) fn external_binary(name: &str) -> Option<String> {
-    if matches!(name, "7zz" | "7z") {
-        return crate::archive_provider::seven_zip();
-    }
-    crate::platform::find_executable(name)
-}
-
 #[cfg(test)]
 #[path = "process_tests.rs"]
 pub(super) mod tests;

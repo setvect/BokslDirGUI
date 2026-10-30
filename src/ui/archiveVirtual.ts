@@ -1,3 +1,4 @@
+import { ARCHIVE_FILE_SUFFIXES } from '../domain/archiveFormats';
 import type { ArchiveListing, DirectoryListing, FileEntry, PanelId, SortSpec } from '../domain/types';
 import { createDirectoryListing, parentPathOf } from './panelState';
 
@@ -6,7 +7,11 @@ export interface ArchiveVirtualPath {
   innerPath: string;
 }
 
-const ARCHIVE_VIRTUAL_PATH_PATTERN = /^(.+\.(?:tar\.gz|tar\.zst|tgz|tzst|zip|jar|war|tar|7z)):\/?(.*)$/i;
+// `압축 파일 경로:/내부 경로` 형식. 압축 확장자 목록에서 생성.
+const ARCHIVE_VIRTUAL_PATH_PATTERN = new RegExp(
+  `^(.+(?:${ARCHIVE_FILE_SUFFIXES.map((suffix) => suffix.replace(/\./g, '\\.')).join('|')})):\\/?(.*)$`,
+  'i',
+);
 
 export const archiveVirtualRootPath = (archivePath: string) => `${archivePath.replace(/\/+$/, '')}:/`;
 

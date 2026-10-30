@@ -106,3 +106,17 @@ fn bulk_rename_and_trash_undo_wire_fields_are_stable() {
     let trash = TrashUndoPreview { id: "trash-fixture".into(), entries: vec![entry] };
     assert_eq!(serde_json::to_value(trash).unwrap(), fixture()["trashUndoPreview"]);
 }
+
+#[test]
+fn archive_format_table_matches_the_frontend_fixture() {
+    let rows: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("../../src/tauri/fixtures/archive-formats.json")).unwrap();
+    let fixture: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|row| (row["suffix"].as_str().unwrap(), row["format"].as_str().unwrap()))
+        .collect();
+    assert_eq!(fixture, crate::archive_provider::ARCHIVE_FORMATS.to_vec());
+    assert_eq!(crate::archive_provider::archive_format(Path::new("/x/Bundle.TAR.GZ")), Some("tar.gz"));
+    assert_eq!(crate::archive_provider::archive_format(Path::new("/x/app.war")), Some("war"));
+    assert!(!crate::archive_provider::is_archive_path(Path::new("/x/notes.txt")));
+}

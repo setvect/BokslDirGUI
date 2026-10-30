@@ -2,6 +2,8 @@ import { expect, it } from 'vitest';
 import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, NativeFileClipboard, RenamePreview, RenameRules, Settings, TrashUndoPreview } from '../domain/types';
 import { normalizeInvokeError } from './client';
 import { EVENTS } from './commands';
+import { ARCHIVE_FORMATS, archiveFormatForName } from '../domain/archiveFormats';
+import archiveFormats from './fixtures/archive-formats.json';
 import fixture from './fixtures/contract.json';
 import platformFixtures from './fixtures/platform.json';
 
@@ -64,4 +66,11 @@ it('keeps frontend event names identical to the Rust event constants', () => {
     expect(source).not.toMatch(/\.emit\(\s*"/);
     expect(source).not.toMatch(/\.emit_to\([^,]+,\s*"/);
   }
+});
+
+it('keeps the archive format table identical to the Rust provider table', () => {
+  expect(ARCHIVE_FORMATS).toEqual(archiveFormats);
+  expect(archiveFormatForName('Bundle.TAR.GZ')).toBe('tar.gz');
+  expect(archiveFormatForName('app.war')).toBe('war');
+  expect(archiveFormatForName('notes.txt')).toBeNull();
 });

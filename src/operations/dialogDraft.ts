@@ -1,4 +1,5 @@
 import { parseShellCommandInput } from '../actions/commandInput';
+import { archiveFileSuffix } from '../domain/archiveFormats';
 import { DIALOG_DEFINITIONS } from './dialogDefinitions';
 import { ACTION_BY_ID, type ActionId } from '../actions/registry';
 import type { OperationKind } from '../domain/types';
@@ -119,7 +120,7 @@ export const validateDialogInput = (dialogKind: DialogKind, value: string, requi
     if (!trimmed || trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('\0')) {
       return 'errors.invalidName';
     }
-    if (!archiveCreateNameIsSupported(trimmed)) {
+    if (archiveFileSuffix(trimmed) === null) {
       return 'errors.archiveFormatUnsupported';
     }
     return null;
@@ -138,10 +139,6 @@ export const validateDialogInput = (dialogKind: DialogKind, value: string, requi
   }
   return null;
 };
-
-const archiveCreateNameIsSupported = (name: string) => [
-  '.zip', '.jar', '.war', '.tar', '.tar.gz', '.tgz', '.tar.zst', '.tzst', '.7z',
-].some((suffix) => name.toLowerCase().endsWith(suffix));
 
 export const operationKindForDialog = (dialogKind: LongRunningDialogKind): OperationKind =>
   DIALOG_DEFINITIONS[dialogKind].operationKind;

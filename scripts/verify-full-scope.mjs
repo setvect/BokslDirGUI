@@ -377,7 +377,14 @@ addCheck('rust rename uses no-replace abstraction', read('src-tauri/src/mutation
 addCheck('rust operation service emits progress and summary events', read('src-tauri/src/operation/runtime.rs').includes('operation_progress') && read('src-tauri/src/operation/runtime.rs').includes('operation_summary') && read('src-tauri/src/operation/runtime.rs').includes('operation_conflict'), 'long-running operation state must be observable by the GUI');
 addCheck('rust operation service implements copy move delete trash policies', rustBackend.includes('start_copy') && rustBackend.includes('start_move') && read('src-tauri/src/operation/delete.rs').includes('DeleteMode::Trash') && read('src-tauri/src/operation/runtime.rs').includes('PERMANENT_DELETE'), 'copy/move/delete/trash must be real backend commands with safety policies');
 addCheck('rust trash does not fall back to permanent delete', read('src-tauri/src/operation/trash_restore.rs').includes('trash::delete(source)') && read('src-tauri/src/operation/delete.rs').includes('trash_recorder.trash(target)') && !read('src-tauri/src/operation/trash_restore.rs').includes('delete_tree_cancellable') && read('src-tauri/src/tests.rs').includes('start_delete_trash_failure_keeps_source_without_permanent_fallback'), 'trash failure must be recoverable and must not silently remove files permanently');
-addCheck('rust archive commands use safe external provider boundary', read('src-tauri/src/operation/archive_ops.rs').includes('archive_entry_is_unsafe') && read('src-tauri/src/operation/archive_ops.rs').includes('common_source_parent') && read('src-tauri/src/commands.rs').includes('start_archive_add') && read('src-tauri/src/archive.rs').includes('errors.archiveProviderUnavailable'), 'archive create/extract/add/list must avoid unsafe paths and absolute source entries');
+addCheck(
+  'rust archive commands use safe external provider boundary',
+  hasTest('src-tauri/src/tests.rs', 'archive_zip_create_list_extract_round_trip_uses_relative_entry_names', 'archive_password_round_trip_and_unsafe_entry_guards')
+    && hasTest('src-tauri/src/operation/tests.rs', 'archive_extract_rejects_escaping_strip_prefix_before_creating_target', 'failing_archive_provider_never_publishes_partial_create_or_add')
+    && hasTest('src-tauri/src/archive_provider.rs', 'missing_archive_tool_reports_provider_unavailable')
+    && read('src-tauri/src/commands.rs').includes('start_archive_add'),
+  'archive create/extract/add/list must avoid unsafe paths and absolute source entries',
+);
 addCheck(
   'archive virtual directories enforce read-only mutations while preserving copy-out',
   registry.includes('activePathIsArchive')
@@ -391,6 +398,12 @@ addCheck(
   hasTest('src/verification/fullScope.test.ts', 'recognizes every required archive format as a virtual directory')
     && hasTest('src-tauri/src/tests.rs', 'archive_required_formats_create_list_and_extract_round_trip'),
   'zip/tar/tar.gz/tgz/tar.zst/tzst/7z/jar/war require create/list/extract evidence',
+);
+addCheck(
+  'archive format table is shared by TypeScript and Rust',
+  hasTest('src/tauri/contract.test.ts', 'keeps the archive format table identical to the Rust provider table')
+    && hasTest('src-tauri/src/contract_tests.rs', 'archive_format_table_matches_the_frontend_fixture'),
+  'src/tauri/fixtures/archive-formats.json',
 );
 addCheck(
   'archive password UI and backend keep secrets out of summaries',

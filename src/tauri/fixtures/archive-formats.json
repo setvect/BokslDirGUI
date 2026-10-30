@@ -1,0 +1,11 @@
+[
+  { "suffix": ".tar.gz", "format": "tar.gz" },
+  { "suffix": ".tgz", "format": "tar.gz" },
+  { "suffix": ".tar.zst", "format": "tar.zst" },
+  { "suffix": ".tzst", "format": "tar.zst" },
+  { "suffix": ".zip", "format": "zip" },
+  { "suffix": ".jar", "format": "jar" },
+  { "suffix": ".war", "format": "war" },
+  { "suffix": ".tar", "format": "tar" },
+  { "suffix": ".7z", "format": "7z" }
+]
