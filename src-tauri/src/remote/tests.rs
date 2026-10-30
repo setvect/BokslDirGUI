@@ -617,3 +617,209 @@ fn remote_bulk_rename_previews_conflicts_and_applies_only_unchanged_sources() {
     assert!(server.root().join("new-a.txt").is_file() && !server.root().join("a.txt").exists());
     super::block_on(connection::disconnect(&connection.location));
 }
+
+fn transfer(kind: crate::contracts::OperationKind, sources: &[String], target: &str, policy: crate::contracts::ConflictDecision) -> crate::contracts::OperationSummary {
+    crate::operation::run_remote_transfer(None, "op-remote-transfer-test", kind, sources, target, policy, crate::contracts::RemoteLinkPolicy::Preserve)
+}
+
+fn mtime(path: &std::path::Path) -> u64 {
+    std::fs::metadata(path).unwrap().modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+}
+
+fn leftovers(dir: &std::path::Path) -> Vec<String> {
+    std::fs::read_dir(dir).unwrap().map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned()).filter(|name| name.contains(".boksldir-")).collect()
+}
+
+fn sample_bytes(length: usize) -> Vec<u8> {
+    (0..length).map(|index| (index * 31 % 251) as u8).collect()
+}
+
+#[test]
+fn uploads_and_downloads_folders_through_temporary_names_and_keep_modified_times() {
+    use crate::contracts::{ConflictDecision, OperationKind, OperationState};
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-transfer");
+    let local = TempDir::new("remote-transfer-local");
+    std::fs::create_dir_all(local.path().join("tree/한글 폴더")).unwrap();
+    std::fs::write(local.path().join("tree/big.bin"), sample_bytes(700_000)).unwrap();
+    std::fs::write(local.path().join("tree/한글 폴더/note.txt"), b"note").unwrap();
+    let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000);
+    std::fs::File::options().write(true).open(local.path().join("tree/big.bin")).unwrap().set_modified(old).unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+
+    let upload = transfer(OperationKind::Copy, &[display(&local.path().join("tree"))], &root, ConflictDecision::Skip);
+    assert_eq!(upload.state, OperationState::Completed, "{:?}", upload.errors);
+    assert_eq!(upload.completed_files, 4);
+    assert_eq!(std::fs::read(server.root().join("tree/big.bin")).unwrap(), sample_bytes(700_000));
+    assert_eq!(std::fs::read(server.root().join("tree/한글 폴더/note.txt")).unwrap(), b"note");
+    assert_eq!(mtime(&server.root().join("tree/big.bin")), 1_600_000_000);
+    assert!(leftovers(server.root()).is_empty());
+
+    let back = TempDir::new("remote-transfer-back");
+    let download = transfer(OperationKind::Copy, &[format!("{root}tree")], &display(back.path()), ConflictDecision::Skip);
+    assert_eq!(download.state, OperationState::Completed, "{:?}", download.errors);
+    assert_eq!(std::fs::read(back.path().join("tree/big.bin")).unwrap(), sample_bytes(700_000));
+    assert_eq!(mtime(&back.path().join("tree/big.bin")), 1_600_000_000);
+    assert!(leftovers(back.path()).is_empty());
+
+    let into_self = transfer(OperationKind::Copy, &[format!("{root}tree")], &format!("{root}tree/한글 폴더"), ConflictDecision::Skip);
+    assert_eq!(into_self.errors[0].message_key, "errors.copyIntoSelf");
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+fn display(path: &std::path::Path) -> String {
+    crate::path_text::display_path(path)
+}
+
+#[test]
+fn transfer_conflicts_skip_or_replace_and_moves_remove_sources_only_after_success() {
+    use crate::contracts::{ConflictDecision, OperationKind, OperationState};
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-transfer-conflict");
+    let local = TempDir::new("remote-transfer-conflict-local");
+    std::fs::write(local.path().join("a.txt"), b"new").unwrap();
+    std::fs::write(server.root().join("a.txt"), b"old").unwrap();
+    std::fs::create_dir(server.root().join("dest")).unwrap();
+    std::fs::create_dir(server.root().join("src")).unwrap();
+    std::fs::write(server.root().join("src/moved.txt"), b"moved").unwrap();
+    std::fs::write(server.root().join("dest/moved.txt"), b"existing").unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let source = display(&local.path().join("a.txt"));
+
+    let skipped = transfer(OperationKind::Copy, std::slice::from_ref(&source), &root, ConflictDecision::Skip);
+    assert_eq!((skipped.skipped_files, std::fs::read(server.root().join("a.txt")).unwrap()), (1, b"old".to_vec()));
+    let replaced = transfer(OperationKind::Copy, std::slice::from_ref(&source), &root, ConflictDecision::Overwrite);
+    assert_eq!(replaced.state, OperationState::Completed, "{:?}", replaced.errors);
+    assert_eq!(std::fs::read(server.root().join("a.txt")).unwrap(), b"new");
+    assert!(leftovers(server.root()).is_empty());
+
+    // 같은 서버 안 이동은 이름 변경, 충돌하면 선택에 따름
+    let same_server_skip = transfer(OperationKind::Move, &[format!("{root}src/moved.txt")], &format!("{root}dest"), ConflictDecision::Skip);
+    assert_eq!(same_server_skip.skipped_files, 1);
+    let same_server = transfer(OperationKind::Move, &[format!("{root}src/moved.txt")], &format!("{root}dest"), ConflictDecision::Overwrite);
+    assert_eq!(same_server.state, OperationState::Completed, "{:?}", same_server.errors);
+    assert_eq!(std::fs::read(server.root().join("dest/moved.txt")).unwrap(), b"moved");
+    assert!(!server.root().join("src/moved.txt").exists() && leftovers(&server.root().join("dest")).is_empty());
+
+    // 다른 끝점으로 이동: 대상에 쓰지 못하면 원본 보존
+    server.faults().deny_path_prefix("/locked".into());
+    std::fs::create_dir(server.root().join("locked")).unwrap();
+    let failed_move = transfer(OperationKind::Move, std::slice::from_ref(&source), &format!("{root}locked"), ConflictDecision::Skip);
+    assert_eq!(failed_move.state, OperationState::Failed);
+    assert!(local.path().join("a.txt").exists());
+    let moved = transfer(OperationKind::Move, std::slice::from_ref(&source), &format!("{root}dest"), ConflictDecision::Skip);
+    assert_eq!(moved.state, OperationState::Completed, "{:?}", moved.errors);
+    assert!(!local.path().join("a.txt").exists() && server.root().join("dest/a.txt").is_file());
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[test]
+fn interrupted_uploads_leave_only_temporary_files_and_resume_on_retry() {
+    use crate::contracts::{ConflictDecision, OperationKind, OperationState};
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-transfer-resume");
+    let local = TempDir::new("remote-transfer-resume-local");
+    std::fs::write(local.path().join("big.bin"), sample_bytes(1_500_000)).unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let source = display(&local.path().join("big.bin"));
+
+    server.faults().set_disconnect_after_bytes(600_000);
+    let interrupted = transfer(OperationKind::Copy, std::slice::from_ref(&source), &root, ConflictDecision::Skip);
+    assert_eq!(interrupted.state, OperationState::Failed);
+    assert!(!server.root().join("big.bin").exists());
+    let partial = leftovers(server.root());
+    assert_eq!(partial.len(), 1, "{partial:?}");
+    let kept = std::fs::metadata(server.root().join(&partial[0])).unwrap().len();
+    assert!(kept > 0 && kept < 1_500_000, "{kept}");
+
+    server.faults().reset();
+    drop(connection);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while connection::connection(&RemoteLocation::new("tester", "127.0.0.1", server.port()).unwrap()).is_ok() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let connection = connect(options(server.port(), password("pw"), &dir, None)).unwrap();
+    let resumed = transfer(OperationKind::Copy, std::slice::from_ref(&source), &root, ConflictDecision::Skip);
+    assert_eq!(resumed.state, OperationState::Completed, "{:?}", resumed.errors);
+    assert_eq!(std::fs::read(server.root().join("big.bin")).unwrap(), sample_bytes(1_500_000));
+    assert!(leftovers(server.root()).is_empty());
+
+    // 내용이 원본과 다른 임시본(빈 구간)은 이어받지 않고 처음부터 다시 받음
+    std::fs::remove_file(server.root().join("big.bin")).unwrap();
+    let mut damaged = sample_bytes(900_000);
+    damaged[300_000..600_000].fill(0);
+    std::fs::write(server.root().join(&partial[0]), damaged).unwrap();
+    let restarted = transfer(OperationKind::Copy, std::slice::from_ref(&source), &root, ConflictDecision::Skip);
+    assert_eq!(restarted.state, OperationState::Completed, "{:?}", restarted.errors);
+    assert_eq!(std::fs::read(server.root().join("big.bin")).unwrap(), sample_bytes(1_500_000));
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[test]
+fn cancelled_downloads_remove_temporary_files() {
+    use crate::contracts::{ConflictDecision, OperationKind, OperationState, RemoteLinkPolicy};
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-transfer-cancel");
+    let local = TempDir::new("remote-transfer-cancel-local");
+    std::fs::write(server.root().join("slow.bin"), sample_bytes(2_000_000)).unwrap();
+    let connection = connected(&server, &dir);
+    server.faults().set_delay_ms(15);
+    let operation_id = "op-remote-transfer-cancel";
+    let watched = local.path().to_path_buf();
+    let canceller = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while leftovers(&watched).is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        crate::operation::cancel_operation(operation_id.to_string()).unwrap();
+    });
+    let summary = crate::operation::run_remote_transfer_registered_for_test(
+        operation_id,
+        OperationKind::Copy,
+        &[format!("{}slow.bin", root_url(&server))],
+        &display(local.path()),
+        ConflictDecision::Skip,
+        RemoteLinkPolicy::Preserve,
+    );
+    canceller.join().unwrap();
+    assert_eq!(summary.state, OperationState::Cancelled);
+    assert!(leftovers(local.path()).is_empty() && !local.path().join("slow.bin").exists());
+    server.faults().reset();
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[cfg(unix)]
+#[test]
+fn link_policies_preserve_follow_or_skip_links_and_reject_loops() {
+    use crate::contracts::{ConflictDecision, OperationKind, OperationState, RemoteLinkPolicy};
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-transfer-links");
+    let local = TempDir::new("remote-transfer-links-local");
+    std::fs::create_dir_all(local.path().join("tree/data")).unwrap();
+    std::fs::write(local.path().join("tree/data/file.txt"), b"data").unwrap();
+    std::os::unix::fs::symlink("data/file.txt", local.path().join("tree/link.txt")).unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let run = |policy, target: &str| {
+        std::fs::create_dir(server.root().join(target)).unwrap();
+        crate::operation::run_remote_transfer(None, "op-remote-links", OperationKind::Copy, &[display(&local.path().join("tree"))], &format!("{root}{target}"), ConflictDecision::Skip, policy)
+    };
+    let preserved = run(RemoteLinkPolicy::Preserve, "preserve");
+    assert_eq!(preserved.state, OperationState::Completed, "{:?}", preserved.errors);
+    assert_eq!(std::fs::read_link(server.root().join("preserve/tree/link.txt")).unwrap(), std::path::Path::new("data/file.txt"));
+    let followed = run(RemoteLinkPolicy::Follow, "follow");
+    assert_eq!(followed.state, OperationState::Completed, "{:?}", followed.errors);
+    assert!(!std::fs::symlink_metadata(server.root().join("follow/tree/link.txt")).unwrap().file_type().is_symlink());
+    assert_eq!(std::fs::read(server.root().join("follow/tree/link.txt")).unwrap(), b"data");
+    let skipped = run(RemoteLinkPolicy::Skip, "skip");
+    assert_eq!((skipped.state, skipped.skipped_files), (OperationState::Completed, 1));
+    assert!(!server.root().join("skip/tree/link.txt").exists());
+
+    std::os::unix::fs::symlink(local.path().join("tree"), local.path().join("tree/data/loop")).unwrap();
+    let looped = run(RemoteLinkPolicy::Follow, "loop");
+    assert_eq!(looped.errors[0].message_key, "errors.remoteLinkLoop");
+    super::block_on(connection::disconnect(&connection.location));
+}

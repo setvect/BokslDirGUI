@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { FileEntry } from '../domain/types';
 import { SAMPLE_LISTINGS } from './commanderFixture';
+import { useOperationStore } from '../operations/operationStore';
 import { CommanderShell } from './CommanderShell';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { createDirectoryListing } from './panelState';
@@ -25,7 +26,7 @@ const renderRemotePanel = (operationClient = operationClientStub()) => {
   ]);
   const dataSource = createFixturePanelDataSource({ ...SAMPLE_LISTINGS, right: listing });
   return render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub()} operationClient={operationClient}
-    remoteClient={remoteClientStub()} initialFocusIndex={{ right: 0 }} initialSelectedPaths={{ left: [], right: [] }} />);
+    remoteClient={remoteClientStub()} initialFocusIndex={{ left: 3, right: 0 }} initialSelectedPaths={{ left: [], right: [] }} />);
 };
 
 describe('CommanderShell remote panels', () => {
@@ -74,6 +75,25 @@ describe('CommanderShell remote panels', () => {
 
     await waitFor(() => expect(startRemoteChmod).toHaveBeenCalledWith({
       targets: [`${REMOTE_DIR}/remote.txt`], mode: 0o750, recursive: false, scope: 'all',
+    }));
+  });
+  it('downloads with the existing copy key and uploads from a local panel into the remote panel', async () => {
+    const user = userEvent.setup();
+    const started = { ok: true as const, data: { operationId: 'op-remote-copy', kind: 'copy' as const, state: 'queued' as const } };
+    const operationClient = operationClientStub({ startCopy: vi.fn(async () => started) });
+    const { container } = renderRemotePanel(operationClient);
+    await waitFor(() => expect(focusedRowText(container)).toContain('remote.txt'));
+
+    await user.keyboard('y');
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: [`${REMOTE_DIR}/remote.txt`], targetDir: SAMPLE_LISTINGS.left.path, policy: 'skip',
+    }));
+    useOperationStore.setState({ dialog: null, progress: null, summary: null, lastError: null, activeOperationController: null });
+
+    await user.keyboard('{Tab}');
+    await user.keyboard('y');
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenLastCalledWith({
+      sources: [`${SAMPLE_LISTINGS.left.path}/Architecture.md`], targetDir: REMOTE_DIR, policy: 'skip',
     }));
   });
 });

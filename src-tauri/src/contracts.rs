@@ -372,6 +372,18 @@ pub(crate) struct RemoteSettings {
     pub(crate) keepalive_seconds: u32,
     #[serde(default = "default_connect_timeout_seconds")]
     pub(crate) connect_timeout_seconds: u32,
+    #[serde(default)]
+    pub(crate) link_policy: RemoteLinkPolicy,
+}
+
+/// 원격 전송의 심볼릭 링크 처리(FR-37.5): 링크 보존·대상 복사·건너뛰기.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum RemoteLinkPolicy {
+    #[default]
+    Preserve,
+    Follow,
+    Skip,
 }
 
 fn default_keepalive_seconds() -> u32 {
@@ -388,6 +400,7 @@ impl Default for RemoteSettings {
             sites: Vec::new(),
             keepalive_seconds: default_keepalive_seconds(),
             connect_timeout_seconds: default_connect_timeout_seconds(),
+            link_policy: RemoteLinkPolicy::Preserve,
         }
     }
 }

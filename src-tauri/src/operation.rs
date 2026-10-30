@@ -9,6 +9,9 @@ pub(crate) use trash_restore::{preview as preview_trash_undo, start as start_tra
 mod file_io;
 mod process;
 mod remote_ops;
+mod remote_transfer;
+#[cfg(test)]
+pub(crate) use remote_transfer::{run_registered_for_test as run_remote_transfer_registered_for_test, run_remote_transfer};
 pub(crate) use remote_ops::start_remote_chmod;
 #[cfg(test)]
 pub(crate) use remote_ops::{run_remote_chmod, run_remote_delete};

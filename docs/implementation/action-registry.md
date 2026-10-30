@@ -102,6 +102,9 @@
 | `settings.toggleIcons` | settings | 없음 | 없음 | Settings > Toggle Icons | none | save_settings |
 | `settings.sizeAuto` | settings | 없음 | 없음 | Settings > File Size Format > Auto | none | save_settings |
 | `settings.sizeBytes` | settings | 없음 | 없음 | Settings > File Size Format > Bytes | none | save_settings |
+| `settings.remoteLinksPreserve` | settings | 없음 | 없음 | Settings > Remote Links > Preserve Links | none | save_settings |
+| `settings.remoteLinksFollow` | settings | 없음 | 없음 | Settings > Remote Links > Copy Link Targets | none | save_settings |
+| `settings.remoteLinksSkip` | settings | 없음 | 없음 | Settings > Remote Links > Skip Links | none | save_settings |
 | `external.runShellCommand` | file | : | `:` | File > Run Shell Command | destructive | ShellCommandDialog → prepare_shell_command → run_shell_command |
 | `help.shortcuts` | help | ? | `?` | Help > Keyboard Help | none | dialog |
 | `help.search` | help | 없음 | 없음 | Help > Search | none | UI state |

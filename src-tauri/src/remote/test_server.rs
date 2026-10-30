@@ -13,7 +13,7 @@ use std::hash::{BuildHasher, Hasher};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, SocketAddr, TcpStream as StdTcpStream};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
-use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -318,6 +318,7 @@ async fn accept_loop(
             let handler = SshHandler {
                 shared,
                 killer: Arc::new(killer),
+                dropped: Arc::default(),
                 channels: HashMap::new(),
             };
             if let Ok(session) = russh::server::run_stream(config, tcp, handler).await {
@@ -331,6 +332,8 @@ async fn accept_loop(
 struct SshHandler {
     shared: Arc<Shared>,
     killer: Arc<StdTcpStream>,
+    /// 끊기 장애로 끊은 연결: 이미 받은 요청도 더 처리하지 않음(실제 끊김과 같게).
+    dropped: Arc<AtomicBool>,
     channels: HashMap<ChannelId, Channel<Msg>>,
 }
 
@@ -424,6 +427,7 @@ impl russh::server::Handler for SshHandler {
                 let sftp = SftpHandler {
                     shared: self.shared.clone(),
                     killer: self.killer.clone(),
+                    dropped: self.dropped.clone(),
                     handles: HashMap::new(),
                     next_handle: 0,
                 };
@@ -455,6 +459,7 @@ struct OpenHandle {
 struct SftpHandler {
     shared: Arc<Shared>,
     killer: Arc<StdTcpStream>,
+    dropped: Arc<AtomicBool>,
     handles: HashMap<String, OpenHandle>,
     next_handle: u64,
 }
@@ -520,7 +525,8 @@ impl SftpHandler {
 
     /// 끊기 장애: 누적 전송량이 한도를 넘으면 TCP 양방향 종료.
     fn transfer(&self, bytes: usize) -> Result<(), StatusReply> {
-        if self.shared.faults.exceeds_disconnect(bytes as u64) {
+        if self.dropped.load(SeqCst) || self.shared.faults.exceeds_disconnect(bytes as u64) {
+            self.dropped.store(true, SeqCst);
             let _ = self.killer.shutdown(Shutdown::Both);
             return Err(failure("connection dropped by test fault"));
         }

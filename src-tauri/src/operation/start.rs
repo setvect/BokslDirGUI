@@ -15,6 +15,9 @@ pub(crate) fn start_copy(
     target_dir: String,
     policy: ConflictDecision,
 ) -> CommandResult<OperationStarted> {
+    if super::remote_transfer::involves_remote(&sources, &target_dir) {
+        return super::remote_transfer::start_remote_transfer(app, OperationKind::Copy, sources, target_dir, policy, remote_link_policy());
+    }
     launch_operation(app, OperationKind::Copy, Some(OperationState::Validating), move |app, operation_id| {
         match run_copy(app, operation_id, &sources, &target_dir, policy, None) {
             Ok(summary) | Err(summary) => summary,
@@ -28,9 +31,17 @@ pub(crate) fn start_move(
     target_dir: String,
     policy: ConflictDecision,
 ) -> CommandResult<OperationStarted> {
+    if super::remote_transfer::involves_remote(&sources, &target_dir) {
+        return super::remote_transfer::start_remote_transfer(app, OperationKind::Move, sources, target_dir, policy, remote_link_policy());
+    }
     launch_operation(app, OperationKind::Move, Some(OperationState::Validating), move |app, operation_id| {
         run_move(app, operation_id, &sources, &target_dir, policy)
     })
+}
+
+/// 원격 전송의 링크 처리 설정. 설정을 읽지 못하면 기본값(링크 보존).
+fn remote_link_policy() -> crate::contracts::RemoteLinkPolicy {
+    crate::settings_service::load_settings().map(|settings| settings.remote.link_policy).unwrap_or_default()
 }
 
 pub(crate) fn start_delete(

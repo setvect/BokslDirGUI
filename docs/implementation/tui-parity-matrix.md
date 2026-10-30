@@ -91,6 +91,9 @@
 | `file.clipboardPaste` | GUI 확장 기능: 복사 목록의 항목을 활성 패널 현재 폴더에 붙여넣기 |
 | `settings.themeMdir` | 사용자 요청의 Mdir 색상 테마 추가, 기존 설정 저장·복원 경로 사용 |
 | `remote.chmod` | 원격(SFTP) 항목 권한을 8진수·읽기/쓰기/실행 표시로 변경, 하위 항목 재귀 적용 범위 선택(FR-38.4) |
+| `settings.remoteLinksPreserve` | 원격 전송에서 심볼릭 링크를 링크로 보존(FR-37.5), 설정 저장·복원 |
+| `settings.remoteLinksFollow` | 원격 전송에서 심볼릭 링크 대상을 따라가 실제 항목 복사, 조상 폴더 재진입 차단(FR-37.5) |
+| `settings.remoteLinksSkip` | 원격 전송에서 심볼릭 링크 건너뛰기와 건너뛴 수 요약(FR-37.5) |
 <!-- END GENERATED:parity-gui-extensions -->
 
 ## 전체 matrix

@@ -88,6 +88,7 @@ export function useCommanderSettings(runtime: CommanderSettingsDependencies) {
     const message = update.kind === 'theme' ? runtime.statusText.themeChanged(update.value)
       : update.kind === 'language' ? COMMANDER_STATUS_TEXT[update.value].languageChanged(update.value)
       : update.kind === 'sizeFormat' ? runtime.statusText.sizeFormat(update.value === 'binary' ? 'auto' : 'bytes')
+      : update.kind === 'remoteLinkPolicy' ? runtime.statusText.remoteLinkPolicy(update.value)
       : runtime.statusText.icons(update.value);
     void saveSettingsPatch(update.patch, message);
     return true;

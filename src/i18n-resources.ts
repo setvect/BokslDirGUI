@@ -50,6 +50,8 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.remoteMixedLocations': '서로 다른 원격 서버의 항목을 한 작업으로 처리할 수 없습니다.',
     'errors.remoteInvalidMode': '권한 값은 0000부터 7777 사이의 8진수여야 합니다.',
     'errors.remoteTrashUnsupported': '원격 항목은 휴지통으로 보낼 수 없습니다. 영구 삭제를 사용하세요.',
+    'errors.remoteLinkLoop': '심볼릭 링크가 상위 폴더를 다시 가리켜 링크 대상을 복사할 수 없습니다. 링크 보존이나 건너뛰기를 선택하세요.',
+    'errors.remoteSizeMismatch': '전송한 크기가 원본과 달라 파일을 게시하지 않았습니다. 다시 시도하세요.',
     'errors.commandNotConnected': '이 작업은 아직 실행할 수 없습니다.',
     'errors.tauriInvokeFailed': '앱 명령 실행에 실패했습니다.',
     'errors.confirmationRequired': '표시된 확인 문구를 정확히 입력하세요.',
@@ -133,6 +135,8 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.remoteMixedLocations': 'Items from different remote servers cannot be handled in one operation.',
     'errors.remoteInvalidMode': 'Permissions must be an octal value from 0000 to 7777.',
     'errors.remoteTrashUnsupported': 'Remote items cannot be moved to the Trash. Use permanent delete.',
+    'errors.remoteLinkLoop': 'A symbolic link points back to a parent folder, so its target cannot be copied. Choose to preserve or skip links.',
+    'errors.remoteSizeMismatch': 'The transferred size differs from the source, so the file was not published. Try again.',
     'errors.commandNotConnected': 'This action cannot be run yet.',
     'errors.tauriInvokeFailed': 'The app command failed.',
     'errors.confirmationRequired': 'Type the displayed confirmation phrase exactly.',
@@ -280,6 +284,10 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Korean: '한국어',
     'Toggle Icons': '아이콘 전환',
     'File Size Format': '파일 크기 형식',
+    'Remote Links': '원격 링크 처리',
+    'Preserve Links': '링크 보존',
+    'Copy Link Targets': '링크 대상 복사',
+    'Skip Links': '링크 건너뛰기',
     Auto: '자동',
     Bytes: '바이트',
     'Run Shell Command': '쉘 명령 실행',
@@ -704,6 +712,7 @@ export interface CommanderStatusText {
   archiveEntry(path: string): string;
   sizeFormat(format: string): string;
   icons(enabled: boolean): string;
+  remoteLinkPolicy(policy: 'preserve' | 'follow' | 'skip'): string;
   externalDropPathRequired: string;
   externalDropUnavailable(error: string): string;
   externalImport(count: number, panel: string): string;
@@ -772,6 +781,7 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     archiveEntry: (path) => `압축 항목 · ${displayPath(path)}`,
     sizeFormat: (format) => `크기 형식 · ${format === 'bytes' ? '바이트' : '자동'}`,
     icons: (enabled) => `아이콘 · ${enabled ? '켜짐' : '꺼짐'}`,
+    remoteLinkPolicy: (policy) => `원격 링크 처리 · ${policy === 'follow' ? '링크 대상 복사' : policy === 'skip' ? '링크 건너뛰기' : '링크 보존'}`,
     externalDropPathRequired: '외부 드롭은 OS 파일 경로가 확인될 때만 가져올 수 있습니다.',
     externalDropUnavailable: (error) => `외부 드롭을 시작할 수 없습니다: ${error}`,
     externalImport: (count, panel) => `외부 가져오기 · ${count}개 → ${panel}`,
@@ -838,6 +848,7 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     archiveEntry: (path) => `Archive entry · ${displayPath(path)}`,
     sizeFormat: (format) => `Size format · ${format}`,
     icons: (enabled) => `Icons · ${enabled ? 'on' : 'off'}`,
+    remoteLinkPolicy: (policy) => `Remote links · ${policy === 'follow' ? 'copy targets' : policy === 'skip' ? 'skip' : 'preserve'}`,
     externalDropPathRequired: 'External drops are allowed only when OS file paths are available.',
     externalDropUnavailable: (error) => `External drop is unavailable: ${error}`,
     externalImport: (count, panel) => `External import · ${count} → ${panel}`,

@@ -86,7 +86,7 @@ it('keeps the archive format table identical to the Rust provider table', () => 
 });
 
 it('consumes the remote site settings contract without secret fields', () => {
-  const remote: RemoteSettings = { ...fixture.remoteSettings, sites: fixture.remoteSettings.sites.map((site) => ({ ...site, authMethod: 'publicKey' as const })) };
+  const remote: RemoteSettings = { ...fixture.remoteSettings, linkPolicy: 'follow', sites: fixture.remoteSettings.sites.map((site) => ({ ...site, authMethod: 'publicKey' as const })) };
   expect(remote).toEqual(fixture.remoteSettings);
   expect(JSON.stringify(fixture.remoteSettings).toLowerCase()).not.toMatch(/password"|passphrase"|secret"\s*:\s*"/);
 });

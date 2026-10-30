@@ -287,11 +287,21 @@ export interface RemoteSite {
   savedSecret: boolean;
 }
 
+// 원격 전송의 심볼릭 링크 처리(FR-37.5)
+export type RemoteLinkPolicy = 'preserve' | 'follow' | 'skip';
+
 export interface RemoteSettings {
   sites: RemoteSite[];
   keepaliveSeconds: number;
   connectTimeoutSeconds: number;
+  linkPolicy: RemoteLinkPolicy;
 }
+
+// Rust `RemoteSettings::default`와 같은 값
+export const DEFAULT_REMOTE_SETTINGS: RemoteSettings = { sites: [], keepaliveSeconds: 30, connectTimeoutSeconds: 15, linkPolicy: 'preserve' };
+
+// 저장 파일에 없는 항목은 기본값으로 채움(이전 버전 설정 호환)
+export const remoteSettingsOf = (settings: Pick<Settings, 'remote'>): RemoteSettings => ({ ...DEFAULT_REMOTE_SETTINGS, ...settings.remote });
 
 // `remote_connect` 요청. 암호·키 암호는 이 요청에만 담고 저장·로그·이벤트에 남기지 않음
 export interface RemoteConnectRequest {
