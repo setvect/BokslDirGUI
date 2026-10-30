@@ -125,7 +125,7 @@ idle
 ## 7. 패널 refresh 정책
 
 - 작업 성공/부분 성공 후 관련 source/target panel listing version을 invalidate
-- 프론트 완료 공통 처리(`src/ui/operationCompletion.ts`): 양쪽 패널 새로고침과 "액션 이름 결과" 상태 메시지, 선택 해제는 작업별 기준(일반 작업은 전체 성공 시, 다중 이름 변경은 일부라도 바뀌면)
+- 프론트 완료 공통 처리(`src/ui/operationCompletion.ts`): 양쪽 패널 새로고침과 "작업 이름 결과" 상태 메시지(작업 이름은 대화상자 제목, 예: 복사 완료·이동 완료), 선택 해제는 작업별 기준(일반 작업은 전체 성공 시, 다중 이름 변경은 일부라도 바뀌면)
 - refresh 실패는 작업 성공을 되돌리지 않고 panel error로 표시
 - 취소/실패 후 임시 파일/디렉토리 정리를 시도하고 결과를 summary에 포함
 

@@ -7,7 +7,7 @@ import {
   type ActionId
 } from '../actions/registry';
 import type { AppError, PlatformInfo, RenameItem, FileEntry, FilePreview, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
-import type { CommanderStatusText } from '../i18n-resources';
+import { OPERATION_DIALOG_TITLES, type CommanderStatusText } from '../i18n-resources';
 import {
   formatUserErrorMessage
 } from '../i18n-resources';
@@ -116,7 +116,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
       onOperationSummary: summary => {
         // 바뀐 이름은 기존 선택 경로와 맞지 않으므로 일부라도 바뀌면 선택 해제.
         if (summary.completedFiles > 0) dependencies.clearCompletedSelection(snapshot.panelId, snapshot.workingDir);
-        finishOperation(dependencies, ACTION_BY_ID.get('file.bulkRename')!, summary, dependencies.settings.language);
+        finishOperation(dependencies, 'bulkRename', summary, dependencies.settings.language);
       },
     });
   };
@@ -601,7 +601,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
           completeClipboardMove(clipboardMoveSnapshot, summary);
           const moveIncomplete = clipboardMoveSnapshot && summary.completedFiles > 0
             && (summary.state !== 'completed' || summary.failedFiles > 0 || (summary.skippedFiles ?? 0) > 0);
-          finishOperation(dependencies, action, summary, dependencies.settings.language, {
+          finishOperation(dependencies, dialog.dialogKind, summary, dependencies.settings.language, {
             firstPanel: dialog.panelId,
             suffix: moveIncomplete ? dependencies.statusText.clipboardMoveIncomplete : '',
           });
@@ -616,7 +616,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
       };
 
       if (actionId === 'file.copy') {
-        const copyStatus = dependencies.statusText.operationStarted(labelForAction(action, dependencies.settings.language), sources.length, operationRequest.targetDir);
+        const copyStatus = dependencies.statusText.operationStarted(OPERATION_DIALOG_TITLES[dependencies.settings.language].copy, sources.length, operationRequest.targetDir);
         if (archiveCopyPlan && panelListing.archiveEncrypted && !archiveCopyPlan.password) {
           pendingArchiveCopyRef.current = { request: operationRequest, plan: archiveCopyPlan, status: copyStatus };
           dependencies.setArchivePasswordRequest({ kind: 'copy', archivePath: archiveCopyPlan.archivePath });

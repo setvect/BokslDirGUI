@@ -106,6 +106,7 @@ describe('CommanderShell drag', () => {
       expect(fixture.panels.left.className).toContain(shift ? 'is-drop-move' : 'is-drop-copy');
       expect(folderRow.className).toContain('is-drop-target');
       expect(fixture.panels.left.querySelector('.panel-drop-indicator')?.textContent).toBe(`${shift ? '폴더로 이동' : '폴더에 복사'} · images`);
+      expect(document.querySelector('.file-drag-preview strong')?.textContent).toBe(shift ? '폴더로 이동' : '폴더에 복사');
       fireEvent.pointerUp(window, { pointerId: 7, button: 0, clientX: 110, clientY: 260, shiftKey: shift });
       if (shift) fireEvent.click(await screen.findByRole('button', { name: '이동' }));
       const execute = shift ? fixture.operationClient.startMove : fixture.operationClient.startCopy;

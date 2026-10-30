@@ -9,6 +9,7 @@ import {
 import type { PanelId } from '../domain/types';
 import { APP_NAME } from '../foundation';
 import {
+  COMMANDER_UI_TEXT,
   COMMANDER_NAVIGATION_TEXT,
   COMMANDER_STATUS_TEXT,
   translateUserMessageKey
@@ -430,7 +431,9 @@ export function CommanderShell({
           left: Math.min(pointerDragPreview.point.x + 16, Math.max(0, window.innerWidth - 340)),
           top: Math.min(pointerDragPreview.point.y + 16, Math.max(0, window.innerHeight - 160)),
         }}>
-          <strong>{labelForAction(ACTION_BY_ID.get(pointerDragPreview.mode === 'move' ? 'file.move' : 'file.copy')!, settings.language)}</strong>
+          <strong>{dragOverPanel?.folderPath
+            ? COMMANDER_UI_TEXT[settings.language][pointerDragPreview.mode === 'move' ? 'dropMoveInto' : 'dropCopyInto']
+            : labelForAction(ACTION_BY_ID.get(pointerDragPreview.mode === 'move' ? 'file.move' : 'file.copy')!, settings.language)}</strong>
           {pointerDragPreview.entries.slice(0, 3).map((entry) => <div key={entry.path}>{entryIcon(entry.kind)} {entry.name}</div>)}
           {pointerDragPreview.entries.length > 3 && <div>+{pointerDragPreview.entries.length - 3}</div>}
         </div>

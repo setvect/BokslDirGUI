@@ -45,7 +45,7 @@ export function useTrashUndo(dependencies: Dependencies) {
       longRunningExecutor: () => operationClient.startTrashUndo!({ id: snapshot.id }),
       cancelExecutor: operationCanceller(operationClient),
       onOperationSummary: summary => {
-        finishOperation(dependencies, action, summary, dependencies.language);
+        finishOperation(dependencies, 'undoTrash', summary, dependencies.language);
         setRevision(value => value + 1);
       },
       onOperationStartError: error => {

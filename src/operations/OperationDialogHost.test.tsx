@@ -175,8 +175,8 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost language="ko" />);
 
-    expect(screen.getByText('2개 항목을 반대 패널로 이동합니다.')).toBeTruthy();
-    expect(screen.queryByText('2개 항목을 대상 위치로 이동합니다.')).toBeNull();
+    // 설명 문장은 개요에 한 번만 표시
+    expect(screen.getAllByText('2개 항목을 대상 위치로 이동합니다.')).toHaveLength(1);
     expect(screen.getAllByText(sampleEntry.path)).toHaveLength(1);
     expect(screen.getAllByText(secondEntry.path)).toHaveLength(1);
     expect(screen.getAllByText('/tmp/target')).toHaveLength(1);
@@ -203,7 +203,7 @@ describe('OperationDialogHost', () => {
     render(<OperationDialogHost language="ko" />);
     const sourceList = document.querySelector('.operation-source-list');
 
-    expect(screen.getByText('300개 항목을 반대 패널로 복사합니다.')).toBeTruthy();
+    expect(screen.getByText('300개 항목을 대상 위치로 복사합니다.')).toBeTruthy();
     expect(sourceList).toBeTruthy();
     expect(sourceList?.querySelectorAll('li')).toHaveLength(300);
     expect(sourceList?.textContent).toContain('/tmp/batch/item-000.txt');

@@ -1147,8 +1147,8 @@ export const OPERATION_DIALOG_TITLES = {
 
 export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<OperationDialogKind, (item: string) => string>> = {
   ko: {
-    copy: (item) => `${item}을 반대 패널로 복사합니다.`,
-    move: (item) => `${item}을 반대 패널로 이동합니다.`,
+    copy: (item) => `${item}을 대상 위치로 복사합니다.`,
+    move: (item) => `${item}을 대상 위치로 이동합니다.`,
     undoTrash: (item) => `${item}을 원래 위치로 복원합니다. 같은 이름의 항목은 덮어쓰지 않습니다. 취소해도 이미 복원한 항목은 유지됩니다.`,
     trash: (item) => `${item}을 휴지통으로 보냅니다.`,
     deletePermanent: (item) => `${item}을 영구 삭제합니다.`,
@@ -1163,8 +1163,8 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     properties: () => '선택한 항목의 정보를 확인합니다.',
   },
   en: {
-    copy: (item) => `Copy ${item} to the opposite panel.`,
-    move: (item) => `Move ${item} to the opposite panel.`,
+    copy: (item) => `Copy ${item} to the target location.`,
+    move: (item) => `Move ${item} to the target location.`,
     undoTrash: (item) => `Restore ${item} to their original locations without overwriting existing items. Cancellation keeps items already restored.`,
     trash: (item) => `Move ${item} to the trash.`,
     deletePermanent: (item) => `Permanently delete ${item}.`,
