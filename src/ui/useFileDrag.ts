@@ -6,6 +6,7 @@ import {
   ACTION_BY_ID,
   labelForAction
 } from '../actions/registry';
+import { isWindowsRuntime } from '../domain/runtimePlatform';
 import type { FileEntry, PanelId, Settings } from '../domain/types';
 import type { CommanderStatusText } from '../i18n-resources';
 import {
@@ -218,7 +219,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
   const handlePanelDragOver = (event: DragEvent<HTMLElement>, targetPanel: PanelId) => {
     if (!Array.from(event.dataTransfer.types ?? []).includes('Files')) return;
     event.preventDefault();
-    if (!navigator.platform.startsWith('Win') && nativeFileDropEnabled && isTauriRuntime() && !nativeDropOverlayRequestedRef.current) {
+    if (!isWindowsRuntime() && nativeFileDropEnabled && isTauriRuntime() && !nativeDropOverlayRequestedRef.current) {
       nativeDropOverlayRequestedRef.current = true;
       void showNativeDropOverlay().catch((error: unknown) => {
         nativeDropOverlayRequestedRef.current = false;

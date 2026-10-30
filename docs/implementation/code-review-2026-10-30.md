@@ -89,6 +89,10 @@
 - 제안: 플랫폼 기능·대상 플랫폼·단축키를 액션 속성으로 이동(`dialogKind`·`setting` 선례), 판정 모듈 하나로 통합
 - 별도 결정 필요: `useFileClipboard`의 `'⌘V'` 표기와 registry `Cmd+V` 통일(화면 표시 변경)
 - 위험·검증: 낮음~중간, `registry.test.ts`, `windowsShortcuts.test.tsx`, `useRuntimePlatform.test.tsx`
+- 진행(7단계): 판정을 `domain/runtimePlatform.ts`(userAgent, `PlatformInfo` 우선)로 통합, `navigator.platform` 사용 3곳 제거
+- 진행(7단계): `PLATFORM_ACTION_FEATURES`·`WINDOWS_SHORTCUTS` 표와 액션 ID 하드코딩 분기를 액션 속성(`platformFeature`·`shortcutPlatforms`·`windowsShortcut`)으로 이동, `isActionAvailable`이 플랫폼 조건 확인
+- 진행(7단계): 기능 정보 없을 때 기본값을 macOS 기능 기준으로 통일(`useTrashUndo`의 허용 기본값 변경, Windows는 플랫폼 정보 수신 뒤 같은 결과)
+- 유지: `useFileClipboard`의 `'⌘V'` 표기(화면 표시 변경, 별도 결정)
 
 ### R03 메뉴 활성 조건과 빈 영역 메뉴 목록 단일화
 

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ACTION_BY_ID, actionsForMenu, fileShortcutPlatform, isActionAvailable, matchKeyboardShortcut, shortcutLabelForAction, shortcutHelpLabelForAction } from '../actions/registry';
+import { ACTION_BY_ID, actionsForMenu, isActionAvailable, matchKeyboardShortcut, shortcutLabelForAction, shortcutHelpLabelForAction } from '../actions/registry';
+import { fileShortcutPlatform } from '../domain/runtimePlatform';
 import type { TrashUndoPreview } from '../domain/types';
 import { useOperationStore } from '../operations/operationStore';
 import { createActionContext } from './actionContext';
@@ -11,7 +12,7 @@ import { renderCommander } from './testing/commanderTestSupport';
 import { testEntry } from './testing/fileEntryFixture';
 import { useTrashUndo } from './useTrashUndo';
 import './testing/commanderTestSetup';
-vi.mock('../actions/registry', async original => ({ ...await original<object>(), fileShortcutPlatform: vi.fn(() => 'mac') }));
+vi.mock('../domain/runtimePlatform', async original => ({ ...await original<object>(), fileShortcutPlatform: vi.fn(() => 'mac') }));
 afterEach(() => vi.mocked(fileShortcutPlatform).mockReturnValue('mac'));
 const entry = testEntry('/original', 'deleted.json');
 const setup = () => {

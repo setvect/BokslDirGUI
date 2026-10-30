@@ -1,5 +1,6 @@
 import type { DialogKind } from '../operations/dialogDefinitions';
 import type { SettingAction } from './settingActions';
+import { fileShortcutPlatform, platformSupports, type FileShortcutPlatform, type PlatformFeature } from '../domain/runtimePlatform';
 import type { PanelId, PlatformInfo } from '../domain/types';
 import { ACTION_LABELS, HOTKEY_LABELS, MENU_SEGMENT_LABELS, type SupportedLanguage } from '../i18n-resources';
 import { COMMANDS, type TauriCommandName } from '../tauri/commands';
@@ -18,7 +19,7 @@ export interface ActionContext {
   trashUndoAvailable?: boolean;
   clipboardMode?: 'copy' | 'move' | null;
   clipboardCanMove?: boolean;
-  platform?: 'mac' | 'other';
+  platform?: FileShortcutPlatform;
   platformInfo?: PlatformInfo;
   hasOppositePanel: boolean;
   shellCommandEnabled: boolean;
@@ -42,23 +43,19 @@ export interface AppAction {
   requiresConcreteSources?: boolean;
   dialogKind?: DialogKind;
   setting?: SettingAction;
+  /** 백엔드 PlatformInfo 기능이 있을 때만 표시·실행 */
+  platformFeature?: PlatformFeature;
+  /** 표시·실행할 단축키 플랫폼, 없으면 모든 플랫폼 */
+  shortcutPlatforms?: readonly FileShortcutPlatform[];
+  /** macOS 외 플랫폼(Windows·Linux)의 단축키 표기와 실행 키 */
+  windowsShortcut?: { label: string; bindings: readonly string[] };
   isEnabled(context: ActionContext): boolean;
 }
 
-const PLATFORM_ACTION_FEATURES: Readonly<Record<string, keyof PlatformInfo['features']>> = {
-  'external.openWith': 'openWith',
-  'external.openCurrentInFileManager': 'currentFolderManager',
-  'external.openCurrentInTerminal': 'currentFolderTerminal',
-  'file.undoTrash': 'trashUndo',
-};
-export const platformFeatureForAction = (id: string) => PLATFORM_ACTION_FEATURES[id];
-
 export const platformAllowsAction = (id: string, info?: PlatformInfo) => {
-  const feature = platformFeatureForAction(id);
+  const feature = ACTION_BY_ID.get(id)?.platformFeature;
   return !feature || !info || info.features[feature];
 };
-const supportsFeature = (context: ActionContext, feature: keyof PlatformInfo['features']) =>
-  context.platformInfo ? context.platformInfo.features[feature] : context.platform === 'mac';
 
 const always = () => true;
 const hasFocus = (context: ActionContext) => context.focusedEntryKind !== null;
@@ -99,7 +96,7 @@ export const ACTIONS = [
   action({ id: 'panel.copyPathToOther', category: 'panel', displayLabel: 'Copy Path to Other Panel', shortcutLabel: 'tp', keyboardBindings: ['t p'], menuPath: ['View', 'Copy Path to Other Panel'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'UI state + list_dir', isEnabled: (c) => c.hasOppositePanel && !c.operationBusy }),
   action({ id: 'panel.compareDirectories', category: 'panel', displayLabel: 'Compare Directories', shortcutLabel: 'tc', keyboardBindings: ['t c'], menuPath: ['View', 'Compare Directories'], dangerLevel: 'none', runPath: 'UI state', isEnabled: (c) => c.hasOppositePanel && !c.operationBusy }),
   action({ id: 'nav.enter', category: 'navigation', displayLabel: 'Open', shortcutLabel: 'Enter/l', keyboardBindings: ['Enter', 'l'], menuPath: ['File', 'Open'], contextScopes: ['file', 'directory', 'archive'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir/open_default', isEnabled: hasFocus }),
-  action({ id: 'external.openWith', requiresConcreteSources: true, category: 'file', displayLabel: 'Open With…', menuPath: ['File', 'Open With…'], contextScopes: ['file', 'archive'], dangerLevel: 'safe', command: COMMANDS.listOpenWithApps, runPath: 'list_open_with_apps/open_with_app', isEnabled: (c) => supportsFeature(c, 'openWith') && c.effectiveTargetCount === 1 && (c.focusedEntryKind === 'file' || c.focusedEntryKind === 'archive') && !c.activePathIsArchive && canInvokeBackend(c) }),
+  action({ id: 'external.openWith', requiresConcreteSources: true, category: 'file', displayLabel: 'Open With…', menuPath: ['File', 'Open With…'], contextScopes: ['file', 'archive'], platformFeature: 'openWith', dangerLevel: 'safe', command: COMMANDS.listOpenWithApps, runPath: 'list_open_with_apps/open_with_app', isEnabled: (c) => c.effectiveTargetCount === 1 && (c.focusedEntryKind === 'file' || c.focusedEntryKind === 'archive') && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'nav.up', category: 'navigation', shortcutLabel: 'Backspace/h', keyboardBindings: ['Backspace', 'h'], menuPath: ['Go', 'Up'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.back', category: 'navigation', shortcutLabel: 'Alt+Left', keyboardBindings: ['Alt+ArrowLeft'], menuPath: ['Go', 'Back'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.forward', category: 'navigation', shortcutLabel: 'Alt+Right', keyboardBindings: ['Alt+ArrowRight'], menuPath: ['Go', 'Forward'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
@@ -113,11 +110,11 @@ export const ACTIONS = [
   action({ id: 'tab.list', category: 'panel', shortcutLabel: 'tt', keyboardBindings: ['t t'], menuPath: ['View', 'Tab List'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.toggle', category: 'selection', hotkeyLabel: 'Sel', shortcutLabel: 'Space', keyboardBindings: ['Space'], menuPath: ['Edit', 'Select'], dangerLevel: 'none', runPath: 'UI state', isEnabled: hasFocus }),
   action({ id: 'selection.all', category: 'selection', hotkeyLabel: 'SelAll', shortcutLabel: 'Ctrl+A', keyboardBindings: ['Ctrl+A'], menuPath: ['Edit', 'Select All'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'file.undoTrash', dialogKind: 'undoTrash', category: 'file', displayLabel: 'Undo Move to Trash', shortcutLabel: 'Cmd+Z', keyboardBindings: ['Cmd+Z', 'Ctrl+Z'], menuPath: ['Edit', 'Undo Move to Trash'], dangerLevel: 'safe', command: COMMANDS.startTrashUndo, runPath: 'preview_trash_undo/start_trash_undo', isEnabled: (c) => supportsFeature(c, 'trashUndo') && c.trashUndoAvailable === true && canInvokeBackend(c) }),
-  action({ id: 'file.clipboardCopy', requiresConcreteSources: true, category: 'file', displayLabel: 'Copy', shortcutLabel: 'Cmd+C', keyboardBindings: ['Cmd+C', 'Ctrl+C'], menuPath: ['Edit', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'macOS/Windows write_file_clipboard / UI clipboard state', isEnabled: hasEffectiveTarget }),
-  action({ id: 'file.clipboardCut', requiresConcreteSources: true, category: 'file', displayLabel: 'Cut', shortcutLabel: 'Ctrl+X', keyboardBindings: ['Ctrl+X'], menuPath: ['Edit', 'Cut'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'Windows write_file_clipboard / UI clipboard state', isEnabled: (c) => c.platform === 'other' && hasEffectiveTarget(c) && !c.activePathIsArchive && c.backendAvailable }),
-  action({ id: 'file.clipboardPaste', category: 'file', displayLabel: 'Paste', shortcutLabel: 'Cmd+V', keyboardBindings: ['Cmd+V', 'Ctrl+V'], menuPath: ['Edit', 'Paste'], contextScopes: ['blank'], dangerLevel: 'safe', runPath: 'start_copy/start_move/archive_extract/archive_add', isEnabled: (c) => (c.clipboardCount ?? 0) > 0 && (c.clipboardMode !== 'move' || c.clipboardCanMove === true) && canMutate(c) }),
-  action({ id: 'file.clipboardMovePaste', category: 'file', displayLabel: 'Move Here', shortcutLabel: 'Opt+Cmd+V', keyboardBindings: ['Alt+Cmd+V'], menuPath: ['Edit', 'Move Here'], contextScopes: ['blank'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move via confirmation dialog', isEnabled: (c) => c.platform === 'mac' && (c.clipboardCount ?? 0) > 0 && c.clipboardCanMove === true && canMutate(c) }),
+  action({ id: 'file.undoTrash', dialogKind: 'undoTrash', category: 'file', displayLabel: 'Undo Move to Trash', shortcutLabel: 'Cmd+Z', keyboardBindings: ['Cmd+Z', 'Ctrl+Z'], windowsShortcut: { label: 'Ctrl+Z', bindings: ['Ctrl+Z'] }, menuPath: ['Edit', 'Undo Move to Trash'], dangerLevel: 'safe', command: COMMANDS.startTrashUndo, runPath: 'preview_trash_undo/start_trash_undo', platformFeature: 'trashUndo', isEnabled: (c) => c.trashUndoAvailable === true && canInvokeBackend(c) }),
+  action({ id: 'file.clipboardCopy', requiresConcreteSources: true, category: 'file', displayLabel: 'Copy', shortcutLabel: 'Cmd+C', keyboardBindings: ['Cmd+C', 'Ctrl+C'], windowsShortcut: { label: 'Ctrl+C', bindings: ['Ctrl+C'] }, menuPath: ['Edit', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'macOS/Windows write_file_clipboard / UI clipboard state', isEnabled: hasEffectiveTarget }),
+  action({ id: 'file.clipboardCut', requiresConcreteSources: true, category: 'file', displayLabel: 'Cut', shortcutLabel: 'Ctrl+X', keyboardBindings: ['Ctrl+X'], menuPath: ['Edit', 'Cut'], contextScopes: ['selection'], shortcutPlatforms: ['other'], dangerLevel: 'safe', runPath: 'Windows write_file_clipboard / UI clipboard state', isEnabled: (c) => hasEffectiveTarget(c) && !c.activePathIsArchive && c.backendAvailable }),
+  action({ id: 'file.clipboardPaste', category: 'file', displayLabel: 'Paste', shortcutLabel: 'Cmd+V', keyboardBindings: ['Cmd+V', 'Ctrl+V'], windowsShortcut: { label: 'Ctrl+V', bindings: ['Ctrl+V'] }, menuPath: ['Edit', 'Paste'], contextScopes: ['blank'], dangerLevel: 'safe', runPath: 'start_copy/start_move/archive_extract/archive_add', isEnabled: (c) => (c.clipboardCount ?? 0) > 0 && (c.clipboardMode !== 'move' || c.clipboardCanMove === true) && canMutate(c) }),
+  action({ id: 'file.clipboardMovePaste', category: 'file', displayLabel: 'Move Here', shortcutLabel: 'Opt+Cmd+V', keyboardBindings: ['Alt+Cmd+V'], menuPath: ['Edit', 'Move Here'], contextScopes: ['blank'], shortcutPlatforms: ['mac'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move via confirmation dialog', isEnabled: (c) => (c.clipboardCount ?? 0) > 0 && c.clipboardCanMove === true && canMutate(c) }),
   action({ id: 'file.copy', requiresConcreteSources: true, dialogKind: 'copy', category: 'file', displayLabel: 'Copy', shortcutLabel: 'y/F5', keyboardBindings: ['y', 'F5'], menuPath: ['Edit', 'Copy to Other Panel'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.startCopy, runPath: 'start_copy', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutate(c) }),
   action({ id: 'file.move', requiresConcreteSources: true, dialogKind: 'move', category: 'file', displayLabel: 'Move', shortcutLabel: 'x/F6', keyboardBindings: ['x', 'F6'], menuPath: ['Edit', 'Move'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutateFilesystem(c) }),
   action({ id: 'file.trash', requiresConcreteSources: true, dialogKind: 'trash', category: 'file', displayLabel: 'Delete', hotkeyLabel: 'Del', shortcutLabel: 'd', keyboardBindings: ['d'], menuPath: ['File', 'Delete'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startDelete, runPath: 'start_delete trash', isEnabled: (c) => hasEffectiveTarget(c) && canMutateFilesystem(c) }),
@@ -125,7 +122,7 @@ export const ACTIONS = [
   action({ id: 'file.mkdir', dialogKind: 'createDir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutateFilesystem }),
   action({ id: 'file.rename', requiresConcreteSources: true, dialogKind: 'rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutateFilesystem(c) }),
   action({ id: 'file.bulkRename', requiresConcreteSources: true, dialogKind: 'bulkRename', category: 'file', displayLabel: 'Bulk Rename', menuPath: ['File', 'Bulk Rename'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startBulkRename, runPath: 'preview_bulk_rename/start_bulk_rename', isEnabled: (c) => c.effectiveTargetCount > 0 && canMutateFilesystem(c) }),
-  action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Cmd+Q', keyboardBindings: ['Cmd+Q'], menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close via explicit menu/platform quit shortcut' }),
+  action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Cmd+Q', keyboardBindings: ['Cmd+Q'], windowsShortcut: { label: 'Alt+F4', bindings: ['Alt+F4'] }, menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close via explicit menu/platform quit shortcut' }),
   action({ id: 'file.properties', requiresConcreteSources: true, dialogKind: 'properties', category: 'file', displayLabel: 'File Info', hotkeyLabel: 'Info', shortcutLabel: 'i', keyboardBindings: ['i'], menuPath: ['View', 'File Info'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.getMetadata, runPath: 'get_metadata', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
   action({ id: 'file.quickView', requiresConcreteSources: true, category: 'file', displayLabel: 'Quick View', hotkeyLabel: 'View', shortcutLabel: 'F3', keyboardBindings: ['F3'], menuPath: ['View', 'Quick View'], contextScopes: ['file', 'archive'], dangerLevel: 'safe', command: COMMANDS.previewFile, runPath: 'preview_file', isEnabled: (c) => hasConcreteFocus(c) && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'archive.list', requiresConcreteSources: true, category: 'archive', shortcutLabel: 'Enter on archive', menuPath: ['Archive', 'Open Archive'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list virtual-directory', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
@@ -134,8 +131,8 @@ export const ACTIONS = [
   action({ id: 'archive.create', requiresConcreteSources: true, dialogKind: 'archiveCreate', category: 'archive', displayLabel: 'Archive Compress', hotkeyLabel: 'Archive', shortcutLabel: 'zc', keyboardBindings: ['z c'], menuPath: ['File', 'Archive Compress'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.archiveCreate, runPath: 'archive_create', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'external.openDefault', requiresConcreteSources: true, dialogKind: 'externalOpenDefault', category: 'file', displayLabel: 'Open Default App', shortcutLabel: 'o', keyboardBindings: ['o'], menuPath: ['File', 'Open Default App'], contextScopes: ['file'], dangerLevel: 'safe', command: COMMANDS.openDefault, runPath: 'open_default', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
   action({ id: 'external.reveal', requiresConcreteSources: true, dialogKind: 'externalReveal', category: 'file', displayLabel: 'Reveal', menuPath: ['File', 'Reveal'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.revealInManager, runPath: 'reveal_in_manager', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
-  action({ id: 'external.openCurrentInFileManager', category: 'navigation', displayLabel: 'Open Current Folder in File Manager', menuPath: ['Go', 'Open Current Folder in File Manager'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInFileManager, runPath: 'open_current_in_file_manager', isEnabled: (c) => supportsFeature(c, 'currentFolderManager') && !c.activePathIsArchive && canInvokeBackend(c) }),
-  action({ id: 'external.openCurrentInTerminal', category: 'navigation', displayLabel: 'Open Terminal Here', menuPath: ['Go', 'Open Terminal Here'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInTerminal, runPath: 'open_current_in_terminal', isEnabled: (c) => supportsFeature(c, 'currentFolderTerminal') && !c.activePathIsArchive && canInvokeBackend(c) }),
+  action({ id: 'external.openCurrentInFileManager', category: 'navigation', displayLabel: 'Open Current Folder in File Manager', menuPath: ['Go', 'Open Current Folder in File Manager'], contextScopes: ['blank'], platformFeature: 'currentFolderManager', dangerLevel: 'safe', command: COMMANDS.openCurrentInFileManager, runPath: 'open_current_in_file_manager', isEnabled: (c) => !c.activePathIsArchive && canInvokeBackend(c) }),
+  action({ id: 'external.openCurrentInTerminal', category: 'navigation', displayLabel: 'Open Terminal Here', menuPath: ['Go', 'Open Terminal Here'], contextScopes: ['blank'], platformFeature: 'currentFolderTerminal', dangerLevel: 'safe', command: COMMANDS.openCurrentInTerminal, runPath: 'open_current_in_terminal', isEnabled: (c) => !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'view.sortName', category: 'view', shortcutLabel: 'sn', keyboardBindings: ['s n'], menuPath: ['View', 'Sort', 'Name'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortSize', category: 'view', shortcutLabel: 'ss', keyboardBindings: ['s s'], menuPath: ['View', 'Sort', 'Size'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortDate', category: 'view', shortcutLabel: 'sd', keyboardBindings: ['s d'], menuPath: ['View', 'Sort', 'Modified Date'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
@@ -259,7 +256,8 @@ export const actionMatchesContextScope = (action: AppAction, context: ActionCont
 };
 
 export const isActionAvailable = (action: AppAction, context: ActionContext) =>
-  action.isEnabled(context) && actionMatchesContextScope(action, context);
+  actionVisibleOnPlatform(action, context.platform, context.platformInfo)
+  && action.isEnabled(context) && actionMatchesContextScope(action, context);
 
 export const menuSegmentLabel = (segment: string, language: SupportedLanguage = 'en') =>
   MENU_SEGMENT_LABELS[language][segment] ?? segment;
@@ -273,17 +271,9 @@ export const labelForAction = (action: AppAction, language: SupportedLanguage = 
 export const hotkeyLabelForAction = (action: AppAction, language: SupportedLanguage = 'en') =>
   HOTKEY_LABELS[language][action.id] ?? action.hotkeyLabel;
 
-export type FileShortcutPlatform = 'mac' | 'other';
-
-export const fileShortcutPlatform = (userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent): FileShortcutPlatform =>
-  /Windows|Linux/i.test(userAgent) ? 'other' : 'mac';
-
-export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortcutPlatform(), info?: PlatformInfo) => {
-  if (action.id === 'file.clipboardCut') return platform !== 'mac';
-  if (action.id === 'file.clipboardMovePaste') return platform === 'mac';
-  const feature = platformFeatureForAction(action.id);
-  return !feature || (info ? info.features[feature] : platform === 'mac');
-};
+export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortcutPlatform(), info?: PlatformInfo) =>
+  (!action.shortcutPlatforms || action.shortcutPlatforms.includes(platform))
+  && (!action.platformFeature || platformSupports(action.platformFeature, info, platform));
 
 export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform(), info?: PlatformInfo) =>
   ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform, info));
@@ -297,17 +287,10 @@ export const menuRootLabelFromRegistry = (root: string, language: SupportedLangu
 export const menuRootAcceleratorFromRegistry = (root: string) =>
   MENU_ROOT_ACCELERATORS.get(root) ?? null;
 
-// Keep platform labels and dispatch bindings together so every UI surface agrees.
-const WINDOWS_SHORTCUTS: Readonly<Record<string, { label: string; bindings: readonly string[] }>> = {
-  'app.quit': { label: 'Alt+F4', bindings: ['Alt+F4'] },
-  'file.undoTrash': { label: 'Ctrl+Z', bindings: ['Ctrl+Z'] },
-  'file.clipboardCopy': { label: 'Ctrl+C', bindings: ['Ctrl+C'] },
-  'file.clipboardPaste': { label: 'Ctrl+V', bindings: ['Ctrl+V'] },
-};
-
+// 플랫폼별 표기와 실행 키는 액션의 windowsShortcut 한곳에서 함께 결정.
 export const keyboardBindingsForAction = (action: AppAction, platform = fileShortcutPlatform()): readonly string[] => {
   if (platform === 'other') {
-    return WINDOWS_SHORTCUTS[action.id]?.bindings
+    return action.windowsShortcut?.bindings
       ?? (action.keyboardBindings ?? []).filter(binding => !binding.includes('Cmd+'));
   }
   return action.keyboardBindings ?? [];
@@ -315,8 +298,8 @@ export const keyboardBindingsForAction = (action: AppAction, platform = fileShor
 
 const platformShortcutLabel = (action: AppAction, platform = fileShortcutPlatform()) => {
   if (platform === 'other') {
-    if (action.id === 'file.clipboardMovePaste') return '';
-    return WINDOWS_SHORTCUTS[action.id]?.label ?? action.shortcutLabel;
+    if (action.shortcutPlatforms && !action.shortcutPlatforms.includes('other')) return '';
+    return action.windowsShortcut?.label ?? action.shortcutLabel;
   }
   return action.shortcutLabel;
 };

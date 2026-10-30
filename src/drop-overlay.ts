@@ -1,3 +1,4 @@
+import { runtimeUserAgent } from './domain/runtimePlatform';
 import { nativeDropPosition } from './ui/nativeDropPosition';
 import { emitTo } from '@tauri-apps/api/event';
 import { getCurrentWebview, type DragDropEvent } from '@tauri-apps/api/webview';
@@ -8,7 +9,7 @@ const logicalDropEvent = (event: DragDropEvent) => {
   if (event.type === 'leave') {
     return event;
   }
-  const position = nativeDropPosition(event.position, window.devicePixelRatio, navigator.platform);
+  const position = nativeDropPosition(event.position, window.devicePixelRatio, runtimeUserAgent());
   if (event.type === 'over') {
     return { type: event.type, position };
   }

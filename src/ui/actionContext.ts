@@ -1,4 +1,5 @@
-import { ACTION_BY_ID, fileShortcutPlatform, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope, type FileShortcutPlatform } from '../actions/registry';
+import { ACTION_BY_ID, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope } from '../actions/registry';
+import { fileShortcutPlatform, shortcutPlatformForInfo, type FileShortcutPlatform } from '../domain/runtimePlatform';
 import type { FileEntry, PanelId, PlatformInfo } from '../domain/types';
 import { isArchiveVirtualPath } from './archiveVirtual';
 
@@ -102,7 +103,7 @@ export const createActionContext = ({
     trashUndoAvailable,
     clipboardMode,
     clipboardCanMove,
-    platform: platformInfo && platformInfo.os !== 'unknown' ? (platformInfo.os === 'macos' ? 'mac' : 'other') : platform,
+    platform: shortcutPlatformForInfo(platformInfo, platform),
     platformInfo,
     hasOppositePanel,
     shellCommandEnabled,

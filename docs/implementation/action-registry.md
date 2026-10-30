@@ -112,7 +112,9 @@
 - `external.openWith`: macOS 단일 파일의 연결 앱 조회 후 선택한 앱으로 한 번 열기
 - `file.copy`: 일반→일반 `start_copy`, 압축 내부→일반 `archive_extract`, 일반→압축 내부 `archive_add`로 실행
 - `app.quit`: macOS `Cmd+Q`, Windows `Alt+F4`로 현재 Tauri 창 종료 요청
-- 플랫폼 단축키: 기본 액션 표의 macOS 표시값에 `WINDOWS_SHORTCUTS`의 Windows 표시·실행 바인딩 적용
+- 플랫폼 단축키: 기본 액션 표의 macOS 표시값에 액션 속성 `windowsShortcut`의 Windows 표시·실행 바인딩 적용
+- 플랫폼 제한 속성: 백엔드 기능 필요(`platformFeature`), 단축키 플랫폼 제한(`shortcutPlatforms`), 가용성 판정(`isActionAvailable`)이 함께 확인하므로 각 액션 `isEnabled`에 플랫폼 조건 중복 금지
+- 실행 플랫폼 판정: `src/domain/runtimePlatform.ts` 하나에서 userAgent 기준, 백엔드 `PlatformInfo`가 있으면 그 값 우선, 기능 정보를 받기 전 기본값은 macOS 기능 기준
 - Windows 복사·잘라내기·붙여넣기·휴지통 이동 취소: `Ctrl+C`·`Ctrl+X`·`Ctrl+V`·`Ctrl+Z` 유지
 - Windows의 `Cmd` 바인딩·Mac 전용 이동 붙여넣기 안내 제외, 메뉴·도움말·하단 안내·접근성·키 매칭에 공통 조회 사용
 - 종료 검증 경계: 프론트엔드로 전달된 종료 키의 작업 중 차단 회귀 포함, OS가 직접 처리하는 `Alt+F4`의 실제 VM 입력 확인은 별도 필요

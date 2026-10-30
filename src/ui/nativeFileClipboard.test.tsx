@@ -16,7 +16,7 @@ import './testing/commanderTestSetup';
 import { useFileClipboard } from './useFileClipboard';
 import type { TauriResult } from '../tauri/client';
 vi.mock('../tauri/client', async importOriginal => ({ ...await importOriginal<object>(), isTauriRuntime: () => true }));
-vi.mock('../actions/registry', async importOriginal => ({ ...await importOriginal<object>(), fileShortcutPlatform: () => 'mac' }));
+vi.mock('../domain/runtimePlatform', async importOriginal => ({ ...await importOriginal<object>(), fileShortcutPlatform: () => 'mac' }));
 afterEach(cleanup);
 const file = testEntry('/finder', 'sample.json');
 const setup = (platformInfo?: PlatformInfo) => {

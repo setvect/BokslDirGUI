@@ -2,6 +2,7 @@ import { startDrag, type DragResult as NativeDragResult } from '@crabnebula/taur
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isWindowsRuntime } from '../domain/runtimePlatform';
 import { tauriClient } from './client';
 import { EVENTS } from './commands';
 
@@ -38,7 +39,7 @@ export const TAURI_NATIVE_FILE_DROP_CLIENT: NativeFileDropClient = {
 
 export const TAURI_NATIVE_FILE_DRAG_CLIENT: NativeFileDragClient = {
   start: async (paths, mode, preview, onResult) => {
-    const items = navigator.platform.startsWith('Win')
+    const items = isWindowsRuntime()
       ? await invoke<string[]>('prepare_native_file_drag', { paths }) : paths;
     await startDrag({ item: items, icon: preview, mode }, ({ result }) => onResult({ result }));
   },

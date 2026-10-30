@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ACTION_BY_ID, labelForAction } from '../actions/registry';
+import { fileShortcutPlatform, platformSupports } from '../domain/runtimePlatform';
 import type { PanelId, PlatformInfo, TrashUndoPreview } from '../domain/types';
 import { formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
 import { operationSummaryStatusLabel } from '../operations/operationLabels';
@@ -23,7 +24,7 @@ export function useTrashUndo(dependencies: Dependencies) {
   const [revision, setRevision] = useState(0);
   const sequence = useRef(0);
   const { mutationClient, operationClient, runtimeBackendAvailable, operationBusy } = dependencies;
-  const enabled = runtimeBackendAvailable && (dependencies.platformInfo?.features.trashUndo ?? true) && !!mutationClient.previewTrashUndo && !!operationClient.startTrashUndo;
+  const enabled = runtimeBackendAvailable && platformSupports('trashUndo', dependencies.platformInfo, fileShortcutPlatform()) && !!mutationClient.previewTrashUndo && !!operationClient.startTrashUndo;
   useEffect(() => {
     const request = ++sequence.current;
     setPreview(null);

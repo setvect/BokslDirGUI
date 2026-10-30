@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ACTION_BY_ID, fileShortcutPlatform, labelForAction, type ActionId, type AppAction } from '../actions/registry';
+import { ACTION_BY_ID, labelForAction, type ActionId, type AppAction } from '../actions/registry';
+import { fileShortcutPlatform, platformSupports } from '../domain/runtimePlatform';
 import type { DirectoryListing, PlatformInfo, FileEntry, OperationSummary, PanelId, Settings } from '../domain/types';
 import { formatUserErrorMessage, type CommanderStatusText } from '../i18n-resources';
 import { isTauriRuntime } from '../tauri/client';
@@ -32,7 +33,7 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
   const writing = useRef(0);
   const polling = useRef(false);
   const pasteRequest = useRef(0);
-  const native = isTauriRuntime() && dependencies.runtimeBackendAvailable && (dependencies.platformInfo?.features.nativeFileClipboard ?? fileShortcutPlatform() === 'mac')
+  const native = isTauriRuntime() && dependencies.runtimeBackendAvailable && platformSupports('nativeFileClipboard', dependencies.platformInfo, fileShortcutPlatform())
     && Boolean(dependencies.mutationClient.readFileClipboard && dependencies.mutationClient.writeFileClipboard);
   const setLocal = (snapshot: FileClipboardSnapshot | null) => { local.current = snapshot; setFileClipboard(snapshot); };
   useEffect(() => {

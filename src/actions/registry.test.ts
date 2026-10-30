@@ -3,6 +3,7 @@ import parityMatrix from '../../docs/implementation/tui-parity-matrix.json';
 import { describe, expect, it } from 'vitest';
 import { COMMANDS } from '../tauri/commands';
 import { platformInfoFixture } from '../ui/testing/clientStubs';
+import { fileShortcutPlatform } from '../domain/runtimePlatform';
 import {
   ACTIONS,
   ACTION_BY_ID,
@@ -10,7 +11,6 @@ import {
   actionVisibleOnPlatform,
   actionsForMenu,
   ariaKeyShortcutsFromRegistry,
-  fileShortcutPlatform,
   isActionAvailable,
   keyboardBindingCollisions,
   keyboardBindingsForAction,
@@ -120,10 +120,10 @@ describe('action registry', () => {
     };
     for (const id of ['external.openCurrentInFileManager', 'external.openCurrentInTerminal']) {
       const action = ACTION_BY_ID.get(id)!;
-      expect(action.isEnabled(context)).toBe(true);
-      expect(action.isEnabled({ ...context, activePathIsArchive: true })).toBe(false);
-      expect(action.isEnabled({ ...context, platform: 'other' })).toBe(false);
-      expect(action.isEnabled({ ...context, backendAvailable: false })).toBe(false);
+      expect(isActionAvailable(action, context)).toBe(true);
+      expect(isActionAvailable(action, { ...context, activePathIsArchive: true })).toBe(false);
+      expect(isActionAvailable(action, { ...context, platform: 'other' })).toBe(false);
+      expect(isActionAvailable(action, { ...context, backendAvailable: false })).toBe(false);
     }
   });
 
@@ -295,9 +295,9 @@ it('uses backend feature availability even when keyboard presentation is macOS',
     platformInfo: { os: 'windows', features: { openWith: false, currentFolderManager: false,
       currentFolderTerminal: false, nativeFileClipboard: false, trashUndo: false } } };
   for (const id of ['external.openWith', 'file.undoTrash', 'external.openCurrentInFileManager', 'external.openCurrentInTerminal'] as const) {
-    expect(ACTION_BY_ID.get(id)!.isEnabled(context)).toBe(false);
+    expect(isActionAvailable(ACTION_BY_ID.get(id)!, context)).toBe(false);
   }
-  expect(ACTION_BY_ID.get('file.copy')!.isEnabled(context)).toBe(true);
+  expect(isActionAvailable(ACTION_BY_ID.get('file.copy')!, context)).toBe(true);
 });
 
 
