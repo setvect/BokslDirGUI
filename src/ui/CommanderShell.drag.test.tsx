@@ -249,6 +249,26 @@ describe('CommanderShell drag', () => {
       expect(f.operationClient.startMove).not.toHaveBeenCalled();
     });
 
+    it('uploads files dropped from the OS onto a remote panel and never drags remote rows out to the OS', async () => {
+      const remote = 'sftp://boksl@example.com/srv';
+      const remoteEntry = { path: `${remote}/remote.txt`, name: 'remote.txt', kind: 'file' as const, sizeBytes: 3, modifiedAt: null, createdAt: null,
+        permissions: '-rw-r--r--', owner: 'boksl', group: 'staff', isHidden: false, isVirtual: false };
+      const listings = { ...SAMPLE_LISTINGS, right: { ...SAMPLE_LISTINGS.right, path: remote, entries: [remoteEntry] } };
+      const f = setupDrag([], listings);
+      const path = SAMPLE_LISTINGS.left.entries.find((entry) => entry.name === 'Architecture.md')!.path;
+      act(() => f.nativeDrop({ type: 'drop', paths: [path], position: { x: 700, y: 200 } }));
+      await waitFor(() => expect(f.operationClient.startCopy).toHaveBeenCalledWith(expect.objectContaining({ sources: [path], targetDir: remote })));
+
+      useOperationStore.setState({ dialog: null, progress: null, summary: null, lastError: null, activeOperationController: null });
+      const remoteRow = rowByText(f.container, 'remote.txt')!;
+      fireEvent.pointerDown(remoteRow, { pointerId: 9, button: 0, clientX: 700, clientY: 200 });
+      fireEvent.pointerMove(window, { pointerId: 9, buttons: 1, clientX: 710, clientY: 210 });
+      fireEvent.pointerMove(window, { pointerId: 9, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
+      fireEvent.pointerUp(window, { pointerId: 9, button: 0, clientX: window.innerWidth + 10, clientY: 200 });
+      await act(async () => {});
+      expect(f.nativeFileDragClient.start).not.toHaveBeenCalled();
+    });
+
     it('keeps the selected source snapshot when another row becomes selected during the gesture', async () => {
       const selected = ['Architecture.md', 'PRD.md'].map((name) => `${SAMPLE_LISTINGS.left.path}/${name}`);
       const f = setupDrag(selected); f.down('left'); f.move('right');

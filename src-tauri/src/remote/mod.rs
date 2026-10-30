@@ -14,6 +14,8 @@ mod tests;
 
 use crate::contracts::{AppError, CommandResult};
 use std::future::Future;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
 /// SSH 세션 작업이 계속 실행될 런타임. 명령 호출마다 바뀌지 않도록 앱 전체에서 하나만 사용.
@@ -42,4 +44,26 @@ pub(crate) async fn run<T: Send + 'static>(
 /// 동기 작업 스레드에서 원격 요청 실행. 비동기 런타임 작업 스레드에서는 호출 금지.
 pub(crate) fn block_on<F: Future>(future: F) -> F::Output {
     runtime().block_on(future)
+}
+
+/// 원격 파일을 기본 앱으로 열 때 받는 앱 전용 임시 위치(FR-39.2). 사용자 파일과 섞이지 않게 임시 폴더 아래에 둠.
+fn open_temp_root() -> PathBuf {
+    std::env::temp_dir().join("BokslDirGUI-remote-open")
+}
+
+/// 열기마다 새 하위 폴더: 같은 이름 파일을 덮어쓰거나 이전에 연 파일을 바꾸지 않음.
+pub(crate) fn new_open_dir() -> CommandResult<PathBuf> {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let dir = open_temp_root().join(format!("{}-{millis}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+    std::fs::create_dir_all(&dir).map_err(|error| crate::filesystem::map_io_error(error, Some(&dir)))?;
+    Ok(dir)
+}
+
+/// 앱 종료 때 받은 임시 파일 정리. 다른 앱이 열고 있어 지우지 못한 파일은 다음 종료 때 다시 시도.
+pub(crate) fn clear_open_temp() {
+    let _ = std::fs::remove_dir_all(open_temp_root());
 }

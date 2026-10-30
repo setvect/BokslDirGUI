@@ -62,6 +62,8 @@ pub fn run() {
                 if let Some(overlay) = window.app_handle().get_webview_window("drop-overlay") {
                     let _ = overlay.close();
                 }
+                // 원격 파일 열기용 임시 파일 정리(FR-39.2)
+                remote::clear_open_temp();
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -110,6 +112,7 @@ pub fn run() {
             commands::remote_trust_host_key,
             commands::remote_disconnect,
             commands::remote_sessions,
+            commands::remote_open_dir,
             commands::remote_forget_secret,
             commands::remote_import_ssh_config,
             commands::start_remote_chmod

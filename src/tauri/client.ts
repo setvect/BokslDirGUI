@@ -184,6 +184,7 @@ export const tauriClient = {
   remoteSessions: () => invokeCommand<RemoteSession[]>(COMMANDS.remoteSessions),
   remoteForgetSecret: (input: { siteId: string }) => invokeCommand<void>(COMMANDS.remoteForgetSecret, input),
   remoteImportSshConfig: () => invokeCommand<SshConfigImport>(COMMANDS.remoteImportSshConfig),
+  remoteOpenDir: () => invokeCommand<string>(COMMANDS.remoteOpenDir),
   startRemoteChmod: (input: { targets: string[]; mode: number; recursive: boolean; scope: ChmodScope }) =>
     invokeCommand<OperationStarted>(COMMANDS.startRemoteChmod, input),
   listenRemoteConnectionChanges: async (handler: (event: RemoteConnectionChanged) => void) => {

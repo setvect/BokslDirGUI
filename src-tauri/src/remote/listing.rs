@@ -2,8 +2,10 @@
 use super::connection::{self, sftp_error, RemoteConnection};
 use super::path::{is_remote_path, RemotePath};
 use crate::contracts::{
-    AppError, CommandResult, DirectoryListing, EntryKind, FileEntry, FileMetadata, PanelId, SortSpec,
+    AppError, CommandResult, DirectoryListing, EntryKind, FileEntry, FileMetadata, FilePreview, PanelId, SortSpec,
 };
+use crate::preview::PreviewPlan;
+use tokio::io::AsyncReadExt;
 use crate::filesystem::{is_hidden_name, mime_from_extension, sort_entries};
 use russh_sftp::protocol::{FileAttributes, FileType};
 use std::path::Path;
@@ -123,6 +125,28 @@ pub(crate) async fn metadata(path: &str) -> CommandResult<FileMetadata> {
         image_metadata: None,
         entry,
     })
+}
+
+/// 원격 빠른 보기(FR-39.1): 로컬과 같은 판정·한도로 앞부분만 받아 표시. 링크는 대상 파일 기준.
+pub(crate) async fn preview(path: &str, max_bytes: Option<u64>) -> CommandResult<FilePreview> {
+    let target = RemotePath::parse(path)?;
+    let connection = connection::ensure(&target.location).await?;
+    let to_error = |error: russh_sftp::client::error::Error| sftp_error(&target.location, &target.path, &error);
+    let attrs = connection.sftp.metadata(target.path.as_str()).await.map_err(to_error)?;
+    if !attrs.is_regular() {
+        return Err(AppError::new("not_file", "errors.previewNotFile", Some(Path::new(&target.url())), true));
+    }
+    let name = target.file_name().unwrap_or("/").to_string();
+    let plan = PreviewPlan::new(&name, attrs.size.unwrap_or(0), max_bytes);
+    let mut bytes = Vec::new();
+    if let Some(limit) = plan.read_limit() {
+        let file = connection.sftp.open(target.path.as_str()).await.map_err(to_error)?;
+        file.take(limit).read_to_end(&mut bytes).await.map_err(|error| {
+            AppError::new("remote_failed", "errors.remoteOperationFailed", Some(Path::new(&target.url())), true)
+                .with_detail("serverMessage", error.to_string().chars().take(200).collect::<String>())
+        })?;
+    }
+    Ok(plan.finish(target.url(), name, bytes))
 }
 
 /// 실제 경로(심볼릭 링크 해석)와 디렉터리 여부 확인.

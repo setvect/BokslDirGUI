@@ -1,4 +1,5 @@
 import { archiveFileSuffix, archiveFormatForName } from '../domain/archiveFormats';
+import { parseRemotePath, remotePathJoin } from '../domain/remotePath';
 import type { FileEntry, SortSpec } from '../domain/types';
 import {
   isArchiveVirtualPath,
@@ -84,6 +85,9 @@ export const basenameFromPath = (path: string) =>
   path.replace(/\\/g, '/').split('/').filter(Boolean).at(-1) ?? path;
 
 export const joinPath = (directory: string, name: string) => {
+  // 원격 경로는 이름의 `%`를 인코딩하는 원격 규칙으로 결합
+  const remote = parseRemotePath(directory);
+  if (remote) return remotePathJoin(remote, name);
   const separator = directory.includes('\\') ? '\\' : '/';
   return directory.endsWith('/') || directory.endsWith('\\') ? `${directory}${name}` : `${directory}${separator}${name}`;
 };

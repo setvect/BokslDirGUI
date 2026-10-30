@@ -88,8 +88,17 @@ pub(crate) async fn get_metadata(path: String) -> CommandResult<FileMetadata> {
 }
 
 #[tauri::command]
-pub(crate) fn preview_file(path: String, max_bytes: Option<u64>) -> CommandResult<FilePreview> {
-    crate::preview::preview_file(path, max_bytes)
+pub(crate) async fn preview_file(path: String, max_bytes: Option<u64>) -> CommandResult<FilePreview> {
+    if is_remote_path(&path) {
+        return crate::remote::run(async move { crate::remote::listing::preview(&path, max_bytes).await }).await;
+    }
+    run_blocking(Some(PathBuf::from(&path)), move || crate::preview::preview_file(path, max_bytes)).await
+}
+
+/// 원격 파일을 기본 앱으로 열기 전에 받을 임시 폴더(FR-39.2).
+#[tauri::command]
+pub(crate) fn remote_open_dir() -> CommandResult<String> {
+    crate::remote::new_open_dir().map(|dir| crate::path_text::display_path(&dir))
 }
 
 #[tauri::command]

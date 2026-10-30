@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { FileEntry, Settings } from '../domain/types';
@@ -57,7 +57,8 @@ describe('CommanderShell remote panels', () => {
 
     fireEvent.contextMenu(rowByText(container, 'remote.txt')!);
     const menu = await screen.findByRole('menu');
-    expect(within(menu).queryByRole('menuitem', { name: /기본 앱으로 열기/ })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: /기본 앱으로 열기/ })).toBeTruthy();
+    expect(within(menu).queryByRole('menuitem', { name: /Finder|탐색기|파일 위치/ })).toBeNull();
     expect(within(menu).queryByRole('menuitem', { name: /압축/ })).toBeNull();
     await user.click(within(menu).getByRole('menuitem', { name: /권한 변경/ }));
 
@@ -287,5 +288,55 @@ describe('CommanderShell remote panels', () => {
     await waitFor(() => expect(remoteConnect).toHaveBeenCalledWith({ request: { siteId: 'site-agent', host: 'agent.example.com', port: 22, user: 'boksl', authMethod: 'agent' } }));
     await waitFor(() => expect(container.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(remotePath));
     expect(rowByText(container, 'restored.txt')).not.toBeNull();
+  });
+  it('opens remote files only after the download to the app temp folder completes', async () => {
+    const user = userEvent.setup();
+    const startCopy = vi.fn()
+      .mockResolvedValueOnce({ ok: true as const, data: { operationId: 'op-remote-open', kind: 'copy' as const, state: 'queued' as const } })
+      .mockResolvedValueOnce({ ok: true as const, data: { operationId: 'op-remote-open-2', kind: 'copy' as const, state: 'queued' as const } });
+    const openDefault = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: null } }));
+    const remoteOpenDir = vi.fn().mockResolvedValueOnce({ ok: true as const, data: '/tmp/BokslDirGUI-remote-open/1' })
+      .mockResolvedValueOnce({ ok: true as const, data: '/tmp/BokslDirGUI-remote-open/2' });
+    const listing = createDirectoryListing('right', REMOTE_DIR, [remoteEntry('remote.txt')]);
+    const { container } = render(<CommanderShell dataSource={createFixturePanelDataSource({ ...SAMPLE_LISTINGS, right: listing })}
+      mutationClient={mutationClientStub({ openDefault, remoteOpenDir })} operationClient={operationClientStub({ startCopy })}
+      remoteClient={remoteClientStub()} initialFocusIndex={{ left: 3, right: 0 }} initialSelectedPaths={{ left: [], right: [] }} />);
+    await waitFor(() => expect(focusedRowText(container)).toContain('remote.txt'));
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(startCopy).toHaveBeenCalledWith({ sources: [`${REMOTE_DIR}/remote.txt`], targetDir: '/tmp/BokslDirGUI-remote-open/1', policy: 'overwrite' }));
+    expect(openDefault).not.toHaveBeenCalled();
+    act(() => useOperationStore.getState().applyOperationSummary({ operationId: 'op-remote-open', kind: 'copy', state: 'completed', completedFiles: 1, failedFiles: 0, skippedFiles: 0, errors: [] }));
+    await waitFor(() => expect(openDefault).toHaveBeenCalledWith({ path: '/tmp/BokslDirGUI-remote-open/1/remote.txt' }));
+
+    useOperationStore.setState({ dialog: null, progress: null, summary: null, lastError: null, activeOperationController: null });
+    await user.keyboard('o');
+    await waitFor(() => expect(startCopy).toHaveBeenCalledTimes(2));
+    act(() => useOperationStore.getState().applyOperationSummary({ operationId: 'op-remote-open-2', kind: 'copy', state: 'cancelled', completedFiles: 0, failedFiles: 0, skippedFiles: 0, errors: [] }));
+    await act(async () => {});
+    expect(openDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it('previews remote files and keeps remote clipboard items inside the app', async () => {
+    const user = userEvent.setup();
+    const previewFile = vi.fn(async () => ({ ok: true as const, data: { path: `${REMOTE_DIR}/remote.txt`, name: 'remote.txt', kind: 'text' as const, mimeType: 'text/plain', sizeBytes: 3, text: 'abc', dataUrl: null, truncated: false, limitBytes: 262144 } }));
+    const writeFileClipboard = vi.fn(async () => ({ ok: true as const, data: 1 }));
+    const startCopy = vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-remote-paste', kind: 'copy' as const, state: 'queued' as const } }));
+    const listing = createDirectoryListing('right', REMOTE_DIR, [remoteEntry('remote.txt')]);
+    const { container } = render(<CommanderShell dataSource={createFixturePanelDataSource({ ...SAMPLE_LISTINGS, right: listing })}
+      mutationClient={mutationClientStub({ previewFile, writeFileClipboard })} operationClient={operationClientStub({ startCopy })}
+      remoteClient={remoteClientStub()} initialFocusIndex={{ left: 3, right: 0 }} initialSelectedPaths={{ left: [], right: [] }} />);
+    await waitFor(() => expect(focusedRowText(container)).toContain('remote.txt'));
+
+    await user.keyboard('{F3}');
+    await waitFor(() => expect(previewFile).toHaveBeenCalledWith(expect.objectContaining({ path: `${REMOTE_DIR}/remote.txt` })));
+    expect(await screen.findByText('abc')).toBeTruthy();
+    await user.keyboard('{Escape}');
+
+    await user.keyboard('{Control>}c{/Control}');
+    await user.keyboard('{Tab}');
+    await user.keyboard('{Control>}v{/Control}');
+    await waitFor(() => expect(startCopy).toHaveBeenCalledWith({ sources: [`${REMOTE_DIR}/remote.txt`], targetDir: SAMPLE_LISTINGS.left.path, policy: 'skip' }));
+    expect(writeFileClipboard).not.toHaveBeenCalled();
   });
 });

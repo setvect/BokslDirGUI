@@ -52,6 +52,7 @@ export type SafeMutationClient = Pick<TauriClient, 'createDir' | 'renameEntry'> 
   | 'getPlatformInfo' | 'previewTrashUndo' | 'previewBulkRename' | 'readFileClipboard' | 'writeFileClipboard' | 'clearFileClipboard'
   | 'getMetadata' | 'previewFile' | 'archiveList' | 'listOpenWithApps' | 'openWithApp' | 'openDefault' | 'revealInManager'
   | 'openCurrentInFileManager' | 'openCurrentInTerminal' | 'prepareShellCommand' | 'runShellCommand' | 'loadSettings' | 'saveSettings'
+  | 'remoteOpenDir'
 >>;
 
 export type LongRunningOperationClient = Pick<TauriClient, 'startCopy' | 'startMove' | 'startDelete' | 'cancelOperation' | 'resolveConflict'>

@@ -6,6 +6,7 @@ import {
   ACTION_BY_ID,
   labelForAction
 } from '../actions/registry';
+import { isRemotePath } from '../domain/remotePath';
 import { isWindowsRuntime } from '../domain/runtimePlatform';
 import type { FileEntry, PanelId, Settings } from '../domain/types';
 import type { CommanderStatusText } from '../i18n-resources';
@@ -122,7 +123,8 @@ export function useFileDrag(runtime: FileDragDependencies) {
   const startNativeEntryDrag = (session: FileDragSource, mode: NativeFileDragMode) => {
     setPointerDragPreview(null);
     setDragOverPanel(null);
-    if (!resolvedNativeFileDragClient || isArchiveVirtualPath(session.sourcePath)) return;
+    // 원격 항목은 OS로 끌어낼 경로가 없어 앱 안 드래그만 허용(FR-40.4 범위 밖)
+    if (!resolvedNativeFileDragClient || isArchiveVirtualPath(session.sourcePath) || isRemotePath(session.sourcePath)) return;
     const { panelId, entries } = session;
     let preview = nativeFileDragIcon;
     if (isTauriRuntime()) {

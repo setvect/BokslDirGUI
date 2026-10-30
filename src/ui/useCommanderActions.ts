@@ -182,7 +182,38 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
       return;
     }
 
+    if (isRemotePath(entry.path)) {
+      void openRemoteEntry(panelId, entry);
+      return;
+    }
     void openDefaultEntry(entry);
+  };
+
+  // 원격 파일 열기(FR-39.2): 앱 전용 임시 폴더로 받는 복사 작업을 거쳐 완료 뒤에만 기본 앱 실행(취소하면 열지 않음)
+  const openRemoteEntry = async (panelId: PanelId, entry: FileEntry) => {
+    if (dependencies.operationBusy || !dependencies.mutationClient.remoteOpenDir || !dependencies.runtimeBackendAvailable) {
+      dependencies.setStatusMessage(dependencies.statusText.openDefaultUnavailable(entry.name));
+      return;
+    }
+    const folder = await dependencies.mutationClient.remoteOpenDir();
+    if (!folder.ok) {
+      dependencies.setStatusMessage(dependencies.statusText.openDefaultFailed(formatUserErrorMessage(dependencies.settings.language, folder.error)));
+      return;
+    }
+    const targetDir = folder.data;
+    void dependencies.startLongRunningOperation({
+      action: ACTION_BY_ID.get('file.copy')!, panelId, sources: [entry], targetDir,
+      workingDir: dependencies.panelState[panelId].path,
+      longRunningExecutor: () => dependencies.operationClient.startCopy({ sources: [entry.path], targetDir, policy: 'overwrite' }),
+      cancelExecutor: operationCanceller(dependencies.operationClient),
+      onOperationSummary: (summary) => {
+        if (summary.state === 'completed' && summary.failedFiles === 0) {
+          void openDefaultEntry({ ...entry, path: joinPath(targetDir, entry.name) });
+          return;
+        }
+        finishOperation(dependencies, 'copy', summary, dependencies.settings.language);
+      },
+    });
   };
 
   const openDefaultEntry = async (entry: FileEntry) => {
@@ -268,6 +299,10 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     if (actionId === 'file.undoTrash') { openTrashUndo(panelOverride, panelListing.path); return; }
 
     if (actionId !== 'remote.chmod' && actionId.startsWith('remote.') && dependencies.handleRemoteAction(actionId, panelOverride)) return;
+    if (actionId === 'external.openDefault' && sources.length === 1 && isRemotePath(sources[0].path)) {
+      void openRemoteEntry(panelOverride, sources[0]);
+      return;
+    }
     if (actionId === 'remote.chmod') {
       if (!sources.length || dependencies.operationBusy || !dependencies.runtimeBackendAvailable
         || !isRemotePath(panelListing.path) || !dependencies.operationClient.startRemoteChmod) return;

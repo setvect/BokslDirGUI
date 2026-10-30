@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ACTION_BY_ID, labelForAction, type ActionId, type AppAction } from '../actions/registry';
+import { isRemotePath } from '../domain/remotePath';
 import { fileShortcutPlatform, platformSupports } from '../domain/runtimePlatform';
 import type { DirectoryListing, PlatformInfo, FileEntry, OperationSummary, PanelId, Settings } from '../domain/types';
 import { formatUserErrorMessage, type CommanderStatusText } from '../i18n-resources';
@@ -20,6 +21,9 @@ interface FileClipboardDependencies {
   operationBusy: boolean;
   platformInfo?: PlatformInfo;
 }
+// OS 파일 클립보드로 내보낼 수 없는 위치: 압축 내부, 원격
+const internalOnly = (path: string) => isArchiveVirtualPath(path) || isRemotePath(path);
+
 export function useFileClipboard(dependencies: FileClipboardDependencies) {
   const [fileClipboard, setFileClipboard] = useState<FileClipboardSnapshot | null>(null);
   const latest = useRef(dependencies);
@@ -87,14 +91,14 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
     writing.current++;
     writeQueue.current = writeQueue.current.then(async () => {
       if (!alive.current || revision !== sequence.current) return;
-      // 가상 압축 항목은 앱 내부에서만 보관하되 외부 클립보드 변경 여부는 추적.
-      const result = isArchiveVirtualPath(panelListing.path)
+      // 가상 압축·원격 항목은 OS 클립보드에 경로를 쓰지 않고 앱 내부에서만 보관하되 외부 클립보드 변경 여부는 추적(FR-40.3).
+      const result = internalOnly(panelListing.path)
         ? await latest.current.mutationClient.readFileClipboard!({ resolve: false })
         : await latest.current.mutationClient.writeFileClipboard!({ paths: sources.map(entry => entry.path), intent });
       if (!alive.current || revision !== sequence.current) return;
       if (!result.ok) { setLocal(null); latest.current.setStatusMessage(formatUserErrorMessage(latest.current.settings.language, result.error)); return; }
       snapshot.nativeVersion = typeof result.data === 'number' ? result.data : result.data.changeCount;
-      setNativeCount(isArchiveVirtualPath(panelListing.path) ? 0 : sources.length);
+      setNativeCount(internalOnly(panelListing.path) ? 0 : sources.length);
       setNativeIntent(intent);
       captured();
     }).finally(() => { writing.current--; });
@@ -136,7 +140,7 @@ export function useFileClipboard(dependencies: FileClipboardDependencies) {
     void writeQueue.current.then(async () => {
       const header = await latest.current.mutationClient.readFileClipboard!({ resolve: false });
       const internalArchive = header.ok && local.current?.nativeVersion === header.data.changeCount
-        && isArchiveVirtualPath(local.current.listing.path);
+        && internalOnly(local.current.listing.path);
       const result = internalArchive || !header.ok ? header : await latest.current.mutationClient.readFileClipboard!({ resolve: true });
       if (!alive.current || request !== pasteRequest.current || revision !== sequence.current || latest.current.operationBusy
         || latest.current.panelState[panelId].path !== targetDir) return;

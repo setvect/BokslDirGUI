@@ -899,3 +899,41 @@ fn link_policies_preserve_follow_or_skip_links_and_reject_loops() {
     assert_eq!(looped.errors[0].message_key, "errors.remoteLinkLoop");
     super::block_on(connection::disconnect(&connection.location));
 }
+
+#[test]
+fn remote_quick_view_uses_local_preview_rules_on_the_downloaded_prefix() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-preview");
+    std::fs::write(server.root().join("notes.txt"), "가나다라마바사".repeat(10)).unwrap();
+    std::fs::write(server.root().join("binary.txt"), [b'a', 0, b'b']).unwrap();
+    std::fs::write(server.root().join("tool.bin"), [0u8; 16]).unwrap();
+    std::fs::write(server.root().join("pixel.png"), [0x89, b'P', b'N', b'G']).unwrap();
+    std::fs::create_dir(server.root().join("folder")).unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let preview = |name: &str, max: Option<u64>| super::block_on(super::listing::preview(&format!("{root}{name}"), max));
+
+    let text = preview("notes.txt", Some(12)).unwrap();
+    assert_eq!((text.kind.as_str(), text.truncated, text.limit_bytes), ("text", true, 12));
+    assert_eq!(text.text.as_deref(), Some("가나다라"));
+    assert_eq!(text.path, format!("{root}notes.txt"));
+    assert_eq!(preview("binary.txt", None).unwrap().kind, "unsupported");
+    assert_eq!(preview("tool.bin", None).unwrap().kind, "unsupported");
+    let image = preview("pixel.png", None).unwrap();
+    assert_eq!((image.kind.as_str(), image.mime_type.as_deref()), ("image", Some("image/png")));
+    assert!(image.data_url.unwrap().starts_with("data:image/png;base64,"));
+    assert_eq!(preview("folder", None).unwrap_err().code, "not_file");
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[test]
+fn remote_open_downloads_land_in_unique_app_temp_folders_cleared_at_exit() {
+    let first = super::new_open_dir().unwrap();
+    let second = super::new_open_dir().unwrap();
+    assert_ne!(first, second);
+    assert_eq!(first.parent(), second.parent());
+    assert!(first.parent().unwrap().ends_with("BokslDirGUI-remote-open"));
+    std::fs::write(first.join("opened.txt"), b"x").unwrap();
+    super::clear_open_temp();
+    assert!(!first.exists() && !second.exists());
+}

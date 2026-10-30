@@ -79,10 +79,14 @@ describe('action registry', () => {
     const base = { activePanel: 'right' as const, focusedEntryKind: 'file' as const, selectedCount: 0, hasConcreteFocus: true, effectiveTargetCount: 1,
       hasOppositePanel: true, shellCommandEnabled: true, operationBusy: false, backendAvailable: true, activePathIsArchive: false };
     const available = (id: ActionId, activePathIsRemote: boolean) => isActionAvailable(getAction(id), { ...base, activePathIsRemote });
-    for (const id of ['external.openDefault', 'external.reveal', 'archive.create', 'file.quickView', 'file.clipboardCopy', 'external.runShellCommand'] as const) {
-      expect(available(id, true), id).toBe(false);
+    for (const id of ['external.reveal', 'external.openWith', 'archive.create', 'file.undoTrash', 'external.openCurrentInTerminal', 'external.runShellCommand'] as const) {
+      expect(getAction(id).remoteSupport, id).toBe('localOnly');
     }
-    expect(available('external.openDefault', false)).toBe(true);
+    expect(available('external.reveal', true)).toBe(false);
+    expect(available('external.reveal', false)).toBe(true);
+    for (const id of ['external.openDefault', 'file.quickView', 'file.clipboardCopy', 'file.copy', 'file.move'] as const) {
+      expect(getAction(id).remoteSupport, id).toBeUndefined();
+    }
     expect(available('remote.chmod', true)).toBe(true);
     expect(available('remote.chmod', false)).toBe(false);
     for (const id of ['file.mkdir', 'file.rename', 'file.trash', 'file.deletePermanent', 'file.bulkRename', 'file.properties'] as const) {

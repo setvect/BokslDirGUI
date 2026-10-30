@@ -248,7 +248,7 @@ fn preview_file_limits_text_and_never_executes_unsupported_content() {
     let text_path = fixture.root.join("preview.md");
     fs::write(&text_path, "가나다라마바사 abcdefghijklmnopqrstuvwxyz")
         .expect("preview text should be written");
-    let text = preview_file(text_path.to_string_lossy().into_owned(), Some(12))
+    let text = tauri::async_runtime::block_on(preview_file(text_path.to_string_lossy().into_owned(), Some(12)))
         .expect("text preview should succeed");
     assert_eq!(text.kind, "text");
     assert!(text.truncated);
@@ -259,7 +259,7 @@ fn preview_file_limits_text_and_never_executes_unsupported_content() {
     let executable = fixture.root.join("program.bin");
     fs::write(&executable, b"#!/bin/sh\necho should-not-run\n")
         .expect("unsupported preview fixture should be written");
-    let unsupported = preview_file(executable.to_string_lossy().into_owned(), None)
+    let unsupported = tauri::async_runtime::block_on(preview_file(executable.to_string_lossy().into_owned(), None))
         .expect("unsupported preview should be a successful state");
     assert_eq!(unsupported.kind, "unsupported");
     assert!(unsupported.text.is_none());
@@ -271,7 +271,7 @@ fn preview_file_limits_text_and_never_executes_unsupported_content() {
         [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a],
     )
     .expect("image preview fixture should be written");
-    let image = preview_file(image_path.to_string_lossy().into_owned(), None)
+    let image = tauri::async_runtime::block_on(preview_file(image_path.to_string_lossy().into_owned(), None))
         .expect("small image preview should succeed");
     assert_eq!(image.kind, "image");
     assert!(image
