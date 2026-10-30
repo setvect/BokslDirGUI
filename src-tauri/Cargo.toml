@@ -43,6 +43,10 @@ base64 = "0.22.1"
 process-wrap = { version = "10.0.1", default-features = false, features = ["std", "creation-flags", "job-object", "process-group"] }
 # 패널 디렉터리 외부 변경 감지. macOS FSEvents·Windows ReadDirectoryChangesW를 감싼 표준 감시 라이브러리.
 notify = "8.2.1"
+russh = { version = "0.65.0", default-features = false, features = ["ring", "rsa", "flate2"] }
+russh-sftp = "3.0.1"
+keyring = "4.2.0"
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "net", "time", "io-util", "sync", "macros", "fs"] }
 
 # Windows 드라이브 및 재파싱 지점 검증에 필요한 최소 OS API.
 [target.'cfg(windows)'.dependencies]

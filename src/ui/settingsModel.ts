@@ -1,5 +1,5 @@
 import { normalizeSavedTabs } from './sessionState';
-import type { Settings } from '../domain/types';
+import type { RemoteSettings, Settings } from '../domain/types';
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 1,
@@ -47,6 +47,10 @@ const ZOOM_PRESETS_BY_STEP: Record<number, number> = {
 
 export type ZoomCommand = 'in' | 'out' | 'reset';
 
+export const DEFAULT_REMOTE_SETTINGS: RemoteSettings = { sites: [], keepaliveSeconds: 30, connectTimeoutSeconds: 15 };
+
+export const remoteSettingsOf = (settings: Settings): RemoteSettings => settings.remote ?? DEFAULT_REMOTE_SETTINGS;
+
 export const mergeSettings = (current: Settings, patch: Partial<Settings>): Settings => ({
   ...current,
   ...patch,
@@ -54,6 +58,7 @@ export const mergeSettings = (current: Settings, patch: Partial<Settings>): Sett
   layout: patch.layout ? { ...current.layout, ...patch.layout } : current.layout,
   session: patch.session ? { ...current.session, ...patch.session } : current.session,
   view: patch.view ? { ...current.view, ...patch.view } : current.view,
+  remote: patch.remote ? { ...remoteSettingsOf(current), ...patch.remote } : current.remote,
 });
 
 export const normalizeSettings = (value: unknown): Settings => {

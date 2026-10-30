@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, NativeFileClipboard, RenamePreview, RenameRules, Settings, TrashUndoPreview } from '../domain/types';
+import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, NativeFileClipboard, RemoteSettings, RenamePreview, RenameRules, Settings, TrashUndoPreview } from '../domain/types';
 import { normalizeInvokeError } from './client';
 import { EVENTS } from './commands';
 import { ARCHIVE_FORMATS, archiveFormatForName } from '../domain/archiveFormats';
@@ -73,4 +73,10 @@ it('keeps the archive format table identical to the Rust provider table', () => 
   expect(archiveFormatForName('Bundle.TAR.GZ')).toBe('tar.gz');
   expect(archiveFormatForName('app.war')).toBe('war');
   expect(archiveFormatForName('notes.txt')).toBeNull();
+});
+
+it('consumes the remote site settings contract without secret fields', () => {
+  const remote: RemoteSettings = { ...fixture.remoteSettings, sites: fixture.remoteSettings.sites.map((site) => ({ ...site, authMethod: 'publicKey' as const })) };
+  expect(remote).toEqual(fixture.remoteSettings);
+  expect(JSON.stringify(fixture.remoteSettings).toLowerCase()).not.toMatch(/password"|passphrase"|secret"\s*:\s*"/);
 });

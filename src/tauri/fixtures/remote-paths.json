@@ -1,0 +1,10 @@
+{
+  "valid": [
+    { "input": "sftp://boksl@example.com/home/boksl/한글 폴더", "user": "boksl", "host": "example.com", "port": 22, "path": "/home/boksl/한글 폴더", "url": "sftp://boksl@example.com/home/boksl/한글 폴더" },
+    { "input": "SFTP://a%40b@[::1]:2222", "user": "a@b", "host": "::1", "port": 2222, "path": "/", "url": "sftp://a%40b@[::1]:2222/" },
+    { "input": "sftp://u@h/x/100%25 done/./../y", "user": "u", "host": "h", "port": 22, "path": "/x/y", "url": "sftp://u@h/x/y" },
+    { "input": "sftp://u%3Ax@h:22/a//b/", "user": "u:x", "host": "h", "port": 22, "path": "/a/b", "url": "sftp://u%3Ax@h/a/b" },
+    { "input": "sftp://u@h/100%25 한글", "user": "u", "host": "h", "port": 22, "path": "/100% 한글", "url": "sftp://u@h/100%25 한글" }
+  ],
+  "invalid": ["sftp://host/path", "sftp://@host/", "sftp://u@:22/", "sftp://u@h:0/", "sftp://u@h/%zz", "/local", "sftp://u@a:b:c/", "sftp://u@h:99999/"]
+}

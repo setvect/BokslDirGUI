@@ -141,6 +141,7 @@ fn validate_settings(settings: &Settings, path: &Path) -> CommandResult<()> {
         )
         .with_detail("field", "view.zoomStep"));
     }
+    validate_remote_settings(&settings.remote, path)?;
     if !["compact", "comfortable"].contains(&settings.view.density.as_str()) {
         return Err(AppError::new(
             "invalid_settings",
@@ -149,6 +150,29 @@ fn validate_settings(settings: &Settings, path: &Path) -> CommandResult<()> {
             true,
         )
         .with_detail("field", "view.density"));
+    }
+    Ok(())
+}
+
+// 사이트는 연결 대상이므로 빈 값·제어 문자·중복 ID·범위 밖 시간 설정 거부.
+fn validate_remote_settings(remote: &crate::contracts::RemoteSettings, path: &Path) -> CommandResult<()> {
+    let invalid = |field: &str| AppError::new("invalid_settings", "errors.settingsInvalid", Some(path), true)
+        .with_detail("field", field);
+    let text_ok = |text: &str| !text.trim().is_empty() && !text.chars().any(char::is_control);
+    let mut ids = std::collections::HashSet::new();
+    for site in &remote.sites {
+        if !text_ok(&site.id) || !ids.insert(site.id.as_str()) || !text_ok(&site.name) || site.name.chars().count() > 120
+            || !text_ok(&site.host) || site.host.contains(char::is_whitespace) || !text_ok(&site.user) || site.port == 0
+            || site.key_path.as_deref().is_some_and(|key| !text_ok(key))
+            || site.start_path.as_deref().is_some_and(|start| !text_ok(start)) {
+            return Err(invalid("remote.sites"));
+        }
+    }
+    if !(5..=600).contains(&remote.keepalive_seconds) {
+        return Err(invalid("remote.keepaliveSeconds"));
+    }
+    if !(3..=120).contains(&remote.connect_timeout_seconds) {
+        return Err(invalid("remote.connectTimeoutSeconds"));
     }
     Ok(())
 }

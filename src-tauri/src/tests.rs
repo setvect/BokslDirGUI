@@ -1836,3 +1836,47 @@ fn zip_detail_listing_marks_encrypted_entries_with_uppercase_type() {
     assert!(archive::zipinfo_long_output_has_encrypted_entry(binary));
     assert!(!archive::zipinfo_long_output_has_encrypted_entry(b"Zip file size: 199 bytes, number of entries: 1\n"));
 }
+
+#[test]
+fn remote_sites_persist_without_secrets_and_reject_invalid_entries() {
+    let _env_guard = crate::test_util::lock_env();
+    let fixture = TempFixture::new();
+    let settings_path = fixture.root.join("settings.json");
+    env::set_var("BOKSLDIRGUI_SETTINGS_PATH", &settings_path);
+    let site = serde_json::json!({
+        "id": "site-1", "name": "작업 서버", "host": "example.com", "port": 2222, "user": "boksl",
+        "authMethod": "publicKey", "keyPath": "~/.ssh/id_ed25519", "startPath": "/srv", "savedSecret": true
+    });
+    let saved = save_settings(serde_json::json!({ "remote": { "sites": [site.clone()] } })).expect("valid site saves");
+    assert_eq!(saved.remote.sites.len(), 1);
+    assert_eq!((saved.remote.keepalive_seconds, saved.remote.connect_timeout_seconds), (30, 15));
+    let stored = fs::read_to_string(&settings_path).unwrap();
+    assert!(stored.contains("\"savedSecret\": true") && !stored.to_lowercase().contains("password\":"));
+
+    for (patch, field) in [
+        (serde_json::json!({ "sites": [{ "host": "" }] }), "remote.sites"),
+        (serde_json::json!({ "sites": [site.clone(), site.clone()] }), "remote.sites"),
+        (serde_json::json!({ "sites": [{ "port": 0 }] }), "remote.sites"),
+        (serde_json::json!({ "sites": [{ "host": "bad host" }] }), "remote.sites"),
+        (serde_json::json!({ "keepaliveSeconds": 1 }), "remote.keepaliveSeconds"),
+        (serde_json::json!({ "connectTimeoutSeconds": 999 }), "remote.connectTimeoutSeconds"),
+    ] {
+        let mut remote = serde_json::json!({ "sites": [site.clone()] });
+        if let Some(sites) = patch.get("sites").and_then(|sites| sites.as_array()) {
+            let merged: Vec<serde_json::Value> = sites.iter().map(|override_fields| {
+                let mut entry = site.clone();
+                for (key, value) in override_fields.as_object().unwrap() {
+                    entry[key] = value.clone();
+                }
+                entry
+            }).collect();
+            remote["sites"] = serde_json::Value::Array(merged);
+        } else {
+            for (key, value) in patch.as_object().unwrap() {
+                remote[key] = value.clone();
+            }
+        }
+        let error = save_settings(serde_json::json!({ "remote": remote })).expect_err("invalid remote settings");
+        assert_eq!(error.details.and_then(|details| details.get("field").cloned()), Some(field.to_string()));
+    }
+}

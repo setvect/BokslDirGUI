@@ -29,6 +29,7 @@ mod settings_service;
 mod native_drop;
 mod window_session;
 mod shell_command;
+mod remote;
 mod watch_service;
 #[cfg(test)]
 mod tests;

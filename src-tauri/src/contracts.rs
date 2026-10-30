@@ -353,6 +353,71 @@ pub(crate) struct Settings {
     pub(crate) session: SessionSettings,
     #[serde(default)]
     pub(crate) view: ViewSettings,
+    #[serde(default, skip_serializing_if = "RemoteSettings::is_default")]
+    pub(crate) remote: RemoteSettings,
+}
+
+/// 원격 연결 설정. 비밀 정보(암호·키 암호)는 OS 자격 증명 저장소에만 저장.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RemoteSettings {
+    #[serde(default)]
+    pub(crate) sites: Vec<RemoteSite>,
+    #[serde(default = "default_keepalive_seconds")]
+    pub(crate) keepalive_seconds: u32,
+    #[serde(default = "default_connect_timeout_seconds")]
+    pub(crate) connect_timeout_seconds: u32,
+}
+
+fn default_keepalive_seconds() -> u32 {
+    30
+}
+
+fn default_connect_timeout_seconds() -> u32 {
+    15
+}
+
+impl Default for RemoteSettings {
+    fn default() -> Self {
+        Self {
+            sites: Vec::new(),
+            keepalive_seconds: default_keepalive_seconds(),
+            connect_timeout_seconds: default_connect_timeout_seconds(),
+        }
+    }
+}
+
+impl RemoteSettings {
+    pub(crate) fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum RemoteAuthMethod {
+    Password,
+    PublicKey,
+    Agent,
+    KeyboardInteractive,
+}
+
+/// 저장된 SFTP 사이트. `saved_secret`은 OS 자격 증명 저장소에 암호·키 암호를 저장했는지 여부만 표시.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RemoteSite {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) user: String,
+    pub(crate) auth_method: RemoteAuthMethod,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) key_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) start_path: Option<String>,
+    #[serde(default)]
+    pub(crate) saved_secret: bool,
 }
 
 impl Default for Settings {
@@ -368,6 +433,7 @@ impl Default for Settings {
             layout: LayoutSettings::default(),
             session: SessionSettings::default(),
             view: ViewSettings::default(),
+            remote: RemoteSettings::default(),
         }
     }
 }

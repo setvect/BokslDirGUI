@@ -120,3 +120,30 @@ fn archive_format_table_matches_the_frontend_fixture() {
     assert_eq!(crate::archive_provider::archive_format(Path::new("/x/app.war")), Some("war"));
     assert!(!crate::archive_provider::is_archive_path(Path::new("/x/notes.txt")));
 }
+
+#[test]
+fn remote_settings_round_trip_without_secret_fields() {
+    let value = fixture()["remoteSettings"].clone();
+    let remote: crate::contracts::RemoteSettings = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&remote).unwrap(), value);
+    assert_eq!(remote.sites[0].auth_method, crate::contracts::RemoteAuthMethod::PublicKey);
+    let text = value.to_string().to_lowercase();
+    assert!(!text.contains("password\"") && !text.contains("passphrase"));
+}
+
+#[test]
+fn remote_path_cases_match_the_frontend_fixture() {
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("../../src/tauri/fixtures/remote-paths.json")).unwrap();
+    for case in cases["valid"].as_array().unwrap() {
+        let parsed = crate::remote::path::RemotePath::parse(case["input"].as_str().unwrap()).unwrap();
+        assert_eq!(parsed.location.user, case["user"].as_str().unwrap());
+        assert_eq!(parsed.location.host, case["host"].as_str().unwrap());
+        assert_eq!(u64::from(parsed.location.port), case["port"].as_u64().unwrap());
+        assert_eq!(parsed.path, case["path"].as_str().unwrap());
+        assert_eq!(parsed.url(), case["url"].as_str().unwrap());
+    }
+    for input in cases["invalid"].as_array().unwrap() {
+        assert!(crate::remote::path::RemotePath::parse(input.as_str().unwrap()).is_err(), "{input}");
+    }
+}

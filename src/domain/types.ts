@@ -265,6 +265,29 @@ export interface Settings {
     density: 'compact' | 'comfortable';
     showIcons: boolean;
   };
+  // 기본값이면 저장 파일에서 생략, 읽을 때 `remoteSettingsOf`로 기본값 적용
+  remote?: RemoteSettings;
+}
+
+export type RemoteAuthMethod = 'password' | 'publicKey' | 'agent' | 'keyboardInteractive';
+
+// 저장된 SFTP 사이트. 암호·키 암호는 OS 자격 증명 저장소에만 있고 `savedSecret`은 저장 여부만 표시
+export interface RemoteSite {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  user: string;
+  authMethod: RemoteAuthMethod;
+  keyPath?: string;
+  startPath?: string;
+  savedSecret: boolean;
+}
+
+export interface RemoteSettings {
+  sites: RemoteSite[];
+  keepaliveSeconds: number;
+  connectTimeoutSeconds: number;
 }
 
 export interface NativeFileClipboard {
