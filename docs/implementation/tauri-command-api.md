@@ -106,7 +106,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `start_delete` | `{ targets, mode, confirmToken? }` | `OperationStarted` | `trash`/`permanent`; permanent는 `PERMANENT_DELETE` token 필요 |
 | `cancel_operation` | `{ operationId }` | `CancelAck` | cooperative cancel |
 | `resolve_conflict` | `{ operationId, decision }` | `ConflictAck` | overwrite/skip/allOverwrite/allSkip/cancel |
-| `archive_list` | `{ archivePath, password?, limit? }` | `ArchiveListing { totalEntries, truncated, ... }` | 기본 50,000개, 최대 200,000개 응답 제한 |
+| `archive_list` | `{ archivePath, password?, limit? }` | `ArchiveListing { totalEntries, truncated, ... }` | 기본 50,000개, 최대 200,000개 응답 제한, 작업 스레드 실행(화면 멈춤 없음), ZIP 암호 여부는 상세 목록의 대문자 형식 표시(T·B)로 판정 |
 | `archive_create` | `{ sources, targetArchive, format, password? }` | `OperationStarted` | zip/7z 암호 지원; jar/war/tar 계열 암호 미지원 |
 | `archive_extract` | `{ archivePath, targetDir, password?, policy, entries?, stripPrefix? }` | `OperationStarted` | zip-slip 차단, 선택 항목 추출 지원 |
 | `archive_add` | `{ sources, archivePath, targetInnerDir, policy }` | `OperationStarted` | 일반 파일/폴더를 zip/jar/war/7z 내부 경로에 추가; unsafe 내부 경로 차단 |

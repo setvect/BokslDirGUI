@@ -110,18 +110,8 @@ fn list_zip_entries_with_metadata(
         .arg(archive)
         .output()
         .map_err(|error| map_io_error(error, Some(archive)))?;
+    let encrypted = zipinfo_long_output_has_encrypted_entry(&detail_output.stdout);
     let entries = parse_zipinfo_long_output(detail_output, archive, &names)?;
-    let encrypted = listing_tool("zipinfo")
-        .arg("-v")
-        .arg(archive)
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .is_some_and(|output| {
-            String::from_utf8_lossy(&output.stdout)
-                .to_ascii_lowercase()
-                .contains("file security status:                           encrypted")
-        });
     Ok((entries, encrypted))
 }
 
@@ -258,6 +248,19 @@ struct ZipInfoMetadata {
     permissions: String,
     size_bytes: Option<u64>,
     modified_at: Option<String>,
+}
+
+/// zipinfo 긴 목록의 다섯째 필드 첫 글자가 대문자(T·B)면 암호화 항목(zipinfo 설명서 기준).
+/// 항목마다 여러 줄을 내는 `zipinfo -v` 전체 출력(5만 항목 약 69MB)을 다시 읽지 않기 위한 판정.
+pub(crate) fn zipinfo_long_output_has_encrypted_entry(stdout: &[u8]) -> bool {
+    String::from_utf8_lossy(stdout).lines().any(|line| {
+        parse_zipinfo_long_line(line).is_some()
+            && line
+                .split_whitespace()
+                .nth(4)
+                .and_then(|field| field.chars().next())
+                .is_some_and(|marker| marker == 'T' || marker == 'B')
+    })
 }
 
 fn parse_zipinfo_long_line(line: &str) -> Option<ZipInfoMetadata> {

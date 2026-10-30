@@ -42,15 +42,20 @@ pub(crate) fn goto_path(panel_id: PanelId, path: String, base: Option<String>) -
     navigation::list_dir(panel_id, &resolved.to_string_lossy(), false, SortSpec::default(), None)
 }
 
+/// 파일 시스템·외부 도구를 기다리는 명령은 메인 스레드 대신 작업 스레드에서 실행.
+async fn run_blocking<T: Send + 'static>(
+    failure_path: Option<PathBuf>,
+    action: impl FnOnce() -> CommandResult<T> + Send + 'static,
+) -> CommandResult<T> {
+    tauri::async_runtime::spawn_blocking(action).await.map_err(|error| {
+        AppError::new("io_error", "errors.io", failure_path.as_deref(), true)
+            .with_detail("message", error.to_string())
+    })?
+}
+
 #[tauri::command]
 pub(crate) async fn get_metadata(path: String) -> CommandResult<FileMetadata> {
-    let failure_path = PathBuf::from(&path);
-    tauri::async_runtime::spawn_blocking(move || navigation::get_metadata(&path))
-        .await
-        .map_err(|error| {
-            AppError::new("io_error", "errors.io", Some(&failure_path), false)
-                .with_detail("message", error.to_string())
-        })?
+    run_blocking(Some(PathBuf::from(&path)), move || navigation::get_metadata(&path)).await
 }
 
 #[tauri::command]
@@ -130,12 +135,12 @@ pub(crate) fn resolve_conflict(
 }
 
 #[tauri::command]
-pub(crate) fn archive_list(
+pub(crate) async fn archive_list(
     archive_path: String,
     password: Option<String>,
     limit: Option<usize>,
 ) -> CommandResult<ArchiveListing> {
-    archive::archive_list(&archive_path, password, limit)
+    run_blocking(Some(PathBuf::from(&archive_path)), move || archive::archive_list(&archive_path, password, limit)).await
 }
 
 #[tauri::command]
@@ -299,13 +304,11 @@ pub(crate) async fn clear_file_clipboard(app: tauri::AppHandle, change_count: i6
 
 #[tauri::command]
 pub(crate) async fn preview_bulk_rename(sources: Vec<String>, rules: crate::contracts::RenameRules) -> CommandResult<Vec<crate::contracts::RenamePreview>> {
-    tauri::async_runtime::spawn_blocking(move || crate::bulk_rename::preview(sources, rules))
-        .await.map_err(|error| AppError::new("io_error", "errors.io", None, true).with_detail("message", error.to_string()))?
+    run_blocking(None, move || crate::bulk_rename::preview(sources, rules)).await
 }
 #[tauri::command]
 pub(crate) async fn start_bulk_rename(app: tauri::AppHandle, items: Vec<crate::contracts::RenameItem>) -> CommandResult<OperationStarted> {
-    tauri::async_runtime::spawn_blocking(move || operation::start_bulk_rename(Some(&app), items))
-        .await.map_err(|error| AppError::new("io_error", "errors.io", None, true).with_detail("message", error.to_string()))?
+    run_blocking(None, move || operation::start_bulk_rename(Some(&app), items)).await
 }
 
 #[tauri::command]

@@ -180,6 +180,19 @@
   - 진행(3단계): TUI 원본 확인 결과 `sort_asc`(`s r`)는 이름과 달리 정렬 방향 반전 실행 → GUI `view.reverseSort`·`view.sortAsc` 두 액션에 대응, GUI 전용 확장 목록에서 `view.reverseSort` 제외
   - 진행(3단계): `implementation-todo.md`의 쉘 취소·출력/시간 상한 항목을 구현 근거와 함께 완료 처리
 
+## 남은 기능 진행(10단계)
+
+| 항목 | 결과 | 근거 |
+| --- | --- | --- |
+| 경로 입력 `~`·상대 경로(FR-26.4) | 구현, `goto_path`의 `base`와 Rust `resolve_input_path` | `goto_path_resolves_home_and_panel_relative_input`, 프론트 base 전달 테스트 |
+| 실제 watcher | 구현, `notify` 8.2.1·패널당 감시·300ms 병합·version 일치 새로고침 | `real_directory_watch_reports_a_new_entry`, 프론트 version 테스트 |
+| 같은 패널 하위 폴더 드롭(FR-29.2) | 구현, 패널 간 드롭과 같은 기본 복사·Shift 이동 | `CommanderShell.drag.test.tsx` 복사·이동 |
+| 압축 목록 성능 | 5만 항목 ZIP 측정: 이름 0.24초·상세 0.15초·암호 확인용 `zipinfo -v` 0.56초(출력 69MB) → 암호 판정을 상세 목록에서 계산해 `zipinfo -v` 제거, 명령을 작업 스레드로 이동 | `zip_detail_listing_marks_encrypted_entries_with_uppercase_type`, 압축 테스트 21개 |
+| 코드 서명 | 결정 필요, 선택지를 `windows-support-plan.md` W7에 기록 | 스마트 앱 컨트롤 차단 관찰 |
+| OS 창 닫기 중 작업 정책 | 결정 필요(차단·확인·취소 후 닫기) | `implementation-todo.md` |
+
+- 남은 확인: Windows 실기 감시·드롭·경로 입력과 D09 후보는 VM E2E에서 확인
+
 ## 문제없음으로 확인한 영역
 
 - 작업 상태 단일 store와 내부 모듈 주입 구조, `dialogDefinitions`·`COMMANDS`·parity JSON 단일 원천

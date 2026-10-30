@@ -1,6 +1,6 @@
 use crate::archive;
 use crate::commands::{
-    archive_list, create_dir, get_metadata, health_check, list_dir, list_locations, load_settings,
+    create_dir, get_metadata, health_check, list_dir, list_locations, load_settings,
     open_current_in_file_manager, open_current_in_terminal, open_default,
     prepare_shell_command, preview_file, rename_entry, reveal_in_manager,
     save_settings,
@@ -1815,4 +1815,24 @@ fn input_path_resolution_keeps_absolute_and_baseless_relative_paths() {
     assert_eq!(crate::navigation::resolve_input_path("sub dir", Some("/base")).unwrap(), Path::new("/base").join("sub dir"));
     assert_eq!(crate::navigation::resolve_input_path("sub", None).unwrap(), PathBuf::from("sub"));
     assert_eq!(crate::navigation::resolve_input_path("", Some("/base")).unwrap(), PathBuf::from(""));
+}
+
+// archive_list 명령은 작업 스레드에서 실행되는 async 명령, 테스트는 같은 동기 서비스 함수를 직접 호출.
+fn archive_list(
+    archive_path: String,
+    password: Option<String>,
+    limit: Option<usize>,
+) -> crate::contracts::CommandResult<crate::contracts::ArchiveListing> {
+    archive::archive_list(&archive_path, password, limit)
+}
+
+#[test]
+fn zip_detail_listing_marks_encrypted_entries_with_uppercase_type() {
+    let plain = b"-rw-r--r--  3.0 unx        1 tx        1 stor 20261030.233558 plain.txt\n";
+    let mixed = b"-rw-r--r--  3.0 unx        1 tx        1 stor 20261030.233558 plain.txt\n-rw-r--r--  3.0 unx        1 TX       13 stor 20261030.233558 secret.txt\n";
+    let binary = b"-rw-r--r--  3.0 unx        1 Bx       13 defN 20261030.233558 secret.bin\n";
+    assert!(!archive::zipinfo_long_output_has_encrypted_entry(plain));
+    assert!(archive::zipinfo_long_output_has_encrypted_entry(mixed));
+    assert!(archive::zipinfo_long_output_has_encrypted_entry(binary));
+    assert!(!archive::zipinfo_long_output_has_encrypted_entry(b"Zip file size: 199 bytes, number of entries: 1\n"));
 }
