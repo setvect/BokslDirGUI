@@ -28,6 +28,7 @@ import {
   focusedEntryOf,
   markPanelError,
   markPanelLoading,
+  MAX_PANEL_TABS,
   parentNavigationEntryOf,
   parentPathOf,
   replacePanelListing,
@@ -593,8 +594,8 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
   const addTab = (panelId: PanelId) => {
     const panel = panelState[panelId];
 
-    if (panelTabs[panelId].length >= 5) {
-      runtime.setStatusMessage(runtime.settings.language === 'ko' ? '패널당 탭은 최대 5개입니다.' : 'Each panel supports up to 5 tabs.');
+    if (panelTabs[panelId].length >= MAX_PANEL_TABS) {
+      runtime.setStatusMessage(runtime.statusText.tabLimit(MAX_PANEL_TABS));
       return;
     }
     beginPanelRequest(panelId);
@@ -651,7 +652,7 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       right: current.left.map((tab) => reassignPanelState(tab, 'right')),
     }));
     setActiveTab((current) => ({ left: current.right, right: current.left }));
-    runtime.setStatusMessage(runtime.settings.language === 'ko' ? '좌우 패널 경로를 맞바꿨습니다.' : 'Swapped panel paths.');
+    runtime.setStatusMessage(runtime.statusText.panelsSwapped);
     return;
 
   };

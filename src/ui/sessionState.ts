@@ -1,9 +1,9 @@
 import type { PanelId, SavedPanelTabs, SavedTab, Settings } from '../domain/types';
-import { DEFAULT_SORT, type PanelNavigationState, type PanelStateById } from './panelState';
+import { DEFAULT_SORT, MAX_PANEL_HISTORY, MAX_PANEL_TABS, type PanelNavigationState, type PanelStateById } from './panelState';
 
 export const savedTab = (panel: PanelNavigationState): SavedTab => ({
   path: panel.path, sort: panel.sort, filter: panel.filter, showHidden: panel.showHidden,
-  historyBack: panel.historyBack.slice(-100), historyForward: panel.historyForward.slice(0, 100),
+  historyBack: panel.historyBack.slice(-MAX_PANEL_HISTORY), historyForward: panel.historyForward.slice(0, MAX_PANEL_HISTORY),
 });
 
 export const sessionFromPanels = (
@@ -25,7 +25,7 @@ export function normalizeSavedTabs(value: unknown): Settings['session']['tabs'] 
     if (!input || typeof input !== 'object') return null;
     const candidate = input as Partial<SavedPanelTabs>;
     if (!Array.isArray(candidate.items) || !candidate.items.length) return null;
-    const items = candidate.items.slice(0, 5).filter((tab) => tab && typeof tab.path === 'string' && tab.path.length > 0)
+    const items = candidate.items.slice(0, MAX_PANEL_TABS).filter((tab) => tab && typeof tab.path === 'string' && tab.path.length > 0)
       .map((tab): SavedTab => ({
         path: tab.path,
         sort: {
@@ -35,8 +35,8 @@ export function normalizeSavedTabs(value: unknown): Settings['session']['tabs'] 
         },
         filter: typeof tab.filter === 'string' ? tab.filter : null,
         showHidden: tab.showHidden === true,
-        historyBack: Array.isArray(tab.historyBack) ? tab.historyBack.filter((path) => typeof path === 'string').slice(-100) : [],
-        historyForward: Array.isArray(tab.historyForward) ? tab.historyForward.filter((path) => typeof path === 'string').slice(0, 100) : [],
+        historyBack: Array.isArray(tab.historyBack) ? tab.historyBack.filter((path) => typeof path === 'string').slice(-MAX_PANEL_HISTORY) : [],
+        historyForward: Array.isArray(tab.historyForward) ? tab.historyForward.filter((path) => typeof path === 'string').slice(0, MAX_PANEL_HISTORY) : [],
       }));
     if (!items.length) return null;
     return { items, activeIndex: Number.isInteger(candidate.activeIndex)

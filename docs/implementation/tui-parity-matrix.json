@@ -151,10 +151,6 @@
       "reason": "GUI 도움말 검색 확장"
     },
     {
-      "guiActionId": "view.reverseSort",
-      "reason": "GUI convenience toggle retained alongside TUI direct ascending/descending sort actions."
-    },
-    {
       "guiActionId": "file.quickView",
       "reason": "GUI 확장 기능: 실행 없이 제한된 크기의 텍스트·이미지를 오버레이에서 안전하게 빠른 확인"
     },
@@ -1876,12 +1872,18 @@
         ]
       ],
       "guiActionIds": [
+        "view.reverseSort",
         "view.sortAsc"
       ],
       "guiShortcutLabels": [
         "sr"
       ],
       "guiMenuPaths": [
+        [
+          "View",
+          "Sort",
+          "Reverse"
+        ],
         [
           "View",
           "Sort",
@@ -1893,7 +1895,7 @@
         "src/ui/useCommanderActions.ts: direct setting/sort action handler",
         "src/ui/CommanderShell.navigation.test.tsx: passes sort, hidden, and refresh state through listDir"
       ],
-      "notes": "Ascending sort direct menu action applies asc direction without relying on reverse toggle.",
+      "notes": "TUI sort_asc는 이름·메뉴 표기와 달리 정렬 방향 반전(toggle_sort_order) 실행. GUI는 `s r` 반전을 view.reverseSort, 메뉴 오름차순을 view.sortAsc 직접 적용으로 분리.",
       "tuiId": "sort_asc",
       "tuiLabel": "Reverse order",
       "tuiCategory": "Sort",

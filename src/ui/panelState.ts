@@ -2,6 +2,10 @@ import type { AppError, DirectoryListing, FileEntry, PanelId, SortSpec } from '.
 
 export const PANEL_IDS: readonly PanelId[] = ['left', 'right'];
 
+// 패널당 탭·히스토리 상한. Rust `settings_service`의 세션 검증과 같은 값 유지.
+export const MAX_PANEL_TABS = 5;
+export const MAX_PANEL_HISTORY = 100;
+
 export const DEFAULT_SORT: SortSpec = {
   field: 'name',
   direction: 'asc',
@@ -113,8 +117,8 @@ export const replacePanelListing = (
     selectedPaths,
     historyBack: (options.replaceBack ?? (options.pushHistory && current.path !== listing.path
       ? [...current.historyBack, current.path]
-      : current.historyBack)).slice(-100),
-    historyForward: (options.replaceForward ?? (options.pushHistory ? [] : current.historyForward)).slice(0, 100),
+      : current.historyBack)).slice(-MAX_PANEL_HISTORY),
+    historyForward: (options.replaceForward ?? (options.pushHistory ? [] : current.historyForward)).slice(0, MAX_PANEL_HISTORY),
     sort: listing.sort,
     filter: listing.filter,
     loading: false,

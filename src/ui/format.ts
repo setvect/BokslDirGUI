@@ -70,8 +70,6 @@ export const formatDateTime = (iso: string | null) => {
   return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 };
 
-export const formatModified = (iso: string | null) => formatDate(iso, 'short');
-
 export const formatOwnerGroup = (entry: FileEntry) => {
   if (entry.owner && entry.group && entry.owner !== entry.group) {
     return `${entry.owner}/${entry.group}`;

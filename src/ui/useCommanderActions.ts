@@ -301,9 +301,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
       }
       const comparison = compareDirectoryListings(dependencies.panelState.left.listing, dependencies.panelState.right.listing);
       dependencies.setDirectoryComparison(comparison);
-      dependencies.setStatusMessage(dependencies.settings.language === 'ko'
-        ? `폴더 비교 · 동일 ${comparison.same} · 다름 ${comparison.different} · 왼쪽만 ${comparison.leftOnly} · 오른쪽만 ${comparison.rightOnly}`
-        : `Directory compare · same ${comparison.same} · different ${comparison.different} · left only ${comparison.leftOnly} · right only ${comparison.rightOnly}`);
+      dependencies.setStatusMessage(dependencies.statusText.directoryComparison(comparison));
       return;
     }
     if (actionId === 'nav.enter' && actionTargetEntry) {
@@ -477,22 +475,22 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     }
 
     if (actionId === 'layout.toggleSingleDual') {
-      dependencies.applyLayout({ singlePanel: !dependencies.settings.layout.singlePanel }, `Layout · ${dependencies.settings.layout.singlePanel ? 'dual' : 'single'} panel`);
+      dependencies.applyLayout({ singlePanel: !dependencies.settings.layout.singlePanel }, dependencies.statusText.layoutPanelMode(!dependencies.settings.layout.singlePanel));
       return;
     }
 
     if (actionId === 'layout.ratio50') {
-      dependencies.applyLayout({ ratio: '50:50' }, 'Layout ratio · 50:50');
+      dependencies.applyLayout({ ratio: '50:50' }, dependencies.statusText.layoutRatio('50:50'));
       return;
     }
 
     if (actionId === 'layout.ratio70Left') {
-      dependencies.applyLayout({ ratio: '70:30' }, 'Layout ratio · 70:30');
+      dependencies.applyLayout({ ratio: '70:30' }, dependencies.statusText.layoutRatio('70:30'));
       return;
     }
 
     if (actionId === 'layout.ratio70Right') {
-      dependencies.applyLayout({ ratio: '30:70' }, 'Layout ratio · 30:70');
+      dependencies.applyLayout({ ratio: '30:70' }, dependencies.statusText.layoutRatio('30:70'));
       return;
     }
 

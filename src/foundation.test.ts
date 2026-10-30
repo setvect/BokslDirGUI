@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { APP_NAME, FOUNDATION_DOCUMENTS, IMPLEMENTATION_BOUNDARY } from './foundation';
+import { APP_NAME, IMPLEMENTATION_BOUNDARY } from './foundation';
 import { I18N_RESOURCES, translateMessageKey } from './i18n-resources';
 
 describe('BokslDirGUI foundation contract', () => {
@@ -11,12 +11,6 @@ describe('BokslDirGUI foundation contract', () => {
 
   it('keeps the clickable prototype as visual reference only', () => {
     expect(IMPLEMENTATION_BOUNDARY.mockupUse).toBe('visual-reference-only');
-  });
-
-  it('anchors the foundation to implementation design documents', () => {
-    expect(FOUNDATION_DOCUMENTS).toContain('docs/implementation/README.md');
-    expect(FOUNDATION_DOCUMENTS).toContain('docs/implementation/tauri-command-api.md');
-    expect(FOUNDATION_DOCUMENTS).toHaveLength(4);
   });
 
   it('keeps Korean and English message resources for backend message keys', () => {

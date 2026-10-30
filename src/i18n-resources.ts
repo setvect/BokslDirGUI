@@ -679,6 +679,11 @@ export interface CommanderStatusText {
   actionReady(action: string): string;
   unavailableInContext(action: string): string;
   previewMode: string;
+  tabLimit(max: number): string;
+  panelsSwapped: string;
+  directoryComparison(result: { same: number; different: number; leftOnly: number; rightOnly: number }): string;
+  layoutPanelMode(singlePanel: boolean): string;
+  layoutRatio(ratio: string): string;
 }
 
 export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusText> = {
@@ -742,6 +747,11 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     actionReady: (action) => `${action} 준비됨`,
     unavailableInContext: (action) => `${action} · 현재 컨텍스트에서는 사용할 수 없습니다.`,
     previewMode: '미리보기 모드입니다. 실제 복사/삭제/이동 같은 파일 작업은 데스크톱 앱에서만 동작합니다.',
+    tabLimit: (max) => `패널당 탭은 최대 ${max}개입니다.`,
+    panelsSwapped: '좌우 패널 경로를 맞바꿨습니다.',
+    directoryComparison: (result) => `폴더 비교 · 동일 ${result.same} · 다름 ${result.different} · 왼쪽만 ${result.leftOnly} · 오른쪽만 ${result.rightOnly}`,
+    layoutPanelMode: (singlePanel) => `레이아웃 · ${singlePanel ? '단일 패널' : '듀얼 패널'}`,
+    layoutRatio: (ratio) => `레이아웃 비율 · ${ratio}`,
   },
   en: {
     listFailed: (error) => `Failed to read listing: ${error}`,
@@ -803,6 +813,11 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     actionReady: (action) => `${action} ready`,
     unavailableInContext: (action) => `${action} · Not available in the current context.`,
     previewMode: 'Preview mode. Real file operations such as copy/delete/move are available only in the desktop app.',
+    tabLimit: (max) => `Each panel supports up to ${max} tabs.`,
+    panelsSwapped: 'Swapped panel paths.',
+    directoryComparison: (result) => `Directory compare · same ${result.same} · different ${result.different} · left only ${result.leftOnly} · right only ${result.rightOnly}`,
+    layoutPanelMode: (singlePanel) => `Layout · ${singlePanel ? 'single' : 'dual'} panel`,
+    layoutRatio: (ratio) => `Layout ratio · ${ratio}`,
   },
 };
 
@@ -1340,3 +1355,54 @@ export const CONFLICT_DECISION_LABELS = {
     cancel: 'Cancel',
   },
 } as const;
+
+export const OPEN_WITH_TEXT = {
+  ko: { title: '다음으로 열기', search: '앱 검색', loading: '앱 목록을 불러오는 중…', empty: '이 파일을 열 수 있는 앱이 없습니다.', noMatch: '검색 결과가 없습니다.', default: '기본', close: '취소', retry: '다시 불러오기', failed: '앱을 열지 못했습니다.', opening: '앱으로 여는 중…' },
+  en: { title: 'Open With', search: 'Search apps', loading: 'Loading applications…', empty: 'No applications are available for this file.', noMatch: 'No matching applications.', default: 'default', close: 'Cancel', retry: 'Reload applications', failed: 'Unable to open the application.', opening: 'Opening application…' },
+};
+
+export const BULK_RENAME_TEXT = {
+  ko: { title: '다중 이름 변경', find: '찾을 문자열', replacement: '바꿀 문자열', prefix: '접두사', numbering: '번호 붙이기', start: '시작 번호', padding: '번호 자릿수', extension: '확장자 유지', before: '현재 이름', after: '변경할 이름', loading: '이름과 충돌을 확인하는 중…', apply: '변경 적용', cancel: '취소', note: '표시 순서대로 이름을 변경합니다. 기존 파일은 덮어쓰지 않으며, 취소하면 이미 변경한 이름은 유지됩니다.', unchanged: '변경 없음', failed: '미리보기를 불러오지 못했습니다.' },
+  en: { title: 'Bulk Rename', find: 'Find text', replacement: 'Replace with', prefix: 'Prefix', numbering: 'Add numbering', start: 'Start number', padding: 'Number digits', extension: 'Preserve extension', before: 'Current name', after: 'New name', loading: 'Checking names and conflicts…', apply: 'Apply changes', cancel: 'Cancel', note: 'Names change in the displayed order. Existing files are never overwritten. Cancellation keeps changes already completed.', unchanged: 'Unchanged', failed: 'Unable to load preview.' },
+};
+
+export const FILE_INFO_TEXT = {
+  ko: {
+    created: '생성일', owner: '소유자', group: '그룹', readonly: '읽기 전용', extension: '확장자',
+    image: '이미지 정보', dimensions: '픽셀 크기', shooting: '촬영 정보', details: '상세 메타데이터',
+    absent: '촬영 정보 없음', unreadable: '이미지 메타데이터를 읽을 수 없습니다.',
+    limited: '읽기 한도 안에서 메타데이터를 확인하지 못했습니다.',
+    truncated: '일부 태그 또는 긴 값은 생략했습니다.',
+    loading: '파일 정보를 불러오는 중…', failed: '파일 정보를 불러오지 못했습니다.', retry: '다시 시도',
+  },
+  en: {
+    created: 'Created', owner: 'Owner', group: 'Group', readonly: 'Read-only', extension: 'Extension',
+    image: 'Image information', dimensions: 'Pixel dimensions', shooting: 'Camera information', details: 'Detailed metadata',
+    absent: 'No camera information', unreadable: 'Unable to read image metadata.',
+    limited: 'Metadata could not be found within the read limit.',
+    truncated: 'Some tags or long values have been omitted.',
+    loading: 'Loading file information…', failed: 'Unable to load file information.', retry: 'Retry',
+  },
+};
+
+export const IMAGE_METADATA_TAG_LABELS: Record<SupportedLanguage, Record<string, string>> = {
+  ko: {
+    Make: '카메라 제조사', Model: '카메라 모델', LensModel: '렌즈 모델', DateTimeOriginal: '촬영 시각', OffsetTimeOriginal: '촬영 시간대',
+    ExposureTime: '셔터 속도', FNumber: '조리개', PhotographicSensitivity: 'ISO 감도', ISOSpeed: 'ISO 감도', FocalLength: '초점거리',
+    FocalLengthIn35mmFilm: '35mm 환산 초점거리', ExposureBiasValue: '노출 보정', ExposureProgram: '노출 프로그램',
+    MeteringMode: '측광 방식', Flash: '플래시', WhiteBalance: '화이트 밸런스', Orientation: '회전 방향', ColorSpace: '색공간',
+    Artist: '촬영자', Copyright: '저작권', ImageDescription: '설명', GPSLatitude: '위도', GPSLatitudeRef: '위도 방향',
+    GPSLongitude: '경도', GPSLongitudeRef: '경도 방향', GPSAltitude: '고도', GPSAltitudeRef: '고도 기준',
+  },
+  en: {
+    Make: 'Camera make', Model: 'Camera model', LensModel: 'Lens model', DateTimeOriginal: 'Date taken',
+    OffsetTimeOriginal: 'Capture time zone', ExposureTime: 'Shutter speed', FNumber: 'Aperture',
+    PhotographicSensitivity: 'ISO', ISOSpeed: 'ISO', FocalLength: 'Focal length',
+    FocalLengthIn35mmFilm: '35mm equivalent', ExposureBiasValue: 'Exposure compensation',
+    ExposureProgram: 'Exposure program', MeteringMode: 'Metering mode', Flash: 'Flash', WhiteBalance: 'White balance',
+    Orientation: 'Orientation', ColorSpace: 'Color space', Artist: 'Artist', Copyright: 'Copyright',
+    ImageDescription: 'Description', GPSLatitude: 'Latitude', GPSLatitudeRef: 'Latitude reference',
+    GPSLongitude: 'Longitude', GPSLongitudeRef: 'Longitude reference', GPSAltitude: 'Altitude',
+    GPSAltitudeRef: 'Altitude reference',
+  },
+};

@@ -69,22 +69,6 @@ export const isTauriRuntime = () => {
   return isTauri() || typeof runtimeGlobal.__TAURI_INTERNALS__?.invoke === 'function';
 };
 
-// COMMANDS에는 실제 등록된 프론트엔드 명령만 포함. Rust 등록 여부는 독립 검증.
-export const BACKEND_IMPLEMENTED_COMMANDS: readonly TauriCommandName[] = Object.values(COMMANDS);
-
-const implementedCommandSet = new Set<TauriCommandName>(BACKEND_IMPLEMENTED_COMMANDS);
-
-export const isBackendImplementedCommand = (command: TauriCommandName) =>
-  implementedCommandSet.has(command);
-
-export const unsupportedCommandError = (command: TauriCommandName): AppError => ({
-  code: 'unsupported',
-  messageKey: 'errors.commandNotImplemented',
-  path: null,
-  details: { command },
-  recoverable: true,
-});
-
 export const normalizeInvokeError = (error: unknown, command: TauriCommandName): AppError => {
   if (isAppError(error)) {
     return error;
@@ -132,10 +116,6 @@ export const isAppError = (value: unknown): value is AppError => {
 };
 
 const invokeCommand = async <T>(command: TauriCommandName, args?: object): Promise<TauriResult<T>> => {
-  if (!isBackendImplementedCommand(command)) {
-    return { ok: false, error: unsupportedCommandError(command) };
-  }
-
   try {
     const data = await invoke<T>(command, args as InvokeArgs | undefined);
     return { ok: true, data };

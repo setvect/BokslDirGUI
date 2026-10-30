@@ -84,7 +84,6 @@
 | `bookmark.rename` | GUI 북마크 관리 확장 |
 | `bookmark.delete` | 북마크 목록의 지정 항목 삭제·설정 저장 확장 |
 | `help.search` | GUI 도움말 검색 확장 |
-| `view.reverseSort` | GUI convenience toggle retained alongside TUI direct ascending/descending sort actions. |
 | `file.quickView` | GUI 확장 기능: 실행 없이 제한된 크기의 텍스트·이미지를 오버레이에서 안전하게 빠른 확인 |
 | `panel.swapPaths` | GUI 듀얼 패널 편의 기능: 좌우 탐색 상태를 안전하게 맞바꾸기 |
 | `panel.copyPathToOther` | GUI 듀얼 패널 편의 기능: 활성 경로를 반대 패널에서 열기 |
@@ -146,7 +145,7 @@
 | `sort_size` | ss | View > Sort By > Size | `view.sortSize` | implemented | P1 | 메뉴 그룹명만 다르다. |
 | `sort_date` | sd | View > Sort By > Date | `view.sortDate` | implemented | P1 | GUI label은 Modified Date. |
 | `sort_ext` | se | View > Sort By > Extension | `view.sortExt` | implemented | P1 | 메뉴 그룹명만 다르다. |
-| `sort_asc` | sr | View > Sort Order > Ascending | `view.sortAsc` | implemented | P1 | Ascending sort direct menu action applies asc direction without relying on reverse toggle. |
+| `sort_asc` | sr | View > Sort Order > Ascending | `view.reverseSort`, `view.sortAsc` | implemented | P1 | TUI sort_asc는 이름·메뉴 표기와 달리 정렬 방향 반전(toggle_sort_order) 실행. GUI는 `s r` 반전을 view.reverseSort, 메뉴 오름차순을 view.sortAsc 직접 적용으로 분리. |
 | `sort_desc` | 없음 | View > Sort Order > Descending | `view.sortDesc` | implemented | P1 | Descending sort direct menu action applies desc direction without relying on reverse toggle. |
 | `filter_start` | / | View > Filter | `filter.start` | implemented | P1 | 필터 입력은 list_dir filter로 전달되고 panel/status/chip 및 파일명 match highlight로 적용 상태를 표시한다. |
 | `filter_clear` | 없음 | View > Clear Filter | `filter.clear` | implemented | P1 | Clear Filter는 list_dir filter=null로 갱신하고 filter chip/status를 제거한다. |

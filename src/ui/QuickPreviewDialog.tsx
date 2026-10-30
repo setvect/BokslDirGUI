@@ -2,10 +2,10 @@ import { displayPath } from '../domain/pathDisplay';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ACTION_BY_ID, actionForKeyboardShortcut, labelForAction, shortcutLabelForAction } from '../actions/registry';
 import type { FileMetadata, FilePreview } from '../domain/types';
-import { formatUserErrorMessage, OVERLAY_TEXT, type SupportedLanguage } from '../i18n-resources';
+import { FILE_INFO_TEXT, formatUserErrorMessage, OVERLAY_TEXT, type SupportedLanguage } from '../i18n-resources';
 import type { SafeMutationClient } from '../tauri/commanderClients';
 import { CommanderOverlayDialog } from './CommanderOverlays';
-import { FILE_INFO_TEXT, FileInfoView } from './FileInfoView';
+import { FileInfoView } from './FileInfoView';
 import { elementOwnsNativeKeyboardActivation, elementOwnsTextKeyboard } from './keyboardOwnership';
 
 export function QuickPreviewDialog({ language, preview, loading, getMetadata, onClose }: {

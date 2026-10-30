@@ -31,6 +31,7 @@ describe('CommanderShell settings', () => {
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
       patch: expect.objectContaining({ layout: expect.objectContaining({ singlePanel: true }) }),
     }));
+    expect(await screen.findByText('레이아웃 · 단일 패널')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
     await user.click(await screen.findByText('아이콘 전환'));

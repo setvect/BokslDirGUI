@@ -22,4 +22,4 @@ type KindForMode<M extends string> = {
 }[DialogKind];
 export type AtomicCommandDialogKind = KindForMode<'atomicCommand'>;
 export type LongRunningDialogKind = KindForMode<'longRunningOperation'>;
-export type DialogExecutionMode = (typeof DIALOG_DEFINITIONS)[DialogKind]['executionMode'] | 'unsupportedPreview';
+export type DialogExecutionMode = (typeof DIALOG_DEFINITIONS)[DialogKind]['executionMode'];

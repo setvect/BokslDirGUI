@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BACKEND_IMPLEMENTED_COMMANDS, isBackendImplementedCommand, isTauriRuntime, normalizeInvokeError, tauriClient } from './client';
+import { isTauriRuntime, normalizeInvokeError, tauriClient } from './client';
 import { COMMANDS } from './commands';
 
 describe('Tauri command names', () => {
@@ -17,22 +17,6 @@ describe('Tauri command names', () => {
         'resolve_conflict',
       ]),
     );
-  });
-
-  it('recognizes supported frontend commands', () => {
-    expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.startCopy)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.archiveAdd)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.openDefault)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.saveSettings)).toBe(true);
-  });
-
-  it('has no remaining frontend wrappers outside the registered backend surface', () => {
-    expect(BACKEND_IMPLEMENTED_COMMANDS).toEqual(Object.values(COMMANDS));
   });
 
   it('normalizes structured and unknown invoke errors to AppError', () => {

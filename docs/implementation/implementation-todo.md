@@ -129,6 +129,7 @@
 - [x] Command capability seam을 도입
   - 내용: `BACKEND_IMPLEMENTED_COMMANDS`를 새 command 구현마다 갱신하는 규칙을 문서화하고, 가능하면 Rust/backend capability를 단일 source of truth로 노출하는 방향 검토
   - Acceptance: 실제 Rust handler가 등록되지 않은 command는 계속 `unsupported`로 보이고, 등록된 command만 UI에서 실제 실행 path 사용
+  - 2026-10-30: 모든 command 구현 완료로 프론트 capability 집합과 `unsupported` 분기 제거, `src/tauri/commands.ts`의 `COMMANDS`가 단일 원천
   - Tests: `src/tauri/client.test.ts`와 `src/verification/fullScope.test.ts`가 command별 implemented/unsupported 상태 검증
 - [x] Dialog 실행 경로를 atomic command와 long-running operation으로 분리
   - Atomic command: `create_dir`, `rename_entry`, `get_metadata`, `open_default`, `reveal_in_manager`, `load_settings`, `save_settings`처럼 request/response 후 panel refresh 또는 dialog update로 끝나는 작업
@@ -357,7 +358,9 @@
 - [x] 작업별 지연 응답 차단, 현재 패널 경로·포커스 보존, 설정 저장 직렬화
 - [x] 탭별 패널 상태와 활성 탭 닫기, 5개 상한, 히스토리 100개 상한
 - [x] OS 휴지통 라이브러리 연결 및 임시 fixture 회귀
-- [ ] 쉘 취소·출력/시간 상한, terminal editor 실행 정책
+- [x] 쉘 취소·출력/시간 상한, terminal editor 실행 정책
+  - 근거: `operation/shell.rs`의 취소 확인(`is_cancelled`)·출력 16KiB(`OUTPUT_LIMIT`)·5분 제한(`COMMAND_TIMEOUT`), 테스트 `command_summary_retains_output_on_success_failure_and_timeout`(2026-10-30 확인)
+  - terminal editor 실행: 2026-10-03 사용자 요청으로 제외([TUI parity](tui-parity-matrix.md)의 `open_terminal_editor`)
 - [ ] 실제 watcher, 패널 기준 상대경로/홈 확장, 플랫폼별 위치 목록
 - [ ] backend 동시 작업 gate와 종료 정책
 - [ ] 실제 WebView/native DnD/휴지통 복원 및 Windows/Linux 검증

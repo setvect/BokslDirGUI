@@ -1,14 +1,9 @@
 import { displayPath } from '../domain/pathDisplay';
 import { useEffect, useRef, useState } from 'react';
 import type { FileEntry, OpenWithApp } from '../domain/types';
-import { formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
+import { formatUserErrorMessage, OPEN_WITH_TEXT, type SupportedLanguage } from '../i18n-resources';
 import type { SafeMutationClient } from '../tauri/commanderClients';
 import { CommanderOverlayDialog } from './CommanderOverlays';
-
-const TEXT = {
-  ko: { title: '다음으로 열기', search: '앱 검색', loading: '앱 목록을 불러오는 중…', empty: '이 파일을 열 수 있는 앱이 없습니다.', noMatch: '검색 결과가 없습니다.', default: '기본', close: '취소', retry: '다시 불러오기', failed: '앱을 열지 못했습니다.', opening: '앱으로 여는 중…' },
-  en: { title: 'Open With', search: 'Search apps', loading: 'Loading applications…', empty: 'No applications are available for this file.', noMatch: 'No matching applications.', default: 'default', close: 'Cancel', retry: 'Reload applications', failed: 'Unable to open the application.', opening: 'Opening application…' },
-};
 
 export function OpenWithDialog({ entry, language, client, onClose }: {
   entry: FileEntry;
@@ -16,7 +11,7 @@ export function OpenWithDialog({ entry, language, client, onClose }: {
   client: SafeMutationClient;
   onClose(): void;
 }) {
-  const text = TEXT[language];
+  const text = OPEN_WITH_TEXT[language];
   const [apps, setApps] = useState<OpenWithApp[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);

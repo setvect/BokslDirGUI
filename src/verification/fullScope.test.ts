@@ -5,7 +5,6 @@ import { ACTIONS, ACTION_BY_ID, isActionAvailable, menuRootsFromRegistry } from 
 import { I18N_RESOURCES } from '../i18n-resources';
 import { canTransitionOperation } from '../operations/operationLifecycle';
 import { useOperationStore } from '../operations/operationStore';
-import { BACKEND_IMPLEMENTED_COMMANDS, isBackendImplementedCommand } from '../tauri/client';
 import { COMMANDS } from '../tauri/commands';
 import { createActionContext } from '../ui/actionContext';
 import { isArchiveVirtualPath } from '../ui/archiveVirtual';
@@ -20,20 +19,8 @@ describe('full-scope verification harness', () => {
         expect(commandNames.has(action.command)).toBe(true);
       }
     }
-  });
-
-  it('keeps frontend supported names aligned with the common command list', () => {
-    expect(BACKEND_IMPLEMENTED_COMMANDS).toEqual(Object.values(COMMANDS));
-    expect(isBackendImplementedCommand(COMMANDS.listDir)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.createDir)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.renameEntry)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.startDelete)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.archiveCreate)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.archiveAdd)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.prepareShellCommand)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.runShellCommand)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.openDefault)).toBe(true);
-    expect(isBackendImplementedCommand(COMMANDS.saveSettings)).toBe(true);
+    expect(ACTION_BY_ID.get('archive.create')?.command).toBe(COMMANDS.archiveCreate);
+    expect(ACTION_BY_ID.get('external.runShellCommand')?.command).toBe(COMMANDS.runShellCommand);
   });
 
   it('keeps parity-critical GUI and file-manager actions registered', () => {

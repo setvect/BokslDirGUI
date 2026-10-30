@@ -10,7 +10,6 @@ import {
   menuRootsFromRegistry,
   shortcutLabelForAction,
   type ActionContext,
-  type ActionId,
   type AppAction
 } from '../actions/registry';
 import type { FileEntry, Settings } from '../domain/types';
@@ -293,25 +292,8 @@ export const menuShortcutLabel = (action: AppAction) => {
   return shortcutLabelForAction(action);
 };
 
-const BLANK_CONTEXT_ACTION_IDS = new Set<ActionId>([
-  'file.mkdir',
-  'file.clipboardPaste',
-  'file.clipboardMovePaste',
-  'nav.refresh',
-  'nav.gotoPath',
-  'external.openCurrentInFileManager',
-  'external.openCurrentInTerminal',
-  'filter.start',
-  'filter.clear',
-  'view.sortName',
-  'view.sortSize',
-  'view.sortDate',
-  'view.sortExt',
-  'view.toggleHidden',
-]);
-
 export const blankContextMenuActions = (context: ActionContext, hasFilter: boolean) => filterEnabledActions(
-  ACTIONS.filter((action) => actionVisibleOnPlatform(action, context.platform, context.platformInfo) && BLANK_CONTEXT_ACTION_IDS.has(action.id as ActionId))
+  ACTIONS.filter((action) => actionVisibleOnPlatform(action, context.platform, context.platformInfo) && action.contextScopes?.includes('blank'))
     .filter((action) => hasFilter || action.id !== 'filter.clear'),
   context,
 );

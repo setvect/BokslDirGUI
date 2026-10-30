@@ -83,6 +83,8 @@
 - 남은 부분: 빈 영역 메뉴 14개 ID가 `menuModel.BLANK_CONTEXT_ACTION_IDS`에 별도 정의, registry의 `contextScopes: ['blank']`는 5개
 - 남은 부분: 메뉴 단축키 표기 함수 3가지(`shortcutHelpLabelForAction`, `shortcutLabelForAction`, `menuShortcutLabel`)
 - 제안: 나머지 액션에 `blank` 범위 추가 후 목록을 registry에서 파생, 표기 통일은 화면 표시 변경이라 별도 결정
+- 진행(3단계): 빈 영역 메뉴 14개를 registry `contextScopes: ['blank']`에서 파생, `registry.test.ts` 목록 고정 테스트 추가
+- 남은 부분: 단축키 표기 함수 통일(화면 표시 변경, 별도 결정)
 - 위험·검증: 낮음, `fullScope.test.ts` 컨텍스트 메뉴 검사, `CommanderShell.keyboard.test.tsx` 빈 영역 메뉴 테스트
 
 ### R04 장기 작업 시작·완료 처리 공통화
@@ -128,17 +130,25 @@
 - 실제 관찰: D07 확인 중 한 테스트의 실패가 테스트 환경 mutex를 오염시켜 무관한 테스트 9개 연쇄 실패
 - 제안: `src/ui/testing/`의 생성 함수, Rust 공용 임시 디렉터리·환경 변수 복원 가드(Drop 복원), 오염된 mutex 회복
 - 위험·검증: 낮음, 테스트 수·결과 동일 여부 대조
+- 진행(2단계): Rust `test_util.rs`의 `lock_env`·`TempDir`, TS `src/ui/testing/clientStubs.ts` 생성 함수, 테스트 수 동일(프론트 424개, Rust 127개)
+- 진행(2단계): `verify-full-scope.mjs`의 구현 문자열 검사를 이름 있는 행동 테스트 근거로 전환
 
 ## 소규모 정리 후보
 
 - i18n: `OpenWithDialog`, `BulkRenameDialog`, `FileInfoView`, `usePanelNavigation`·`useCommanderActions` 일부 메시지의 하드코딩 문자열(FR-20.4), 레이아웃 메시지의 한국어 UI 영어 표시
+  - 진행(3단계): 문구 표를 `i18n-resources.ts`로 이동, 상태 메시지 5종을 `COMMANDER_STATUS_TEXT`로 이동, 한국어 레이아웃 메시지 회귀 테스트 추가
 - 라벨 원천 중복: registry 기본값, `ACTION_LABELS.en`, `MENU_SEGMENT_LABELS.en`, `HOTKEY_LABELS`, 테마·언어 이름 삼항식
 - 한도 상수 중복: 탭 5개·히스토리 100개(`usePanelNavigation`, `sessionState`, `panelState`, Rust `settings_service`)
+  - 진행(3단계): TS는 `panelState`의 `MAX_PANEL_TABS`·`MAX_PANEL_HISTORY` 공유, Rust 검증 값은 유지
 - 작업 상태: 진행 초기값 리터럴 7벌, `pending-` ID 생성·판정 분산, 종료 상태 판정 2벌
 - 심볼릭 링크 판정: 대상 미확인 링크를 경로마다 디렉터리·파일로 다르게 취급, 디렉터리 링크의 "다음으로 열기" 표시 후 실행 불가 의심(정적 확인만)
 - Rust: tar 오류의 문자열 비교, 파일 동일성 판정 3벌, 창 크기 상수 중복, 자체 base64 구현, `JoinError` 매핑의 `recoverable` 불일치, 테스트 훅 `BOKSLDIRGUI_EXTERNAL_DRY_RUN`의 배포본 동작, Windows `ItemId` 중복, 클립보드 무효 경로 오류 코드의 OS별 불일치
 - 미사용 코드: `labelKey`·`descriptionKey`, 도달 불가 분기(`BACKEND_IMPLEMENTED_COMMANDS`), `'unsupportedPreview'`, 테스트 전용 `FOUNDATION_DOCUMENTS`, `formatModified`
+  - 진행(3단계): 모두 제거, 죽은 코드만 확인하던 테스트 4개·게이트 검사 4개 삭제(프론트 421개, 게이트 258개)
 - 문서 불일치: `action-registry.md`의 "Finder 등 다른 앱의 파일 클립보드와는 연동하지 않음" 문구, parity JSON `sort_asc`의 `sr` 라벨
+  - 진행(3단계): 클립보드 문구를 Finder·Explorer 연동 요구사항 기준으로 수정
+  - 진행(3단계): TUI 원본 확인 결과 `sort_asc`(`s r`)는 이름과 달리 정렬 방향 반전 실행 → GUI `view.reverseSort`·`view.sortAsc` 두 액션에 대응, GUI 전용 확장 목록에서 `view.reverseSort` 제외
+  - 진행(3단계): `implementation-todo.md`의 쉘 취소·출력/시간 상한 항목을 구현 근거와 함께 완료 처리
 
 ## 문제없음으로 확인한 영역
 

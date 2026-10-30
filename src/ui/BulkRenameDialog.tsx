@@ -1,21 +1,17 @@
 import { displayPath } from '../domain/pathDisplay';
 import { useEffect, useRef, useState } from 'react';
 import type { FileEntry, RenameItem, RenamePreview, RenameRules } from '../domain/types';
-import { formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
+import { BULK_RENAME_TEXT, formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
 import type { SafeMutationClient } from '../tauri/commanderClients';
 import { CommanderOverlayDialog } from './CommanderOverlays';
 
-const TEXT = {
-  ko: { title: '다중 이름 변경', find: '찾을 문자열', replacement: '바꿀 문자열', prefix: '접두사', numbering: '번호 붙이기', start: '시작 번호', padding: '번호 자릿수', extension: '확장자 유지', before: '현재 이름', after: '변경할 이름', loading: '이름과 충돌을 확인하는 중…', apply: '변경 적용', cancel: '취소', note: '표시 순서대로 이름을 변경합니다. 기존 파일은 덮어쓰지 않으며, 취소하면 이미 변경한 이름은 유지됩니다.', unchanged: '변경 없음', failed: '미리보기를 불러오지 못했습니다.' },
-  en: { title: 'Bulk Rename', find: 'Find text', replacement: 'Replace with', prefix: 'Prefix', numbering: 'Add numbering', start: 'Start number', padding: 'Number digits', extension: 'Preserve extension', before: 'Current name', after: 'New name', loading: 'Checking names and conflicts…', apply: 'Apply changes', cancel: 'Cancel', note: 'Names change in the displayed order. Existing files are never overwritten. Cancellation keeps changes already completed.', unchanged: 'Unchanged', failed: 'Unable to load preview.' },
-};
 const DEFAULT_RULES: RenameRules = { find: '', replacement: '', prefix: '', numbering: false, start: 1, padding: 3, preserveExtension: true };
 
 export function BulkRenameDialog({ sources, language, client, onClose, onConfirm }: {
   sources: FileEntry[]; language: SupportedLanguage; client: SafeMutationClient;
   onClose(): void; onConfirm(items: RenameItem[]): void;
 }) {
-  const text = TEXT[language];
+  const text = BULK_RENAME_TEXT[language];
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [preview, setPreview] = useState<{ signature: string; rows: RenamePreview[] } | null>(null);
   const [error, setError] = useState<string | null>(null);

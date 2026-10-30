@@ -30,8 +30,6 @@ export interface ActionContext {
 export interface AppAction {
   id: string;
   category: ActionCategory;
-  labelKey: string;
-  descriptionKey: string;
   displayLabel: string;
   hotkeyLabel: string;
   shortcutLabel?: string;
@@ -70,7 +68,7 @@ const canMutate = (context: ActionContext) => context.backendAvailable && !conte
 const canMutateFilesystem = (context: ActionContext) => canMutate(context) && !context.activePathIsArchive;
 const canInvokeBackend = (context: ActionContext) => context.backendAvailable && !context.operationBusy;
 
-type ActionDefinition = Omit<AppAction, 'labelKey' | 'descriptionKey' | 'displayLabel' | 'hotkeyLabel' | 'isEnabled'> & {
+type ActionDefinition = Omit<AppAction, 'displayLabel' | 'hotkeyLabel' | 'isEnabled'> & {
   displayLabel?: string;
   hotkeyLabel?: string;
   isEnabled?: AppAction['isEnabled'];
@@ -88,8 +86,6 @@ const action = <T extends ActionDefinition>(definition: T): T & AppAction => {
   const displayLabel = userFacingActionLabel(definition);
   return {
     ...definition,
-    labelKey: `actions.${definition.id}.label`,
-    descriptionKey: `actions.${definition.id}.description`,
     displayLabel,
     hotkeyLabel: definition.hotkeyLabel ?? displayLabel,
     isEnabled: definition.isEnabled ?? always,
@@ -107,8 +103,8 @@ export const ACTIONS = [
   action({ id: 'nav.up', category: 'navigation', shortcutLabel: 'Backspace/h', keyboardBindings: ['Backspace', 'h'], menuPath: ['Go', 'Up'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.back', category: 'navigation', shortcutLabel: 'Alt+Left', keyboardBindings: ['Alt+ArrowLeft'], menuPath: ['Go', 'Back'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.forward', category: 'navigation', shortcutLabel: 'Alt+Right', keyboardBindings: ['Alt+ArrowRight'], menuPath: ['Go', 'Forward'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
-  action({ id: 'nav.refresh', category: 'navigation', shortcutLabel: 'Ctrl+R', keyboardBindings: ['Ctrl+R'], menuPath: ['View', 'Refresh'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
-  action({ id: 'nav.gotoPath', category: 'navigation', shortcutLabel: 'gp', keyboardBindings: ['g p'], menuPath: ['View', 'Go To Path'], dangerLevel: 'safe', command: COMMANDS.gotoPath, runPath: 'goto_path' }),
+  action({ id: 'nav.refresh', category: 'navigation', shortcutLabel: 'Ctrl+R', keyboardBindings: ['Ctrl+R'], menuPath: ['View', 'Refresh'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
+  action({ id: 'nav.gotoPath', category: 'navigation', shortcutLabel: 'gp', keyboardBindings: ['g p'], menuPath: ['View', 'Go To Path'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.gotoPath, runPath: 'goto_path' }),
   action({ id: 'nav.locations', category: 'navigation', shortcutLabel: 'gm', keyboardBindings: ['g m'], menuPath: ['View', 'Mount Points'], dangerLevel: 'safe', command: COMMANDS.listLocations, runPath: 'list_locations' }),
   action({ id: 'nav.top', category: 'navigation', displayLabel: 'Go Top', shortcutLabel: 'gg', keyboardBindings: ['g g'], menuPath: ['Go', 'Top'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'nav.bottom', category: 'navigation', displayLabel: 'Go Bottom', shortcutLabel: 'G', keyboardBindings: ['Shift+G'], menuPath: ['Go', 'Bottom'], dangerLevel: 'none', runPath: 'UI state' }),
@@ -140,16 +136,16 @@ export const ACTIONS = [
   action({ id: 'external.reveal', requiresConcreteSources: true, dialogKind: 'externalReveal', category: 'file', displayLabel: 'Reveal', menuPath: ['File', 'Reveal'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.revealInManager, runPath: 'reveal_in_manager', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
   action({ id: 'external.openCurrentInFileManager', category: 'navigation', displayLabel: 'Open Current Folder in File Manager', menuPath: ['Go', 'Open Current Folder in File Manager'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInFileManager, runPath: 'open_current_in_file_manager', isEnabled: (c) => supportsFeature(c, 'currentFolderManager') && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'external.openCurrentInTerminal', category: 'navigation', displayLabel: 'Open Terminal Here', menuPath: ['Go', 'Open Terminal Here'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.openCurrentInTerminal, runPath: 'open_current_in_terminal', isEnabled: (c) => supportsFeature(c, 'currentFolderTerminal') && !c.activePathIsArchive && canInvokeBackend(c) }),
-  action({ id: 'view.sortName', category: 'view', shortcutLabel: 'sn', keyboardBindings: ['s n'], menuPath: ['View', 'Sort', 'Name'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
-  action({ id: 'view.sortSize', category: 'view', shortcutLabel: 'ss', keyboardBindings: ['s s'], menuPath: ['View', 'Sort', 'Size'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
-  action({ id: 'view.sortDate', category: 'view', shortcutLabel: 'sd', keyboardBindings: ['s d'], menuPath: ['View', 'Sort', 'Modified Date'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
-  action({ id: 'view.sortExt', category: 'view', shortcutLabel: 'se', keyboardBindings: ['s e'], menuPath: ['View', 'Sort', 'Extension'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
+  action({ id: 'view.sortName', category: 'view', shortcutLabel: 'sn', keyboardBindings: ['s n'], menuPath: ['View', 'Sort', 'Name'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
+  action({ id: 'view.sortSize', category: 'view', shortcutLabel: 'ss', keyboardBindings: ['s s'], menuPath: ['View', 'Sort', 'Size'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
+  action({ id: 'view.sortDate', category: 'view', shortcutLabel: 'sd', keyboardBindings: ['s d'], menuPath: ['View', 'Sort', 'Modified Date'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
+  action({ id: 'view.sortExt', category: 'view', shortcutLabel: 'se', keyboardBindings: ['s e'], menuPath: ['View', 'Sort', 'Extension'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.reverseSort', category: 'view', shortcutLabel: 'sr', keyboardBindings: ['s r'], menuPath: ['View', 'Sort', 'Reverse'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortAsc', category: 'view', menuPath: ['View', 'Sort', 'Ascending'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortDesc', category: 'view', menuPath: ['View', 'Sort', 'Descending'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
-  action({ id: 'filter.start', category: 'view', displayLabel: 'Filter', shortcutLabel: '/', keyboardBindings: ['/'], menuPath: ['View', 'Filter'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'filter.clear', category: 'view', shortcutLabel: 'Esc in filter', menuPath: ['View', 'Clear Filter'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
-  action({ id: 'view.toggleHidden', category: 'view', shortcutLabel: '.', keyboardBindings: ['.'], menuPath: ['View', 'Hidden Files'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
+  action({ id: 'filter.start', category: 'view', displayLabel: 'Filter', shortcutLabel: '/', keyboardBindings: ['/'], menuPath: ['View', 'Filter'], contextScopes: ['blank'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'filter.clear', category: 'view', shortcutLabel: 'Esc in filter', menuPath: ['View', 'Clear Filter'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
+  action({ id: 'view.toggleHidden', category: 'view', shortcutLabel: '.', keyboardBindings: ['.'], menuPath: ['View', 'Hidden Files'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'selection.invert', category: 'selection', hotkeyLabel: 'InvSel', shortcutLabel: 'v', keyboardBindings: ['v'], menuPath: ['Edit', 'Invert Selection'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.clear', category: 'selection', hotkeyLabel: 'Desel', shortcutLabel: 'u', keyboardBindings: ['u'], menuPath: ['Edit', 'Clear Selection'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'layout.toggleSingleDual', category: 'view', shortcutLabel: 'Ctrl+W', keyboardBindings: ['Ctrl+W'], menuPath: ['View', 'Toggle Layout'], dangerLevel: 'none', runPath: 'UI state' }),

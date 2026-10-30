@@ -127,6 +127,14 @@ describe('action registry', () => {
     }
   });
 
+  it('lists blank-area context actions only through the blank context scope', () => {
+    expect(ACTIONS.filter((action) => action.contextScopes?.includes('blank')).map((action) => action.id)).toEqual([
+      'nav.refresh', 'nav.gotoPath', 'file.clipboardPaste', 'file.clipboardMovePaste', 'file.mkdir',
+      'external.openCurrentInFileManager', 'external.openCurrentInTerminal',
+      'view.sortName', 'view.sortSize', 'view.sortDate', 'view.sortExt', 'filter.start', 'filter.clear', 'view.toggleHidden',
+    ]);
+  });
+
   it('applies contextScopes before action-specific enablement', () => {
     const archiveOpen = ACTION_BY_ID.get('archive.list');
     if (!archiveOpen) {

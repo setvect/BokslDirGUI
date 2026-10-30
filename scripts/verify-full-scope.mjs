@@ -460,8 +460,8 @@ addCheck(
 );
 
 const tauriClient = read('src/tauri/client.ts');
-for (const token of ['TauriResult', 'BACKEND_IMPLEMENTED_COMMANDS', 'unsupportedCommandError', 'normalizeInvokeError']) {
-  addCheck(`tauri client exposes ${token}`, tauriClient.includes(token), 'Frontend wrappers must distinguish unsupported vs failed commands');
+for (const token of ['TauriResult', 'normalizeInvokeError']) {
+  addCheck(`tauri client exposes ${token}`, tauriClient.includes(token), 'Frontend wrappers must return typed command results and errors');
 }
 addCheck('tauri client marks safe mutation handlers implemented', tauriClient.includes('COMMANDS.createDir') && tauriClient.includes('COMMANDS.renameEntry'), 'create_dir/rename_entry frontend capability must match Rust handler registration');
 addCheck('tauri client marks long-running operation handlers implemented', tauriClient.includes('COMMANDS.startCopy') && tauriClient.includes('COMMANDS.startMove') && tauriClient.includes('COMMANDS.startDelete') && tauriClient.includes('listenOperationEvents'), 'copy/move/delete/trash frontend capability must match Rust handler registration and event stream');
@@ -487,7 +487,7 @@ for (const token of ['createActionContext', 'filterEnabledActions', 'blocksVirtu
 }
 
 const fullScopeTest = read('src/verification/fullScope.test.ts');
-for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.archiveAdd', 'COMMANDS.runShellCommand', 'contextMenuActions', 'isBackendImplementedCommand', 'archive.list']) {
+for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.runShellCommand', 'contextMenuActions', 'archive.list']) {
   addCheck(`full-scope test covers ${token}`, fullScopeTest.includes(token), 'Semantic verification beyond static smoke');
 }
 
