@@ -94,6 +94,11 @@
 | `settings.remoteLinksPreserve` | 원격 전송에서 심볼릭 링크를 링크로 보존(FR-37.5), 설정 저장·복원 |
 | `settings.remoteLinksFollow` | 원격 전송에서 심볼릭 링크 대상을 따라가 실제 항목 복사, 조상 폴더 재진입 차단(FR-37.5) |
 | `settings.remoteLinksSkip` | 원격 전송에서 심볼릭 링크 건너뛰기와 건너뛴 수 요약(FR-37.5) |
+| `remote.sites` | 저장된 SFTP 사이트 목록에서 연결·추가·편집·복제·삭제(FR-34.3) |
+| `remote.connect` | 저장 없이 한 번 SFTP 연결, 호스트 키 확인·추가 인증 흐름(FR-34.1, FR-35) |
+| `remote.disconnect` | 활성 원격 패널 연결 해제 후 연결 전 로컬 경로로 복귀(FR-34.6) |
+| `remote.reconnect` | 끊긴 원격 패널을 같은 사용자·호스트·포트로 다시 연결(FR-34.7) |
+| `remote.info` | 연결 주소·상태·원격 홈·호스트 키 알고리즘과 SHA-256 지문 표시 |
 <!-- END GENERATED:parity-gui-extensions -->
 
 ## 전체 matrix

@@ -60,6 +60,11 @@
 | `file.mkdir` | file | a/F7 | `a`, `F7` | File > New Folder | safe | create_dir |
 | `file.rename` | file | r/F2 | `r`, `F2` | File > Rename | destructive | rename_entry |
 | `file.bulkRename` | file | 없음 | 없음 | File > Bulk Rename | destructive | preview_bulk_rename/start_bulk_rename |
+| `remote.sites` | navigation | gr | `g r` | Remote > Sites… | none | site list → remote_connect |
+| `remote.connect` | navigation | 없음 | 없음 | Remote > New Connection… | none | remote_connect |
+| `remote.disconnect` | navigation | gd | `g d` | Remote > Disconnect | safe | remote_disconnect |
+| `remote.reconnect` | navigation | 없음 | 없음 | Remote > Reconnect | none | remote_connect |
+| `remote.info` | navigation | 없음 | 없음 | Remote > Connection Info | none | remote_sessions |
 | `remote.chmod` | file | 없음 | 없음 | Remote > Change Permissions… | destructive | start_remote_chmod |
 | `app.quit` | file | Cmd+Q | `Cmd+Q` | File > Quit | none | getCurrentWindow().close via explicit menu/platform quit shortcut |
 | `file.properties` | file | i | `i` | View > File Info | safe | get_metadata |

@@ -1,7 +1,7 @@
 import { ACTION_BY_ID, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope } from '../actions/registry';
 import { fileShortcutPlatform, shortcutPlatformForInfo, type FileShortcutPlatform } from '../domain/runtimePlatform';
 import type { FileEntry, PanelId, PlatformInfo } from '../domain/types';
-import { isRemotePath } from '../domain/remotePath';
+import { isRemotePath, parseRemotePath, remoteLocationKey } from '../domain/remotePath';
 import { isArchiveVirtualPath } from './archiveVirtual';
 
 export interface ActionContextInput {
@@ -22,6 +22,9 @@ export interface ActionContextInput {
   backendAvailable?: boolean;
   activePathIsArchive?: boolean;
   activePathIsRemote?: boolean;
+  activeRemoteConnected?: boolean;
+  /** 연결된 원격 세션 식별자(`sftp://사용자@호스트:포트/`) */
+  connectedRemoteSessions?: ReadonlySet<string>;
 }
 
 interface ActionTargetPanel {
@@ -94,6 +97,7 @@ export const createActionContext = ({
   backendAvailable = true,
   activePathIsArchive = false,
   activePathIsRemote = false,
+  activeRemoteConnected = false,
 }: ActionContextInput): ActionContext => {
   const hasConcreteFocus = hasConcreteFocusOverride ?? Boolean(focusedEntry && !focusedEntry.isVirtual);
   return {
@@ -114,6 +118,7 @@ export const createActionContext = ({
     backendAvailable,
     activePathIsArchive,
     activePathIsRemote,
+    activeRemoteConnected,
   };
 };
 
@@ -121,6 +126,7 @@ export const createActionContext = ({
 export type SharedActionState = Pick<
   ActionContextInput,
   'clipboardCount' | 'trashUndoAvailable' | 'clipboardMode' | 'clipboardCanMove' | 'platformInfo' | 'shellCommandEnabled' | 'operationBusy' | 'backendAvailable'
+  | 'connectedRemoteSessions'
 >;
 
 export const createPanelActionContext = (
@@ -141,7 +147,13 @@ export const createPanelActionContext = (
     hasOppositePanel: true,
     activePathIsArchive,
     activePathIsRemote: isRemotePath(panel.path),
+    activeRemoteConnected: remoteSessionOf(panel.path, shared.connectedRemoteSessions),
   });
+};
+
+const remoteSessionOf = (path: string, sessions: ReadonlySet<string> | undefined) => {
+  const remote = parseRemotePath(path);
+  return Boolean(remote && sessions?.has(remoteLocationKey(remote)));
 };
 
 export const blocksVirtualEntryTarget = (action: AppAction, entry: FileEntry) =>

@@ -4,7 +4,8 @@ import {
   ariaKeyShortcutsFromRegistry,
   labelForAction,
   menuRootLabelFromRegistry,
-  menuRootsFromRegistry
+  menuRootsFromRegistry,
+  type ActionId,
 } from '../actions/registry';
 import type { PanelId } from '../domain/types';
 import { APP_NAME } from '../foundation';
@@ -44,6 +45,10 @@ import {
 import { clampNumber, remoteSettingsOf, viewMetricsForSettings } from './settingsModel';
 import { remoteStatusForPath } from './remoteSessionState';
 import { useRemoteSessions } from './useRemoteSessions';
+import { useRemoteConnect } from './useRemoteConnect';
+import { RemoteAuthPromptDialog, RemoteConnectDialog, RemoteHostKeyDialog, RemoteInfoDialog, RemoteSitesDialog } from './RemoteDialogs';
+import { draftFromSite, emptyDraft } from './remoteConnectModel';
+import { isRemotePath } from '../domain/remotePath';
 import { BottomStatusStrip, HotkeyStrip } from './StatusStrips';
 import { TopMenuBar } from './TopMenuBar';
 import { BulkRenameDialog } from './BulkRenameDialog';
@@ -85,7 +90,7 @@ export function CommanderShell({
   remoteClient = tauriClient,
 }: CommanderShellProps) {
   const platformInfo = useRuntimePlatform(mutationClient, runtimeBackendAvailable);
-  const { sessions: remoteSessions } = useRemoteSessions(remoteClient, runtimeBackendAvailable);
+  const { sessions: remoteSessions, recordSession } = useRemoteSessions(remoteClient, runtimeBackendAvailable);
   const openOperationDialog = useOperationStore((state) => state.openDialog);
   const startLongRunningOperation = useOperationStore((state) => state.startLongRunningOperation);
   const operationDialogOpen = useOperationStore((state) => Boolean(state.dialog));
@@ -205,6 +210,7 @@ export function CommanderShell({
     get setArchivePasswordRequest() { return setArchivePasswordRequest; },
     get startLongRunningOperation() { return startLongRunningOperation; },
     get openOperationDialog() { return openOperationDialog; },
+    get handleRemoteAction() { return handleRemoteAction; },
   });
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -268,9 +274,39 @@ export function CommanderShell({
   };
 
   const applyGotoPath = async (panelId: PanelId, pathValue: string) => {
-    const error = await gotoPanelPath(panelId, pathValue.trim());
+    const target = pathValue.trim();
+    const error = await gotoPanelPath(panelId, target);
+    // 연결되지 않은 원격 주소: 연결 창을 열고 연결 뒤 그 주소로 이동(FR-36.3)
+    if (error?.code === 'remote_not_connected' && isRemotePath(target) && remote.openForUrl(panelId, target)) {
+      setPathPromptPanel(null);
+      return undefined;
+    }
     return error ? translateUserMessageKey(settings.language, error.messageKey) : error;
   };
+
+  const remote = useRemoteConnect({
+    get client() { return remoteClient; },
+    get language() { return settings.language; },
+    get settings() { return settings; },
+    get sessions() { return remoteSessions; },
+    recordSession,
+    saveSettingsPatch: (patch, message) => saveSettingsPatch(patch, message),
+    get gotoPanelPath() { return gotoPanelPath; },
+    panelStateRef,
+    listLocations: () => dataSource.listLocations(),
+    get setStatusMessage() { return setStatusMessage; },
+    focusShell: () => requestAnimationFrame(() => shellRef.current?.focus({ preventScroll: true })),
+  });
+  const handleRemoteAction = (actionId: ActionId, panelId: PanelId) => {
+    if (actionId === 'remote.sites') remote.openSites(panelId);
+    else if (actionId === 'remote.connect') remote.openForm(panelId);
+    else if (actionId === 'remote.disconnect') void remote.disconnect(panelId);
+    else if (actionId === 'remote.reconnect') remote.reconnect(panelId);
+    else if (actionId === 'remote.info') remote.showInfo(panelId);
+    else return false;
+    return true;
+  };
+  const remoteFlow = remote.flow;
 
   const closeOverlay = () => {
     closeNavigationOverlays();
@@ -293,6 +329,7 @@ export function CommanderShell({
     shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: operationBusy || panelState.left.loading || panelState.right.loading,
     backendAvailable: runtimeBackendAvailable,
+    connectedRemoteSessions: new Set(Object.entries(remoteSessions).filter(([, entry]) => entry.state === 'connected').map(([sessionId]) => sessionId)),
   };
   const context = createPanelActionContext(
     sharedActionState,
@@ -499,6 +536,30 @@ export function CommanderShell({
           }}
           onCancel={closeOverlay}
         />
+      ) : null}
+      {remoteFlow?.stage === 'form' ? (
+        <RemoteConnectDialog key={`${remoteFlow.panelId}-${remoteFlow.draft.siteId ?? 'new'}-${remoteFlow.targetUrl ?? ''}`} language={settings.language}
+          draft={remoteFlow.draft} error={remoteFlow.error} pending={remoteFlow.pending}
+          onConnect={remote.submitForm} onSave={remote.saveOnly} onCancel={remote.cancel} />
+      ) : null}
+      {remoteFlow?.stage === 'hostKey' ? (
+        <RemoteHostKeyDialog language={settings.language} question={remoteFlow.question} pending={remoteFlow.pending}
+          onTrust={() => { void remote.trustHostKey(); }} onCancel={remote.cancel} />
+      ) : null}
+      {remoteFlow?.stage === 'prompts' ? (
+        <RemoteAuthPromptDialog key={remoteFlow.prompts.challengeId} language={settings.language} prompts={remoteFlow.prompts}
+          error={remoteFlow.error} pending={remoteFlow.pending} onSubmit={(responses) => { void remote.respondPrompts(responses); }} onCancel={remote.cancel} />
+      ) : null}
+      {remoteFlow?.stage === 'sites' ? (
+        <RemoteSitesDialog language={settings.language} sites={remoteSettingsOf(settings).sites} selectedId={remoteFlow.selectedId}
+          onSelect={(id) => remote.setFlow({ ...remoteFlow, selectedId: id })}
+          onConnect={(site) => remote.connectSite(remoteFlow.panelId, site)}
+          onNew={() => remote.openForm(remoteFlow.panelId, { ...emptyDraft(), saveSite: true })}
+          onEdit={(site) => remote.openForm(remoteFlow.panelId, draftFromSite(site))}
+          onDuplicate={(site) => remote.duplicateSite(site.id)} onDelete={(site) => remote.deleteSite(site.id)} onClose={remote.close} />
+      ) : null}
+      {remoteFlow?.stage === 'info' ? (
+        <RemoteInfoDialog language={settings.language} status={remoteFlow.status} session={remoteFlow.session} onClose={remote.close} />
       ) : null}
       {remoteChmod ? <RemoteChmodDialog sources={remoteChmod.sources} language={settings.language}
         onConfirm={confirmRemoteChmod} onClose={() => { setRemoteChmod(null); requestAnimationFrame(() => shellRef.current?.focus()); }} /> : null}

@@ -33,7 +33,8 @@ export const applyRemoteConnectionChange = (current: RemoteSessionMap, event: Re
   return { ...rest, [event.sessionId]: { session: existing?.session ?? null, state: event.state } };
 };
 
-const addressOf = (user: string, host: string, port: number) => {
+// 표시용 주소: 기본 포트는 생략, IPv6는 대괄호
+export const remoteAddressOf = (user: string, host: string, port: number) => {
   const shownHost = host.includes(':') ? `[${host}]` : host;
   return `${user}@${shownHost}${port === DEFAULT_SFTP_PORT ? '' : `:${port}`}`;
 };
@@ -47,7 +48,7 @@ export const remoteStatusForPath = (path: string, sessions: RemoteSessionMap, si
   return {
     sessionId,
     siteName: site?.name ?? null,
-    address: addressOf(remote.user, remote.host, remote.port),
+    address: remoteAddressOf(remote.user, remote.host, remote.port),
     state: sessions[sessionId]?.state ?? 'disconnected',
   };
 };

@@ -91,6 +91,8 @@ interface CommanderActionsDependencies {
   readonly setArchivePasswordRequest: Dispatch<SetStateAction<ArchivePasswordRequest | null>>;
   readonly startLongRunningOperation: (request: OpenDialogRequest) => Promise<void>;
   readonly openOperationDialog: (request: OpenDialogRequest) => void;
+  /** 원격 메뉴 액션(사이트·연결·해제·다시 연결·정보) 처리. 처리했으면 true */
+  readonly handleRemoteAction: (actionId: ActionId, panelId: PanelId) => boolean;
 }
 export function useCommanderActions(dependencies: CommanderActionsDependencies) {
   const { trashUndoAvailable, openTrashUndo, refreshTrashUndo } = useTrashUndo({
@@ -265,6 +267,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     if (actionId === 'file.undoTrash') { openTrashUndo(panelOverride, panelListing.path); return; }
 
+    if (actionId !== 'remote.chmod' && actionId.startsWith('remote.') && dependencies.handleRemoteAction(actionId, panelOverride)) return;
     if (actionId === 'remote.chmod') {
       if (!sources.length || dependencies.operationBusy || !dependencies.runtimeBackendAvailable
         || !isRemotePath(panelListing.path) || !dependencies.operationClient.startRemoteChmod) return;

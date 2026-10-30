@@ -28,6 +28,8 @@ export interface ActionContext {
   activePathIsArchive: boolean;
   /** 활성 패널이 원격(`sftp://`) 경로 */
   activePathIsRemote?: boolean;
+  /** 활성 원격 패널의 연결이 살아 있음 */
+  activeRemoteConnected?: boolean;
 }
 
 /** 원격 패널 지원 여부: `localOnly`는 원격 패널에서 비활성, `remoteOnly`는 원격 패널에서만 활성 */
@@ -129,6 +131,11 @@ export const ACTIONS = [
   action({ id: 'file.mkdir', dialogKind: 'createDir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutateFilesystem }),
   action({ id: 'file.rename', requiresConcreteSources: true, dialogKind: 'rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutateFilesystem(c) }),
   action({ id: 'file.bulkRename', requiresConcreteSources: true, dialogKind: 'bulkRename', category: 'file', displayLabel: 'Bulk Rename', menuPath: ['File', 'Bulk Rename'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startBulkRename, runPath: 'preview_bulk_rename/start_bulk_rename', isEnabled: (c) => c.effectiveTargetCount > 0 && canMutateFilesystem(c) }),
+  action({ id: 'remote.sites', category: 'navigation', displayLabel: 'Sites…', shortcutLabel: 'gr', keyboardBindings: ['g r'], menuPath: ['Remote', 'Sites…'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'site list → remote_connect', isEnabled: canInvokeBackend }),
+  action({ id: 'remote.connect', category: 'navigation', displayLabel: 'New Connection…', menuPath: ['Remote', 'New Connection…'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'remote_connect', isEnabled: canInvokeBackend }),
+  action({ id: 'remote.disconnect', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Disconnect', shortcutLabel: 'gd', keyboardBindings: ['g d'], menuPath: ['Remote', 'Disconnect'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.remoteDisconnect, runPath: 'remote_disconnect', isEnabled: (c) => Boolean(c.activeRemoteConnected) && c.backendAvailable }),
+  action({ id: 'remote.reconnect', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Reconnect', menuPath: ['Remote', 'Reconnect'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'remote_connect', isEnabled: (c) => !c.activeRemoteConnected && canInvokeBackend(c) }),
+  action({ id: 'remote.info', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Connection Info', menuPath: ['Remote', 'Connection Info'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.remoteSessions, runPath: 'remote_sessions' }),
   action({ id: 'remote.chmod', remoteSupport: 'remoteOnly', requiresConcreteSources: true, dialogKind: 'remoteChmod', category: 'file', displayLabel: 'Change Permissions…', menuPath: ['Remote', 'Change Permissions…'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startRemoteChmod, runPath: 'start_remote_chmod', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Cmd+Q', keyboardBindings: ['Cmd+Q'], windowsShortcut: { label: 'Alt+F4', bindings: ['Alt+F4'] }, menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close via explicit menu/platform quit shortcut' }),
   action({ id: 'file.properties', requiresConcreteSources: true, dialogKind: 'properties', category: 'file', displayLabel: 'File Info', hotkeyLabel: 'Info', shortcutLabel: 'i', keyboardBindings: ['i'], menuPath: ['View', 'File Info'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.getMetadata, runPath: 'get_metadata', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),

@@ -2,13 +2,13 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { FileEntry } from '../domain/types';
+import type { FileEntry, Settings } from '../domain/types';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { useOperationStore } from '../operations/operationStore';
 import { CommanderShell } from './CommanderShell';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { createDirectoryListing } from './panelState';
-import { mutationClientStub, operationClientStub, remoteClientStub } from './testing/clientStubs';
+import { mutationClientStub, operationClientStub, remoteClientStub, settingsFixture } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { focusedRowText, rowByText } from './testing/commanderTestSupport';
 
@@ -19,14 +19,14 @@ const remoteEntry = (name: string, overrides: Partial<FileEntry> = {}): FileEntr
   permissions: '-rw-r--r--', owner: 'boksl', group: 'staff', isHidden: false, isVirtual: false, ...overrides,
 });
 
-const renderRemotePanel = (operationClient = operationClientStub()) => {
+const renderRemotePanel = (operationClient = operationClientStub(), remoteClient = remoteClientStub()) => {
   const listing = createDirectoryListing('right', REMOTE_DIR, [
     remoteEntry('remote.txt'),
     remoteEntry('logs', { kind: 'directory', sizeBytes: null, permissions: 'drwxr-xr-x' }),
   ]);
   const dataSource = createFixturePanelDataSource({ ...SAMPLE_LISTINGS, right: listing });
   return render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub()} operationClient={operationClient}
-    remoteClient={remoteClientStub()} initialFocusIndex={{ left: 3, right: 0 }} initialSelectedPaths={{ left: [], right: [] }} />);
+    remoteClient={remoteClient} initialFocusIndex={{ left: 3, right: 0 }} initialSelectedPaths={{ left: [], right: [] }} />);
 };
 
 describe('CommanderShell remote panels', () => {
@@ -95,5 +95,115 @@ describe('CommanderShell remote panels', () => {
     await waitFor(() => expect(operationClient.startCopy).toHaveBeenLastCalledWith({
       sources: [`${SAMPLE_LISTINGS.left.path}/Architecture.md`], targetDir: REMOTE_DIR, policy: 'skip',
     }));
+  });
+  it('adds a site, trusts the shown host key, connects and opens the remote home in the active panel', async () => {
+    const user = userEvent.setup();
+    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:fixture' };
+    const hostKeyError = { code: 'host_key_unknown', messageKey: 'errors.remoteHostKeyUnknown', path: session.sessionId, recoverable: true,
+      details: { hostName: 'example.com', port: '2222', algorithm: 'ssh-ed25519', fingerprint: 'SHA256:fixture' } };
+    const remoteConnect = vi.fn()
+      .mockResolvedValueOnce({ ok: false as const, error: hostKeyError })
+      .mockResolvedValueOnce({ ok: true as const, data: session });
+    const remoteTrustHostKey = vi.fn(async () => ({ ok: true as const, data: undefined }));
+    const saveSettings = vi.fn(async (input: { patch: Partial<Settings> }) => ({ ok: true as const, data: settingsFixture(input.patch) }));
+    const dataSource = createFixturePanelDataSource();
+    dataSource.gotoPath = vi.fn(async (input) => ({ ok: true as const, data: createDirectoryListing(input.panelId, input.path, []) }));
+    const { container } = render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub({ saveSettings, loadSettings: vi.fn(async () => ({ ok: true as const, data: settingsFixture() })) })}
+      operationClient={operationClientStub()} remoteClient={remoteClientStub({ remoteConnect, remoteTrustHostKey })} />);
+
+    await user.keyboard('gr');
+    const sites = await screen.findByRole('dialog', { name: '사이트 목록' });
+    await user.click(within(sites).getByRole('button', { name: '새 사이트' }));
+    const form = await screen.findByRole('dialog', { name: '원격 연결' });
+    await user.type(within(form).getByLabelText('호스트'), 'example.com');
+    const port = within(form).getByLabelText('포트');
+    await user.clear(port);
+    await user.type(port, '2222');
+    await user.type(within(form).getByLabelText('사용자'), 'boksl');
+    await user.type(within(form).getByLabelText('암호'), 'secret-pw');
+    await user.type(within(form).getByLabelText('사이트 이름'), '배포 서버');
+    await user.click(within(form).getByRole('button', { name: '연결' }));
+
+    const hostKey = await screen.findByRole('dialog', { name: '호스트 키 확인' });
+    expect(within(hostKey).getByText('SHA256:fixture')).toBeTruthy();
+    expect(document.activeElement?.textContent).toBe('취소');
+    await user.click(within(hostKey).getByRole('button', { name: '신뢰하고 연결' }));
+
+    await waitFor(() => expect(remoteTrustHostKey).toHaveBeenCalledWith({ host: 'example.com', port: 2222, fingerprint: 'SHA256:fixture' }));
+    await waitFor(() => expect(remoteConnect).toHaveBeenCalledTimes(2));
+    expect(remoteConnect).toHaveBeenLastCalledWith({ request: { host: 'example.com', port: 2222, user: 'boksl', authMethod: 'password', password: 'secret-pw' } });
+    await waitFor(() => expect(dataSource.gotoPath).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right', path: session.homeUrl })));
+    const savedPatch = saveSettings.mock.calls.map(([input]) => JSON.stringify(input.patch)).find((patch) => patch.includes('배포 서버'));
+    expect(savedPatch).toBeTruthy();
+    expect(savedPatch).not.toContain('secret-pw');
+    expect(container.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(session.homeUrl);
+  });
+
+  it('answers keyboard-interactive prompts and cancels pending challenges', async () => {
+    const user = userEvent.setup();
+    const promptsError = { code: 'remote_auth_prompts', messageKey: 'errors.remoteAuthPrompts', path: null, recoverable: true,
+      details: { challengeId: 'kbd-7', instructions: '', prompts: '[{"prompt":"Verification code: ","echo":false}]' } };
+    const remoteConnect = vi.fn(async () => ({ ok: false as const, error: promptsError }));
+    const remoteAuthRespond = vi.fn(async () => ({ ok: false as const, error: { code: 'remote_auth_failed', messageKey: 'errors.remoteAuthFailed', path: null, details: null, recoverable: true } }));
+    const remoteAuthCancel = vi.fn(async () => ({ ok: true as const, data: true }));
+    renderRemotePanel(operationClientStub(), remoteClientStub({ remoteConnect, remoteAuthRespond, remoteAuthCancel }));
+
+    await user.keyboard('gr');
+    await user.click(within(await screen.findByRole('dialog', { name: '사이트 목록' })).getByRole('button', { name: '새 사이트' }));
+    const form = await screen.findByRole('dialog', { name: '원격 연결' });
+    await user.type(within(form).getByLabelText('호스트'), 'otp.example.com');
+    await user.type(within(form).getByLabelText('사용자'), 'boksl');
+    await user.selectOptions(within(form).getByLabelText('인증 방식'), 'keyboardInteractive');
+    await user.click(within(form).getByLabelText('사이트로 저장'));
+    await user.click(within(form).getByRole('button', { name: '연결' }));
+
+    const prompts = await screen.findByRole('dialog', { name: '추가 인증' });
+    await user.type(within(prompts).getByLabelText('Verification code:'), '123456');
+    await user.click(within(prompts).getByRole('button', { name: '확인' }));
+    await waitFor(() => expect(remoteAuthRespond).toHaveBeenCalledWith({ challengeId: 'kbd-7', responses: ['123456'] }));
+    const failed = await screen.findByRole('dialog', { name: '원격 연결' });
+    expect(within(failed).getByRole('alert').textContent).toContain('인증에 실패');
+
+    await user.click(within(failed).getByRole('button', { name: '연결' }));
+    await user.click(within(await screen.findByRole('dialog', { name: '추가 인증' })).getByRole('button', { name: '취소' }));
+    await waitFor(() => expect(remoteAuthCancel).toHaveBeenCalledWith({ challengeId: 'kbd-7' }));
+  });
+
+  it('disconnects a connected remote panel back to a local folder and offers reconnect when lost', async () => {
+    const user = userEvent.setup();
+    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x' };
+    const remoteDisconnect = vi.fn(async () => ({ ok: true as const, data: true }));
+    const remoteClient = remoteClientStub({ remoteDisconnect, remoteSessions: vi.fn(async () => ({ ok: true as const, data: [session] })) });
+    const operationClient = operationClientStub();
+    const listing = createDirectoryListing('right', REMOTE_DIR, [remoteEntry('remote.txt')]);
+    const dataSource = createFixturePanelDataSource({ ...SAMPLE_LISTINGS, right: listing });
+    dataSource.gotoPath = vi.fn(async (input) => ({ ok: true as const, data: createDirectoryListing(input.panelId, input.path, []) }));
+    dataSource.listLocations = vi.fn(async () => ({ ok: true as const, data: { home: '/Users/boksl', roots: ['/'], recent: [], bookmarks: [] } }));
+    const { container } = render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub()} operationClient={operationClient}
+      remoteClient={remoteClient} initialFocusIndex={{ left: 3, right: 0 }} initialSelectedPaths={{ left: [], right: [] }} />);
+    await waitFor(() => expect(container.querySelector('.remote-chip')?.textContent).toBe('SFTP 연결됨'));
+
+    await user.keyboard('gd');
+    await waitFor(() => expect(remoteDisconnect).toHaveBeenCalledWith({ sessionId: session.sessionId }));
+    await waitFor(() => expect(dataSource.gotoPath).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right', path: '/Users/boksl' })));
+  });
+
+  it('opens the connection form for an unconnected sftp address typed in go to path', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    dataSource.gotoPath = vi.fn(async (input) => ({ ok: false as const, error: { code: 'remote_not_connected', messageKey: 'errors.remoteNotConnected', path: 'sftp://deploy@files.example.com:2200/', details: null, recoverable: true } }));
+    render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub()} operationClient={operationClientStub()} remoteClient={remoteClientStub()} />);
+
+    await user.keyboard('gp');
+    const input = screen.getByRole('textbox', { name: '경로' });
+    await user.clear(input);
+    await user.type(input, 'sftp://deploy@files.example.com:2200/var/www');
+    await user.click(screen.getByRole('button', { name: '이동' }));
+
+    const form = await screen.findByRole('dialog', { name: '원격 연결' });
+    expect((within(form).getByLabelText('호스트') as HTMLInputElement).value).toBe('files.example.com');
+    expect((within(form).getByLabelText('포트') as HTMLInputElement).value).toBe('2200');
+    expect((within(form).getByLabelText('사용자') as HTMLInputElement).value).toBe('deploy');
+    expect(screen.queryByRole('dialog', { name: '경로 이동' })).toBeNull();
   });
 });
