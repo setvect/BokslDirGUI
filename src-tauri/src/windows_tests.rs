@@ -136,7 +136,7 @@ fn windows_hidden_attributes_executables_and_file_locks() {
 }
 #[test]
 fn windows_settings_save_twice_and_contract() {
-    let _guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    let _guard = crate::test_util::lock_env();
     let f = Fixture::new();
     std::env::set_var("BOKSLDIRGUI_SETTINGS_PATH", f.0.join("settings.json"));
     commands::save_settings(serde_json::json!({"language":"en"})).unwrap();
@@ -145,7 +145,6 @@ fn windows_settings_save_twice_and_contract() {
         serde_json::to_value(commands::load_settings().unwrap()).unwrap()["language"],
         "ko"
     );
-    std::env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
     let info = serde_json::to_value(commands::get_platform_info()).unwrap();
     assert_eq!(info["os"], "windows");
     assert_eq!(info["features"]["trashUndo"], true);

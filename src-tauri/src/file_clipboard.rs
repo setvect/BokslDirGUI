@@ -175,9 +175,8 @@ mod native {
                 "BokslDir.tests.{}",
                 std::process::id()
             )));
-            let dir =
-                std::env::temp_dir().join(format!("boksldir-clipboard-{}", std::process::id()));
-            std::fs::create_dir_all(&dir).unwrap();
+            let temp = crate::test_util::TempDir::new("clipboard");
+            let dir = temp.path().to_path_buf();
             let file = dir.join("한글 space # %.json");
             std::fs::write(&file, "{}").unwrap();
             let link = dir.join("link.json");
@@ -213,7 +212,6 @@ mod native {
             std::fs::remove_file(&file).unwrap();
             assert!(super::resolve_entries(&mut read(&board).unwrap()).is_err());
             board.clearContents();
-            std::fs::remove_dir_all(dir).unwrap();
         });
     }
 }

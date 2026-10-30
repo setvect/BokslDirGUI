@@ -8,6 +8,7 @@ import { createPanelStates } from './panelState';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { DEFAULT_SETTINGS } from './settingsModel';
 import { testEntry } from './testing/fileEntryFixture';
+import { mutationClientStub, operationClientStub, platformInfoFixture } from './testing/clientStubs';
 import { renderCommander } from './testing/commanderTestSupport';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { useOperationStore } from '../operations/operationStore';
@@ -20,11 +21,11 @@ afterEach(cleanup);
 const file = testEntry('/finder', 'sample.json');
 const setup = (platformInfo?: PlatformInfo) => {
   let content: NativeFileClipboard = { changeCount: 10, intent: 'copy', paths: [file.path], entries: [file] };
-  const client = { createDir: vi.fn(), renameEntry: vi.fn(),
+  const client = mutationClientStub({
     readFileClipboard: vi.fn(async (_: { resolve: boolean }): Promise<TauriResult<NativeFileClipboard>> => ({ ok: true, data: content })),
     writeFileClipboard: vi.fn(async (_: { paths: string[]; intent: 'copy' | 'move' }) => ({ ok: true as const, data: content.changeCount })),
     clearFileClipboard: vi.fn(async (_: { changeCount: number }) => ({ ok: true as const, data: undefined })),
-  };
+  });
   const dependencies = { platformInfo, settings: DEFAULT_SETTINGS, panelState: createPanelStates(SAMPLE_LISTINGS), statusText: COMMANDER_STATUS_TEXT.ko,
     setStatusMessage: vi.fn(), runtimeBackendAvailable: true, dispatch: vi.fn(), mutationClient: client, operationBusy: false };
   return { client, dependencies, replace: (next: NativeFileClipboard) => { content = next; } };
@@ -109,8 +110,7 @@ it('moves through confirmation and clears only the clipboard version used by tha
 
 it('accepts Finder move sources in the shell and waits for the common move confirmation', async () => {
   const { client } = setup();
-  const operations = { startCopy: vi.fn(), startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'finder-move', kind: 'move' as const, state: 'queued' as const } })),
-    startDelete: vi.fn(), cancelOperation: vi.fn(), resolveConflict: vi.fn() };
+  const operations = operationClientStub({ startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'finder-move', kind: 'move' as const, state: 'queued' as const } })) });
   // 초기 클립보드 응답과 패널 상태 반영을 마친 뒤 키보드 입력 전송.
   await act(async () => { renderCommander(createFixturePanelDataSource(), client, operations); });
   await waitFor(() => expect(client.readFileClipboard).toHaveBeenCalled());
@@ -123,9 +123,7 @@ it('accepts Finder move sources in the shell and waits for the common move confi
   expect(operations.startMove).toHaveBeenCalledWith(expect.objectContaining({ sources: [file.path], targetDir: SAMPLE_LISTINGS.right.path }));
 });
 
-const windowsPlatform: PlatformInfo = { os: 'windows', features: {
-  nativeFileClipboard: true, openWith: true, currentFolderManager: true, currentFolderTerminal: true, trashUndo: false,
-} };
+const windowsPlatform = platformInfoFixture('windows', { trashUndo: false });
 it('reads Explorer cut intent and dispatches ordinary paste through the common move confirmation', async () => {
   const { dependencies, replace } = setup(windowsPlatform);
   replace({ changeCount: 20, intent: 'move', paths: [file.path], entries: [file] });

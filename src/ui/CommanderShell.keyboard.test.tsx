@@ -11,6 +11,7 @@ import { CommanderShell } from './CommanderShell';
 import { commanderKeyboardOwners } from './keyboardOwnership';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { createDirectoryListing } from './panelState';
+import { mutationClientStub, operationClientStub } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { activePanelLabel, commanderElement, focusedRow, focusedRowText, KeyboardOwnerProbe, renderCommander, rowByText, testEntry } from './testing/commanderTestSupport';
 
@@ -130,13 +131,7 @@ describe('CommanderShell keyboard', () => {
 
   it('disables real file mutation shortcuts in plain browser preview mode', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    const operationClient = operationClientStub();
     renderCommander(createFixturePanelDataSource(), undefined, operationClient, false);
 
     expect(screen.getByText(/미리보기 모드입니다/)).toBeTruthy();
@@ -214,17 +209,13 @@ describe('CommanderShell keyboard', () => {
         directoryStats: null,
       },
     }));
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-native-drop', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container, unmount } = render(
       <CommanderShell
         dataSource={createFixturePanelDataSource()}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), getMetadata }}
+        mutationClient={mutationClientStub({ getMetadata })}
         operationClient={operationClient}
         runtimeBackendAvailable
         nativeFileDropClient={nativeFileDropClient}
@@ -701,10 +692,10 @@ describe('CommanderShell keyboard', () => {
     const user = userEvent.setup();
     const openCurrentInFileManager = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: null } }));
     const openCurrentInTerminal = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: null } }));
-    const { container } = renderCommander(createFixturePanelDataSource(), {
-      createDir: vi.fn(), renameEntry: vi.fn(), openCurrentInFileManager, openCurrentInTerminal,
+    const { container } = renderCommander(createFixturePanelDataSource(), mutationClientStub({
+      openCurrentInFileManager, openCurrentInTerminal,
       getPlatformInfo: vi.fn(async () => ({ ok: true as const, data: platform })),
-    });
+    }));
     const activeBlankArea = () => container.querySelector<HTMLElement>('.file-panel.is-active .file-table-scroll')!;
 
     fireEvent.contextMenu(activeBlankArea());
@@ -724,7 +715,7 @@ describe('CommanderShell keyboard', () => {
       ok: true as const,
       data: { ...SAMPLE_LISTINGS.right.entries[0], path: `${SAMPLE_LISTINGS.right.path}/New Folder`, name: 'New Folder', kind: 'directory' as const },
     }));
-    const { container } = renderCommander(createFixturePanelDataSource(), { createDir, renameEntry: vi.fn() });
+    const { container } = renderCommander(createFixturePanelDataSource(), mutationClientStub({ createDir }));
     const blankArea = container.querySelector<HTMLElement>('.file-panel.is-active .file-table-scroll');
 
     if (!blankArea) {

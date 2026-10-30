@@ -7,6 +7,7 @@ import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './
 import { CommanderShell } from './CommanderShell';
 import { commanderKeyboardOwners } from './keyboardOwnership';
 import { createFixturePanelDataSource } from './panelDataSource';
+import { operationClientStub } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { renderCommander } from './testing/commanderTestSupport';
 
@@ -28,13 +29,7 @@ describe('CommanderShell clipboard', () => {
     { name: 'Ctrl+C', modifier: { ctrlKey: true }, reverse: true },
   ])('allows native selected-path copying with $name without capturing files', async ({ modifier, reverse }) => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    const operationClient = operationClientStub();
     const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
     const shell = screen.getByRole('application');
     shell.focus();
@@ -72,13 +67,9 @@ describe('CommanderShell clipboard', () => {
 
   it('preserves prepared files when copying selected path text before pasting with Cmd+V', async () => {
     const user = userEvent.setup();
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-clipboard-copy', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('{Meta>}c{/Meta}');
@@ -99,13 +90,9 @@ describe('CommanderShell clipboard', () => {
 
   it('uses Finder-style Cmd+C then Option+Cmd+V to move with confirmation', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
+    const operationClient = operationClientStub({
       startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-mac-paste-move', kind: 'move' as const, state: 'queued' as const } })),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('{Meta>}c{/Meta}');
@@ -125,13 +112,9 @@ describe('CommanderShell clipboard', () => {
 
   it('offers the prepared clipboard in the blank-area context menu like the Edit menu', async () => {
     const user = userEvent.setup();
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-context-paste', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('{Meta>}c{/Meta}');
@@ -151,13 +134,9 @@ describe('CommanderShell clipboard', () => {
     const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Windows NT 10.0)');
     try {
       const user = userEvent.setup();
-      const operationClient = {
-        startCopy: vi.fn(),
+      const operationClient = operationClientStub({
         startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-win-paste-move', kind: 'move' as const, state: 'queued' as const } })),
-        startDelete: vi.fn(),
-        cancelOperation: vi.fn(),
-        resolveConflict: vi.fn(),
-      };
+      });
       renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
       await user.keyboard('{Control>}x{/Control}');
@@ -191,13 +170,7 @@ describe('CommanderShell clipboard', () => {
 
   it('does not start a self-copy when pasting into the source folder', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    const operationClient = operationClientStub();
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('{Meta>}c{/Meta}');

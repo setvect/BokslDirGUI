@@ -10,6 +10,7 @@ import { CommanderShell } from './CommanderShell';
 import type { PanelDataSource } from './panelDataSource';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { createDirectoryListing, DEFAULT_SORT } from './panelState';
+import { mutationClientStub, operationClientStub, settingsFixture } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { activePanelLabel, emptyListings, focusedRow, focusedRowText, mockedPanelDataSource, renderCommander, rowByText, testEntry } from './testing/commanderTestSupport';
 
@@ -273,7 +274,7 @@ describe('CommanderShell navigation', () => {
       ? { ok: true as const, data: targetListing }
       : listDir(input));
     const openDefault = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } }));
-    const { container } = renderCommander(dataSource, { createDir: vi.fn(), renameEntry: vi.fn(), openDefault });
+    const { container } = renderCommander(dataSource, mutationClientStub({ openDefault }));
     const linkRow = rowByText(container, 'IdeaProjects');
     if (!linkRow) throw new Error('directory link row is required');
 
@@ -304,7 +305,7 @@ describe('CommanderShell navigation', () => {
     };
     const dataSource = createFixturePanelDataSource(initial);
     const openDefault = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } }));
-    const { container } = renderCommander(dataSource, { createDir: vi.fn(), renameEntry: vi.fn(), openDefault });
+    const { container } = renderCommander(dataSource, mutationClientStub({ openDefault }));
     const linkRow = rowByText(container, 'document-link');
     if (!linkRow) throw new Error('file link row is required');
 
@@ -512,38 +513,18 @@ describe('CommanderShell navigation', () => {
   it('restores saved session panel paths and persists later navigation paths', async () => {
     const loadSettings = vi.fn(async () => ({
       ok: true as const,
-      data: {
-        schemaVersion: 1,
-        theme: 'dark' as const,
-        language: 'ko' as const,
-        sizeFormat: 'binary' as const,
-        external: { editorId: null, shellCommand: { enabled: false } },
-        bookmarks: [],
-        layout: { singlePanel: false, ratio: '50:50' as const },
-        session: { leftPath: '/saved/left', rightPath: '/saved-right', activePanel: 'left' as const },
-        view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-      },
+      data: settingsFixture({ session: { leftPath: '/saved/left', rightPath: '/saved-right', activePanel: 'left' as const } }),
     }));
     const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
       ok: true as const,
-      data: {
-        schemaVersion: 1,
-        theme: 'dark' as const,
-        language: 'ko' as const,
-        sizeFormat: 'binary' as const,
-        external: { editorId: null, shellCommand: { enabled: false } },
-        bookmarks: [],
-        layout: { singlePanel: false, ratio: '50:50' as const },
-        session: patch.session ?? { leftPath: '/saved/left', rightPath: '/saved-right', activePanel: 'left' as const },
-        view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-      },
+      data: settingsFixture({ session: patch.session ?? { leftPath: '/saved/left', rightPath: '/saved-right', activePanel: 'left' as const } }),
     }));
     const dataSource = mockedPanelDataSource({
       loadInitialOnMount: true,
       initial: emptyListings('/boot-left', '/boot-right'),
     });
 
-    render(<CommanderShell dataSource={dataSource} mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), loadSettings, saveSettings }} />);
+    render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub({ loadSettings, saveSettings })} />);
 
     await waitFor(() => expect(dataSource.listDir).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'left', path: '/saved/left' })));
     expect(dataSource.listDir).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right', path: '/saved-right' }));
@@ -569,7 +550,7 @@ describe('CommanderShell navigation', () => {
           right: createDirectoryListing('right', '/real-right', [testEntry('/real-right', 'strict-right.txt')]),
         },
       });
-      render(<StrictMode><CommanderShell dataSource={dataSource} mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn() }} /></StrictMode>);
+      render(<StrictMode><CommanderShell dataSource={dataSource} mutationClient={mutationClientStub()} /></StrictMode>);
       expect(await screen.findByText('strict-left.txt')).toBeTruthy();
       expect(await screen.findByText('strict-right.txt')).toBeTruthy();
     });
@@ -577,11 +558,10 @@ describe('CommanderShell navigation', () => {
     it('refreshes current paths after copy without switching the active panel or stealing input focus', async () => {
       const dataSource = createFixturePanelDataSource();
       const listDir = vi.spyOn(dataSource, 'listDir');
-      const operationClient = {
+      const operationClient = operationClientStub({
         startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'review-path', kind: 'copy' as const, state: 'queued' as const } })),
-        startMove: vi.fn(), startDelete: vi.fn(), cancelOperation: vi.fn(), resolveConflict: vi.fn(),
-      };
-      const { container } = renderCommander(dataSource, { createDir: vi.fn(), renameEntry: vi.fn() }, operationClient);
+      });
+      const { container } = renderCommander(dataSource, mutationClientStub(), operationClient);
       await userEvent.setup().keyboard('y');
       await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalled());
       await userEvent.setup().keyboard('h');
@@ -610,17 +590,12 @@ describe('CommanderShell navigation', () => {
       const saveSettings = vi.fn(({ patch }: { patch: Partial<Settings> }) => new Promise<{ ok: true; data: Settings }>((resolve) => {
         pending.push({ patch, resolve });
       }));
-      const { container } = renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+      const { container } = renderCommander(createFixturePanelDataSource(), mutationClientStub({ saveSettings }));
       fireEvent.keyDown(document, { key: '=', metaKey: true });
       await waitFor(() => expect(pending).toHaveLength(1));
       fireEvent.keyDown(document, { key: '=', metaKey: true });
       expect(saveSettings).toHaveBeenCalledTimes(1);
-      const settings: Settings = {
-        schemaVersion: 1, theme: 'dark', language: 'ko', sizeFormat: 'binary',
-        external: { editorId: null, shellCommand: { enabled: false } }, bookmarks: [],
-        layout: { singlePanel: false, ratio: '50:50' }, session: { leftPath: null, rightPath: null, activePanel: 'right' },
-        view: { zoomStep: 1, density: 'compact', showIcons: true }
-      };
+      const settings = settingsFixture({ view: { zoomStep: 1, density: 'compact', showIcons: true } });
       await act(async () => pending[0].resolve({ ok: true, data: settings }));
       await waitFor(() => expect(pending).toHaveLength(2));
       expect(pending[1].patch.view?.zoomStep).toBe(2);
@@ -632,7 +607,7 @@ describe('CommanderShell navigation', () => {
   describe('review: independent tabs and large listings', () => {
     it('restores a tab selection and closes the active tab instead of the last one', async () => {
       const user = userEvent.setup();
-      const { container } = renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn() });
+      const { container } = renderCommander(createFixturePanelDataSource(), mutationClientStub());
       const originalPath = activePanelLabel(container);
       const originalSelected = container.querySelectorAll('.file-panel.is-active .file-row[aria-selected="true"]').length;
       await user.keyboard('tn');

@@ -11,6 +11,11 @@ const hasCommanderTestEvidence = (item) => {
 
 const checks = [];
 const addCheck = (name, passed, detail) => checks.push({ name, passed, detail });
+// 구현 문자열 대신 이름 있는 행동 테스트를 근거로 사용. 리팩토링으로 내부 코드가 바뀌어도 검사 유지.
+const hasTest = (file, ...titles) => {
+  const source = read(file);
+  return titles.every((title) => source.includes(title));
+};
 
 const packageJson = JSON.parse(read('package.json'));
 for (const script of ['typecheck', 'test', 'build', 'check', 'rust:test', 'verify:scope', 'docs:generate', 'docs:check', 'verify']) {
@@ -99,14 +104,12 @@ addCheck(
   (() => {
     const row = parityRowsById.get('copy');
 
-    const store = read('src/operations/operationStore.ts');
     return row?.priority === 'P0'
       && row.implementationStatus === 'implemented'
       && rowHasMenuPath(row, 'Edit')
       && row.guiMenuPaths?.some((menuPath) => menuPath[0] === 'Edit')
-      && read('src/ui/useCommanderActions.ts').includes("if (actionId === 'file.copy')")
-      && read('src/ui/useCommanderActions.ts').includes('startLongRunningOperation(operationRequest)')
-      && store.includes('startLongRunningOperation');
+      && hasTest('src/ui/CommanderShell.operations.test.tsx', 'dispatches the copy shortcut directly to the operation client without a preflight dialog')
+      && hasTest('src/operations/operationStore.test.ts', 'starts connected copy without opening a preflight dialog');
   })(),
   'copy may be implemented only when it is on the TUI Edit menu and starts real operations without a preflight dialog',
 );
@@ -119,9 +122,7 @@ addCheck(
       && row.implementationStatus === 'implemented'
       && rowHasMenuPath(row, 'Edit')
       && row.guiMenuPaths?.some((menuPath) => menuPath[0] === 'Edit')
-      && read('src/ui/useCommanderActions.ts').includes("if (actionId === 'file.copy')")
-      && read('src/ui/useCommanderActions.ts').includes('openOperationDialog(operationRequest)')
-      && read('src/ui/CommanderShell.operations.test.tsx').includes('requires explicit confirmation before a move reaches the operation client');
+      && hasTest('src/ui/CommanderShell.operations.test.tsx', 'requires explicit confirmation before a move reaches the operation client');
   })(),
   'move may be implemented only when it is on the TUI Edit menu and requires explicit confirmation before start_move',
 );
@@ -299,17 +300,17 @@ addCheck(
 );
 addCheck(
   'commander shell wires panel navigation to listDir state flow',
-  commanderShell.includes('listPanel') && read('src/ui/usePanelNavigation.ts').includes('historyBack') && read('src/ui/usePanelNavigation.ts').includes('showHidden'),
+  hasTest('src/ui/CommanderShell.navigation.test.tsx', 'keeps per-panel history and parent navigation on the listDir path', 'passes sort, hidden, and refresh state through listDir'),
   'Entry open/refresh/history/sort/hidden state must feed list_dir requests',
 );
 addCheck(
   'commander shell guards stale async panel navigation results',
-  read('src/ui/usePanelNavigation.ts').includes('navigationRequestRef') && read('src/ui/usePanelNavigation.ts').includes('isCurrentPanelRequest'),
+  hasTest('src/ui/CommanderShell.navigation.test.tsx', 'ignores stale async navigation results that resolve after a newer request'),
   'Older list_dir responses must not overwrite newer panel state',
 );
 addCheck(
   'commander shell exposes real filter input path',
-  commanderShell.includes('FilterPrompt') && (commanderOverlays.includes('Filter pattern') || i18nResources.includes('filterPattern')) && read('src/ui/usePanelNavigation.ts').includes("Object.hasOwn(options, 'filter')"),
+  commanderShell.includes('FilterPrompt') && (commanderOverlays.includes('Filter pattern') || i18nResources.includes('filterPattern')) && hasTest('src/ui/CommanderShell.navigation.test.tsx', 'applies typed filters and preserves them through refresh until clear'),
   'filter.start/filter.clear must send explicit non-null/null filter values to list_dir',
 );
 addCheck(
@@ -319,8 +320,7 @@ addCheck(
 );
 addCheck(
   'commander shell refreshes and focuses after safe mutation',
-  read('src/ui/useCommanderActions.ts').includes('onAtomicSuccess') && read('src/ui/useCommanderActions.ts').includes('currentPanel.path')
-    && read('src/ui/CommanderShell.operations.test.tsx').includes('creates a directory through the connected atomic command path and refreshes focus')
+  read('src/ui/CommanderShell.operations.test.tsx').includes('creates a directory through the connected atomic command path and refreshes focus')
     && read('src/ui/CommanderShell.operations.test.tsx').includes('renames the focused entry through the connected atomic command path and keeps row focus'),
   'Safe mutation success must refresh the active panel and focus the changed row',
 );
@@ -341,26 +341,26 @@ const operationStoreTest = read('src/operations/operationStore.test.ts');
 for (const dialogKind of Object.keys(metadata.dialogs)) {
   addCheck(`operation dialog supports ${dialogKind}`, metadata.actions.some((action) => action.dialogKind === dialogKind), 'G005 dialog shell coverage');
 }
-addCheck('operation store uses backend stub policy boundary', operationStore.includes('backendExecutionStubbed'), 'Stub policy applies to safe and destructive file mutation shells');
+addCheck('operation store uses backend stub policy boundary', hasTest('src/operations/operationStore.test.ts', 'confirms copy into a queued stub operation without file I/O', 'runs connected long-running copy through operation executor instead of preview stub'), 'Stub policy applies to safe and destructive file mutation shells');
 addCheck('operation store removed danger-only stub flag', !operationStore.includes('destructiveExecutionStubbed'), 'Stub policy must not hide safe mutation stubs');
-addCheck('operation store separates atomic command execution mode', operationStore.includes("'atomicCommand'") && read('src/operations/dialogDraft.ts').includes('dialogExecutionModeForDialog'), 'Atomic commands must not be queued as long-running progress');
-addCheck('operation store separates long-running operation execution mode', Object.values(metadata.dialogs).some((definition) => definition.executionMode === 'longRunningOperation') && operationStore.includes('isLongRunningDialog'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
-addCheck('operation store validates safe mutation names', operationStore.includes('validateDialogInput') && read('src/operations/dialogDraft.ts').includes('errors.invalidName'), 'create_dir/rename_entry dialog names must be validated before Rust command execution');
-addCheck('operation store exposes atomic executor seam', read('src/operations/operationTypes.ts').includes('AtomicCommandExecutor') && operationStore.includes('onAtomicSuccess'), 'Connected atomic commands must use request/response execution, not progress stubs');
-addCheck('operation store exposes long-running executor seam', read('src/operations/operationTypes.ts').includes('LongRunningOperationExecutor') && read('src/operations/operationEvents.ts').includes('applyOperationProgress') && read('src/operations/operationEvents.ts').includes('applyOperationSummary'), 'copy/move/delete/trash must consume backend operation events instead of preview-only stubs');
-addCheck('operation store preserves active controller when dismissing long-running dialog', operationStore.includes('closeDialog: () => set((current) =>') && operationStore.includes('if (isOperationInFlight(current))'), 'closing a confirmed long-running dialog must not detach summary refresh/cancel/conflict callbacks');
-addCheck('operation store guards duplicate atomic submissions', operationStore.includes('atomicPending') && operationStore.includes('if (dialog.atomicPending)'), 'create_dir/rename_entry dialogs must not submit duplicate filesystem requests while pending');
-addCheck('operation store guards duplicate long-running submissions', operationStore.includes('operationPending') && operationStore.includes('isOperationInFlight(get())'), 'long-running operation dialogs must not submit duplicate or concurrent filesystem requests while pending');
-addCheck('operation store defers pending-start cancellation until real operation id', operationStore.includes('cancelRequestedBeforeStart') && operationStoreTest.includes('defers pending-start cancellation until the real backend operation id is known') && operationStoreTest.includes('defers confirmed-dialog pending-start cancellation until the real backend operation id is known'), 'pending synthetic operation ids must not be sent to backend cancel or detach the active controller');
-addCheck('operation store accepts real events while direct start uses pending alias', read('src/operations/operationEvents.ts').includes('isPendingAliasForUnboundController') && operationStoreTest.includes('accepts real backend progress and summary while direct copy is still bound to a pending id'), 'fast backend events must not be dropped while frontend start promise still has a synthetic pending id');
+addCheck('operation store separates atomic command execution mode', Object.values(metadata.dialogs).some((definition) => definition.executionMode === 'atomicCommand') && hasTest('src/operations/operationStore.test.ts', 'routes atomic command dialogs separately from long-running operation progress'), 'Atomic commands must not be queued as long-running progress');
+addCheck('operation store separates long-running operation execution mode', Object.values(metadata.dialogs).some((definition) => definition.executionMode === 'longRunningOperation') && hasTest('src/operations/operationStore.test.ts', 'runs connected long-running copy through operation executor instead of preview stub'), 'Copy/move/delete/archive jobs keep operation-progress semantics');
+addCheck('operation store validates safe mutation names', hasTest('src/operations/operationStore.test.ts', 'validates safe mutation names before running atomic commands'), 'create_dir/rename_entry dialog names must be validated before Rust command execution');
+addCheck('operation store exposes atomic executor seam', hasTest('src/operations/operationStore.test.ts', 'runs connected createDir atomic commands without queuing progress'), 'Connected atomic commands must use request/response execution, not progress stubs');
+addCheck('operation store exposes long-running executor seam', hasTest('src/operations/operationStore.test.ts', 'applies backend operation event stream transitions to progress, conflict, and summary'), 'copy/move/delete/trash must consume backend operation events instead of preview-only stubs');
+addCheck('operation store preserves active controller when dismissing long-running dialog', hasTest('src/operations/operationStore.test.ts', 'keeps an active operation controller after a confirmed long-running dialog closes'), 'closing a confirmed long-running dialog must not detach summary refresh/cancel/conflict callbacks');
+addCheck('operation store guards duplicate atomic submissions', hasTest('src/operations/operationStore.test.ts', 'prevents duplicate atomic submissions while the first command is pending'), 'create_dir/rename_entry dialogs must not submit duplicate filesystem requests while pending');
+addCheck('operation store guards duplicate long-running submissions', hasTest('src/operations/operationStore.test.ts', 'blocks a second long-running operation while one controller is in flight'), 'long-running operation dialogs must not submit duplicate or concurrent filesystem requests while pending');
+addCheck('operation store defers pending-start cancellation until real operation id', operationStoreTest.includes('defers pending-start cancellation until the real backend operation id is known') && operationStoreTest.includes('defers confirmed-dialog pending-start cancellation until the real backend operation id is known'), 'pending synthetic operation ids must not be sent to backend cancel or detach the active controller');
+addCheck('operation store accepts real events while direct start uses pending alias', operationStoreTest.includes('accepts real backend progress and summary while direct copy is still bound to a pending id'), 'fast backend events must not be dropped while frontend start promise still has a synthetic pending id');
 addCheck('operation store preserves controller across atomic dialogs', operationStoreTest.includes('preserves an active operation controller when opening an atomic dialog'), 'opening properties/info dialogs during active operations must not detach summary/cancel/conflict callbacks');
-addCheck('operation store dismisses terminal status surface', read('src/operations/operationEvents.ts').includes('isTerminalState(current.progress.state) ? null : current.progress') && operationStoreTest.includes('clears terminal progress when dismissing the operation summary'), 'summary dismiss must clear terminal progress so the non-modal status surface can close');
+addCheck('operation store dismisses terminal status surface', operationStoreTest.includes('clears terminal progress when dismissing the operation summary'), 'summary dismiss must clear terminal progress so the non-modal status surface can close');
 for (const conflictState of ['lastConflictDecision', 'applyAllConflictDecision', 'allOverwrite', 'allSkip']) {
   addCheck(`operation conflict model includes ${conflictState}`, read('src/operations/operationTypes.ts').includes(conflictState), 'Conflict apply-all decisions are explicit');
 }
 addCheck(
   'operation store keeps local operation history',
-  operationStore.includes('operationHistory') && read('src/operations/operationLifecycle.ts').includes('MAX_OPERATION_HISTORY') && read('src/operations/operationLifecycle.ts').includes('appendOperationHistory'),
+  hasTest('src/operations/operationStore.test.ts', 'keeps a bounded local operation history without duplicate operation ids'),
   'destructive and long-running actions need a local audit/history trail',
 );
 
@@ -368,7 +368,6 @@ const rustLib = read('src-tauri/src/lib.rs');
 
 const rustBackend = read('src-tauri/src/commands.rs');
 
-const archiveVirtual = read('src/ui/archiveVirtual.ts');
 const rustCommandErrors = validateRustCommands(Object.values(metadata.commands), rustLib, rustBackend);
 addCheck('frontend commands match Rust registration and implementation', rustCommandErrors.length === 0, rustCommandErrors.join('; ') || 'ok');
 addCheck('rust list_dir normalizes filter once', read('src-tauri/src/navigation.rs').includes('normalized_filter'), 'avoid repeated filter lowercasing in read_dir loop');
@@ -389,8 +388,8 @@ addCheck(
 );
 addCheck(
   'archive providers cover every required format',
-  ['tar\\.gz', 'tar\\.zst', 'tgz', 'tzst', 'zip', 'jar', 'war', 'tar', '7z'].every((token) => archiveVirtual.includes(token))
-    && read('src-tauri/src/tests.rs').includes('archive_required_formats_create_list_and_extract_round_trip'),
+  hasTest('src/verification/fullScope.test.ts', 'recognizes every required archive format as a virtual directory')
+    && hasTest('src-tauri/src/tests.rs', 'archive_required_formats_create_list_and_extract_round_trip'),
   'zip/tar/tar.gz/tgz/tar.zst/tzst/7z/jar/war require create/list/extract evidence',
 );
 addCheck(

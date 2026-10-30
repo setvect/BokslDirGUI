@@ -7,6 +7,7 @@ import { useOperationStore } from '../operations/operationStore';
 import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './commanderFixture';
 import { CommanderShell } from './CommanderShell';
 import { createFixturePanelDataSource } from './panelDataSource';
+import { mutationClientStub, operationClientStub, runningProgress } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { rowByText } from './testing/commanderTestSupport';
 
@@ -30,16 +31,15 @@ describe('CommanderShell drag', () => {
         return { ok: true as const, data: { ...entry, absolutePath: entry?.path ?? path, extension: null,
           mimeType: null, readonly: false, directoryStats: null } };
       });
-      const operationClient = {
+      const operationClient = operationClientStub({
         startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'drag-copy', kind: 'copy' as const, state: 'queued' as const } })),
         startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'drag-move', kind: 'move' as const, state: 'queued' as const } })),
-        startDelete: vi.fn(), cancelOperation: vi.fn(), resolveConflict: vi.fn(),
-      };
+      });
       const dataSource = createFixturePanelDataSource(listings);
       const listDir = vi.spyOn(dataSource, 'listDir');
       const rendered = render(<CommanderShell
         dataSource={dataSource}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), getMetadata }}
+        mutationClient={mutationClientStub({ getMetadata })}
         operationClient={operationClient}
         nativeFileDragClient={nativeFileDragClient}
         nativeFileDropClient={nativeFileDropClient}
@@ -219,9 +219,7 @@ describe('CommanderShell drag', () => {
       await waitFor(() => expect(f.nativeFileDragClient.start).toHaveBeenCalledOnce());
       act(() => f.nativeDrop({ type: 'drop', paths: [path], position: { x: 700, y: 200 } }));
       if (condition === 'unmount') f.unmount();
-      else act(() => useOperationStore.setState({ progress: { operationId: 'other', kind: 'copy', state: 'running',
-        totalFiles: 1, completedFiles: 0, totalBytes: null, completedBytes: 0, currentPath: null,
-        bytesPerSecond: null, etaSeconds: null, recentErrorCount: 0 } }));
+      else act(() => useOperationStore.setState({ progress: runningProgress({ operationId: 'other' }) }));
       await act(async () => resolve(metadata));
       expect(f.operationClient.startCopy).not.toHaveBeenCalled();
       expect(f.operationClient.startMove).not.toHaveBeenCalled();
@@ -244,11 +242,7 @@ describe('CommanderShell drag', () => {
     it('rechecks busy state at release', () => {
       const f = setupDrag(); f.down('left'); f.move('right');
       act(() => useOperationStore.setState({
-        progress: {
-          operationId: 'busy-during-drag', kind: 'copy', state: 'running', totalFiles: 1,
-          completedFiles: 0, totalBytes: null, completedBytes: 0, currentPath: null,
-          bytesPerSecond: null, etaSeconds: null, recentErrorCount: 0,
-        }
+        progress: runningProgress({ operationId: 'busy-during-drag' }),
       }));
       f.up('right');
       expect(f.operationClient.startCopy).not.toHaveBeenCalled();

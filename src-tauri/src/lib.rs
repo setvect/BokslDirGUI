@@ -31,6 +31,8 @@ mod window_session;
 mod shell_command;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod test_util;
 use std::env;
 use tauri::Manager;
 

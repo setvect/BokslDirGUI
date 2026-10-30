@@ -7,6 +7,7 @@ import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './
 import { CommanderShell } from './CommanderShell';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { createDirectoryListing } from './panelState';
+import { mutationClientStub, operationClientStub, runningProgress, settingsFixture } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { activePanelLabel, focusedRowText, renderCommander, rowByText, testEntry } from './testing/commanderTestSupport';
 
@@ -46,13 +47,9 @@ describe('CommanderShell operations', () => {
 
   it('dispatches the copy shortcut directly to the operation client without a preflight dialog', async () => {
     const user = userEvent.setup();
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-shortcut', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('y');
@@ -69,27 +66,12 @@ describe('CommanderShell operations', () => {
 
   it('blocks file-operation shortcuts while another operation is in flight', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    const operationClient = operationClientStub();
     useOperationStore.setState({
-      progress: {
+      progress: runningProgress({
         operationId: 'op-busy',
-        kind: 'copy',
-        state: 'running',
-        totalFiles: 1,
-        completedFiles: 0,
-        totalBytes: null,
-        completedBytes: 0,
         currentPath: SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right]?.path ?? null,
-        bytesPerSecond: null,
-        etaSeconds: null,
-        recentErrorCount: 0,
-      },
+      }),
     });
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
@@ -101,13 +83,9 @@ describe('CommanderShell operations', () => {
 
   it('requires explicit confirmation before a move reaches the operation client', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
+    const operationClient = operationClientStub({
       startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-move-confirmed', kind: 'move' as const, state: 'queued' as const } })),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('x');
@@ -126,13 +104,9 @@ describe('CommanderShell operations', () => {
 
   it('moves operation dialog button focus with arrow keys', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
+    const operationClient = operationClientStub({
       startDelete: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-trash-arrow-nav', kind: 'trash' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     render(
       <CommanderShell
         dataSource={createFixturePanelDataSource()}
@@ -161,13 +135,9 @@ describe('CommanderShell operations', () => {
 
   it('uses the focused row as the file-operation source when nothing is explicitly selected', async () => {
     const user = userEvent.setup();
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-focused-copy', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     render(
       <CommanderShell
         dataSource={createFixturePanelDataSource()}
@@ -190,13 +160,9 @@ describe('CommanderShell operations', () => {
   it('clears source selection after a fully successful copy summary', async () => {
     const user = userEvent.setup();
     const selectedPaths = SAMPLE_LISTINGS.right.entries.slice(8, 11).map((entry) => entry.path);
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-clear-selection', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = render(
       <CommanderShell
         dataSource={createFixturePanelDataSource()}
@@ -232,13 +198,9 @@ describe('CommanderShell operations', () => {
   it('keeps source selection when a copy summary reports skipped items', async () => {
     const user = userEvent.setup();
     const selectedPaths = SAMPLE_LISTINGS.right.entries.slice(8, 11).map((entry) => entry.path);
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-skipped-selection', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = render(
       <CommanderShell
         dataSource={createFixturePanelDataSource()}
@@ -268,13 +230,9 @@ describe('CommanderShell operations', () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();
     const listDirSpy = vi.spyOn(dataSource, 'listDir');
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-cancelled', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     renderCommander(dataSource, undefined, operationClient);
 
     await user.keyboard('y');
@@ -308,13 +266,9 @@ describe('CommanderShell operations', () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();
     const listDirSpy = vi.spyOn(dataSource, 'listDir');
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
+    const operationClient = operationClientStub({
       startDelete: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-trash-focused', kind: 'trash' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     render(
       <CommanderShell
         dataSource={dataSource}
@@ -357,9 +311,7 @@ describe('CommanderShell operations', () => {
     const dataSource = createFixturePanelDataSource();
     const listDirSpy = vi.spyOn(dataSource, 'listDir');
     const stalePath = SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right].path;
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
+    const operationClient = operationClientStub({
       startDelete: vi.fn(async () => ({
         ok: false as const,
         error: {
@@ -370,9 +322,7 @@ describe('CommanderShell operations', () => {
           recoverable: true,
         },
       })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     render(
       <CommanderShell
         dataSource={dataSource}
@@ -402,13 +352,7 @@ describe('CommanderShell operations', () => {
 
   it('blocks delete on the virtual parent row before it reaches the operation client', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    const operationClient = operationClientStub();
     render(
       <CommanderShell
         dataSource={createFixturePanelDataSource()}
@@ -427,13 +371,9 @@ describe('CommanderShell operations', () => {
 
   it('requires typed confirmation before permanent delete reaches the operation client', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
+    const operationClient = operationClientStub({
       startDelete: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-permanent-ui', kind: 'delete' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     render(
       <CommanderShell
         dataSource={createFixturePanelDataSource()}
@@ -461,13 +401,13 @@ describe('CommanderShell operations', () => {
 
   it('starts connected long-running copy through the operation client', async () => {
     const user = userEvent.setup();
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-ui', kind: 'copy' as const, state: 'queued' as const } })),
       startMove: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-move-ui', kind: 'move' as const, state: 'queued' as const } })),
       startDelete: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-delete-ui', kind: 'delete' as const, state: 'queued' as const } })),
       cancelOperation: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-ui', state: 'cancelling' as const } })),
       resolveConflict: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-copy-ui', decision: 'skip' as const } })),
-    };
+    });
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('y');
@@ -498,10 +438,10 @@ describe('CommanderShell operations', () => {
         7,
       ),
     }));
-    const mutationClient = {
+    const mutationClient = mutationClientStub({
       createDir: vi.fn(async () => ({ ok: true as const, data: created })),
       renameEntry: vi.fn(async () => ({ ok: true as const, data: created })),
-    };
+    });
     const { container } = renderCommander(dataSource, mutationClient);
 
     await user.keyboard('a');
@@ -536,10 +476,10 @@ describe('CommanderShell operations', () => {
         8,
       ),
     }));
-    const mutationClient = {
+    const mutationClient = mutationClientStub({
       createDir: vi.fn(async () => ({ ok: true as const, data: renamed })),
       renameEntry: vi.fn(async () => ({ ok: true as const, data: renamed })),
-    };
+    });
     const { container } = renderCommander(dataSource, mutationClient);
 
     await user.keyboard('{F2}');
@@ -562,25 +502,13 @@ describe('CommanderShell operations', () => {
 
   it('opens files through the default app and leaves the removed editor shortcut inactive', async () => {
     const user = userEvent.setup();
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const mutationClient = mutationClientStub({
       loadSettings: vi.fn(async () => ({
         ok: true as const,
-        data: {
-          schemaVersion: 1,
-          theme: 'dark' as const,
-          language: 'ko' as const,
-          sizeFormat: 'binary' as const,
-          external: { editorId: 'vim', shellCommand: { enabled: false } },
-          bookmarks: [],
-          layout: { singlePanel: false, ratio: '50:50' as const },
-          session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
-          view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-        },
+        data: settingsFixture({ external: { editorId: 'vim', shellCommand: { enabled: false } } }),
       })),
       openDefault: vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } })),
-    };
+    });
     const { container } = renderCommander(createFixturePanelDataSource(), mutationClient);
     await screen.findByText('Architecture.md');
     await user.keyboard('{Tab}');
@@ -606,22 +534,10 @@ describe('CommanderShell operations', () => {
 
   it('runs an enabled shell command directly from the input dialog', async () => {
     const user = userEvent.setup();
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const mutationClient = mutationClientStub({
       loadSettings: vi.fn(async () => ({
         ok: true as const,
-        data: {
-          schemaVersion: 1,
-          theme: 'dark' as const,
-          language: 'ko' as const,
-          sizeFormat: 'binary' as const,
-          external: { editorId: null, shellCommand: { enabled: true } },
-          bookmarks: [],
-          layout: { singlePanel: false, ratio: '50:50' as const },
-          session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
-          view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-        },
+        data: settingsFixture({ external: { editorId: null, shellCommand: { enabled: true } } }),
       })),
       prepareShellCommand: vi.fn(async () => ({ ok: true as const, data: {
         confirmToken: 'confirmed-input', fingerprint: 'preview', expiresAt: '2099-01-01T00:00:00Z',
@@ -633,7 +549,7 @@ describe('CommanderShell operations', () => {
           operationId: 'op-shell-test', kind: 'shellCommand' as const, state: 'queued' as const,
         },
       })),
-    };
+    });
     renderCommander(createFixturePanelDataSource(), mutationClient);
 
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
@@ -661,19 +577,7 @@ describe('CommanderShell operations', () => {
   it('blocks Quit while a file operation is in flight', async () => {
     const appController = { quit: vi.fn(async () => undefined) };
     useOperationStore.setState({
-      progress: {
-        operationId: 'op-copy-active',
-        kind: 'copy',
-        state: 'running',
-        totalFiles: 2,
-        completedFiles: 1,
-        totalBytes: null,
-        completedBytes: 0,
-        currentPath: '/tmp/source.txt',
-        bytesPerSecond: null,
-        etaSeconds: null,
-        recentErrorCount: 0,
-      },
+      progress: runningProgress({ operationId: 'op-copy-active', totalFiles: 2, completedFiles: 1, currentPath: '/tmp/source.txt' }),
     });
 
     render(

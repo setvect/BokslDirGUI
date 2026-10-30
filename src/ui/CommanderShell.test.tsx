@@ -9,6 +9,7 @@ import { CommanderShell } from './CommanderShell';
 import type { PanelDataSource } from './panelDataSource';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { createDirectoryListing, DEFAULT_SORT } from './panelState';
+import { mutationClientStub, operationClientStub } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { activePanelLabel, emptyListings, mockedPanelDataSource, renderCommander, rowByText, testEntry } from './testing/commanderTestSupport';
 
@@ -162,7 +163,7 @@ describe('CommanderShell rendering', () => {
       }
       : listDir(input));
     const openDefault = vi.fn(async () => ({ ok: true as const, data: { ok: true, messageKey: 'external.dryRun' } }));
-    const { container } = renderCommander(dataSource, { createDir: vi.fn(), renameEntry: vi.fn(), openDefault });
+    const { container } = renderCommander(dataSource, mutationClientStub({ openDefault }));
     const linkRow = rowByText(container, 'broken-link');
     if (!linkRow) throw new Error('broken link row is required');
 
@@ -203,7 +204,7 @@ describe('CommanderShell rendering', () => {
     render(
       <CommanderShell
         dataSource={dataSource}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), previewFile, getMetadata }}
+        mutationClient={mutationClientStub({ previewFile, getMetadata })}
         initialFocusIndex={{ right: 0 }}
       />,
     );
@@ -302,13 +303,9 @@ describe('CommanderShell rendering', () => {
   });
 
   it('imports external dropped files only when the OS path is exposed', async () => {
-    const operationClient = {
+    const operationClient = operationClientStub({
       startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-external-import', kind: 'copy' as const, state: 'queued' as const } })),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
     const leftPanel = container.querySelector<HTMLElement>('.file-panel[aria-label^="left panel"]');
     if (!leftPanel) {

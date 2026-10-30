@@ -243,8 +243,8 @@ pub(crate) mod tests {
     }
     #[test]
     fn preview_checks_collisions_names_and_changed_sources_without_mutation() {
-        let root = std::env::temp_dir().join(format!("bulk-preview-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let temp = crate::test_util::TempDir::new("bulk-preview");
+        let root = temp.path().to_path_buf();
         let file = root.join("old.json");
         fs::write(&file, "original").unwrap();
         let sources = vec![file.to_string_lossy().into_owned()];
@@ -267,12 +267,11 @@ pub(crate) mod tests {
             validate_plan(&[rows[0].item.clone()]).unwrap_err().code,
             "source_changed"
         );
-        fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn detects_plan_duplicates_and_keeps_directory_names_and_whitespace() {
-        let root = std::env::temp_dir().join(format!("bulk-rules-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let temp = crate::test_util::TempDir::new("bulk-rules");
+        let root = temp.path().to_path_buf();
         let a = root.join("old.json");
         let b = root.join("new.json");
         fs::write(&a, "a").unwrap();
@@ -304,6 +303,5 @@ pub(crate) mod tests {
         let rows = preview(vec![spaced.to_string_lossy().into_owned()], rule).unwrap();
         assert!(!rows[0].changed);
         assert!(rows[0].error.is_none());
-        fs::remove_dir_all(root).unwrap();
     }
 }

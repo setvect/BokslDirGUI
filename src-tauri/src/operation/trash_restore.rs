@@ -395,22 +395,21 @@ fn run_restore(
 
 #[cfg(test)]
 mod tests {
-    use crate::contracts::OperationKind;
     use crate::contracts::OperationState;
     use crate::filesystem::file_entry_from_path;
-    use crate::operation::runtime::next_operation_id;
     use crate::operation::trash_restore::{
         run_restore, Batch, History, Identity, Receipt, HISTORY_LIMIT,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
-    struct Fixture(PathBuf);
+    struct Fixture(PathBuf, #[allow(dead_code)] crate::test_util::TempDir); // 삭제는 TempDir Drop이 담당
     impl Fixture {
         fn new() -> Self {
-            let root = std::env::temp_dir().join(next_operation_id(OperationKind::RestoreTrash));
+            let dir = crate::test_util::TempDir::new("trash-restore");
+            let root = dir.path().to_path_buf();
             fs::create_dir_all(root.join("original")).unwrap();
             fs::create_dir_all(root.join("trash")).unwrap();
-            Self(root)
+            Self(root, dir)
         }
         fn trash(&self, name: &str) -> Receipt {
             let source = self.0.join("original").join(name);
@@ -433,11 +432,6 @@ mod tests {
         fn file(&self, name: &str) -> Receipt {
             fs::write(self.0.join("original").join(name), "original content").unwrap();
             self.trash(name)
-        }
-    }
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
         }
     }
     fn batch(id: &str, receipts: Vec<Receipt>) -> Batch {
@@ -580,7 +574,7 @@ mod tests {
     #[test]
     #[ignore = "실제 macOS 휴지통을 이용하는 임시 파일 왕복 검증: 명시적 실행 전용"]
     fn native_macos_trash_roundtrip() {
-        let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+        let _env_guard = crate::test_util::lock_env();
         assert!(std::env::var_os("BOKSLDIRGUI_TRASH_DIR").is_none());
         let fixture = Fixture::new();
         let source = fixture.0.join("original/복원 확인 # %.txt");
@@ -639,7 +633,7 @@ mod tests {
     #[ignore = "실제 Windows 휴지통의 임시 항목 왕복·선택 제거: 폐기 가능한 테스트 세션에서 명시 실행"]
     fn native_windows_trash_roundtrip_conflicts_and_missing_items() {
         use crate::operation::trash_restore::{windows, TrashRecorder};
-        let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+        let _env_guard = crate::test_util::lock_env();
         assert!(std::env::var_os("BOKSLDIRGUI_TRASH_DIR").is_none());
         struct Cleanup(Vec<Receipt>);
         impl Drop for Cleanup {

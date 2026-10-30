@@ -1,6 +1,5 @@
 use crate::contracts::{CommandResult, ConflictDecision, OperationKind, OperationSummary};
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -10,7 +9,7 @@ use super::archive_ops::{
     archive_entry_is_unsafe, list_archive_entry_names_for_operation, run_archive_add,
     run_archive_create, run_archive_extract,
 };
-use super::process::{external_binary, run_external_command};
+use super::process::run_external_command;
 use super::runtime::{
     cancel_operation, finish_operation, next_operation_id, register_operation, resolve_conflict,
     wait_for_conflict_decision,
@@ -76,21 +75,13 @@ pub(crate) fn archive_extract_summary_for_test(
 }
 
 #[cfg(test)]
-pub(crate) fn external_archive_command_cancel_for_test() -> Option<(CommandResult<()>, Duration)> {
-    #[cfg(not(windows))]
-    let executable = external_binary("sleep")?;
-    #[cfg(windows)]
-    let executable = String::from("powershell.exe");
+pub(crate) fn external_archive_command_cancel_for_test() -> (CommandResult<()>, Duration) {
     let operation_id = next_operation_id(OperationKind::ArchiveCreate);
     register_operation(&operation_id);
     let worker_operation_id = operation_id.clone();
     let worker = thread::spawn(move || {
         let started_at = Instant::now();
-        let mut command = Command::new(executable);
-        #[cfg(not(windows))]
-        command.arg("10");
-        #[cfg(windows)]
-        command.args(["-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 10"]);
+        let command = super::process::tests::fixture_command("sleep");
         let result = run_external_command(&worker_operation_id, command, None);
         (result, started_at.elapsed())
     });
@@ -100,7 +91,7 @@ pub(crate) fn external_archive_command_cancel_for_test() -> Option<(CommandResul
         .join()
         .expect("external cancel test worker should finish");
     finish_operation(&operation_id);
-    Some(outcome)
+    outcome
 }
 
 #[cfg(test)]

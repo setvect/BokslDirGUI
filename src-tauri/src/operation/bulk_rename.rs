@@ -102,8 +102,8 @@ mod tests {
     use std::path::Path;
     #[test]
     fn renames_with_partial_cancel_and_rejects_conflicts_before_any_change() {
-        let root = std::env::temp_dir().join(format!("bulk-execute-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let temp = crate::test_util::TempDir::new("bulk-execute");
+        let root = temp.path().to_path_buf();
         let paths: Vec<_> = ["old-a.json", "old-b.json"]
             .iter()
             .map(|n| {
@@ -132,13 +132,12 @@ mod tests {
         let summary = run_rename(None, "test", &items[1..], None);
         assert_eq!(summary.state, OperationState::Completed);
         assert_eq!(summary.completed_files, 1);
-        fs::remove_dir_all(root).unwrap();
     }
     #[cfg(unix)]
     #[test]
     fn renames_the_symlink_not_its_target() {
-        let root = std::env::temp_dir().join(format!("bulk-link-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let temp = crate::test_util::TempDir::new("bulk-link");
+        let root = temp.path().to_path_buf();
         let target = root.join("target.txt");
         fs::write(&target, "target").unwrap();
         let link = root.join("old.json");
@@ -155,6 +154,5 @@ mod tests {
             target
         );
         assert_eq!(fs::read(&target).unwrap(), b"target");
-        fs::remove_dir_all(root).unwrap();
     }
 }

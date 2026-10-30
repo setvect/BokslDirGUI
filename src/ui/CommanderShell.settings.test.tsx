@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { CommanderShell } from './CommanderShell';
 import { createFixturePanelDataSource } from './panelDataSource';
+import { mutationClientStub, settingsFixture } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { renderCommander } from './testing/commanderTestSupport';
 
@@ -14,20 +15,9 @@ describe('CommanderShell settings', () => {
     const user = userEvent.setup();
     const saveSettings = vi.fn(async ({ patch }: { patch: object }) => ({
       ok: true as const,
-      data: {
-        schemaVersion: 1,
-        theme: 'dark' as const,
-        language: 'ko' as const,
-        sizeFormat: 'binary' as const,
-        external: { editorId: null, shellCommand: { enabled: false } },
-        bookmarks: [],
-        layout: { singlePanel: false, ratio: '50:50' as const },
-        session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
-        view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-        ...patch,
-      },
+      data: { ...settingsFixture(), ...patch },
     }));
-    renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+    renderCommander(createFixturePanelDataSource(), mutationClientStub({ saveSettings }));
 
     await user.keyboard('{Control>}b{/Control}');
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
@@ -71,27 +61,15 @@ describe('CommanderShell settings', () => {
       label: '기존 이름',
       path: SAMPLE_LISTINGS.right.path,
     };
-    const baseSettings = {
-      schemaVersion: 1,
-      theme: 'dark' as const,
-      language: 'ko' as const,
-      sizeFormat: 'binary' as const,
-      external: { editorId: null, shellCommand: { enabled: false } },
-      bookmarks: [initialBookmark],
-      layout: { singlePanel: false, ratio: '50:50' as const },
-      session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
-      view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-    };
+    const baseSettings = settingsFixture({ bookmarks: [initialBookmark] });
     const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
       ok: true as const,
       data: { ...baseSettings, ...patch },
     }));
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const mutationClient = mutationClientStub({
       loadSettings: vi.fn(async () => ({ ok: true as const, data: baseSettings })),
       saveSettings,
-    };
+    });
     renderCommander(createFixturePanelDataSource(), mutationClient);
 
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
@@ -126,23 +104,11 @@ describe('CommanderShell settings', () => {
 
   it.each(['cancel button', 'Escape'])('closes the bookmark rename prompt with the %s without saving', async (closeWith) => {
     const user = userEvent.setup();
-    const baseSettings = {
-      schemaVersion: 1,
-      theme: 'dark' as const,
-      language: 'ko' as const,
-      sizeFormat: 'binary' as const,
-      external: { editorId: null, shellCommand: { enabled: false } },
-      bookmarks: [{ id: 'bookmark-existing', label: '기존 이름', path: SAMPLE_LISTINGS.right.path }],
-      layout: { singlePanel: false, ratio: '50:50' as const },
-      session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
-      view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-    };
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const baseSettings = settingsFixture({ bookmarks: [{ id: 'bookmark-existing', label: '기존 이름', path: SAMPLE_LISTINGS.right.path }] });
+    const mutationClient = mutationClientStub({
       loadSettings: vi.fn(async () => ({ ok: true as const, data: baseSettings })),
       saveSettings: vi.fn(),
-    };
+    });
     renderCommander(createFixturePanelDataSource(), mutationClient);
 
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
@@ -173,27 +139,15 @@ describe('CommanderShell settings', () => {
       { id: 'first', label: '첫째', path: '/tmp/bookmark-first' },
       { id: 'second', label: '둘째', path: '/tmp/bookmark-second' },
     ];
-    const baseSettings = {
-      schemaVersion: 1,
-      theme: 'dark' as const,
-      language: 'ko' as const,
-      sizeFormat: 'binary' as const,
-      external: { editorId: null, shellCommand: { enabled: false } },
-      bookmarks,
-      layout: { singlePanel: false, ratio: '50:50' as const },
-      session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
-      view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-    };
+    const baseSettings = settingsFixture({ bookmarks });
     const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
       ok: true as const,
       data: { ...baseSettings, ...patch },
     }));
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const mutationClient = mutationClientStub({
       loadSettings: vi.fn(async () => ({ ok: true as const, data: baseSettings })),
       saveSettings,
-    };
+    });
     renderCommander(createFixturePanelDataSource(), mutationClient);
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
 
@@ -223,28 +177,13 @@ describe('CommanderShell settings', () => {
   it('restores a bookmark in the open list when deleting it fails to save', async () => {
     const user = userEvent.setup();
     const bookmark = { id: 'keep', label: '보존', path: '/tmp/bookmark-keep' };
-    const settings: import('../domain/types').Settings = {
-      schemaVersion: 1,
-      theme: 'dark',
-      language: 'ko',
-      sizeFormat: 'binary',
-      external: { editorId: null, shellCommand: { enabled: false } },
-      bookmarks: [bookmark],
-      layout: { singlePanel: false, ratio: '50:50' },
-      session: { leftPath: null, rightPath: null, activePanel: 'right' },
-      view: { zoomStep: 0, density: 'compact', showIcons: true },
-    };
+    const settings = settingsFixture({ bookmarks: [bookmark] });
     const saveSettings = vi.fn(async () => ({
       ok: false as const,
       error: { code: 'save_failed', messageKey: 'errors.settingsSaveFailed', path: null, details: {}, retryable: true, recoverable: true },
     }));
     const loadSettings = vi.fn(async () => ({ ok: true as const, data: settings }));
-    renderCommander(createFixturePanelDataSource(), {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
-      loadSettings,
-      saveSettings,
-    });
+    renderCommander(createFixturePanelDataSource(), mutationClientStub({ loadSettings, saveSettings }));
     await waitFor(() => expect(loadSettings).toHaveBeenCalled());
     await user.keyboard('tb');
     const dialog = await screen.findByRole('dialog', { name: '북마크' });
@@ -262,17 +201,7 @@ describe('CommanderShell settings', () => {
       { id: 'first', label: '첫째', path: '/tmp/first' },
       { id: 'second', label: '둘째', path: '/tmp/second' },
     ];
-    const settings: import('../domain/types').Settings = {
-      schemaVersion: 1,
-      theme: 'dark',
-      language: 'ko',
-      sizeFormat: 'binary',
-      external: { editorId: null, shellCommand: { enabled: false } },
-      bookmarks,
-      layout: { singlePanel: false, ratio: '50:50' },
-      session: { leftPath: null, rightPath: null, activePanel: 'right' },
-      view: { zoomStep: 0, density: 'compact', showIcons: true },
-    };
+    const settings = settingsFixture({ bookmarks });
     const releaseSaves: Array<() => void> = [];
     const saveSettings = vi.fn(async () => {
       await new Promise<void>((resolve) => releaseSaves.push(resolve));
@@ -282,12 +211,7 @@ describe('CommanderShell settings', () => {
       };
     });
     const loadSettings = vi.fn(async () => ({ ok: true as const, data: settings }));
-    renderCommander(createFixturePanelDataSource(), {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
-      loadSettings,
-      saveSettings,
-    });
+    renderCommander(createFixturePanelDataSource(), mutationClientStub({ loadSettings, saveSettings }));
     await waitFor(() => expect(loadSettings).toHaveBeenCalled());
     await user.keyboard('tb');
     const dialog = await screen.findByRole('dialog', { name: '북마크' });
@@ -445,19 +369,11 @@ describe('CommanderShell settings', () => {
   it('scales font, density variables, and persists zoom settings with Cmd/Ctrl +/-/0', async () => {
     const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => ({
       ok: true as const,
-      data: {
-        schemaVersion: 1,
-        theme: 'dark' as const,
-        language: 'ko' as const,
-        sizeFormat: 'binary' as const,
-        external: { editorId: null, shellCommand: { enabled: false } },
-        bookmarks: [],
-        layout: { singlePanel: false, ratio: '50:50' as const },
-        session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+      data: settingsFixture({
         view: { zoomStep: patch.view?.zoomStep ?? 0, density: 'compact' as const, showIcons: patch.view?.showIcons ?? true },
-      },
+      }),
     }));
-    renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+    renderCommander(createFixturePanelDataSource(), mutationClientStub({ saveSettings }));
     const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
     const beforeRowHeight = shell.style.getPropertyValue('--row-height');
 
@@ -479,22 +395,12 @@ describe('CommanderShell settings', () => {
 
   it('applies direct Settings menu actions visibly and persists them', async () => {
     const user = userEvent.setup();
-    let savedSettings: import('../domain/types').Settings = {
-      schemaVersion: 1,
-      theme: 'dark' as const,
-      language: 'ko' as const,
-      sizeFormat: 'binary' as const,
-      external: { editorId: null, shellCommand: { enabled: false } },
-      bookmarks: [],
-      layout: { singlePanel: false, ratio: '50:50' as const },
-      session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
-      view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
-    };
+    let savedSettings = settingsFixture();
     const saveSettings = vi.fn(async ({ patch }: { patch: Partial<import('../domain/types').Settings> }) => {
       savedSettings = { ...savedSettings, ...patch };
       return { ok: true as const, data: savedSettings };
     });
-    renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+    renderCommander(createFixturePanelDataSource(), mutationClientStub({ saveSettings }));
     const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
@@ -559,7 +465,7 @@ describe('CommanderShell settings', () => {
       ok: false as const,
       error: { code: 'save_failed', messageKey: 'errors.settingsSaveFailed', path: null, details: {}, retryable: true, recoverable: true },
     }));
-    renderCommander(createFixturePanelDataSource(), { createDir: vi.fn(), renameEntry: vi.fn(), saveSettings });
+    renderCommander(createFixturePanelDataSource(), mutationClientStub({ saveSettings }));
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
     fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
@@ -579,7 +485,7 @@ describe('CommanderShell settings', () => {
     }));
     render(<CommanderShell
       dataSource={createFixturePanelDataSource()}
-      mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), loadSettings, saveSettings }}
+      mutationClient={mutationClientStub({ loadSettings, saveSettings })}
       runtimeBackendAvailable={false}
     />);
 

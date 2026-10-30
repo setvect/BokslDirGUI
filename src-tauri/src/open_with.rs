@@ -129,8 +129,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn native_lookup_returns_real_bundles_and_rejects_an_unlisted_application() {
-        let dir = std::env::temp_dir().join(format!("boksldir-open-with-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let temp = crate::test_util::TempDir::new("boksldir-open-with");
+        let dir = temp.path().to_path_buf();
         let path = dir.join("한글 sample.json");
         std::fs::write(&path, "{}").unwrap();
         let apps = list_apps(path.to_str().unwrap()).unwrap();
@@ -141,7 +141,6 @@ mod tests {
         assert!(apps.iter().all(|app| unique.insert(&app.id)));
         let error = open(path.to_str().unwrap(), dir.to_str().unwrap()).unwrap_err();
         assert_eq!(error.message_key, "errors.openWithAppUnavailable");
-        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[cfg(target_os = "macos")]

@@ -7,6 +7,7 @@ import { INITIAL_FOCUS_INDEX, SAMPLE_LISTINGS } from './commanderFixture';
 import { CommanderShell } from './CommanderShell';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { createDirectoryListing } from './panelState';
+import { mutationClientStub, operationClientStub } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { activePanelLabel, focusedRowText, mockedPanelDataSource, renderCommander, rowByText, testEntry } from './testing/commanderTestSupport';
 
@@ -30,22 +31,15 @@ describe('CommanderShell archives', () => {
       },
     });
     const listDirSpy = vi.spyOn(dataSource, 'listDir');
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const mutationClient = mutationClientStub({
       archiveList: vi.fn(async () => ({
         ok: true as const,
         data: { archivePath, encrypted: false, totalEntries: 0, truncated: false, entries: [] },
       })),
-    };
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    });
+    const operationClient = operationClientStub({
       archiveExtract: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-copy', kind: 'archiveExtract' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = render(
       <CommanderShell
         dataSource={dataSource}
@@ -115,18 +109,13 @@ describe('CommanderShell archives', () => {
       ok: true as const,
       data: { operationId: 'encrypted-archive-copy', kind: 'archiveExtract' as const, state: 'queued' as const },
     }));
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    const operationClient = operationClientStub({
       archiveExtract,
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = render(
       <CommanderShell
         dataSource={dataSource}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList }}
+        mutationClient={mutationClientStub({ archiveList })}
         operationClient={operationClient}
         initialFocusIndex={{ right: 0 }}
       />,
@@ -176,14 +165,9 @@ describe('CommanderShell archives', () => {
         }]),
       },
     });
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    const operationClient = operationClientStub({
       archiveExtract: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-directory-copy', kind: 'archiveExtract' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     render(
       <CommanderShell
         dataSource={dataSource}
@@ -229,14 +213,9 @@ describe('CommanderShell archives', () => {
         ]),
       },
     });
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    const operationClient = operationClientStub({
       archiveExtract: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-multi-copy', kind: 'archiveExtract' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     render(
       <CommanderShell
         dataSource={dataSource}
@@ -281,9 +260,7 @@ describe('CommanderShell archives', () => {
         path: sourceFile,
       }] : [], input.sort, input.filter, 4),
     }));
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const mutationClient = mutationClientStub({
       archiveList: vi.fn(async () => ({
         ok: true as const,
         data: {
@@ -294,15 +271,10 @@ describe('CommanderShell archives', () => {
           truncated: false,
         },
       })),
-    };
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    });
+    const operationClient = operationClientStub({
       archiveAdd: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-add', kind: 'archiveAdd' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = render(
       <CommanderShell
         dataSource={dataSource}
@@ -364,22 +336,15 @@ describe('CommanderShell archives', () => {
         path: sourceFile,
       }] : [], input.sort, input.filter, 4),
     }));
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const mutationClient = mutationClientStub({
       archiveList: vi.fn(async () => ({
         ok: true as const,
         data: { archivePath, encrypted: false, totalEntries: 0, truncated: false, entries: [] },
       })),
-    };
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    });
+    const operationClient = operationClientStub({
       archiveAdd: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-add-cancelled', kind: 'archiveAdd' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = render(
       <CommanderShell
         dataSource={dataSource}
@@ -417,9 +382,7 @@ describe('CommanderShell archives', () => {
     if (!archiveEntry) {
       throw new Error('archive fixture is required');
     }
-    const mutationClient = {
-      createDir: vi.fn(),
-      renameEntry: vi.fn(),
+    const mutationClient = mutationClientStub({
       getMetadata: vi.fn(async () => ({
         ok: true as const,
         data: {
@@ -446,7 +409,7 @@ describe('CommanderShell archives', () => {
           }],
         },
       })),
-    };
+    });
     const { container } = renderCommander(createFixturePanelDataSource(), mutationClient);
 
     await user.keyboard('i');
@@ -537,7 +500,7 @@ describe('CommanderShell archives', () => {
     const { container } = render(
       <CommanderShell
         dataSource={dataSource}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList }}
+        mutationClient={mutationClientStub({ archiveList })}
         initialFocusIndex={{ left: 0 }}
       />,
     );
@@ -605,7 +568,7 @@ describe('CommanderShell archives', () => {
     const { container } = render(
       <CommanderShell
         dataSource={dataSource}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList, getMetadata }}
+        mutationClient={mutationClientStub({ archiveList, getMetadata })}
         initialFocusIndex={{ left: 0 }}
       />,
     );
@@ -661,21 +624,16 @@ describe('CommanderShell archives', () => {
         ],
       },
     }));
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    const operationClient = operationClientStub({
       archiveExtract: vi.fn(async () => ({
         ok: true as const,
         data: { operationId: 'archive-space-copy', kind: 'archiveExtract' as const, state: 'queued' as const },
       })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     const { container } = render(
       <CommanderShell
         dataSource={dataSource}
-        mutationClient={{ createDir: vi.fn(), renameEntry: vi.fn(), archiveList }}
+        mutationClient={mutationClientStub({ archiveList })}
         operationClient={operationClient}
         initialFocusIndex={{ left: 0 }}
       />,
@@ -698,15 +656,10 @@ describe('CommanderShell archives', () => {
 
   it('starts archive creation through the connected operation client in the source panel directory', async () => {
     const user = userEvent.setup();
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    const operationClient = operationClientStub({
       archiveCreate: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-create', kind: 'archiveCreate' as const, state: 'queued' as const } })),
       archiveExtract: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     renderCommander(createFixturePanelDataSource(), undefined, operationClient);
 
     await user.keyboard('zc');
@@ -728,15 +681,10 @@ describe('CommanderShell archives', () => {
       entries: [...SAMPLE_LISTINGS.right.entries, testEntry(SAMPLE_LISTINGS.right.path, archiveName)],
     };
     const dataSource = createFixturePanelDataSource({ ...SAMPLE_LISTINGS, right: rightListing });
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    const operationClient = operationClientStub({
       archiveCreate: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-numbered', kind: 'archiveCreate' as const, state: 'queued' as const } })),
       archiveExtract: vi.fn(),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     renderCommander(dataSource, undefined, operationClient);
 
     await user.keyboard('zc');
@@ -758,15 +706,10 @@ describe('CommanderShell archives', () => {
     }
     const dataSource = createFixturePanelDataSource();
     const listDirSpy = vi.spyOn(dataSource, 'listDir');
-    const operationClient = {
-      startCopy: vi.fn(),
-      startMove: vi.fn(),
-      startDelete: vi.fn(),
+    const operationClient = operationClientStub({
       archiveCreate: vi.fn(),
       archiveExtract: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-archive-extract-auto', kind: 'archiveExtract' as const, state: 'queued' as const } })),
-      cancelOperation: vi.fn(),
-      resolveConflict: vi.fn(),
-    };
+    });
     render(
       <CommanderShell
         dataSource={dataSource}

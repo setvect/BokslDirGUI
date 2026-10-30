@@ -2,10 +2,11 @@
 import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ACTION_BY_ID, actionsForMenu, fileShortcutPlatform, isActionAvailable, matchKeyboardShortcut, shortcutLabelForAction, shortcutHelpLabelForAction } from '../actions/registry';
-import type { PlatformInfo, TrashUndoPreview } from '../domain/types';
+import type { TrashUndoPreview } from '../domain/types';
 import { useOperationStore } from '../operations/operationStore';
 import { createActionContext } from './actionContext';
 import { createFixturePanelDataSource } from './panelDataSource';
+import { mutationClientStub, operationClientStub, platformInfoFixture } from './testing/clientStubs';
 import { renderCommander } from './testing/commanderTestSupport';
 import { testEntry } from './testing/fileEntryFixture';
 import { useTrashUndo } from './useTrashUndo';
@@ -15,9 +16,9 @@ afterEach(() => vi.mocked(fileShortcutPlatform).mockReturnValue('mac'));
 const entry = testEntry('/original', 'deleted.json');
 const setup = () => {
   const preview: TrashUndoPreview = { id: 'deleted-batch', entries: [entry] };
-  const mutationClient = { createDir: vi.fn(), renameEntry: vi.fn(), previewTrashUndo: vi.fn(async () => ({ ok: true as const, data: preview as TrashUndoPreview | null })) };
-  const operationClient = { startCopy: vi.fn(), startMove: vi.fn(), startDelete: vi.fn(), resolveConflict: vi.fn(), cancelOperation: vi.fn(),
-    startTrashUndo: vi.fn(async (_: { id: string }) => ({ ok: true as const, data: { operationId: 'restore-id', kind: 'restoreTrash' as const, state: 'queued' as const } })) };
+  const mutationClient = mutationClientStub({ previewTrashUndo: vi.fn(async () => ({ ok: true as const, data: preview as TrashUndoPreview | null })) });
+  const operationClient = operationClientStub({
+    startTrashUndo: vi.fn(async (_: { id: string }) => ({ ok: true as const, data: { operationId: 'restore-id', kind: 'restoreTrash' as const, state: 'queued' as const } })) });
   return { preview, mutationClient, operationClient };
 };
 it('offers Cmd+Z only for available macOS trash receipts, independently of the focused row', () => {
@@ -125,8 +126,7 @@ it('refreshes undo receipts after a deletion completes within one render batch',
 
 it('connects Windows Ctrl+Z, menu and help to the same receipt confirmation while preserving input undo', async () => {
   vi.mocked(fileShortcutPlatform).mockReturnValue('other');
-  const platform: PlatformInfo = { os: 'windows', features: { trashUndo: true, nativeFileClipboard: true,
-    openWith: true, currentFolderManager: true, currentFolderTerminal: true } };
+  const platform = platformInfoFixture('windows');
   const { mutationClient, operationClient } = setup();
   const client = { ...mutationClient, getPlatformInfo: vi.fn(async () => ({ ok: true as const, data: platform })) };
   renderCommander(createFixturePanelDataSource(), client, operationClient);

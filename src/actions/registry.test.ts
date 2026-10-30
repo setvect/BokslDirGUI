@@ -2,6 +2,7 @@ import { requiredActionIdsFromParity } from '../verification/featureContracts';
 import parityMatrix from '../../docs/implementation/tui-parity-matrix.json';
 import { describe, expect, it } from 'vitest';
 import { COMMANDS } from '../tauri/commands';
+import { platformInfoFixture } from '../ui/testing/clientStubs';
 import {
   ACTIONS,
   ACTION_BY_ID,
@@ -293,8 +294,7 @@ it('uses backend feature availability even when keyboard presentation is macOS',
 
 
 it('shows supported Windows desktop actions consistently with backend capabilities', () => {
-  const platformInfo = { os: 'windows', features: { openWith: true, currentFolderManager: true,
-    currentFolderTerminal: true, nativeFileClipboard: false, trashUndo: false } };
+  const platformInfo = platformInfoFixture('windows', { nativeFileClipboard: false, trashUndo: false });
   const go = actionsForMenu('Go', 'other', platformInfo).map(action => action.id);
   expect(go).toContain('external.openCurrentInFileManager');
   expect(go).toContain('external.openCurrentInTerminal');

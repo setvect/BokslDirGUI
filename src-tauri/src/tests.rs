@@ -19,33 +19,21 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering as AtomicOrdering;
 use std::time::Duration;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 
 use std::fs::File;
 use std::io::Write;
 
-static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
-pub(super) static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 struct TempFixture {
     root: PathBuf,
+    _dir: crate::test_util::TempDir,
 }
 
 impl TempFixture {
     fn new() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock must be after epoch")
-            .as_nanos();
-        let counter = FIXTURE_COUNTER.fetch_add(1, AtomicOrdering::Relaxed);
-        let root = env::temp_dir().join(format!(
-            "boksldir-gui-navigation-{}-{nonce}-{counter}",
-            std::process::id()
-        ));
+        let dir = crate::test_util::TempDir::new("navigation");
+        let root = dir.path().to_path_buf();
         fs::create_dir_all(root.join("folder")).expect("fixture folder should be created");
         let mut file =
             File::create(root.join("alpha.txt")).expect("fixture file should be created");
@@ -53,13 +41,7 @@ impl TempFixture {
             .expect("fixture file should be written");
         File::create(root.join("archive.7z")).expect("archive fixture should be created");
         File::create(root.join(".hidden")).expect("hidden fixture should be created");
-        Self { root }
-    }
-}
-
-impl Drop for TempFixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
+        Self { root, _dir: dir }
     }
 }
 
@@ -220,13 +202,9 @@ fn get_metadata_counts_nested_regular_files_and_subdirectories() {
 #[test]
 fn get_metadata_does_not_follow_links_or_count_sockets() {
     use std::os::unix::net::UnixListener;
-    let short_root = env::temp_dir().join(format!(
-        "bdm-{}-{}",
-        std::process::id(),
-        FIXTURE_COUNTER.fetch_add(1, AtomicOrdering::Relaxed)
-    ));
-    fs::create_dir(&short_root).unwrap();
-    let fixture = TempFixture { root: short_root };
+    // 소켓 경로 길이 제한(macOS 104자) 안에 들도록 짧은 이름 사용.
+    let temp = crate::test_util::TempDir::new("bdm");
+    let fixture = TempFixture { root: temp.path().to_path_buf(), _dir: temp };
     let root = fixture.root.join("folder");
     let outside = fixture.root.join("outside");
     fs::create_dir(&root).unwrap();
@@ -689,7 +667,7 @@ fn start_delete_permanently_removes_confirmed_targets() {
 
 #[test]
 fn start_delete_trash_moves_without_permanent_fallback() {
-    let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     let trash_dir = fixture.root.join("trash-fixture");
     fs::create_dir_all(&trash_dir).expect("trash fixture should be created");
@@ -703,7 +681,6 @@ fn start_delete_trash_moves_without_permanent_fallback() {
         None,
     )
     .expect("trash delete should start");
-    env::remove_var("BOKSLDIRGUI_TRASH_DIR");
 
     assert_eq!(started.kind, OperationKind::Trash);
     assert!(!source.exists());
@@ -722,7 +699,7 @@ fn start_delete_trash_moves_without_permanent_fallback() {
 
 #[test]
 fn start_delete_trash_failure_keeps_source_without_permanent_fallback() {
-    let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     let invalid_trash = fixture.root.join("not-a-trash-directory");
     fs::write(&invalid_trash, b"file blocks trash directory")
@@ -737,7 +714,6 @@ fn start_delete_trash_failure_keeps_source_without_permanent_fallback() {
         None,
     )
     .expect("trash operation should be accepted and report failure by summary event");
-    env::remove_var("BOKSLDIRGUI_TRASH_DIR");
 
     assert_eq!(started.kind, OperationKind::Trash);
     assert!(
@@ -781,7 +757,7 @@ fn cross_device_error_detection_supports_move_fallback_policy() {
 
 #[test]
 fn load_and_save_settings_persist_bookmarks_and_layout() {
-    let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     let settings_path = fixture.root.join("settings/settings.json");
     env::set_var("BOKSLDIRGUI_SETTINGS_PATH", &settings_path);
@@ -831,12 +807,11 @@ fn load_and_save_settings_persist_bookmarks_and_layout() {
         .iter()
         .any(|bookmark| bookmark.id == "root"));
 
-    env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
 }
 
 #[test]
 fn workspace_tabs_and_window_round_trip_and_reject_invalid_indices() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     env::set_var("BOKSLDIRGUI_SETTINGS_PATH", fixture.root.join("workspace.json"));
     let tab = serde_json::json!({ "path": "/saved", "sort": { "field": "size", "direction": "desc", "directoriesFirst": true },
@@ -858,12 +833,11 @@ fn workspace_tabs_and_window_round_trip_and_reject_invalid_indices() {
     let compact = save_settings(serde_json::json!({ "window": { "width": 944, "height": 453, "maximized": false } })).unwrap();
     assert_eq!(load_settings().unwrap().window, compact.window);
     assert!(save_settings(serde_json::json!({ "window": { "height": 399 } })).is_err());
-    env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
 }
 
 #[test]
 fn save_settings_rejects_invalid_layout_ratio() {
-    let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     env::set_var(
         "BOKSLDIRGUI_SETTINGS_PATH",
@@ -875,7 +849,6 @@ fn save_settings_rejects_invalid_layout_ratio() {
     }))
     .expect_err("invalid layout ratio should fail");
 
-    env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
     assert_eq!(error.code, "invalid_settings");
     assert_eq!(
         error
@@ -887,7 +860,7 @@ fn save_settings_rejects_invalid_layout_ratio() {
 
 #[test]
 fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() {
-    let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     shell_command::reset_clock_for_test();
     env::set_var(
@@ -955,14 +928,13 @@ fn shell_command_is_disabled_by_default_and_uses_one_shot_tokens_when_enabled() 
         Some(preview.confirm_token),
     )
     .expect_err("shell confirm token must be one-shot");
-    env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
     assert_eq!(reused.code, "invalid_token");
     shell_command::reset_clock_for_test();
 }
 
 #[test]
 fn shell_command_confirm_token_expires_after_ttl() {
-    let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     shell_command::reset_clock_for_test();
     env::set_var(
@@ -991,7 +963,6 @@ fn shell_command_confirm_token_expires_after_ttl() {
     .expect_err("expired shell confirm token must be rejected");
 
     shell_command::reset_clock_for_test();
-    env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
     assert_eq!(expired.code, "invalid_token");
     assert_eq!(expired.message_key, "errors.shellConfirmationInvalid");
     assert!(expired
@@ -1008,7 +979,7 @@ fn external_open_commands_support_dry_run() {
     fn terminal(path: String) -> crate::contracts::CommandResult<crate::contracts::ActionResult> {
         tauri::async_runtime::block_on(open_current_in_terminal(path))
     }
-    let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     let source = fixture.root.join("alpha.txt");
     env::set_var(
@@ -1042,13 +1013,11 @@ fn external_open_commands_support_dry_run() {
         assert_eq!(missing_error.code, "not_found");
     }
 
-    env::remove_var("BOKSLDIRGUI_EXTERNAL_DRY_RUN");
-    env::remove_var("BOKSLDIRGUI_SETTINGS_PATH");
 }
 
 #[test]
 fn archive_zip_create_list_extract_round_trip_uses_relative_entry_names() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     if !command_available("zip") || !command_available("unzip") {
         report_missing_provider("zip/unzip");
         return;
@@ -1283,7 +1252,7 @@ fn archive_zip_create_list_extract_round_trip_uses_relative_entry_names() {
 
 #[test]
 fn archive_required_formats_create_list_and_extract_round_trip() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     if !command_available("zip") || !command_available("unzip") {
         report_missing_provider("zip/unzip");
         return;
@@ -1345,7 +1314,7 @@ fn archive_required_formats_create_list_and_extract_round_trip() {
 
 #[test]
 fn archive_listing_limit_reports_truncation() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     if !command_available("zip") || !command_available("unzip") {
         report_missing_provider("zip/unzip");
         return;
@@ -1375,7 +1344,7 @@ fn archive_listing_limit_reports_truncation() {
 
 #[test]
 fn archive_password_round_trip_and_unsafe_entry_guards() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     if !command_available("zip") || !command_available("unzip") {
         report_missing_provider("zip/unzip");
@@ -1478,11 +1447,8 @@ fn archive_password_round_trip_and_unsafe_entry_guards() {
 
 #[test]
 fn external_archive_provider_is_killed_when_operation_is_cancelled() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
-    let Some((result, elapsed)) = operation::external_archive_command_cancel_for_test() else {
-        report_missing_provider("sleep");
-        return;
-    };
+    let _env_guard = crate::test_util::lock_env();
+    let (result, elapsed) = operation::external_archive_command_cancel_for_test();
     let error = result.expect_err("cancelled external provider should return cancellation");
     assert_eq!(error.code, "operation_cancelled");
     assert!(
@@ -1496,7 +1462,7 @@ fn external_archive_provider_is_killed_when_operation_is_cancelled() {
 fn archive_extract_preflight_listing_provider_is_killed_when_cancelled() {
     use std::os::unix::fs::PermissionsExt;
 
-    let _env_guard = TEST_ENV_MUTEX.lock().expect("test env mutex should lock");
+    let _env_guard = crate::test_util::lock_env();
     let fixture = TempFixture::new();
     let listing_provider = if cfg!(target_os = "macos") {
         "tar"
@@ -1528,11 +1494,6 @@ fn archive_extract_preflight_listing_provider_is_killed_when_cancelled() {
 
     let (result, elapsed) = operation::archive_entry_listing_cancel_for_test(archive);
 
-    match old_path {
-        Some(path) => env::set_var("PATH", path),
-        None => env::remove_var("PATH"),
-    }
-    env::remove_var("BOKSLDIRGUI_TEST_7ZIP");
     let error = result.expect_err("cancelled archive listing should return cancellation");
     assert_eq!(error.code, "operation_cancelled");
     assert!(
@@ -1543,7 +1504,7 @@ fn archive_extract_preflight_listing_provider_is_killed_when_cancelled() {
 
 #[test]
 fn archive_7z_slt_parser_preserves_spaces_and_unsafe_paths() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     let paths = archive::parse_7z_slt_paths_for_test(
         b"Path = fixture.7z\nType = 7z\n----------\nPath = dir/my file.txt\nSize = 5\nPath = ../escape file.txt\nSize = 1\n",
     );
@@ -1620,7 +1581,7 @@ fn archive_listing_parsers_keep_file_metadata_when_available() {
 
 #[test]
 fn archive_7z_provider_lists_real_fixture_when_available() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     let Some(binary) = archive::seven_zip_binary_for_test() else {
         report_missing_provider("7z/7zz");
         return;
@@ -1701,7 +1662,7 @@ fn archive_7z_provider_lists_real_fixture_when_available() {
 
 #[test]
 fn archive_7z_password_and_large_listing_when_provider_is_available() {
-    let _env_guard = TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     let Some(_binary) = archive::seven_zip_binary_for_test() else {
         report_missing_provider("7z/7zz");
         return;

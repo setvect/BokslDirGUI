@@ -4,9 +4,10 @@ import { expect, it, vi } from 'vitest';
 import { useRuntimePlatform } from './useRuntimePlatform';
 import type { PlatformInfo } from '../domain/types';
 import type { SafeMutationClient } from '../tauri/commanderClients';
+import { mutationClientStub } from './testing/clientStubs';
 
 const windows: PlatformInfo = { os: 'windows', features: { openWith: false, currentFolderManager: false, currentFolderTerminal: false, nativeFileClipboard: false, trashUndo: false } };
-const client = (getPlatformInfo: SafeMutationClient['getPlatformInfo']): SafeMutationClient => ({ getPlatformInfo, createDir: vi.fn(), renameEntry: vi.fn() });
+const client = (getPlatformInfo: SafeMutationClient['getPlatformInfo']): SafeMutationClient => mutationClientStub({ getPlatformInfo });
 it('loads backend capabilities and rejects a late result from the previous client', async () => {
   let finish!: (value: { ok: true; data: PlatformInfo }) => void;
   const first = client(() => new Promise(resolve => { finish = resolve; }));

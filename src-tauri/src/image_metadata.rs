@@ -150,19 +150,12 @@ mod tests {
     use std::fs::{self, File};
     use std::io::Cursor;
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    struct Fixture(PathBuf);
+    struct Fixture(PathBuf, #[allow(dead_code)] crate::test_util::TempDir); // 삭제는 TempDir Drop이 담당
     impl Fixture {
         fn new() -> Self {
-            static NEXT: AtomicUsize = AtomicUsize::new(0);
-            let root = std::env::temp_dir().join(format!(
-                "boksldir-photo-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            fs::create_dir_all(&root).unwrap();
-            Self(root)
+            let dir = crate::test_util::TempDir::new("photo");
+            Self(dir.path().to_path_buf(), dir)
         }
         fn write(&self, name: &str, bytes: &[u8]) -> PathBuf {
             let path = self.0.join(name);
@@ -170,12 +163,6 @@ mod tests {
             path
         }
     }
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
     fn photo_fields() -> Vec<Field> {
         vec![
             (Tag::Make, Value::Ascii(vec![b"Test Camera".to_vec()])),

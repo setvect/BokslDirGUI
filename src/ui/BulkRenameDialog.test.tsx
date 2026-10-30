@@ -8,6 +8,7 @@ import { testEntry } from './testing/fileEntryFixture';
 import { commanderKeyboardOwners } from './keyboardOwnership';
 import { useOperationStore } from '../operations/operationStore';
 import { createFixturePanelDataSource } from './panelDataSource';
+import { mutationClientStub, operationClientStub } from './testing/clientStubs';
 import { renderCommander } from './testing/commanderTestSupport';
 import './testing/commanderTestSetup';
 afterEach(cleanup);
@@ -16,7 +17,7 @@ const row: RenamePreview = { item: { source: source.path, newName: 'new.json', s
 it('requires a current conflict-free preview, owns input keys, and submits only the reviewed plan once', async () => {
   const user = userEvent.setup();
   let resolve!: (value: { ok: true; data: RenamePreview[] }) => void;
-  const client = { createDir: vi.fn(), renameEntry: vi.fn(), previewBulkRename: vi.fn(() => new Promise<{ ok: true; data: RenamePreview[] }>(done => { resolve = done; })) };
+  const client = mutationClientStub({ previewBulkRename: vi.fn(() => new Promise<{ ok: true; data: RenamePreview[] }>(done => { resolve = done; })) });
   const onConfirm = vi.fn();
   render(<BulkRenameDialog sources={[source]} language="ko" client={client} onClose={vi.fn()} onConfirm={onConfirm} />);
   expect(commanderKeyboardOwners()).toContain('bulk-rename');
@@ -37,7 +38,7 @@ it('requires a current conflict-free preview, owns input keys, and submits only 
 });
 it('ignores a stale preview response after the rules change', async () => {
   let stale!: (value: { ok: true; data: RenamePreview[] }) => void;
-  const client = { createDir: vi.fn(), renameEntry: vi.fn(), previewBulkRename: vi.fn(() => new Promise<{ ok: true; data: RenamePreview[] }>(done => { stale = done; })) };
+  const client = mutationClientStub({ previewBulkRename: vi.fn(() => new Promise<{ ok: true; data: RenamePreview[] }>(done => { stale = done; })) });
   render(<BulkRenameDialog sources={[source]} language="ko" client={client} onClose={vi.fn()} onConfirm={vi.fn()} />);
   await waitFor(() => expect(client.previewBulkRename).toHaveBeenCalledOnce());
   const first = stale;
@@ -48,10 +49,10 @@ it('ignores a stale preview response after the rules change', async () => {
 });
 it('opens from the file menu and runs through the common operation store with cancellation', async () => {
   const user = userEvent.setup();
-  const client = { createDir: vi.fn(), renameEntry: vi.fn(), previewBulkRename: vi.fn(async ({ sources }: { sources: string[] }) => ({ ok: true as const,
-    data: sources.map(source => ({ ...row, item: { ...row.item, source } })) })) };
-  const operations = { startCopy: vi.fn(), startMove: vi.fn(), startDelete: vi.fn(), resolveConflict: vi.fn(),
-    startBulkRename: vi.fn(async () => ({ ok: true as const, data: { operationId: 'bulk-op', kind: 'rename' as const, state: 'queued' as const } })), cancelOperation: vi.fn(async () => ({ ok: true as const, data: { operationId: 'bulk-op', state: 'cancelling' as const } })) };
+  const client = mutationClientStub({ previewBulkRename: vi.fn(async ({ sources }: { sources: string[] }) => ({ ok: true as const,
+    data: sources.map(source => ({ ...row, item: { ...row.item, source } })) })) });
+  const operations = operationClientStub({
+    startBulkRename: vi.fn(async () => ({ ok: true as const, data: { operationId: 'bulk-op', kind: 'rename' as const, state: 'queued' as const } })), cancelOperation: vi.fn(async () => ({ ok: true as const, data: { operationId: 'bulk-op', state: 'cancelling' as const } })) });
   renderCommander(createFixturePanelDataSource(), client, operations);
   await user.click(screen.getByRole('button', { name: '파일(F)' }));
   await user.click(screen.getByRole('menuitem', { name: '다중 이름 변경' }));

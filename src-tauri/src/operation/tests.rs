@@ -25,17 +25,11 @@ use super::process::run_external_command_capture_observed;
 use super::runtime::{finish_operation, next_operation_id, register_operation, OperationStats};
 use super::transfer::{run_copy, run_move};
 
-struct Fixture(PathBuf);
+struct Fixture(PathBuf, #[allow(dead_code)] crate::test_util::TempDir); // 삭제는 TempDir Drop이 담당
 impl Fixture {
     fn new() -> Self {
-        let root = env::temp_dir().join(next_operation_id(OperationKind::Copy));
-        fs::create_dir(&root).unwrap();
-        Self(root)
-    }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        let dir = crate::test_util::TempDir::new("operation");
+        Self(dir.path().to_path_buf(), dir)
     }
 }
 
@@ -84,7 +78,7 @@ fn windows_archive_names_reject_ads_devices_and_lossy_normalization() {
 #[test]
 fn seven_zip_preserves_literal_names_and_selected_extraction() {
     use super::archive_ops::{run_7z_create_observed, run_7z_extract};
-    let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     if crate::archive_provider::seven_zip().is_none() {
         crate::tests::report_missing_provider("7z/7zz");
         return;
@@ -125,7 +119,7 @@ fn seven_zip_preflight_rejects_symbolic_and_hard_link_records() {
 #[test]
 fn seven_zip_real_symlink_archive_never_writes_through_the_link() {
     use std::os::unix::fs::symlink;
-    let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     let Some(binary) = crate::archive_provider::seven_zip() else {
         crate::tests::report_missing_provider("7z/7zz");
         return;
@@ -175,7 +169,7 @@ fn external_command_observer_receives_output_before_process_exit() {
 
 #[test]
 fn zip_create_reports_processed_items_before_publication() {
-    let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     if !crate::archive_provider::zip_available() {
         crate::tests::report_missing_provider("zip");
         return;
@@ -440,7 +434,7 @@ fn archive_extract_rejects_escaping_strip_prefix_before_creating_target() {
 
 #[test]
 fn archive_skip_does_not_count_as_success() {
-    let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     if !crate::archive_provider::zip_available() {
         crate::tests::report_missing_provider("zip/unzip");
         return;
@@ -542,11 +536,10 @@ fn recursive_scan_and_delete_observe_cancellation() {
 
 #[test]
 fn settings_save_preserves_corrupt_file_and_serializes_patches() {
-    let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     let fixture = Fixture::new();
     let path = fixture.0.join("settings.json");
     fs::write(&path, b"{corrupt user settings").unwrap();
-    let old = env::var_os("BOKSLDIRGUI_SETTINGS_PATH");
     env::set_var("BOKSLDIRGUI_SETTINGS_PATH", &path);
     let failed = settings_service::save_settings(serde_json::json!({"theme": "light"}));
     let contents = fs::read(&path).unwrap();
@@ -557,10 +550,6 @@ fn settings_save_preserves_corrupt_file_and_serializes_patches() {
         thread::spawn(|| settings_service::save_settings(serde_json::json!({"language": "en"})));
     let outcomes = (a.join().unwrap(), b.join().unwrap());
     let saved = settings_service::load_settings();
-    match old {
-        Some(value) => env::set_var("BOKSLDIRGUI_SETTINGS_PATH", value),
-        None => env::remove_var("BOKSLDIRGUI_SETTINGS_PATH"),
-    }
     assert!(failed.is_err());
     assert_eq!(contents, b"{corrupt user settings");
     assert!(outcomes.0.is_ok() && outcomes.1.is_ok());
@@ -573,7 +562,7 @@ fn settings_save_preserves_corrupt_file_and_serializes_patches() {
 #[test]
 fn failing_archive_provider_never_publishes_partial_create_or_add() {
     use std::os::unix::fs::PermissionsExt;
-    let _env_guard = crate::tests::TEST_ENV_MUTEX.lock().unwrap();
+    let _env_guard = crate::test_util::lock_env();
     if !crate::archive_provider::zip_available() {
         crate::tests::report_missing_provider("zip/unzip");
         return;
@@ -611,8 +600,6 @@ fn failing_archive_provider_never_publishes_partial_create_or_add() {
         "new-folder".into(),
         ConflictDecision::AllOverwrite,
     );
-    env::set_var("PATH", old_path);
-    env::remove_var("BOKSLDIRGUI_TEST_7ZIP");
     assert_eq!(created.state, OperationState::Failed);
     assert_eq!(added.state, OperationState::Failed);
     assert!(!created_path.exists());

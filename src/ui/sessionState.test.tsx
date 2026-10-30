@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from './settingsModel';
 import { DEFAULT_SORT, createDirectoryListing } from './panelState';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { normalizeSavedTabs } from './sessionState';
+import { mutationClientStub } from './testing/clientStubs';
 import type { ListDirInput, TauriResult } from '../tauri/client';
 import type { DirectoryListing } from '../domain/types';
 import { usePanelNavigation } from './usePanelNavigation';
@@ -19,7 +20,7 @@ const setup = (settings: Settings) => {
     dataSource, settings, settingsLoaded: true,
     initialFocusIndex: undefined, initialSelectedPaths: undefined,
     setDirectoryComparison: vi.fn(), setStatusMessage: vi.fn(), statusText: COMMANDER_STATUS_TEXT.ko,
-    shellRef: { current: null }, mutationClient: { createDir: vi.fn(), renameEntry: vi.fn() },
+    shellRef: { current: null }, mutationClient: mutationClientStub(),
     runtimeBackendAvailable: true, setArchivePasswordRequest: vi.fn(), saveSettingsPatch: vi.fn(async () => {}),
   };
   return { runtime, dataSource };
