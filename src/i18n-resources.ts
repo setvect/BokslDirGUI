@@ -47,6 +47,9 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.remoteConnectionLost': '원격 연결이 끊어졌습니다.',
     'errors.remoteOperationUnsupported': '원격 서버가 이 작업을 지원하지 않습니다.',
     'errors.remoteOperationFailed': '원격 작업을 완료하지 못했습니다.',
+    'errors.remoteMixedLocations': '서로 다른 원격 서버의 항목을 한 작업으로 처리할 수 없습니다.',
+    'errors.remoteInvalidMode': '권한 값은 0000부터 7777 사이의 8진수여야 합니다.',
+    'errors.remoteTrashUnsupported': '원격 항목은 휴지통으로 보낼 수 없습니다. 영구 삭제를 사용하세요.',
     'errors.commandNotConnected': '이 작업은 아직 실행할 수 없습니다.',
     'errors.tauriInvokeFailed': '앱 명령 실행에 실패했습니다.',
     'errors.confirmationRequired': '표시된 확인 문구를 정확히 입력하세요.',
@@ -127,6 +130,9 @@ export const I18N_RESOURCES: Record<SupportedLanguage, Record<string, string>> =
     'errors.remoteConnectionLost': 'The remote connection was lost.',
     'errors.remoteOperationUnsupported': 'The remote server does not support this operation.',
     'errors.remoteOperationFailed': 'The remote operation could not be completed.',
+    'errors.remoteMixedLocations': 'Items from different remote servers cannot be handled in one operation.',
+    'errors.remoteInvalidMode': 'Permissions must be an octal value from 0000 to 7777.',
+    'errors.remoteTrashUnsupported': 'Remote items cannot be moved to the Trash. Use permanent delete.',
     'errors.commandNotConnected': 'This action cannot be run yet.',
     'errors.tauriInvokeFailed': 'The app command failed.',
     'errors.confirmationRequired': 'Type the displayed confirmation phrase exactly.',
@@ -199,6 +205,8 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Edit: '편집',
     View: '보기',
     Go: '이동',
+    Remote: '원격',
+    'Change Permissions…': '권한 변경…',
     Archive: '압축',
     Tools: '도구',
     Settings: '설정',
@@ -284,6 +292,7 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Edit: 'Edit',
     View: 'View',
     Go: 'Go',
+    Remote: 'Remote',
     Archive: 'Archive',
     Tools: 'Tools',
     Settings: 'Settings',
@@ -398,6 +407,7 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'file.mkdir': '새 폴더',
     'file.undoTrash': '휴지통으로 이동 취소',
     'file.bulkRename': '다중 이름 변경',
+    'remote.chmod': '권한 변경…',
     'file.rename': '이름 변경',
     'file.properties': '파일 정보',
     'file.quickView': '빠른 보기',
@@ -457,6 +467,7 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'file.mkdir': 'New Folder',
     'file.undoTrash': 'Undo Move to Trash',
     'file.bulkRename': 'Bulk Rename',
+    'remote.chmod': 'Change Permissions…',
     'file.rename': 'Rename',
     'file.properties': 'File Info',
     'file.quickView': 'Quick View',
@@ -1172,6 +1183,7 @@ export const OPERATION_DIALOG_TITLES = {
     externalOpenDefault: '기본 앱으로 열기',
     externalReveal: '파일 위치 열기',
     shellCommand: '쉘 명령 실행',
+    remoteChmod: '권한 변경',
   },
   en: {
     copy: 'Copy',
@@ -1188,6 +1200,7 @@ export const OPERATION_DIALOG_TITLES = {
     externalOpenDefault: 'Open with Default App',
     externalReveal: 'Reveal in File Manager',
     shellCommand: 'Run Shell Command',
+    remoteChmod: 'Change Permissions',
   },
 } as const satisfies Record<SupportedLanguage, Record<OperationDialogKind, string>>;
 
@@ -1207,6 +1220,7 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     externalReveal: () => '선택한 항목의 위치를 파일 관리자에서 엽니다.',
     shellCommand: () => '현재 폴더에서 프로그램을 최대 5분 동안 실행합니다. 공백이 있는 인수는 따옴표로 감싸세요. 셸 문법을 쓰려면 sh, cmd.exe 또는 PowerShell을 명시하세요.',
     properties: () => '선택한 항목의 정보를 확인합니다.',
+    remoteChmod: (item) => `${item}의 원격 권한을 바꿉니다.`,
   },
   en: {
     copy: (item) => `Copy ${item} to the target location.`,
@@ -1223,6 +1237,7 @@ export const OPERATION_DIALOG_DESCRIPTIONS: Record<SupportedLanguage, Record<Ope
     externalReveal: () => 'Reveal the selected item in the file manager.',
     shellCommand: () => 'Run a program in the current folder for up to five minutes. Quote arguments containing spaces. Invoke sh, cmd.exe or PowerShell explicitly for shell syntax.',
     properties: () => 'Show information for the selected item.',
+    remoteChmod: (item) => `Change remote permissions of ${item}.`,
   },
 };
 
@@ -1242,6 +1257,7 @@ export const OPERATION_DIALOG_PRIMARY_LABELS = {
     externalOpenDefault: '기본 앱으로 열기',
     externalReveal: '파일 위치 열기',
     shellCommand: '실행',
+    remoteChmod: '권한 변경',
   },
   en: {
     copy: 'Copy',
@@ -1258,6 +1274,7 @@ export const OPERATION_DIALOG_PRIMARY_LABELS = {
     externalOpenDefault: 'Open',
     externalReveal: 'Reveal',
     shellCommand: 'Run',
+    remoteChmod: 'Change Permissions',
   },
 } as const satisfies Record<SupportedLanguage, Record<OperationDialogKind, string>>;
 
@@ -1303,6 +1320,7 @@ export const OPERATION_KIND_LABELS = {
     archiveExtract: '압축 해제',
     archiveAdd: '압축 파일에 복사',
     shellCommand: '명령 실행',
+    chmod: '권한 변경',
   },
   en: {
     copy: 'Copy',
@@ -1316,6 +1334,7 @@ export const OPERATION_KIND_LABELS = {
     archiveExtract: 'Extract Archive',
     archiveAdd: 'Copy into Archive',
     shellCommand: 'Run Command',
+    chmod: 'Change Permissions',
   },
 } as const;
 
@@ -1416,6 +1435,23 @@ export const OPEN_WITH_TEXT = {
 export const BULK_RENAME_TEXT = {
   ko: { title: '다중 이름 변경', find: '찾을 문자열', replacement: '바꿀 문자열', prefix: '접두사', numbering: '번호 붙이기', start: '시작 번호', padding: '번호 자릿수', extension: '확장자 유지', before: '현재 이름', after: '변경할 이름', loading: '이름과 충돌을 확인하는 중…', apply: '변경 적용', cancel: '취소', note: '표시 순서대로 이름을 변경합니다. 기존 파일은 덮어쓰지 않으며, 취소하면 이미 변경한 이름은 유지됩니다.', unchanged: '변경 없음', failed: '미리보기를 불러오지 못했습니다.' },
   en: { title: 'Bulk Rename', find: 'Find text', replacement: 'Replace with', prefix: 'Prefix', numbering: 'Add numbering', start: 'Start number', padding: 'Number digits', extension: 'Preserve extension', before: 'Current name', after: 'New name', loading: 'Checking names and conflicts…', apply: 'Apply changes', cancel: 'Cancel', note: 'Names change in the displayed order. Existing files are never overwritten. Cancellation keeps changes already completed.', unchanged: 'Unchanged', failed: 'Unable to load preview.' },
+};
+
+export const REMOTE_CHMOD_TEXT = {
+  ko: {
+    title: '권한 변경', octal: '8진수 권한', owner: '소유자', group: '그룹', others: '기타',
+    read: '읽기', write: '쓰기', execute: '실행', recursive: '하위 항목에도 적용',
+    scopeAll: '파일과 폴더', scopeFiles: '파일만', scopeDirectories: '폴더만',
+    note: '선택한 원격 항목의 권한을 바꿉니다. 하위 항목에 적용하면 범위에 맞는 항목만 바꾸고 심볼릭 링크는 건너뜁니다.',
+    invalid: '0000부터 7777 사이의 8진수를 입력하세요.', apply: '적용', cancel: '취소', selected: '대상',
+  },
+  en: {
+    title: 'Change Permissions', octal: 'Octal mode', owner: 'Owner', group: 'Group', others: 'Others',
+    read: 'Read', write: 'Write', execute: 'Execute', recursive: 'Apply to contents',
+    scopeAll: 'Files and folders', scopeFiles: 'Files only', scopeDirectories: 'Folders only',
+    note: 'Changes permissions of the selected remote items. When applied to contents, only matching items change and symbolic links are skipped.',
+    invalid: 'Enter an octal value from 0000 to 7777.', apply: 'Apply', cancel: 'Cancel', selected: 'Targets',
+  },
 };
 
 export const FILE_INFO_TEXT = {

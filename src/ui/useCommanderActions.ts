@@ -6,7 +6,8 @@ import {
   labelForAction,
   type ActionId
 } from '../actions/registry';
-import type { AppError, PlatformInfo, RenameItem, FileEntry, FilePreview, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
+import type { AppError, ChmodScope, PlatformInfo, RenameItem, FileEntry, FilePreview, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
+import { isRemotePath } from '../domain/remotePath';
 import { OPERATION_DIALOG_TITLES, type CommanderStatusText } from '../i18n-resources';
 import {
   formatUserErrorMessage
@@ -120,6 +121,19 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
       },
     });
   };
+  const [remoteChmod, setRemoteChmod] = useState<{ panelId: PanelId; sources: FileEntry[]; workingDir: string } | null>(null);
+  const confirmRemoteChmod = (input: { mode: number; recursive: boolean; scope: ChmodScope }) => {
+    const snapshot = remoteChmod;
+    const startRemoteChmod = dependencies.operationClient.startRemoteChmod;
+    if (!snapshot || dependencies.operationBusy || !startRemoteChmod) return;
+    setRemoteChmod(null);
+    void dependencies.startLongRunningOperation({
+      action: ACTION_BY_ID.get('remote.chmod')!, ...snapshot, targetDir: snapshot.workingDir,
+      longRunningExecutor: () => startRemoteChmod({ targets: snapshot.sources.map((source) => source.path), ...input }),
+      cancelExecutor: operationCanceller(dependencies.operationClient),
+      onOperationSummary: (summary) => finishOperation(dependencies, 'remoteChmod', summary, dependencies.settings.language),
+    });
+  };
   const previewRequestRef = useRef(0);
   const [openWithEntry, setOpenWithEntry] = useState<FileEntry | null>(null);
 
@@ -198,8 +212,12 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
   };
 
   const handleAction = (request: ActionRequest): void => {
-    const { actionId, panelId: panelOverride = dependencies.activePanel, sources: sourceOverride,
+    const { actionId: requestedActionId, panelId: panelOverride = dependencies.activePanel, sources: sourceOverride,
       targetDir: targetDirOverride, sourceListing: sourceListingOverride, clipboardMoveSnapshot } = request;
+    // 원격 패널에는 휴지통이 없어 삭제 요청을 영구 삭제 확인 흐름으로 전환(FR-38.2)
+    const actionId: ActionId = requestedActionId === 'file.trash'
+      && isRemotePath((sourceListingOverride ?? dependencies.panelState[panelOverride].listing).path)
+      ? 'file.deletePermanent' : requestedActionId;
     const action = ACTION_BY_ID.get(actionId)!;
     if (!platformAllowsAction(actionId, dependencies.platformInfo)) return;
     if (actionId === 'menu.open') {
@@ -247,6 +265,12 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     if (actionId === 'file.undoTrash') { openTrashUndo(panelOverride, panelListing.path); return; }
 
+    if (actionId === 'remote.chmod') {
+      if (!sources.length || dependencies.operationBusy || !dependencies.runtimeBackendAvailable
+        || !isRemotePath(panelListing.path) || !dependencies.operationClient.startRemoteChmod) return;
+      setRemoteChmod({ sources: [...sources], panelId: panelOverride, workingDir: panelListing.path });
+      return;
+    }
     if (actionId === 'file.bulkRename') {
       if (!sources.length || dependencies.operationBusy || !dependencies.runtimeBackendAvailable
         || isArchiveVirtualPath(panelListing.path) || sources.some(entry => isArchiveVirtualPath(entry.path))
@@ -653,5 +677,5 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     });
     dependencies.setStatusMessage(pending.status);
   };
-  return { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, handleAction, closeOverlays, resumeArchiveCopy, fileClipboard, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview };
+  return { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, remoteChmod, setRemoteChmod, confirmRemoteChmod, openWithEntry, handleAction, closeOverlays, resumeArchiveCopy, fileClipboard, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview };
 }

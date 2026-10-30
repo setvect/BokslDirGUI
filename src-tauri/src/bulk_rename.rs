@@ -10,13 +10,7 @@ pub(crate) fn preview(
     sources: Vec<String>,
     rules: RenameRules,
 ) -> CommandResult<Vec<RenamePreview>> {
-    if sources.is_empty()
-        || sources.len() > 10_000
-        || rules.padding > 9
-        || rules.start > 1_000_000_000
-    {
-        return Err(invalid(None));
-    }
+    validate_preview_input(&sources, &rules)?;
     let mut rows = Vec::new();
     for (index, raw) in sources.iter().enumerate() {
         let source = source_path(raw)?;
@@ -25,29 +19,7 @@ pub(crate) fn preview(
             .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| invalid(Some(&source)))?;
-        let split = if rules.preserve_extension && !metadata.is_dir() {
-            name.rfind('.').filter(|i| *i > 0)
-        } else {
-            None
-        };
-        let (stem, extension) = split
-            .map(|i| (&name[..i], &name[i..]))
-            .unwrap_or((name, ""));
-        let replaced = if rules.find.is_empty() {
-            stem.to_string()
-        } else {
-            stem.replace(&rules.find, &rules.replacement)
-        };
-        let number = if rules.numbering {
-            format!(
-                "_{:0width$}",
-                rules.start + index as u64,
-                width = rules.padding
-            )
-        } else {
-            String::new()
-        };
-        let new_name = format!("{}{replaced}{number}{extension}", rules.prefix);
+        let new_name = planned_name(name, metadata.is_dir(), &rules, index);
         rows.push(RenamePreview {
             changed: new_name != name,
             item: RenameItem {
@@ -64,6 +36,41 @@ pub(crate) fn preview(
         row.error = error;
     }
     Ok(rows)
+}
+
+/// 규칙으로 새 이름 계산(로컬·원격 공통): 찾아 바꾸기 → 접두사 → 번호, 확장자 보존 선택.
+pub(crate) fn planned_name(name: &str, is_dir: bool, rules: &RenameRules, index: usize) -> String {
+    let split = if rules.preserve_extension && !is_dir {
+        name.rfind('.').filter(|i| *i > 0)
+    } else {
+        None
+    };
+    let (stem, extension) = split
+        .map(|i| (&name[..i], &name[i..]))
+        .unwrap_or((name, ""));
+    let replaced = if rules.find.is_empty() {
+        stem.to_string()
+    } else {
+        stem.replace(&rules.find, &rules.replacement)
+    };
+    let number = if rules.numbering {
+        format!(
+            "_{:0width$}",
+            rules.start + index as u64,
+            width = rules.padding
+        )
+    } else {
+        String::new()
+    };
+    format!("{}{replaced}{number}{extension}", rules.prefix)
+}
+
+/// 미리보기 입력 상한: 로컬·원격 공통.
+pub(crate) fn validate_preview_input(sources: &[String], rules: &RenameRules) -> CommandResult<()> {
+    if sources.is_empty() || sources.len() > 10_000 || rules.padding > 9 || rules.start > 1_000_000_000 {
+        return Err(invalid(None));
+    }
+    Ok(())
 }
 
 pub(crate) fn validate_plan(items: &[RenameItem]) -> CommandResult<()> {

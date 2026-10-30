@@ -15,6 +15,9 @@ pub(crate) fn start(
     app: Option<&tauri::AppHandle>,
     items: Vec<RenameItem>,
 ) -> CommandResult<OperationStarted> {
+    if items.iter().any(|item| crate::remote::path::is_remote_path(&item.source)) {
+        return super::remote_ops::start_remote_bulk_rename(app, items);
+    }
     validate_plan(&items)?;
     launch_operation(app, OperationKind::Rename, None, move |app, operation_id| {
         run_rename(app, operation_id, &items, None)

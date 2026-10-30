@@ -2289,6 +2289,14 @@ html.is-file-dragging * {
   user-select: none !important;
 }
 
+.remote-chmod-dialog { width: min(520px, calc(100vw - 40px)); }
+.remote-chmod-targets { overflow-wrap: anywhere; color: var(--muted); }
+.remote-chmod-octal { display: flex; gap: 8px; align-items: center; }
+.remote-chmod-octal input { width: 6ch; font-family: inherit; }
+.remote-chmod-grid { border-collapse: collapse; margin: 8px 0; }
+.remote-chmod-grid th, .remote-chmod-grid td { padding: 2px 10px; text-align: center; }
+.remote-chmod-grid th[scope='row'] { text-align: left; }
+.remote-chmod-scope { display: flex; gap: 12px; flex-wrap: wrap; border: 0; padding: 0; margin: 6px 0; }
 .bulk-rename-dialog { top: 32px; width: min(1000px, calc(100vw - 40px)); max-height: calc(100vh - 64px); overflow-y: auto; }
 .bulk-rename-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .bulk-rename-fields label { min-width: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

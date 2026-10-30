@@ -464,3 +464,156 @@ fn remote_listing_reports_denied_folders_with_remote_paths() {
     assert_eq!(error.path.as_deref(), Some(format!("{}locked", root_url(&server)).as_str()));
     super::block_on(connection::disconnect(&connection.location));
 }
+
+fn summary_codes(summary: &crate::contracts::OperationSummary) -> Vec<&str> {
+    summary.errors.iter().map(|error| error.code.as_str()).collect()
+}
+
+#[test]
+fn remote_create_and_rename_follow_local_name_rules_without_overwrite() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-mutation");
+    std::fs::write(server.root().join("a.txt"), b"a").unwrap();
+    std::fs::write(server.root().join("keep.txt"), b"keep").unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let create = |name: &str| super::block_on(super::ops::create_dir(&root, name));
+    let rename = |path: &str, name: &str| super::block_on(super::ops::rename_entry(&format!("{root}{path}"), name));
+
+    let created = create(" 새 폴더 ").unwrap();
+    assert_eq!((created.name.as_str(), created.path.clone()), ("새 폴더", format!("{root}새 폴더")));
+    assert!(server.root().join("새 폴더").is_dir());
+    assert_eq!(create("새 폴더").unwrap_err().code, "already_exists");
+    for invalid in ["", " ", ".", "..", "a/b", r"a\b"] {
+        assert_eq!(create(invalid).unwrap_err().code, "invalid_name", "{invalid:?}");
+    }
+
+    assert_eq!(rename("a.txt", "keep.txt").unwrap_err().code, "already_exists");
+    assert_eq!(std::fs::read(server.root().join("keep.txt")).unwrap(), b"keep");
+    let renamed = rename("a.txt", "b.txt").unwrap();
+    assert_eq!(renamed.path, format!("{root}b.txt"));
+    // 대소문자만 바꾸는 이름 변경: 대소문자 무시 파일 시스템에서도 임시 이름을 거쳐 성공
+    assert_eq!(rename("b.txt", "B.txt").unwrap().name, "B.txt");
+    let names: Vec<String> = std::fs::read_dir(server.root()).unwrap().map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert!(names.contains(&"B.txt".to_string()) && !names.iter().any(|name| name.starts_with(".boksldir-rename")), "{names:?}");
+    assert_eq!(super::block_on(super::ops::rename_entry(&root, "x")).unwrap_err().code, "invalid_path");
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[test]
+fn remote_permanent_delete_removes_trees_and_protects_root_and_home() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-delete");
+    std::fs::create_dir_all(server.root().join("tree/sub")).unwrap();
+    std::fs::write(server.root().join("tree/a.txt"), b"12345").unwrap();
+    std::fs::write(server.root().join("tree/sub/b.txt"), b"678").unwrap();
+    std::fs::write(server.root().join("single.txt"), b"x").unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let delete = |targets: Vec<String>, mode| {
+        crate::operation::start_delete(None, targets, mode, Some("PERMANENT_DELETE"))
+    };
+    assert_eq!(delete(vec![format!("{root}tree")], crate::contracts::DeleteMode::Trash).unwrap_err().code, "unsupported");
+    assert_eq!(delete(vec![root.clone()], crate::contracts::DeleteMode::Permanent).unwrap_err().message_key, "errors.protectedPath");
+    let mixed = delete(vec![format!("{root}tree"), "sftp://other@127.0.0.1:1/x".into()], crate::contracts::DeleteMode::Permanent);
+    assert_eq!(mixed.unwrap_err().message_key, "errors.remoteMixedLocations");
+    let unconfirmed = crate::operation::start_delete(None, vec![format!("{root}tree")], crate::contracts::DeleteMode::Permanent, None);
+    assert_eq!(unconfirmed.unwrap_err().code, "confirmation_required");
+
+    let summary = crate::operation::run_remote_delete(None, "op-remote-delete-test", &[format!("{root}tree"), format!("{root}tree/sub"), format!("{root}single.txt")]);
+    assert_eq!(summary.state, crate::contracts::OperationState::Completed, "{:?}", summary.errors);
+    assert_eq!((summary.completed_files, summary.failed_files), (5, 0));
+    assert!(!server.root().join("tree").exists() && !server.root().join("single.txt").exists());
+
+    std::fs::create_dir(server.root().join("locked")).unwrap();
+    std::fs::write(server.root().join("locked/in.txt"), b"").unwrap();
+    server.faults().deny_path_prefix("/locked/in.txt".into());
+    let denied = crate::operation::run_remote_delete(None, "op-remote-delete-denied", &[format!("{root}locked")]);
+    assert_eq!(denied.state, crate::contracts::OperationState::Failed);
+    assert_eq!(summary_codes(&denied), ["permission_denied"]);
+    assert!(server.root().join("locked/in.txt").exists());
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[cfg(unix)]
+#[test]
+fn remote_permanent_delete_removes_links_without_following_them() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-delete-links");
+    let outside = TempDir::new("remote-delete-outside");
+    std::fs::write(outside.path().join("precious.txt"), b"keep").unwrap();
+    std::fs::create_dir(server.root().join("tree")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), server.root().join("tree/outside-link")).unwrap();
+    let connection = connected(&server, &dir);
+    let summary = crate::operation::run_remote_delete(None, "op-remote-delete-link", &[format!("{}tree", root_url(&server))]);
+    assert_eq!(summary.state, crate::contracts::OperationState::Completed, "{:?}", summary.errors);
+    assert_eq!(std::fs::read(outside.path().join("precious.txt")).unwrap(), b"keep");
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[cfg(unix)]
+#[test]
+fn remote_chmod_applies_selected_items_or_recursive_scope_without_touching_links() {
+    use std::os::unix::fs::PermissionsExt;
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-chmod");
+    std::fs::create_dir_all(server.root().join("tree/sub")).unwrap();
+    std::fs::write(server.root().join("tree/f.txt"), b"").unwrap();
+    std::fs::write(server.root().join("target.txt"), b"").unwrap();
+    std::fs::set_permissions(server.root().join("target.txt"), std::fs::Permissions::from_mode(0o644)).unwrap();
+    std::os::unix::fs::symlink(server.root().join("target.txt"), server.root().join("tree/link")).unwrap();
+    for path in ["tree", "tree/sub"] {
+        std::fs::set_permissions(server.root().join(path), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    std::fs::set_permissions(server.root().join("tree/f.txt"), std::fs::Permissions::from_mode(0o644)).unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let mode = |path: &str| std::fs::symlink_metadata(server.root().join(path)).unwrap().permissions().mode() & 0o7777;
+    let chmod = |mode: u32, recursive: bool, scope| crate::operation::run_remote_chmod(None, "op-remote-chmod-test", &[format!("{root}tree")], mode, recursive, scope);
+
+    let only_selected = chmod(0o750, false, crate::contracts::ChmodScope::All);
+    assert_eq!((only_selected.completed_files, mode("tree"), mode("tree/sub")), (1, 0o750, 0o755));
+    let directories = chmod(0o700, true, crate::contracts::ChmodScope::Directories);
+    assert_eq!(directories.state, crate::contracts::OperationState::Completed, "{:?}", directories.errors);
+    assert_eq!((mode("tree"), mode("tree/sub"), mode("tree/f.txt")), (0o700, 0o700, 0o644));
+    let files = chmod(0o600, true, crate::contracts::ChmodScope::Files);
+    assert_eq!((mode("tree"), mode("tree/f.txt"), mode("target.txt")), (0o700, 0o600, 0o644));
+    assert_eq!(files.completed_files, 1);
+    let invalid = crate::operation::start_remote_chmod(None, vec![format!("{root}tree")], 0o10000, false, crate::contracts::ChmodScope::All);
+    assert_eq!(invalid.unwrap_err().code, "invalid_mode");
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[test]
+fn remote_bulk_rename_previews_conflicts_and_applies_only_unchanged_sources() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-bulk-rename");
+    for name in ["a.txt", "b.txt", "new-b.txt", "c.txt"] {
+        std::fs::write(server.root().join(name), name.as_bytes()).unwrap();
+    }
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let rules = crate::contracts::RenameRules {
+        find: String::new(),
+        replacement: String::new(),
+        prefix: "new-".into(),
+        numbering: false,
+        start: 1,
+        padding: 0,
+        preserve_extension: true,
+    };
+    let sources = |names: &[&str]| names.iter().map(|name| format!("{root}{name}")).collect::<Vec<_>>();
+    let rows = super::block_on(super::bulk_rename::preview(sources(&["a.txt", "b.txt"]), rules.clone())).unwrap();
+    assert_eq!(rows[0].item.new_name, "new-a.txt");
+    assert!(rows[0].changed && rows[0].error.is_none());
+    assert_eq!(rows[1].error.as_ref().map(|error| error.code.as_str()), Some("already_exists"));
+
+    let rows = super::block_on(super::bulk_rename::preview(sources(&["a.txt", "c.txt"]), rules)).unwrap();
+    let items: Vec<_> = rows.iter().map(|row| row.item.clone()).collect();
+    std::fs::write(server.root().join("c.txt"), b"changed after preview").unwrap();
+    let stale = crate::operation::start_bulk_rename(None, items.clone());
+    assert_eq!(stale.unwrap_err().code, "source_changed");
+    crate::operation::start_bulk_rename(None, items[..1].to_vec()).unwrap();
+    assert!(server.root().join("new-a.txt").is_file() && !server.root().join("a.txt").exists());
+    super::block_on(connection::disconnect(&connection.location));
+}

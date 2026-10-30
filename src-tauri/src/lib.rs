@@ -109,7 +109,8 @@ pub fn run() {
             commands::remote_auth_cancel,
             commands::remote_trust_host_key,
             commands::remote_disconnect,
-            commands::remote_sessions
+            commands::remote_sessions,
+            commands::start_remote_chmod
         ])
         .run(context)
         .expect("failed to run BokslDirGUI Tauri application");

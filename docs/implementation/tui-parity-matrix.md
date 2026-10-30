@@ -90,6 +90,7 @@
 | `panel.compareDirectories` | GUI 듀얼 패널 편의 기능: 현재 좌우 목록의 이름·종류·크기·수정일 차이를 시각화 |
 | `file.clipboardPaste` | GUI 확장 기능: 복사 목록의 항목을 활성 패널 현재 폴더에 붙여넣기 |
 | `settings.themeMdir` | 사용자 요청의 Mdir 색상 테마 추가, 기존 설정 저장·복원 경로 사용 |
+| `remote.chmod` | 원격(SFTP) 항목 권한을 8진수·읽기/쓰기/실행 표시로 변경, 하위 항목 재귀 적용 범위 선택(FR-38.4) |
 <!-- END GENERATED:parity-gui-extensions -->
 
 ## 전체 matrix

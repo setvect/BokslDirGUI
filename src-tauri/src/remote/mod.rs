@@ -1,7 +1,9 @@
 //! SFTP 원격 파일 관리: 원격 경로, 연결·인증, 목록·파일 관리, 전송.
 //! 원격 요청은 전용 비동기 런타임에서 실행. 명령은 `run`, 동기 작업 스레드는 `block_on` 사용.
+pub(crate) mod bulk_rename;
 pub(crate) mod connection;
 pub(crate) mod listing;
+pub(crate) mod ops;
 pub(crate) mod path;
 #[cfg(test)]
 pub(crate) mod test_server;
@@ -36,7 +38,6 @@ pub(crate) async fn run<T: Send + 'static>(
 }
 
 /// 동기 작업 스레드에서 원격 요청 실행. 비동기 런타임 작업 스레드에서는 호출 금지.
-#[cfg(test)]
 pub(crate) fn block_on<F: Future>(future: F) -> F::Output {
     runtime().block_on(future)
 }

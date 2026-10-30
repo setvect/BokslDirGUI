@@ -14,6 +14,7 @@ export const DIALOG_DEFINITIONS = {
   externalOpenDefault: { executionMode: 'atomicCommand' },
   externalReveal: { executionMode: 'atomicCommand' },
   shellCommand: { executionMode: 'longRunningOperation', operationKind: 'shellCommand' },
+  remoteChmod: { executionMode: 'longRunningOperation', operationKind: 'chmod' },
 } as const;
 
 export type DialogKind = keyof typeof DIALOG_DEFINITIONS;

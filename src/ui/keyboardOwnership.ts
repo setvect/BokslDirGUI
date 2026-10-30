@@ -20,6 +20,7 @@ export type CommanderKeyboardOwner =
   | 'quick-preview'
   | 'open-with'
   | 'bulk-rename'
+  | 'remote-chmod'
   | 'shortcut-help'
   | 'help-search'
   | 'about-dialog'

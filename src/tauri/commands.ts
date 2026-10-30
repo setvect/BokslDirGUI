@@ -43,6 +43,7 @@ export const COMMANDS = {
   remoteTrustHostKey: 'remote_trust_host_key',
   remoteDisconnect: 'remote_disconnect',
   remoteSessions: 'remote_sessions',
+  startRemoteChmod: 'start_remote_chmod',
 } as const;
 
 export type TauriCommandName = (typeof COMMANDS)[keyof typeof COMMANDS];

@@ -145,6 +145,6 @@ describe('action context helpers', () => {
   });
 
   it('derives top-level menu roots from registry metadata', () => {
-    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Settings', 'Help']);
+    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Remote', 'Archive', 'Settings', 'Help']);
   });
 });

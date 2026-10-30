@@ -1,6 +1,7 @@
 import { ACTION_BY_ID, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope } from '../actions/registry';
 import { fileShortcutPlatform, shortcutPlatformForInfo, type FileShortcutPlatform } from '../domain/runtimePlatform';
 import type { FileEntry, PanelId, PlatformInfo } from '../domain/types';
+import { isRemotePath } from '../domain/remotePath';
 import { isArchiveVirtualPath } from './archiveVirtual';
 
 export interface ActionContextInput {
@@ -20,6 +21,7 @@ export interface ActionContextInput {
   operationBusy: boolean;
   backendAvailable?: boolean;
   activePathIsArchive?: boolean;
+  activePathIsRemote?: boolean;
 }
 
 interface ActionTargetPanel {
@@ -91,6 +93,7 @@ export const createActionContext = ({
   operationBusy,
   backendAvailable = true,
   activePathIsArchive = false,
+  activePathIsRemote = false,
 }: ActionContextInput): ActionContext => {
   const hasConcreteFocus = hasConcreteFocusOverride ?? Boolean(focusedEntry && !focusedEntry.isVirtual);
   return {
@@ -110,6 +113,7 @@ export const createActionContext = ({
     operationBusy,
     backendAvailable,
     activePathIsArchive,
+    activePathIsRemote,
   };
 };
 
@@ -136,6 +140,7 @@ export const createPanelActionContext = (
     clipboardCanMove: Boolean(shared.clipboardCanMove) && !activePathIsArchive,
     hasOppositePanel: true,
     activePathIsArchive,
+    activePathIsRemote: isRemotePath(panel.path),
   });
 };
 

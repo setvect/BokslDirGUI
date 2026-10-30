@@ -47,6 +47,13 @@ pub(crate) fn start_delete(
             true,
         ));
     }
+    // 원격 대상은 휴지통이 없어 영구 삭제만 허용(FR-38.2)
+    if targets.iter().any(|target| crate::remote::path::is_remote_path(target)) {
+        if mode != DeleteMode::Permanent {
+            return Err(AppError::new("unsupported", "errors.remoteTrashUnsupported", None, true));
+        }
+        return super::remote_ops::start_remote_delete(app, targets);
+    }
     let preflight_targets = collect_source_paths(&targets)?;
     for target in &preflight_targets {
         guard_delete_target(target)?;

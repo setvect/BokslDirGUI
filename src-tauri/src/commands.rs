@@ -111,13 +111,19 @@ pub(crate) fn list_locations() -> CommandResult<LocationList> {
 }
 
 #[tauri::command]
-pub(crate) fn create_dir(parent: String, name: String) -> CommandResult<FileEntry> {
-    mutation::create_dir(&parent, &name)
+pub(crate) async fn create_dir(parent: String, name: String) -> CommandResult<FileEntry> {
+    if is_remote_path(&parent) {
+        return crate::remote::run(async move { crate::remote::ops::create_dir(&parent, &name).await }).await;
+    }
+    run_blocking(Some(PathBuf::from(&parent)), move || mutation::create_dir(&parent, &name)).await
 }
 
 #[tauri::command]
-pub(crate) fn rename_entry(path: String, new_name: String) -> CommandResult<FileEntry> {
-    mutation::rename_entry(&path, &new_name)
+pub(crate) async fn rename_entry(path: String, new_name: String) -> CommandResult<FileEntry> {
+    if is_remote_path(&path) {
+        return crate::remote::run(async move { crate::remote::ops::rename_entry(&path, &new_name).await }).await;
+    }
+    run_blocking(Some(PathBuf::from(&path)), move || mutation::rename_entry(&path, &new_name)).await
 }
 
 #[tauri::command]
@@ -333,6 +339,9 @@ pub(crate) async fn clear_file_clipboard(app: tauri::AppHandle, change_count: i6
 
 #[tauri::command]
 pub(crate) async fn preview_bulk_rename(sources: Vec<String>, rules: crate::contracts::RenameRules) -> CommandResult<Vec<crate::contracts::RenamePreview>> {
+    if sources.iter().any(|source| is_remote_path(source)) {
+        return crate::remote::run(async move { crate::remote::bulk_rename::preview(sources, rules).await }).await;
+    }
     run_blocking(None, move || crate::bulk_rename::preview(sources, rules)).await
 }
 #[tauri::command]
@@ -395,4 +404,16 @@ pub(crate) async fn remote_disconnect(session_id: String) -> CommandResult<bool>
 #[tauri::command]
 pub(crate) fn remote_sessions() -> Vec<crate::contracts::RemoteSession> {
     crate::remote::connection::sessions()
+}
+
+/// 원격 권한 변경(FR-38.4). 재귀 적용 범위는 선택 항목의 하위 항목에만 적용.
+#[tauri::command]
+pub(crate) fn start_remote_chmod(
+    app: tauri::AppHandle,
+    targets: Vec<String>,
+    mode: u32,
+    recursive: bool,
+    scope: crate::contracts::ChmodScope,
+) -> CommandResult<OperationStarted> {
+    operation::start_remote_chmod(Some(&app), targets, mode, recursive, scope)
 }

@@ -29,7 +29,7 @@ describe('full-scope verification harness', () => {
     for (const id of requiredIds) {
       expect(ACTION_BY_ID.has(id)).toBe(true);
     }
-    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Settings', 'Help']);
+    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Remote', 'Archive', 'Settings', 'Help']);
   });
 
   it('keeps the BokslDir TUI parity matrix as the hard gate for incomplete actions', () => {

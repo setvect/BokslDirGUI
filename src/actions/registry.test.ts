@@ -11,6 +11,7 @@ import {
   actionVisibleOnPlatform,
   actionsForMenu,
   ariaKeyShortcutsFromRegistry,
+  getAction,
   isActionAvailable,
   keyboardBindingCollisions,
   keyboardBindingsForAction,
@@ -74,13 +75,29 @@ describe('action registry', () => {
     expect(ACTION_BY_ID.get('file.properties')?.menuPath).toEqual(['View', 'File Info']);
   });
 
+  it('limits local-only actions to local panels and remote-only actions to remote panels', () => {
+    const base = { activePanel: 'right' as const, focusedEntryKind: 'file' as const, selectedCount: 0, hasConcreteFocus: true, effectiveTargetCount: 1,
+      hasOppositePanel: true, shellCommandEnabled: true, operationBusy: false, backendAvailable: true, activePathIsArchive: false };
+    const available = (id: ActionId, activePathIsRemote: boolean) => isActionAvailable(getAction(id), { ...base, activePathIsRemote });
+    for (const id of ['external.openDefault', 'external.reveal', 'archive.create', 'file.quickView', 'file.clipboardCopy', 'external.runShellCommand'] as const) {
+      expect(available(id, true), id).toBe(false);
+    }
+    expect(available('external.openDefault', false)).toBe(true);
+    expect(available('remote.chmod', true)).toBe(true);
+    expect(available('remote.chmod', false)).toBe(false);
+    for (const id of ['file.mkdir', 'file.rename', 'file.trash', 'file.deletePermanent', 'file.bulkRename', 'file.properties'] as const) {
+      expect(getAction(id).remoteSupport, id).toBeUndefined();
+    }
+  });
+
   it('derives menu roots and display labels from the registry', () => {
-    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Archive', 'Settings', 'Help']);
+    expect(menuRootsFromRegistry()).toEqual(['File', 'Edit', 'View', 'Go', 'Remote', 'Archive', 'Settings', 'Help']);
     expect(menuRootsFromRegistry().map((root) => menuRootLabelFromRegistry(root))).toEqual([
       'File(F)',
       'Edit(E)',
       'View(V)',
       'Go(G)',
+      'Remote(R)',
       'Archive(A)',
       'Settings(S)',
       'Help(H)',
@@ -90,11 +107,12 @@ describe('action registry', () => {
       '편집(E)',
       '보기(V)',
       '이동(G)',
+      '원격(R)',
       '압축(A)',
       '설정(S)',
       '도움말(H)',
     ]);
-    expect(menuRootsFromRegistry().map(menuRootAcceleratorFromRegistry)).toEqual(['F', 'E', 'V', 'G', 'A', 'S', 'H']);
+    expect(menuRootsFromRegistry().map(menuRootAcceleratorFromRegistry)).toEqual(['F', 'E', 'V', 'G', 'R', 'A', 'S', 'H']);
     const copy = ACTION_BY_ID.get('file.copy');
     if (!copy) {
       throw new Error('file.copy action is required');

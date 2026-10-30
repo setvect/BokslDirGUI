@@ -173,6 +173,10 @@
     {
       "guiActionId": "settings.themeMdir",
       "reason": "사용자 요청의 Mdir 색상 테마 추가, 기존 설정 저장·복원 경로 사용"
+    },
+    {
+      "guiActionId": "remote.chmod",
+      "reason": "원격(SFTP) 항목 권한을 8진수·읽기/쓰기/실행 표시로 변경, 하위 항목 재귀 적용 범위 선택(FR-38.4)"
     }
   ],
   "tuiActions": [

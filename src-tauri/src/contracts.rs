@@ -615,6 +615,16 @@ pub(crate) enum OperationKind {
     ArchiveExtract,
     ArchiveAdd,
     ShellCommand,
+    Chmod,
+}
+
+/// 원격 권한 변경의 재귀 적용 범위. 선택한 항목 자체는 범위와 상관없이 변경.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ChmodScope {
+    All,
+    Files,
+    Directories,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

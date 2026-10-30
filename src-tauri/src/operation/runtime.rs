@@ -287,6 +287,7 @@ pub(super) fn next_operation_id(kind: OperationKind) -> String {
         OperationKind::ArchiveExtract => "archive-extract",
         OperationKind::ArchiveAdd => "archive-add",
         OperationKind::ShellCommand => "shell-command",
+        OperationKind::Chmod => "chmod",
     };
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)

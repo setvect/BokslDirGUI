@@ -22,7 +22,10 @@ export type OperationKind =
   | 'archiveCreate'
   | 'archiveExtract'
   | 'archiveAdd'
-  | 'shellCommand';
+  | 'shellCommand'
+  | 'chmod';
+// 원격 권한 변경의 재귀 적용 범위
+export type ChmodScope = 'all' | 'files' | 'directories';
 export type OperationState =
   | 'idle'
   | 'validating'

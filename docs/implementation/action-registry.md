@@ -60,6 +60,7 @@
 | `file.mkdir` | file | a/F7 | `a`, `F7` | File > New Folder | safe | create_dir |
 | `file.rename` | file | r/F2 | `r`, `F2` | File > Rename | destructive | rename_entry |
 | `file.bulkRename` | file | 없음 | 없음 | File > Bulk Rename | destructive | preview_bulk_rename/start_bulk_rename |
+| `remote.chmod` | file | 없음 | 없음 | Remote > Change Permissions… | destructive | start_remote_chmod |
 | `app.quit` | file | Cmd+Q | `Cmd+Q` | File > Quit | none | getCurrentWindow().close via explicit menu/platform quit shortcut |
 | `file.properties` | file | i | `i` | View > File Info | safe | get_metadata |
 | `file.quickView` | file | F3 | `F3` | View > Quick View | safe | preview_file |

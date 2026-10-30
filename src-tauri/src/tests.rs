@@ -330,10 +330,10 @@ fn watch_path_validates_directory_and_returns_version() {
 #[test]
 fn create_dir_creates_child_with_validated_name() {
     let fixture = TempFixture::new();
-    let created = create_dir(
+    let created = tauri::async_runtime::block_on(create_dir(
         fixture.root.to_string_lossy().into_owned(),
         "new-folder".to_string(),
-    )
+    ))
     .expect("directory should be created");
 
     assert_eq!(created.name, "new-folder");
@@ -345,18 +345,18 @@ fn create_dir_creates_child_with_validated_name() {
 fn create_dir_rejects_existing_and_nested_names() {
     let fixture = TempFixture::new();
 
-    let existing = create_dir(
+    let existing = tauri::async_runtime::block_on(create_dir(
         fixture.root.to_string_lossy().into_owned(),
         "folder".to_string(),
-    )
+    ))
     .expect_err("existing directory should fail");
     assert_eq!(existing.code, "already_exists");
     assert!(existing.recoverable);
 
-    let invalid = create_dir(
+    let invalid = tauri::async_runtime::block_on(create_dir(
         fixture.root.to_string_lossy().into_owned(),
         "nested/folder".to_string(),
-    )
+    ))
     .expect_err("path separator should fail");
     assert_eq!(invalid.code, "invalid_name");
 }
@@ -366,10 +366,10 @@ fn rename_entry_renames_within_same_parent_without_overwrite() {
     let fixture = TempFixture::new();
     let source = fixture.root.join("alpha.txt");
 
-    let renamed = rename_entry(
+    let renamed = tauri::async_runtime::block_on(rename_entry(
         source.to_string_lossy().into_owned(),
         "beta.txt".to_string(),
-    )
+    ))
     .expect("rename should succeed");
 
     assert_eq!(renamed.name, "beta.txt");
@@ -382,17 +382,17 @@ fn rename_entry_rejects_existing_and_invalid_names() {
     let fixture = TempFixture::new();
     let source = fixture.root.join("alpha.txt");
 
-    let existing = rename_entry(
+    let existing = tauri::async_runtime::block_on(rename_entry(
         source.to_string_lossy().into_owned(),
         "archive.7z".to_string(),
-    )
+    ))
     .expect_err("rename overwrite should fail");
     assert_eq!(existing.code, "already_exists");
 
-    let invalid = rename_entry(
+    let invalid = tauri::async_runtime::block_on(rename_entry(
         source.to_string_lossy().into_owned(),
         "../escape.txt".to_string(),
-    )
+    ))
     .expect_err("path traversal should fail");
     assert_eq!(invalid.code, "invalid_name");
     assert!(source.exists());
@@ -409,10 +409,10 @@ fn rename_entry_rejects_dangling_symlink_target() {
     symlink(fixture.root.join("missing-target"), &dangling)
         .expect("dangling symlink should be created");
 
-    let error = rename_entry(
+    let error = tauri::async_runtime::block_on(rename_entry(
         source.to_string_lossy().into_owned(),
         "dangling-link".to_string(),
-    )
+    ))
     .expect_err("rename should not overwrite dangling symlink path");
 
     assert_eq!(error.code, "already_exists");
@@ -431,10 +431,10 @@ fn rename_entry_renames_symlink_entry_not_target() {
     let renamed_link = fixture.root.join("renamed-link");
     symlink(&target, &link).expect("symlink source should be created");
 
-    let renamed = rename_entry(
+    let renamed = tauri::async_runtime::block_on(rename_entry(
         link.to_string_lossy().into_owned(),
         "renamed-link".to_string(),
-    )
+    ))
     .expect("symlink entry rename should succeed");
 
     assert_eq!(renamed.name, "renamed-link");
@@ -455,10 +455,10 @@ fn rename_entry_renames_dangling_symlink_source_entry() {
     symlink(fixture.root.join("missing-target"), &link)
         .expect("dangling symlink source should be created");
 
-    let renamed = rename_entry(
+    let renamed = tauri::async_runtime::block_on(rename_entry(
         link.to_string_lossy().into_owned(),
         "renamed-dangling-source".to_string(),
-    )
+    ))
     .expect("dangling symlink source entry rename should succeed");
 
     assert_eq!(renamed.name, "renamed-dangling-source");

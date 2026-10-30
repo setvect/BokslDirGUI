@@ -55,7 +55,7 @@ export type SafeMutationClient = Pick<TauriClient, 'createDir' | 'renameEntry'> 
 >>;
 
 export type LongRunningOperationClient = Pick<TauriClient, 'startCopy' | 'startMove' | 'startDelete' | 'cancelOperation' | 'resolveConflict'>
-  & Partial<Pick<TauriClient, 'startTrashUndo' | 'startBulkRename' | 'archiveCreate' | 'archiveExtract' | 'archiveAdd'>>;
+  & Partial<Pick<TauriClient, 'startTrashUndo' | 'startBulkRename' | 'archiveCreate' | 'archiveExtract' | 'archiveAdd' | 'startRemoteChmod'>>;
 
 export type RemoteSessionClient = Pick<TauriClient,
   | 'remoteConnect' | 'remoteAuthRespond' | 'remoteAuthCancel' | 'remoteTrustHostKey' | 'remoteDisconnect' | 'remoteSessions'

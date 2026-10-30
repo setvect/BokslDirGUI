@@ -47,6 +47,7 @@ import { useRemoteSessions } from './useRemoteSessions';
 import { BottomStatusStrip, HotkeyStrip } from './StatusStrips';
 import { TopMenuBar } from './TopMenuBar';
 import { BulkRenameDialog } from './BulkRenameDialog';
+import { RemoteChmodDialog } from './RemoteChmodDialog';
 import { OpenWithDialog } from './OpenWithDialog';
 import { useCommanderActions } from './useCommanderActions';
 import { useCommanderKeyboard } from './useCommanderKeyboard';
@@ -152,7 +153,7 @@ export function CommanderShell({
     get dataSource() { return dataSource; },
     get gotoPanelPath() { return gotoPanelPath; },
   });
-  const { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, handleAction, closeOverlays: closeActionOverlays, resumeArchiveCopy, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview } = useCommanderActions({
+  const { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, remoteChmod, setRemoteChmod, confirmRemoteChmod, openWithEntry, handleAction, closeOverlays: closeActionOverlays, resumeArchiveCopy, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview } = useCommanderActions({
     clearCompletedSelection,
     get platformInfo() { return platformInfo; },
     get setActivePanel() { return setActivePanel; },
@@ -499,6 +500,8 @@ export function CommanderShell({
           onCancel={closeOverlay}
         />
       ) : null}
+      {remoteChmod ? <RemoteChmodDialog sources={remoteChmod.sources} language={settings.language}
+        onConfirm={confirmRemoteChmod} onClose={() => { setRemoteChmod(null); requestAnimationFrame(() => shellRef.current?.focus()); }} /> : null}
       {bulkRename ? <BulkRenameDialog sources={bulkRename.sources} language={settings.language} client={mutationClient}
         onConfirm={confirmBulkRename} onClose={() => { setBulkRename(null); requestAnimationFrame(() => shellRef.current?.focus()); }} /> : null}
       {openWithEntry ? (
