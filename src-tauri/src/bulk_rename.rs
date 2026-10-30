@@ -89,9 +89,7 @@ fn plan_errors(items: &[RenameItem]) -> Vec<Option<AppError>> {
                 let source = source_path(&item.source)?;
                 validate_child_name(&item.new_name, Some(&source))?;
                 let target = source.with_file_name(&item.new_name);
-                let metadata =
-                    fs::symlink_metadata(&source).map_err(|e| map_io_error(e, Some(&source)))?;
-                crate::platform::validate_reparse_point(&source, &metadata)?;
+                let metadata = crate::platform::entry_metadata(&source)?;
                 if stamp(&metadata, &source)? != item.stamp {
                     return Err(AppError::new(
                         "source_changed",

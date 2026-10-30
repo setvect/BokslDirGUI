@@ -37,15 +37,7 @@ pub(crate) fn prepare_shell_command(
     args: Vec<String>,
 ) -> CommandResult<ShellCommandPreview> {
     let settings = settings_service::load_settings()?;
-    let working_dir = navigation::canonical_existing_path(working_dir)?;
-    if !working_dir.is_dir() {
-        return Err(AppError::new(
-            "not_directory",
-            "errors.notDirectory",
-            Some(&working_dir),
-            true,
-        ));
-    }
+    let working_dir = navigation::canonical_existing_directory(working_dir)?;
     let fingerprint = fingerprint(&working_dir, command, &args)?;
     let enabled = settings.external.shell_command.enabled;
     if !enabled {
@@ -103,15 +95,7 @@ pub(crate) fn confirmed_command(
             true,
         ));
     }
-    let working_dir = navigation::canonical_existing_path(working_dir)?;
-    if !working_dir.is_dir() {
-        return Err(AppError::new(
-            "not_directory",
-            "errors.notDirectory",
-            Some(&working_dir),
-            true,
-        ));
-    }
+    let working_dir = navigation::canonical_existing_directory(working_dir)?;
     let fingerprint = fingerprint(&working_dir, command, &args)?;
     let confirm_token = confirm_token.ok_or_else(|| {
         AppError::new(

@@ -130,6 +130,10 @@
 - 위험: 새 진입점에서 호출 누락 시 Windows junction 검사 누락
 - 제안: 항목 메타데이터 조회와 재파싱 지점 검사를 묶은 공통 함수, 디렉터리 정규화 함수 공유
 - 위험·검증: 낮음~중간(오류 우선순위·코드 변화 가능), `windows_tests.rs` junction·ADS 테스트(Windows CI), rename·create_dir·bulk_rename 테스트
+- 진행(8단계): 메타데이터 조회와 재파싱 지점 검사를 `platform::entry_metadata`로 묶어 7곳 교체
+- 진행(8단계): 디렉터리 정규화 9곳을 `navigation::canonical_existing_directory` 하나로 공유(오류 코드·경로 동일)
+- 유지 결정: `archive_tar`는 io 오류 종류 보존이 필요해 기존 두 단계 유지, 정확한 이름 해석 3벌은 `invalid_name`·`invalid_path` 오류 우선순위가 달라 유지
+- 검증: 새 단위 테스트(디렉터리 아님·없는 항목·링크 비추적), Windows junction·ADS 테스트는 CI 확인
 
 ### R07 React↔Rust 계약 검증 보강
 

@@ -1,7 +1,6 @@
 use crate::contracts::{AppError, CommandResult, OperationKind, OperationState};
 use crate::filesystem::map_io_error;
 use crate::mutation;
-use crate::navigation;
 use crate::path_text::display_path;
 use std::fs;
 use std::io;
@@ -352,9 +351,7 @@ pub(super) fn scan_work(
     special_file_policy: SpecialFileScanPolicy,
 ) -> CommandResult<()> {
     check_cancelled(operation_id, source)?;
-    let metadata =
-        fs::symlink_metadata(source).map_err(|error| map_io_error(error, Some(source)))?;
-    crate::platform::validate_reparse_point(source, &metadata)?;
+    let metadata = crate::platform::entry_metadata(source)?;
     if !metadata.is_file()
         && !metadata.is_dir()
         && !metadata.file_type().is_symlink()
@@ -408,18 +405,7 @@ pub(super) fn collect_source_paths(paths: &[String]) -> CommandResult<Vec<PathBu
 
 pub(super) use crate::navigation::canonical_existing_entry;
 
-pub(super) fn canonical_existing_directory(path: &str) -> CommandResult<PathBuf> {
-    let path = navigation::canonical_existing_path(path)?;
-    if !path.is_dir() {
-        return Err(AppError::new(
-            "not_directory",
-            "errors.notDirectory",
-            Some(&path),
-            true,
-        ));
-    }
-    Ok(path)
-}
+pub(super) use crate::navigation::canonical_existing_directory;
 
 pub(super) fn same_path(left: &Path, right: &Path) -> bool {
     left == right || same_file::is_same_file(left, right).unwrap_or(false)
@@ -460,8 +446,7 @@ pub(super) fn copy_symlink(source: &Path, destination: &Path) -> CommandResult<(
 #[cfg(windows)]
 pub(super) fn copy_symlink(source: &Path, destination: &Path) -> CommandResult<()> {
     use std::os::windows::fs::{FileTypeExt, symlink_dir, symlink_file};
-    let metadata = fs::symlink_metadata(source).map_err(|e| map_io_error(e, Some(source)))?;
-    crate::platform::validate_reparse_point(source, &metadata)?;
+    let metadata = crate::platform::entry_metadata(source)?;
     let target = fs::read_link(source).map_err(|e| map_io_error(e, Some(source)))?;
     let result = if metadata.file_type().is_symlink_dir() {
         symlink_dir(target, destination)
@@ -503,8 +488,7 @@ pub(super) fn count_entries_and_bytes(
     total_bytes: &mut u64,
 ) -> CommandResult<u64> {
     check_cancelled(operation_id, path)?;
-    let metadata = fs::symlink_metadata(path).map_err(|error| map_io_error(error, Some(path)))?;
-    crate::platform::validate_reparse_point(path, &metadata)?;
+    let metadata = crate::platform::entry_metadata(path)?;
     if metadata.is_file() {
         *total_bytes += metadata.len();
     }

@@ -26,14 +26,13 @@ pub(crate) fn forward(window: &tauri::Window, event: &tauri::WindowEvent) {
 
 #[cfg(windows)]
 pub(crate) fn prepare_paths(paths: Vec<String>) -> crate::contracts::CommandResult<Vec<String>> {
-    use crate::{contracts::AppError, filesystem::map_io_error, navigation, platform, windows_shell};
+    use crate::{contracts::AppError, navigation, platform, windows_shell};
     if paths.is_empty() {
         return Err(AppError::new("invalid_path", "errors.emptyOperation", None, true));
     }
     paths.into_iter().map(|raw| {
         let path = navigation::canonical_existing_entry(&raw)?;
-        let metadata = std::fs::symlink_metadata(&path).map_err(|e| map_io_error(e, Some(&path)))?;
-        platform::validate_reparse_point(&path, &metadata)?;
+        platform::entry_metadata(&path)?;
         Ok(display_path(&windows_shell::compatible_path(&path)))
     }).collect()
 }

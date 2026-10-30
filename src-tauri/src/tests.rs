@@ -1761,3 +1761,26 @@ pub(crate) fn report_missing_provider(name: &str) {
     assert!(env::var_os("BOKSLDIRGUI_REQUIRE_PROVIDERS").is_none(), "필수 압축/프로세스 검증 도구 없음: {name}");
     eprintln!("[미검증: 도구 없음] {name}; 전체 지원 완료로 판단 금지");
 }
+
+#[test]
+fn shared_path_checks_report_not_directory_and_missing_entries_without_following_links() {
+    let fixture = TempFixture::new();
+    let file = fixture.root.join("plain.txt");
+    fs::write(&file, b"x").expect("fixture file should be created");
+    let file_error = crate::navigation::canonical_existing_directory(&file.to_string_lossy())
+        .expect_err("a file is not a directory");
+    assert_eq!(file_error.code, "not_directory");
+    assert_eq!(file_error.path, Some(display_path(&file.canonicalize().unwrap())));
+
+    let missing = fixture.root.join("missing");
+    let missing_error = crate::platform::entry_metadata(&missing).expect_err("missing entry");
+    assert_eq!(missing_error.code, "not_found");
+
+    #[cfg(unix)]
+    {
+        let link = fixture.root.join("dangling-link");
+        std::os::unix::fs::symlink(&missing, &link).expect("fixture link should be created");
+        let metadata = crate::platform::entry_metadata(&link).expect("links are inspected without following");
+        assert!(metadata.file_type().is_symlink());
+    }
+}

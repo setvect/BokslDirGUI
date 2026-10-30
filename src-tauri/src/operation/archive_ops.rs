@@ -52,7 +52,7 @@ pub(super) fn run_archive_create(
         return error_summary(operation_id, kind, error);
     }
     let parent = match target.parent() {
-        Some(parent) => match navigation::canonical_existing_path(&parent.to_string_lossy()) {
+        Some(parent) => match navigation::canonical_existing_directory(&parent.to_string_lossy()) {
             Ok(parent) => parent,
             Err(error) => return error_summary(operation_id, kind, error),
         },
@@ -64,13 +64,6 @@ pub(super) fn run_archive_create(
             )
         }
     };
-    if !parent.is_dir() {
-        return error_summary(
-            operation_id,
-            kind,
-            AppError::new("not_directory", "errors.notDirectory", Some(&parent), true),
-        );
-    }
     let target = parent.join(target.file_name().unwrap_or_default());
     if mutation::path_is_occupied(&target) {
         return error_summary(
@@ -243,17 +236,10 @@ pub(super) fn run_archive_extract(
             );
         }
     }
-    let target = match navigation::canonical_existing_path(&target_dir) {
+    let target = match navigation::canonical_existing_directory(&target_dir) {
         Ok(path) => path,
         Err(error) => return error_summary(operation_id, kind, error),
     };
-    if !target.is_dir() {
-        return error_summary(
-            operation_id,
-            kind,
-            AppError::new("not_directory", "errors.notDirectory", Some(&target), true),
-        );
-    }
 
     let mut stats = OperationStats::new(0, 0);
     emit_progress(

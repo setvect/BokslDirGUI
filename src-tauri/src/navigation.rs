@@ -20,15 +20,7 @@ pub(crate) fn list_dir(
     sort: SortSpec,
     filter: Option<String>,
 ) -> CommandResult<DirectoryListing> {
-    let path = canonical_existing_path(path)?;
-    if !path.is_dir() {
-        return Err(AppError::new(
-            "not_directory",
-            "errors.notDirectory",
-            Some(&path),
-            true,
-        ));
-    }
+    let path = canonical_existing_directory(path)?;
 
     let mut entries = Vec::new();
     if let Some(parent) = path.parent() {
@@ -172,6 +164,20 @@ pub(crate) fn canonical_existing_path(path: &str) -> CommandResult<PathBuf> {
     crate::platform::validate_path_input(&raw)?;
     raw.canonicalize()
         .map_err(|error| map_io_error(error, Some(&raw)))
+}
+
+/// 존재하는 디렉터리 경로 정규화, 파일이면 not_directory 오류.
+pub(crate) fn canonical_existing_directory(path: &str) -> CommandResult<PathBuf> {
+    let path = canonical_existing_path(path)?;
+    if !path.is_dir() {
+        return Err(AppError::new(
+            "not_directory",
+            "errors.notDirectory",
+            Some(&path),
+            true,
+        ));
+    }
+    Ok(path)
 }
 
 pub(crate) fn canonical_existing_entry(path: &str) -> CommandResult<PathBuf> {

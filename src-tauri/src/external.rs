@@ -26,15 +26,7 @@ pub(crate) fn open_current_in_terminal(path: &str) -> CommandResult<ActionResult
 }
 
 fn open_directory_in_app(path: &str, terminal: bool) -> CommandResult<ActionResult> {
-    let path = navigation::canonical_existing_path(path)?;
-    if !path.is_dir() {
-        return Err(AppError::new(
-            "not_directory",
-            "errors.notDirectory",
-            Some(&path),
-            true,
-        ));
-    }
+    let path = navigation::canonical_existing_directory(path)?;
     #[cfg(target_os = "macos")]
     {
         if env::var_os("BOKSLDIRGUI_EXTERNAL_DRY_RUN").is_none() {

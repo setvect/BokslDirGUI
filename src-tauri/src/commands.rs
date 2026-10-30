@@ -60,15 +60,7 @@ pub(crate) fn preview_file(path: String, max_bytes: Option<u64>) -> CommandResul
 
 #[tauri::command]
 pub(crate) fn watch_path(panel_id: PanelId, path: String) -> CommandResult<WatchAck> {
-    let path = navigation::canonical_existing_path(&path)?;
-    if !path.is_dir() {
-        return Err(AppError::new(
-            "not_directory",
-            "errors.notDirectory",
-            Some(&path),
-            true,
-        ));
-    }
+    let path = navigation::canonical_existing_directory(&path)?;
     Ok(WatchAck {
         panel_id,
         path: display_path(&path),

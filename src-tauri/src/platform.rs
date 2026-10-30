@@ -145,6 +145,14 @@ pub(crate) fn protected_delete_path(path: &Path) -> bool {
 }
 
 // 알 수 없는 재파싱 지점과 junction은 따라가지 않고 거부하여 대상 재귀 변경 방지.
+/// 링크를 따라가지 않는 항목 메타데이터와 재파싱 지점 검사. 파일 작업 진입점은 이 함수로 항목 확인.
+pub(crate) fn entry_metadata(path: &Path) -> CommandResult<std::fs::Metadata> {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|error| crate::filesystem::map_io_error(error, Some(path)))?;
+    validate_reparse_point(path, &metadata)?;
+    Ok(metadata)
+}
+
 pub(crate) fn validate_reparse_point(
     path: &Path,
     metadata: &std::fs::Metadata,

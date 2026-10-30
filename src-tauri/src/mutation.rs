@@ -7,15 +7,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 pub(crate) fn create_dir(parent: &str, name: &str) -> CommandResult<FileEntry> {
-    let parent = navigation::canonical_existing_path(parent)?;
-    if !parent.is_dir() {
-        return Err(AppError::new(
-            "not_directory",
-            "errors.notDirectory",
-            Some(&parent),
-            true,
-        ));
-    }
+    let parent = navigation::canonical_existing_directory(parent)?;
 
     let safe_name = validate_child_name(name, Some(&parent))?;
     let target = parent.join(safe_name);
@@ -56,18 +48,9 @@ pub(crate) fn rename_entry(path: &str, new_name: &str) -> CommandResult<FileEntr
         })?;
     // The existing entry name is an exact filesystem identity, including whitespace.
     // 원본 이름은 Path::file_name으로 검증된 항목 식별자 그대로 사용.
-    let parent = navigation::canonical_existing_path(&raw_parent.to_string_lossy())?;
-    if !parent.is_dir() {
-        return Err(AppError::new(
-            "not_directory",
-            "errors.notDirectory",
-            Some(&parent),
-            true,
-        ));
-    }
+    let parent = navigation::canonical_existing_directory(&raw_parent.to_string_lossy())?;
     let source = parent.join(source_name);
-    let metadata = fs::symlink_metadata(&source).map_err(|error| map_io_error(error, Some(&source)))?;
-    crate::platform::validate_reparse_point(&source, &metadata)?;
+    crate::platform::entry_metadata(&source)?;
     let safe_name = validate_child_name(new_name, Some(&parent))?;
     let target = parent.join(safe_name);
 

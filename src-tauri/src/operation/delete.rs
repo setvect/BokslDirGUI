@@ -125,8 +125,7 @@ pub(super) fn delete_tree_cancellable(
     ticker: &mut ProgressTicker,
 ) -> CommandResult<()> {
     check_cancelled(operation_id, path)?;
-    let metadata = fs::symlink_metadata(path).map_err(|error| map_io_error(error, Some(path)))?;
-    crate::platform::validate_reparse_point(path, &metadata)?;
+    let metadata = crate::platform::entry_metadata(path)?;
     if metadata.is_dir() {
         for child in fs::read_dir(path).map_err(|error| map_io_error(error, Some(path)))? {
             let child = child.map_err(|error| map_io_error(error, Some(path)))?;
