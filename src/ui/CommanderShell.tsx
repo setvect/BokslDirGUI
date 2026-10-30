@@ -32,7 +32,6 @@ import {
 import { QuickPreviewDialog } from './QuickPreviewDialog';
 import { ArchivePasswordRequest } from './commanderTypes';
 import { DirectoryComparison } from './directoryComparison';
-import { archiveCopyExecutorForPlan } from './fileActionExecutors';
 import { FilePanel, type FilePanelHandle } from './FilePanel';
 import { entryIcon } from './format';
 import { TopMenuState } from './menuModel';
@@ -116,7 +115,7 @@ export function CommanderShell({
     get setActivePanel() { return setActivePanel; },
   });
 
-  const { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordsRef, recordFocusedRow, selectEntry, archiveListingsRef } = usePanelNavigation({
+  const { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordFor, retryArchiveListing, recordFocusedRow, selectEntry } = usePanelNavigation({
     get dataSource() { return dataSource; },
     get initialFocusIndex() { return initialFocusIndex; },
     get initialSelectedPaths() { return initialSelectedPaths; },
@@ -131,7 +130,7 @@ export function CommanderShell({
     get saveSettingsPatch() { return saveSettingsPatch; },
     get settingsLoaded() { return settingsLoaded; },
   });
-  const { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, setBookmarkRenameRequest, locationsRequestRef, setNavigationList, bookmarkRenameRequest, applyBookmarkRename, navigationList, chooseNavigationItem, closeNavigationTab, deleteNavigationBookmark } = useNavigationMenus({
+  const { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, closeOverlays: closeNavigationOverlays, bookmarkRenameRequest, applyBookmarkRename, navigationList, chooseNavigationItem, closeNavigationTab, deleteNavigationBookmark } = useNavigationMenus({
     activateTab,
     closeTab,
     get panelState() { return panelState; },
@@ -147,7 +146,7 @@ export function CommanderShell({
     get dataSource() { return dataSource; },
     get gotoPanelPath() { return gotoPanelPath; },
   });
-  const { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview } = useCommanderActions({
+  const { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, handleAction, closeOverlays: closeActionOverlays, resumeArchiveCopy, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview } = useCommanderActions({
     clearCompletedSelection,
     get platformInfo() { return platformInfo; },
     get setActivePanel() { return setActivePanel; },
@@ -193,7 +192,7 @@ export function CommanderShell({
     get setAboutDialogOpen() { return setAboutDialogOpen; },
     get setHelpSearchOpen() { return setHelpSearchOpen; },
     get refreshPanelAfterSourceInvalid() { return refreshPanelAfterSourceInvalid; },
-    get archivePasswordsRef() { return archivePasswordsRef; },
+    get archivePasswordFor() { return archivePasswordFor; },
     get operationClient() { return operationClient; },
     get panelStateRef() { return panelStateRef; },
     get setArchivePasswordRequest() { return setArchivePasswordRequest; },
@@ -267,17 +266,12 @@ export function CommanderShell({
   };
 
   const closeOverlay = () => {
-    locationsRequestRef.current += 1;
-    previewRequestRef.current += 1;
+    closeNavigationOverlays();
+    closeActionOverlays();
     setPathPromptPanel(null);
     setArchivePasswordRequest(null);
-    pendingArchiveCopyRef.current = null;
-    setNavigationList(null);
-    setBookmarkRenameRequest(null);
     setHelpSearchOpen(false);
     setAboutDialogOpen(false);
-    setQuickPreview(null);
-    setOpenWithEntry(null);
     shellRef.current?.focus({ preventScroll: true });
   };
 
@@ -485,19 +479,10 @@ export function CommanderShell({
             const request = archivePasswordRequest;
             setArchivePasswordRequest(null);
             if (request.kind === 'copy') {
-              const pending = pendingArchiveCopyRef.current;
-              pendingArchiveCopyRef.current = null;
-              if (!pending || pending.plan.archivePath !== request.archivePath) return;
-              void startLongRunningOperation({
-                ...pending.request,
-                longRunningExecutor: archiveCopyExecutorForPlan({ ...pending.plan, password }, operationClient),
-              });
-              setStatusMessage(pending.status);
+              resumeArchiveCopy(request.archivePath, password);
               return;
             }
-            archivePasswordsRef.current.set(request.archivePath, password);
-            archiveListingsRef.current.delete(request.archivePath);
-            void listPanel(request.panelId, request.virtualPath, { preserveSelection: true });
+            retryArchiveListing(request.panelId, request.archivePath, request.virtualPath, password);
           }}
           onCancel={closeOverlay}
         />

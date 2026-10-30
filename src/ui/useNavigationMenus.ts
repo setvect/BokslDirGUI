@@ -167,6 +167,13 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
     if (index >= 0) dependencies.closeTab(state.panelId, index);
   };
 
+  // 보조 창 닫기: 진행 중인 위치 목록 요청 무효화와 목록·북마크 이름 입력 닫기.
+  const closeOverlays = () => {
+    locationsRequestRef.current += 1;
+    setNavigationList(null);
+    setBookmarkRenameRequest(null);
+  };
+
   const visibleNavigationList = useMemo(
     () => navigationList?.kind === 'tabs'
       ? { ...navigationList, items: tabItemsForPanel(dependencies, navigationList.panelId) }
@@ -174,7 +181,7 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
     [navigationList, dependencies.panelTabs, dependencies.activeTab, dependencies.panelState, dependencies.panelStateRef],
   );
 
-  return { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, setBookmarkRenameRequest, locationsRequestRef, setNavigationList, bookmarkRenameRequest, applyBookmarkRename, navigationList: visibleNavigationList, chooseNavigationItem, closeNavigationTab, deleteNavigationBookmark };
+  return { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, closeOverlays, bookmarkRenameRequest, applyBookmarkRename, navigationList: visibleNavigationList, chooseNavigationItem, closeNavigationTab, deleteNavigationBookmark };
 }
 
 function tabItemsForPanel(dependencies: NavigationMenusDependencies, panelId: PanelId): NavigationListItem[] {

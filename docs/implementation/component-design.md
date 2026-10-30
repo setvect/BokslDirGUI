@@ -79,9 +79,10 @@ App
 
 | 소유자 | 포함 상태와 책임 | 연결 방식 |
 | --- | --- | --- |
-| `usePanelNavigation` | 좌우 경로·탭·목록·포커스·선택·히스토리, 요청 버전, 압축 목록/암호 캐시 | 탐색·탭 전환·선택·새로고침 의도별 메서드 |
+| `usePanelNavigation` | 좌우 경로·탭·목록·포커스·선택·히스토리, 요청 버전, 압축 목록/암호 캐시 | 탐색·탭 전환·선택·새로고침, 암호 입력 뒤 압축 목록 재시도(`retryArchiveListing`)·암호 조회(`archivePasswordFor`) 의도별 메서드 |
 | `useCommanderSettings` | 표시 설정, 설정 로딩, 낙관적 갱신과 직렬 저장 큐 | 설정 patch와 레이아웃/확대 명령 |
-| `useCommanderActions` | registry 액션 실행, 미리보기, 압축 암호 재시도 | `ActionRequest`의 action ID·출발 패널·선택·대상 경로 |
+| `useNavigationMenus` | 위치·탭·히스토리·북마크 목록, 위치 목록 요청 버전, 북마크 이름 입력 | 목록 열기·선택 의도별 메서드, 보조 창 닫기(`closeOverlays`) |
+| `useCommanderActions` | registry 액션 실행, 빠른 보기 요청 버전, 다음으로 열기, 암호를 기다리는 압축 내부 복사 | `ActionRequest`의 action ID·출발 패널·선택·대상 경로, 압축 복사 재개(`resumeArchiveCopy`)·보조 창 닫기(`closeOverlays`) |
 | `useFileClipboard` | 복사/잘라내기 원본 스냅샷, 붙여넣기 의도 | 공통 액션 실행에 요청 전달 |
 | `useCommanderKeyboard` | 문서 리스너, 최신 실행 참조, 시퀀스 타이머 정리 | registry 판정과 입력 소유권을 거쳐 공통 액션 호출 |
 | `useFileDrag` / `pointerFileDrag` | 내부 포인터 세션, 외부 드래그 연결과 리스너 해제 | 놓는 시점에 대상/작업 가능 여부 재검사 |
@@ -95,6 +96,7 @@ App
 - `OperationDialogHost`는 공통 프레임/포커스/이벤트 구독을 연결하고 `OperationInputs`, `OperationOverview`, `OperationResultView`, `ConflictResolutionView`는 표시와 의도별 콜백을 담당
 - 컨트롤러 연결의 지연 getter: 렌더 중 나중에 만들어지는 콜백 참조 목적
 - 최신 이벤트 실행 참조와 요청 버전은 해당 컨트롤러가 유지
+- Shell은 컨트롤러의 ref·setter를 직접 바꾸지 않음, 보조 창 닫기는 각 소유 컨트롤러의 `closeOverlays` 호출 후 Shell 자체 상태 정리
 - 추출 범위와 검증 증거는 [구조 리팩토링 기록](refactoring.md) 참조
 
 ## 5. 렌더링 규칙

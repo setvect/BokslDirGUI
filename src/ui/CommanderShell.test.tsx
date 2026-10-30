@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { AppError, PanelId } from '../domain/types';
+import type { AppError, FilePreview, PanelId } from '../domain/types';
 import type { ListDirInput } from '../tauri/client';
 import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './commanderFixture';
 import { CommanderShell } from './CommanderShell';
@@ -247,6 +247,41 @@ describe('CommanderShell rendering', () => {
     expect(screen.queryByRole('dialog', { name: '빠른 보기' })).toBeNull();
     await user.keyboard('{ArrowDown}');
     expect(screen.getByLabelText('활성 패널 상태').textContent).toContain('next.md');
+  });
+
+  it('ignores a quick preview response that arrives after the loading preview is closed', async () => {
+    const user = userEvent.setup();
+    const file = testEntry('/tmp/source', 'late.md');
+    const dataSource = mockedPanelDataSource({
+      loadInitialOnMount: false,
+      initial: {
+        left: createDirectoryListing('left', '/tmp/target', []),
+        right: createDirectoryListing('right', '/tmp/source', [file]),
+      },
+    });
+    let resolvePreview: () => void = () => undefined;
+    const previewFile = vi.fn(() => new Promise<{ ok: true; data: FilePreview }>((resolve) => {
+      resolvePreview = () => resolve({ ok: true, data: {
+        path: file.path, name: file.name, kind: 'text', mimeType: 'text/markdown', sizeBytes: 4,
+        text: 'late preview text', dataUrl: null, truncated: false, limitBytes: 256 * 1024,
+      } });
+    }));
+    render(
+      <CommanderShell
+        dataSource={dataSource}
+        mutationClient={mutationClientStub({ previewFile })}
+        initialFocusIndex={{ right: 0 }}
+      />,
+    );
+
+    await user.keyboard('{F3}');
+    expect(await screen.findByRole('dialog', { name: '빠른 보기' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '빠른 보기' })).toBeNull());
+
+    await act(async () => resolvePreview());
+    expect(screen.queryByRole('dialog', { name: '빠른 보기' })).toBeNull();
+    expect(screen.queryByText('late preview text')).toBeNull();
   });
 
   it('opens the active panel path in the opposite panel with tp', async () => {

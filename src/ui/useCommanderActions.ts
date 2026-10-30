@@ -84,7 +84,7 @@ interface CommanderActionsDependencies {
   readonly setAboutDialogOpen: Dispatch<SetStateAction<boolean>>;
   readonly setHelpSearchOpen: Dispatch<SetStateAction<boolean>>;
   readonly refreshPanelAfterSourceInvalid: (panelId: PanelId, status: string) => void;
-  readonly archivePasswordsRef: RefObject<Map<string, string>>;
+  readonly archivePasswordFor: (archivePath: string) => string | undefined;
   readonly operationClient: LongRunningOperationClient;
   readonly panelStateRef: RefObject<PanelStateById>;
   readonly setArchivePasswordRequest: Dispatch<SetStateAction<ArchivePasswordRequest | null>>;
@@ -545,7 +545,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
           panelListing.path,
           operationTargetDir,
           parseArchiveVirtualPath(panelListing.path)
-            ? dependencies.archivePasswordsRef.current.get(parseArchiveVirtualPath(panelListing.path)?.archivePath ?? '')
+            ? dependencies.archivePasswordFor(parseArchiveVirtualPath(panelListing.path)?.archivePath ?? '')
             : undefined,
         )
         : null;
@@ -631,5 +631,25 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     dependencies.setStatusMessage(dependencies.statusText.actionReady(labelForAction(action, dependencies.settings.language)));
   };
-  return { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, setOpenWithEntry, handleAction, pendingArchiveCopyRef, previewRequestRef, setQuickPreview, fileClipboard, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview };
+
+  // 보조 창 닫기: 진행 중인 빠른 보기 요청 무효화, 암호를 기다리던 압축 내부 복사 폐기.
+  const closeOverlays = () => {
+    previewRequestRef.current += 1;
+    pendingArchiveCopyRef.current = null;
+    setQuickPreview(null);
+    setOpenWithEntry(null);
+  };
+
+  // 암호 입력 뒤 기다리던 압축 내부 복사 재개. 다른 압축의 요청이면 폐기.
+  const resumeArchiveCopy = (archivePath: string, password: string) => {
+    const pending = pendingArchiveCopyRef.current;
+    pendingArchiveCopyRef.current = null;
+    if (!pending || pending.plan.archivePath !== archivePath) return;
+    void dependencies.startLongRunningOperation({
+      ...pending.request,
+      longRunningExecutor: archiveCopyExecutorForPlan({ ...pending.plan, password }, dependencies.operationClient),
+    });
+    dependencies.setStatusMessage(pending.status);
+  };
+  return { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, openWithEntry, handleAction, closeOverlays, resumeArchiveCopy, fileClipboard, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview };
 }

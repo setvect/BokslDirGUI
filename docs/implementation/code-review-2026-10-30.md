@@ -104,6 +104,7 @@
 - 제안: 소유 훅에 `closeOverlays()`, 압축 목록 재시도 같은 의도 메서드 추가, ref 반환 제거
 - 유지: 새 store 없이 기존 소유자
 - 위험·검증: 낮음~중간(요청 무효화 순서), `CommanderShell.archives.test.tsx` 암호 사례, D02 회귀 테스트
+- 진행(4단계): `useNavigationMenus`·`useCommanderActions`의 `closeOverlays`, `resumeArchiveCopy`, `usePanelNavigation`의 `retryArchiveListing`·`archivePasswordFor` 추가, Shell의 ref·setter 직접 조작과 ref 반환 제거, `component-design.md` 4절 소유 기록 갱신
 
 ### R06 경로 확인·재파싱 지점 검사 공통화
 

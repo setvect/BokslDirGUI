@@ -675,10 +675,18 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
 
   };
 
+  // 암호 입력 뒤 압축 목록 다시 읽기. 캐시된 목록은 암호 없이 읽은 결과라 폐기.
+  const retryArchiveListing = (panelId: PanelId, archivePath: string, virtualPath: string, password: string) => {
+    archivePasswordsRef.current.set(archivePath, password);
+    archiveListingsRef.current.delete(archivePath);
+    void listPanel(panelId, virtualPath, { preserveSelection: true });
+  };
+  const archivePasswordFor = (archivePath: string) => archivePasswordsRef.current.get(archivePath);
+
   const clearCompletedSelection = (panelId: PanelId, sourcePath: string) => {
     if (panelStateRef.current[panelId].path !== sourcePath) return;
     selectionAnchorRef.current[panelId] = null;
     setPanelState((current) => ({ ...current, [panelId]: { ...current[panelId], selectedPaths: [] } }));
   };
-  return { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordsRef, recordFocusedRow, selectEntry, archiveListingsRef };
+  return { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordFor, retryArchiveListing, recordFocusedRow, selectEntry };
 }
