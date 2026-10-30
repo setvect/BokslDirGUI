@@ -51,6 +51,25 @@ describe('CommanderShell navigation', () => {
     expect(screen.getByText('arrived.txt')).toBeTruthy();
   });
 
+  it.each(['keyboard', 'View menu'])('closes the Go To Path prompt opened from the %s with one Escape and keeps row keys working', async (openedFrom) => {
+    const user = userEvent.setup();
+    const { container } = renderCommander(createFixturePanelDataSource());
+
+    if (openedFrom === 'keyboard') {
+      await user.keyboard('gp');
+    } else {
+      await user.click(screen.getByRole('button', { name: '보기(V)' }));
+      await user.click(within(await screen.findByRole('menu', { name: '보기(V) menu' })).getByRole('menuitem', { name: /^경로 이동/ }));
+    }
+    expect(await screen.findByRole('dialog', { name: '경로 이동' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '경로 이동' })).toBeNull());
+    const focusedBefore = focusedRowText(container);
+    await user.keyboard('{ArrowDown}');
+    expect(focusedRowText(container)).not.toBe(focusedBefore);
+  });
+
   it('keeps the current rows visible when opening a directory fails', async () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();
