@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ACTION_BY_ID, labelForAction } from '../actions/registry';
+import { ACTION_BY_ID } from '../actions/registry';
 import { fileShortcutPlatform, platformSupports } from '../domain/runtimePlatform';
 import type { PanelId, PlatformInfo, TrashUndoPreview } from '../domain/types';
 import { formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
-import { operationSummaryStatusLabel } from '../operations/operationLabels';
 import type { OpenDialogRequest } from '../operations/operationTypes';
 import type { LongRunningOperationClient, SafeMutationClient } from '../tauri/commanderClients';
+import { finishOperation, operationCanceller } from './operationCompletion';
 
 interface Dependencies {
   readonly mutationClient: SafeMutationClient;
@@ -43,11 +43,9 @@ export function useTrashUndo(dependencies: Dependencies) {
     dependencies.openOperationDialog({
       action, panelId, sources: snapshot.entries, targetDir: null, workingDir,
       longRunningExecutor: () => operationClient.startTrashUndo!({ id: snapshot.id }),
-      cancelExecutor: operationId => operationClient.cancelOperation({ operationId }),
+      cancelExecutor: operationCanceller(operationClient),
       onOperationSummary: summary => {
-        dependencies.refreshPanel('left', true);
-        dependencies.refreshPanel('right', true);
-        dependencies.setStatusMessage(`${labelForAction(action, dependencies.language)} ${operationSummaryStatusLabel(summary, dependencies.language)}`);
+        finishOperation(dependencies, action, summary, dependencies.language);
         setRevision(value => value + 1);
       },
       onOperationStartError: error => {

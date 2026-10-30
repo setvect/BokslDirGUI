@@ -3,15 +3,10 @@ use crate::contracts::{
     OperationState,
 };
 
-use std::thread;
-
 use super::archive_ops::{run_archive_add, run_archive_create, run_archive_extract};
 use super::delete::run_delete;
 use super::file_io::{collect_source_paths, guard_delete_target};
-use super::runtime::{
-    emit_state, emit_summary, finish_operation, next_operation_id, register_operation,
-    PERMANENT_DELETE_CONFIRM_TOKEN,
-};
+use super::runtime::{launch_operation, PERMANENT_DELETE_CONFIRM_TOKEN};
 use super::transfer::{run_copy, run_move};
 
 pub(crate) fn start_copy(
@@ -20,58 +15,11 @@ pub(crate) fn start_copy(
     target_dir: String,
     policy: ConflictDecision,
 ) -> CommandResult<OperationStarted> {
-    let operation_id = next_operation_id(OperationKind::Copy);
-    register_operation(&operation_id);
-    let started = OperationStarted {
-        operation_id: operation_id.clone(),
-        kind: OperationKind::Copy,
-        state: OperationState::Queued,
-    };
-    if let Some(app) = app {
-        let app = app.clone();
-        thread::spawn({
-            let operation_id = operation_id.clone();
-            move || {
-                emit_state(
-                    Some(&app),
-                    &operation_id,
-                    OperationKind::Copy,
-                    OperationState::Validating,
-                    None,
-                    0,
-                    0,
-                    None,
-                );
-                match run_copy(
-                    Some(&app),
-                    &operation_id,
-                    &sources,
-                    &target_dir,
-                    policy,
-                    None,
-                ) {
-                    Ok(summary) | Err(summary) => emit_summary(Some(&app), &summary),
-                }
-                finish_operation(&operation_id);
-            }
-        });
-    } else {
-        emit_state(
-            app,
-            &operation_id,
-            OperationKind::Copy,
-            OperationState::Validating,
-            None,
-            0,
-            0,
-            None,
-        );
-        match run_copy(app, &operation_id, &sources, &target_dir, policy, None) {
-            Ok(summary) | Err(summary) => emit_summary(app, &summary),
+    launch_operation(app, OperationKind::Copy, Some(OperationState::Validating), move |app, operation_id| {
+        match run_copy(app, operation_id, &sources, &target_dir, policy, None) {
+            Ok(summary) | Err(summary) => summary,
         }
-        finish_operation(&operation_id);
-    }
-    Ok(started)
+    })
 }
 
 pub(crate) fn start_move(
@@ -80,49 +28,9 @@ pub(crate) fn start_move(
     target_dir: String,
     policy: ConflictDecision,
 ) -> CommandResult<OperationStarted> {
-    let operation_id = next_operation_id(OperationKind::Move);
-    register_operation(&operation_id);
-    let started = OperationStarted {
-        operation_id: operation_id.clone(),
-        kind: OperationKind::Move,
-        state: OperationState::Queued,
-    };
-    if let Some(app) = app {
-        let app = app.clone();
-        thread::spawn({
-            let operation_id = operation_id.clone();
-            move || {
-                emit_state(
-                    Some(&app),
-                    &operation_id,
-                    OperationKind::Move,
-                    OperationState::Validating,
-                    None,
-                    0,
-                    0,
-                    None,
-                );
-                let summary = run_move(Some(&app), &operation_id, &sources, &target_dir, policy);
-                emit_summary(Some(&app), &summary);
-                finish_operation(&operation_id);
-            }
-        });
-    } else {
-        emit_state(
-            app,
-            &operation_id,
-            OperationKind::Move,
-            OperationState::Validating,
-            None,
-            0,
-            0,
-            None,
-        );
-        let summary = run_move(app, &operation_id, &sources, &target_dir, policy);
-        emit_summary(app, &summary);
-        finish_operation(&operation_id);
-    }
-    Ok(started)
+    launch_operation(app, OperationKind::Move, Some(OperationState::Validating), move |app, operation_id| {
+        run_move(app, operation_id, &sources, &target_dir, policy)
+    })
 }
 
 pub(crate) fn start_delete(
@@ -148,49 +56,9 @@ pub(crate) fn start_delete(
     } else {
         OperationKind::Delete
     };
-    let operation_id = next_operation_id(kind);
-    register_operation(&operation_id);
-    let started = OperationStarted {
-        operation_id: operation_id.clone(),
-        kind,
-        state: OperationState::Queued,
-    };
-    if let Some(app) = app {
-        let app = app.clone();
-        thread::spawn({
-            let operation_id = operation_id.clone();
-            move || {
-                emit_state(
-                    Some(&app),
-                    &operation_id,
-                    kind,
-                    OperationState::Validating,
-                    None,
-                    0,
-                    0,
-                    None,
-                );
-                let summary = run_delete(Some(&app), &operation_id, &targets, mode);
-                emit_summary(Some(&app), &summary);
-                finish_operation(&operation_id);
-            }
-        });
-    } else {
-        emit_state(
-            app,
-            &operation_id,
-            kind,
-            OperationState::Validating,
-            None,
-            0,
-            0,
-            None,
-        );
-        let summary = run_delete(app, &operation_id, &targets, mode);
-        emit_summary(app, &summary);
-        finish_operation(&operation_id);
-    }
-    Ok(started)
+    launch_operation(app, kind, Some(OperationState::Validating), move |app, operation_id| {
+        run_delete(app, operation_id, &targets, mode)
+    })
 }
 
 pub(crate) fn start_archive_create(
@@ -200,63 +68,9 @@ pub(crate) fn start_archive_create(
     format: String,
     password: Option<String>,
 ) -> CommandResult<OperationStarted> {
-    let operation_id = next_operation_id(OperationKind::ArchiveCreate);
-    register_operation(&operation_id);
-    let started = OperationStarted {
-        operation_id: operation_id.clone(),
-        kind: OperationKind::ArchiveCreate,
-        state: OperationState::Queued,
-    };
-    if let Some(app) = app {
-        let app = app.clone();
-        thread::spawn({
-            let operation_id = operation_id.clone();
-            move || {
-                emit_state(
-                    Some(&app),
-                    &operation_id,
-                    OperationKind::ArchiveCreate,
-                    OperationState::Validating,
-                    None,
-                    0,
-                    0,
-                    None,
-                );
-                let summary = run_archive_create(
-                    Some(&app),
-                    &operation_id,
-                    sources,
-                    target_archive,
-                    format,
-                    password,
-                );
-                emit_summary(Some(&app), &summary);
-                finish_operation(&operation_id);
-            }
-        });
-    } else {
-        emit_state(
-            app,
-            &operation_id,
-            OperationKind::ArchiveCreate,
-            OperationState::Validating,
-            None,
-            0,
-            0,
-            None,
-        );
-        let summary = run_archive_create(
-            app,
-            &operation_id,
-            sources,
-            target_archive,
-            format,
-            password,
-        );
-        emit_summary(app, &summary);
-        finish_operation(&operation_id);
-    }
-    Ok(started)
+    launch_operation(app, OperationKind::ArchiveCreate, Some(OperationState::Validating), move |app, operation_id| {
+        run_archive_create(app, operation_id, sources, target_archive, format, password)
+    })
 }
 
 pub(crate) fn start_archive_extract(
@@ -268,67 +82,9 @@ pub(crate) fn start_archive_extract(
     entries: Option<Vec<String>>,
     strip_prefix: Option<String>,
 ) -> CommandResult<OperationStarted> {
-    let operation_id = next_operation_id(OperationKind::ArchiveExtract);
-    register_operation(&operation_id);
-    let started = OperationStarted {
-        operation_id: operation_id.clone(),
-        kind: OperationKind::ArchiveExtract,
-        state: OperationState::Queued,
-    };
-    if let Some(app) = app {
-        let app = app.clone();
-        thread::spawn({
-            let operation_id = operation_id.clone();
-            move || {
-                emit_state(
-                    Some(&app),
-                    &operation_id,
-                    OperationKind::ArchiveExtract,
-                    OperationState::Validating,
-                    None,
-                    0,
-                    0,
-                    None,
-                );
-                let summary = run_archive_extract(
-                    Some(&app),
-                    &operation_id,
-                    archive_path,
-                    target_dir,
-                    password,
-                    policy,
-                    entries,
-                    strip_prefix,
-                );
-                emit_summary(Some(&app), &summary);
-                finish_operation(&operation_id);
-            }
-        });
-    } else {
-        emit_state(
-            app,
-            &operation_id,
-            OperationKind::ArchiveExtract,
-            OperationState::Validating,
-            None,
-            0,
-            0,
-            None,
-        );
-        let summary = run_archive_extract(
-            app,
-            &operation_id,
-            archive_path,
-            target_dir,
-            password,
-            policy,
-            entries,
-            strip_prefix,
-        );
-        emit_summary(app, &summary);
-        finish_operation(&operation_id);
-    }
-    Ok(started)
+    launch_operation(app, OperationKind::ArchiveExtract, Some(OperationState::Validating), move |app, operation_id| {
+        run_archive_extract(app, operation_id, archive_path, target_dir, password, policy, entries, strip_prefix)
+    })
 }
 
 pub(crate) fn start_archive_add(
@@ -338,61 +94,7 @@ pub(crate) fn start_archive_add(
     target_inner_dir: String,
     policy: ConflictDecision,
 ) -> CommandResult<OperationStarted> {
-    let operation_id = next_operation_id(OperationKind::ArchiveAdd);
-    register_operation(&operation_id);
-    let started = OperationStarted {
-        operation_id: operation_id.clone(),
-        kind: OperationKind::ArchiveAdd,
-        state: OperationState::Queued,
-    };
-    if let Some(app) = app {
-        let app = app.clone();
-        thread::spawn({
-            let operation_id = operation_id.clone();
-            move || {
-                emit_state(
-                    Some(&app),
-                    &operation_id,
-                    OperationKind::ArchiveAdd,
-                    OperationState::Validating,
-                    None,
-                    0,
-                    0,
-                    None,
-                );
-                let summary = run_archive_add(
-                    Some(&app),
-                    &operation_id,
-                    sources,
-                    archive_path,
-                    target_inner_dir,
-                    policy,
-                );
-                emit_summary(Some(&app), &summary);
-                finish_operation(&operation_id);
-            }
-        });
-    } else {
-        emit_state(
-            app,
-            &operation_id,
-            OperationKind::ArchiveAdd,
-            OperationState::Validating,
-            None,
-            0,
-            0,
-            None,
-        );
-        let summary = run_archive_add(
-            app,
-            &operation_id,
-            sources,
-            archive_path,
-            target_inner_dir,
-            policy,
-        );
-        emit_summary(app, &summary);
-        finish_operation(&operation_id);
-    }
-    Ok(started)
+    launch_operation(app, OperationKind::ArchiveAdd, Some(OperationState::Validating), move |app, operation_id| {
+        run_archive_add(app, operation_id, sources, archive_path, target_inner_dir, policy)
+    })
 }

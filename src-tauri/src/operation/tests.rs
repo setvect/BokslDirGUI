@@ -22,7 +22,9 @@ use super::file_io::{
     COPY_PROGRESS_CHUNK_BYTES,
 };
 use super::process::run_external_command_capture_observed;
-use super::runtime::{finish_operation, next_operation_id, register_operation, OperationStats};
+use super::runtime::{
+    claim_slot, finish_operation, next_operation_id, register_operation, release_slot, OperationStats,
+};
 use super::transfer::{run_copy, run_move};
 
 struct Fixture(PathBuf, #[allow(dead_code)] crate::test_util::TempDir); // 삭제는 TempDir Drop이 담당
@@ -661,4 +663,14 @@ fn source_entry_rejects_ads_before_resolving_parent() {
     let error = super::file_io::canonical_existing_entry(&ads).unwrap_err();
     assert_eq!(error.code, "invalid_path");
     assert_eq!(fs::read_to_string(file).unwrap(), "keep");
+}
+
+#[test]
+fn second_app_operation_is_rejected_until_the_first_releases_its_slot() {
+    let slot = std::sync::Mutex::new(false);
+    claim_slot(&slot).expect("first operation claims the slot");
+    let busy = claim_slot(&slot).expect_err("second operation must wait");
+    assert_eq!((busy.code.as_str(), busy.message_key.as_str()), ("operation_busy", "errors.operationBusy"));
+    release_slot(&slot);
+    claim_slot(&slot).expect("slot is free after release");
 }

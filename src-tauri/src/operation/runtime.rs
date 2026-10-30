@@ -1,6 +1,6 @@
 use crate::contracts::{
     AppError, CancelAck, CommandResult, ConflictAck, ConflictDecision, ConflictPrompt,
-    OperationKind, OperationProgress, OperationState, OperationSummary,
+    OperationKind, OperationProgress, OperationStarted, OperationState, OperationSummary,
 };
 use crate::path_text::display_path;
 use std::collections::BTreeMap;
@@ -180,6 +180,98 @@ pub(super) fn wait_for_conflict_decision(
 
 pub(super) fn conflict_registry() -> &'static (Mutex<BTreeMap<String, ConflictState>>, Condvar) {
     CONFLICTS.get_or_init(|| (Mutex::new(BTreeMap::new()), Condvar::new()))
+}
+
+/// 앱에서 시작한 장기 작업은 한 번에 하나만 실행(프론트 작업 차단과 같은 정책의 백엔드 방어선).
+static ACTIVE_APP_OPERATION: Mutex<bool> = Mutex::new(false);
+
+/// 앱 작업 자리. Drop 시 해제, 앱 없이 동기로 실행하는 경로(테스트)는 자리를 잡지 않음.
+pub(super) struct OperationSlot {
+    held: bool,
+}
+
+impl OperationSlot {
+    pub(super) fn claim(app: Option<&tauri::AppHandle>) -> CommandResult<Self> {
+        if app.is_none() {
+            return Ok(Self { held: false });
+        }
+        claim_slot(&ACTIVE_APP_OPERATION)?;
+        Ok(Self { held: true })
+    }
+}
+
+impl Drop for OperationSlot {
+    fn drop(&mut self) {
+        if self.held {
+            release_slot(&ACTIVE_APP_OPERATION);
+        }
+    }
+}
+
+pub(super) fn claim_slot(slot: &Mutex<bool>) -> CommandResult<()> {
+    let mut active = slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if *active {
+        return Err(AppError::new("operation_busy", "errors.operationBusy", None, true));
+    }
+    *active = true;
+    Ok(())
+}
+
+pub(super) fn release_slot(slot: &Mutex<bool>) {
+    *slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = false;
+}
+
+/// 장기 작업 시작 공통 경계: 자리 확보 → 등록 → Queued 응답, 작업 스레드에서 첫 상태 알림·실행·요약 발행·등록 해제.
+/// 앱이 없으면(테스트) 같은 순서를 현재 스레드에서 실행. 요약 발행 전에 자리를 풀어 프론트가 바로 다음 작업 시작 가능.
+pub(super) fn launch_operation(
+    app: Option<&tauri::AppHandle>,
+    kind: OperationKind,
+    initial_state: Option<OperationState>,
+    run: impl FnOnce(Option<&tauri::AppHandle>, &str) -> OperationSummary + Send + 'static,
+) -> CommandResult<OperationStarted> {
+    let slot = OperationSlot::claim(app)?;
+    launch_claimed_operation(app, kind, initial_state, slot, run)
+}
+
+/// 시작 전 상태를 바꾸는 작업(휴지통 되돌리기 기록 꺼내기)은 자리를 먼저 잡고 이 함수로 시작.
+pub(super) fn launch_claimed_operation(
+    app: Option<&tauri::AppHandle>,
+    kind: OperationKind,
+    initial_state: Option<OperationState>,
+    slot: OperationSlot,
+    run: impl FnOnce(Option<&tauri::AppHandle>, &str) -> OperationSummary + Send + 'static,
+) -> CommandResult<OperationStarted> {
+    let operation_id = next_operation_id(kind);
+    register_operation(&operation_id);
+    let started = OperationStarted {
+        operation_id: operation_id.clone(),
+        kind,
+        state: OperationState::Queued,
+    };
+    let execute = move |app: Option<&tauri::AppHandle>, operation_id: &str| {
+        if let Some(state) = initial_state {
+            emit_state(app, operation_id, kind, state, None, 0, 0, None);
+        }
+        let summary = run(app, operation_id);
+        drop(slot);
+        emit_summary(app, &summary);
+        finish_operation(operation_id);
+    };
+    match app {
+        Some(app) => {
+            let app = app.clone();
+            let worker_id = operation_id.clone();
+            if let Err(error) = std::thread::Builder::new()
+                .name("boksldir-operation".to_owned())
+                .spawn(move || execute(Some(&app), &worker_id))
+            {
+                finish_operation(&operation_id);
+                return Err(crate::filesystem::map_io_error(error, None));
+            }
+        }
+        None => execute(None, &operation_id),
+    }
+    Ok(started)
 }
 
 pub(super) fn next_operation_id(kind: OperationKind) -> String {

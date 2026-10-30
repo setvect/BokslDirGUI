@@ -12,7 +12,6 @@ import {
   formatUserErrorMessage
 } from '../i18n-resources';
 import { dialogKindForAction } from '../operations/dialogDraft';
-import { operationSummaryStatusLabel } from '../operations/operationLabels';
 import type { OpenDialogRequest } from '../operations/operationTypes';
 import { type OperationDialogDraft } from '../operations/operationTypes';
 import { AppController, LongRunningOperationClient, SafeMutationClient } from '../tauri/commanderClients';
@@ -37,6 +36,7 @@ import {
 import { oppositePanelOf, shouldClearSourceSelectionAfterOperation, sourcesBelongToListing } from './selectionModel';
 import { useFileClipboard } from './useFileClipboard';
 import { useTrashUndo } from './useTrashUndo';
+import { finishOperation, operationCanceller } from './operationCompletion';
 
 interface CommanderActionsDependencies {
   readonly clearCompletedSelection: (panelId: PanelId, sourcePath: string) => void;
@@ -112,11 +112,11 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     void dependencies.startLongRunningOperation({
       action: ACTION_BY_ID.get('file.bulkRename')!, ...snapshot, targetDir: snapshot.workingDir,
       longRunningExecutor: () => dependencies.operationClient.startBulkRename!({ items }),
-      cancelExecutor: operationId => dependencies.operationClient.cancelOperation({ operationId }),
+      cancelExecutor: operationCanceller(dependencies.operationClient),
       onOperationSummary: summary => {
+        // 바뀐 이름은 기존 선택 경로와 맞지 않으므로 일부라도 바뀌면 선택 해제.
         if (summary.completedFiles > 0) dependencies.clearCompletedSelection(snapshot.panelId, snapshot.workingDir);
-        dependencies.refreshPanel('left', true); dependencies.refreshPanel('right', true);
-        dependencies.setStatusMessage(operationSummaryStatusLabel(summary, dependencies.settings.language));
+        finishOperation(dependencies, ACTION_BY_ID.get('file.bulkRename')!, summary, dependencies.settings.language);
       },
     });
   };
@@ -575,7 +575,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
           : archiveAddPlan
             ? archiveAddExecutorForPlan(archiveAddPlan, dependencies.operationClient)
             : longRunningExecutorForAction(actionId, dependencies.operationClient, dependencies.mutationClient),
-        cancelExecutor: (operationId: string) => dependencies.operationClient.cancelOperation({ operationId }),
+        cancelExecutor: operationCanceller(dependencies.operationClient),
         conflictResolver: (operationId: string, decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel') => dependencies.operationClient.resolveConflict({ operationId, decision }),
         onAtomicSuccess: (result: unknown) => {
           const entry = result as Partial<FileEntry>;
@@ -594,15 +594,17 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
         },
         onOperationSummary: (summary: OperationSummary, dialog: OperationDialogDraft) => {
           if (dialog.dialogKind === 'trash') refreshTrashUndo();
+          // 일부 실패·건너뜀이면 남은 원본을 다시 고를 수 있도록 선택 유지.
           if (shouldClearSourceSelectionAfterOperation(summary, dialog.dialogKind)) {
             dependencies.clearCompletedSelection(dialog.panelId, panelListing.path);
           }
-          dependencies.refreshPanel(dialog.panelId, true);
-          dependencies.refreshPanel(oppositePanelOf(dialog.panelId), true);
           completeClipboardMove(clipboardMoveSnapshot, summary);
           const moveIncomplete = clipboardMoveSnapshot && summary.completedFiles > 0
             && (summary.state !== 'completed' || summary.failedFiles > 0 || (summary.skippedFiles ?? 0) > 0);
-          dependencies.setStatusMessage(`${labelForAction(action, dependencies.settings.language)} ${operationSummaryStatusLabel(summary, dependencies.settings.language)}${moveIncomplete ? dependencies.statusText.clipboardMoveIncomplete : ''}`);
+          finishOperation(dependencies, action, summary, dependencies.settings.language, {
+            firstPanel: dialog.panelId,
+            suffix: moveIncomplete ? dependencies.statusText.clipboardMoveIncomplete : '',
+          });
         },
         onOperationStartError: (error: AppError) => {
           if (actionNeedsConcreteSources(actionId) && error.code === 'not_found') {

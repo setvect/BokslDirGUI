@@ -1,7 +1,7 @@
 //! Session-only receipts. Only paths returned by the OS trash API can be restored.
 use super::runtime::{
-    cancel_summary, emit_progress, emit_summary, finish_operation, is_cancelled, next_operation_id,
-    register_operation, summary_from_stats, OperationStats,
+    cancel_summary, emit_progress, is_cancelled, launch_claimed_operation, summary_from_stats,
+    OperationSlot, OperationStats,
 };
 use crate::contracts::{
     AppError, CommandResult, FileEntry, OperationKind, OperationStarted, OperationState,
@@ -222,28 +222,14 @@ fn move_to_trash(
 }
 
 pub(crate) fn start(app: Option<&tauri::AppHandle>, id: String) -> CommandResult<OperationStarted> {
+    // 자리를 먼저 잡아 작업이 거절돼도 되돌리기 기록을 꺼내지 않음.
+    let slot = OperationSlot::claim(app)?;
     let batch = history().lock().unwrap().take(&id)?;
-    let operation_id = next_operation_id(OperationKind::RestoreTrash);
-    register_operation(&operation_id);
-    let started = OperationStarted {
-        operation_id: operation_id.clone(),
-        kind: OperationKind::RestoreTrash,
-        state: OperationState::Queued,
-    };
-    let asynchronous = app.is_some();
-    let app = app.cloned();
-    let run = move || {
-        let (summary, remaining) = run_restore(app.as_ref(), &operation_id, batch, None);
+    launch_claimed_operation(app, OperationKind::RestoreTrash, None, slot, move |app, operation_id| {
+        let (summary, remaining) = run_restore(app, operation_id, batch, None);
         history().lock().unwrap().finish(remaining);
-        emit_summary(app.as_ref(), &summary);
-        finish_operation(&operation_id);
-    };
-    if asynchronous {
-        std::thread::spawn(run);
-    } else {
-        run();
-    }
-    Ok(started)
+        summary
+    })
 }
 fn validate_restore(receipt: &Receipt) -> CommandResult<()> {
     let target = Path::new(&receipt.entry.path);

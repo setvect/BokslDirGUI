@@ -1,8 +1,5 @@
 use super::process::{capture_process, CapturePolicy};
-use super::runtime::{
-    emit_state, emit_summary, error_summary, finish_operation, is_cancelled, next_operation_id,
-    register_operation,
-};
+use super::runtime::{emit_state, error_summary, is_cancelled, launch_operation};
 use crate::contracts::{
     AppError, CommandResult, OperationKind, OperationStarted, OperationState, OperationSummary,
     ShellCommandResult,
@@ -20,25 +17,8 @@ pub(crate) fn start(
     command: Command,
     directory: PathBuf,
 ) -> CommandResult<OperationStarted> {
-    let id = next_operation_id(OperationKind::ShellCommand);
-    register_operation(&id);
-    let app = app.clone();
-    let worker_id = id.clone();
-    if let Err(error) = std::thread::Builder::new()
-        .name("shell-command".to_owned())
-        .spawn(move || {
-            let summary = run(Some(&app), &worker_id, command, &directory, COMMAND_TIMEOUT);
-            emit_summary(Some(&app), &summary);
-            finish_operation(&worker_id);
-        })
-    {
-        finish_operation(&id);
-        return Err(crate::filesystem::map_io_error(error, None));
-    }
-    Ok(OperationStarted {
-        operation_id: id,
-        kind: OperationKind::ShellCommand,
-        state: OperationState::Queued,
+    launch_operation(Some(app), OperationKind::ShellCommand, None, move |app, operation_id| {
+        run(app, operation_id, command, &directory, COMMAND_TIMEOUT)
     })
 }
 
@@ -196,10 +176,10 @@ pub(crate) fn run_for_test(
         args.unwrap_or_default(),
         token.as_deref(),
     )?;
-    let id = next_operation_id(OperationKind::ShellCommand);
-    register_operation(&id);
+    let id = super::runtime::next_operation_id(OperationKind::ShellCommand);
+    super::runtime::register_operation(&id);
     let summary = run(None, &id, command, &directory, COMMAND_TIMEOUT);
-    finish_operation(&id);
+    super::runtime::finish_operation(&id);
     summary.command_result.ok_or_else(|| {
         summary
             .errors

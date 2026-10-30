@@ -1,6 +1,6 @@
 use super::runtime::{
-    check_cancelled, emit_progress, emit_summary, error_summary, finish_operation,
-    next_operation_id, register_operation, summary_from_stats, OperationStats,
+    check_cancelled, emit_progress, error_summary, launch_operation, summary_from_stats,
+    OperationStats,
 };
 use crate::bulk_rename::validate_plan;
 use crate::contracts::RenameItem;
@@ -16,26 +16,9 @@ pub(crate) fn start(
     items: Vec<RenameItem>,
 ) -> CommandResult<OperationStarted> {
     validate_plan(&items)?;
-    let operation_id = next_operation_id(OperationKind::Rename);
-    register_operation(&operation_id);
-    let started = OperationStarted {
-        operation_id: operation_id.clone(),
-        kind: OperationKind::Rename,
-        state: OperationState::Queued,
-    };
-    let asynchronous = app.is_some();
-    let app = app.cloned();
-    let run = move || {
-        let summary = run_rename(app.as_ref(), &operation_id, &items, None);
-        emit_summary(app.as_ref(), &summary);
-        finish_operation(&operation_id);
-    };
-    if asynchronous {
-        std::thread::spawn(run);
-    } else {
-        run();
-    }
-    Ok(started)
+    launch_operation(app, OperationKind::Rename, None, move |app, operation_id| {
+        run_rename(app, operation_id, &items, None)
+    })
 }
 
 fn run_rename(

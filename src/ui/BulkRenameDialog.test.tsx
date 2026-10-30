@@ -62,4 +62,9 @@ it('opens from the file menu and runs through the common operation store with ca
   expect(useOperationStore.getState().activeOperationController?.operationId).toBe('bulk-op');
   act(() => useOperationStore.getState().cancelOperation());
   expect(operations.cancelOperation).toHaveBeenCalledWith({ operationId: 'bulk-op' });
+  act(() => useOperationStore.getState().applyOperationSummary({
+    operationId: 'bulk-op', kind: 'rename', state: 'cancelled', completedFiles: 0, failedFiles: 0, errors: [],
+  }));
+  // 다른 장기 작업과 같은 "액션 이름 결과" 상태 메시지.
+  expect(await screen.findByText('다중 이름 변경 취소됨')).toBeTruthy();
 });

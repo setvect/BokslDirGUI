@@ -112,6 +112,10 @@
 - 제안: `useCommanderActions` 안 공통 완료 요청 생성, `operation/runtime.rs`의 공통 시작 함수
 - 유지: 유형별 사전 검증과 `run_*` 알고리즘, 이벤트 순서와 등록 해제 시점
 - 위험·검증: 낮음~중간, `trashUndo.test.tsx`, `BulkRenameDialog.test.tsx`, Rust 동기 경로 테스트, 스레드 생성 실패 주입 테스트 추가
+- 진행(9단계): Rust 시작 9곳을 `launch_operation`(첫 상태 알림 선택, 스레드 생성 실패 정리 포함)으로 통합, 백엔드 단일 활성 작업 차단 추가
+- 진행(9단계): 프론트 완료 처리 3곳을 `operationCompletion.ts`의 `finishOperation`·`operationCanceller`로 통합, 다중 이름 변경 완료 메시지에 액션 이름 추가
+- 유지 결정: 선택 해제 기준은 작업 의미가 달라 작업별 유지
+- 미검증: 스레드 생성 실패 주입 테스트(표준 라이브러리 스레드 생성 실패를 결정적으로 만들 수단 없음), 공통 경로는 기존 shell 정리 방식과 동일
 
 ### R05 Shell의 컨트롤러 내부 직접 조작 정리
 
