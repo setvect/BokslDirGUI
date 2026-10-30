@@ -34,7 +34,7 @@
 | D02 | `CommanderShell.closeOverlay` | 북마크 이름 변경 창이 취소 버튼·Esc로 닫히지 않음 | 재현 | `closeOverlay`에서 이름 변경 요청 초기화, 취소·Esc 회귀 2건(설정 저장 미호출 포함) |
 | D03 | `fileActionPlans.archiveAutoExtractFolderName` | 자동 해제(`za`)가 `.tar.zst`·`.tzst`·`.tar`·`.jar`·`.war`에서 `이름.확장자-extracted` 폴더 생성, parity 노트의 basename 규칙과 불일치 | 재현 | 지원 확장자 목록을 `src/domain/archiveFormats.ts`로 분리해 사용, 형식별·대소문자·대체 이름 단위 테스트 11건 |
 | D04 | `i18n-resources` | Rust 오류 키 6개 번역 없음(`errors.io`, `errors.operationCancelled`, `errors.protectedPath`, `errors.emptyOperation`, `errors.homeUnavailable`, `errors.symlinkCopyUnsupported`), 구체 사유 대신 일반 실패 문구 표시 | 재현 | ko·en 번역 추가, Rust 소스 전체의 `errors.*` 키 번역 존재 검사 추가(`fullScope.test.ts`) |
-| D05 | `archive::list_7z_entries_with_metadata` | Windows 배포본(GUI 서브시스템)에서 ZIP·7z 목록 조회 시 7-Zip 콘솔 창 표시 가능 | 코드 대조, 실기 미확인 | `platform::hide_console_window`로 `CREATE_NO_WINDOW` 적용, 작업용 실행(`spawn_managed`)과 같은 정책 |
+| D05 | `archive::list_7z_entries_with_metadata` | Windows 배포본(GUI 서브시스템)에서 ZIP·7z 목록 조회 시 7-Zip이 콘솔 세션을 만들어 콘솔 창 표시 가능 | 코드 대조, Windows VM 확인 | `platform::hide_console_window`로 `CREATE_NO_WINDOW` 적용, 작업용 실행(`spawn_managed`)과 같은 정책, Windows VM 수정 전후 비교(아래 기록) |
 | D06 | `external::open_directory_in_app`, `external::run_open_command` | macOS `open` 종료를 기다리지 않아 실패 미보고, 종료된 자식 프로세스 미회수 가능 | 코드 대조, 실기 미확인 | macOS는 종료 상태 확인 후 실패 시 `errors.externalCommandFailed`(연결 앱 열기와 동일), Linux는 응답을 막지 않고 백그라운드 회수, Windows 변경 없음, macOS 단위 테스트 추가 |
 | D07 | `archive::zip_name_listing_command` 등 ZIP 목록 도구 | 로케일이 없으면 macOS 기본 `tar`가 한글 이름을 8진수 이스케이프로 출력, Finder 실행 앱이 물려받는 launchd 환경에 `LANG` 없음 → 배포 앱의 ZIP 목록 한글 이름 깨짐 가능 | 재현(로케일 없는 Rust 테스트 실패), 실제 앱 실기 미확인 | macOS 목록 도구(`tar`·`unzip`·`zipinfo`)에 `LC_ALL=en_US.UTF-8` 고정, 테스트의 교차 확인용 `/usr/bin/tar`도 동일 |
 
@@ -164,7 +164,6 @@
   - 타입 검사, 프론트 테스트 41개 파일·422개, 도구 테스트 16개, 빌드
   - Rust 검사, Rust 테스트 127개 통과·1개 무시, 범위 검사 262개, 생성 문서 정합성
 - 미검증
-  - Windows 설치본의 7-Zip 콘솔 창(D05), Windows 빌드 미확보
   - 실제 앱에서 `open` 실패 시 오류 표시(D06 실패 경로)
   - Linux
 
@@ -180,3 +179,22 @@
 | D01 빈 영역 우클릭 메뉴 | jsdom 재현으로 대체 | 붙여넣기·여기로 이동 표시, 붙여넣기 실행 후 원본·사본 SHA-1 일치 |
 | D02 북마크 이름 변경 창 | jsdom 재현으로 대체 | 취소 버튼·창 바깥 클릭으로 닫힘, Esc는 D08 영향 |
 | D06 기본 앱으로 열기 | TextEdit 실행 후 앱에 회수되지 않은 `open` 자식(좀비) 잔존 | TextEdit 실행, 앱 자식 프로세스 없음 |
+
+### Windows VM 실기 확인
+
+- 환경: VirtualBox VM `win 11`(Windows 11 ARM64, x64 앱 에뮬레이션), 시험 전 스냅샷 `before-d05-verify-20261030` 생성
+- 수정 전 앱: VM에 설치돼 있던 2026-10-19 17:48 빌드(실행 파일 SHA-256 앞자리 `B667CFE8DD63`)
+- 수정 후 앱: 브랜치 `claude/code-review-fixes-20261030`의 CI 실행 41057264320 NSIS 설치본(설치 후 실행 파일 `7FD159DF0D7D`)
+- 방법: 3,001개 항목 ZIP을 열 때 새로 생기는 최상위 창과 `7za`·`conhost`·`OpenConsole`·`WindowsTerminal` 프로세스를 PowerShell로 기록
+- CI windows-2022 작업에서 Windows 전용 코드 컴파일과 Rust 테스트 117개 통과
+
+| 항목 | 수정 전 앱 | 수정 후 앱 |
+| --- | --- | --- |
+| `7za` 실행 | 있음 | 있음(목록 캐시 없는 새 실행으로 확인) |
+| 콘솔 세션 | `conhost`·`OpenConsole`(Windows 터미널 호스트) 생성, `7za` 소유 `PseudoConsoleWindow` 창 | 창 없는 `conhost`만 생성, `OpenConsole`·콘솔 창 없음 |
+| 화면·작업 표시줄 | 감시 스크립트가 Windows 터미널에서 실행돼 판정 불가 | 터미널 항목·콘솔 창 없음 |
+| ZIP 목록 | 정상 | 정상 |
+
+- 한계: 수정 전 앱은 감시 스크립트가 Windows 터미널에서 실행된 상태로만 측정
+- 한계: 수정 전 CI 설치본(`ae5856b`) 재설치는 Windows 스마트 앱 컨트롤 차단으로 같은 조건 재측정 미실시
+- 관찰: 스마트 앱 컨트롤이 서명 없는 설치본을 차단할 수 있음 → 배포 시 코드 서명 검토 필요
