@@ -40,7 +40,7 @@ pub(crate) async fn list_dir_limited(
     limit: usize,
 ) -> CommandResult<DirectoryListing> {
     let requested = RemotePath::parse(path)?;
-    let connection = connection::connection(&requested.location)?;
+    let connection = connection::ensure(&requested.location).await?;
     let (directory, attrs) = existing_directory(&connection, &requested).await?;
     let filter_text = filter
         .as_deref()
@@ -91,7 +91,7 @@ pub(crate) async fn goto_path(panel_id: PanelId, input: &str, base: Option<&str>
         RemotePath::parse(input)?
     } else {
         let base = RemotePath::parse(base.unwrap_or_default())?;
-        let connection = connection::connection(&base.location)?;
+        let connection = connection::ensure(&base.location).await?;
         base.resolve(input, &connection.home)
     };
     list_dir(panel_id, &target.url(), false, SortSpec::default(), None).await
@@ -100,7 +100,7 @@ pub(crate) async fn goto_path(panel_id: PanelId, input: &str, base: Option<&str>
 /// 원격 항목 정보. 링크는 링크 자체를 설명하고 대상 종류만 확인, 폴더 크기 합계는 계산하지 않음.
 pub(crate) async fn metadata(path: &str) -> CommandResult<FileMetadata> {
     let target = RemotePath::parse(path)?;
-    let connection = connection::connection(&target.location)?;
+    let connection = connection::ensure(&target.location).await?;
     let attrs = connection
         .sftp
         .symlink_metadata(target.path.as_str())

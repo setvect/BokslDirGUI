@@ -26,6 +26,7 @@ import type {
   RemoteConnectionChanged,
   RemoteConnectRequest,
   RemoteSession,
+  SshConfigImport,
   Settings,
   ShellCommandPreview,
   SortSpec,
@@ -181,6 +182,8 @@ export const tauriClient = {
     invokeCommand<void>(COMMANDS.remoteTrustHostKey, input),
   remoteDisconnect: (input: { sessionId: string }) => invokeCommand<boolean>(COMMANDS.remoteDisconnect, input),
   remoteSessions: () => invokeCommand<RemoteSession[]>(COMMANDS.remoteSessions),
+  remoteForgetSecret: (input: { siteId: string }) => invokeCommand<void>(COMMANDS.remoteForgetSecret, input),
+  remoteImportSshConfig: () => invokeCommand<SshConfigImport>(COMMANDS.remoteImportSshConfig),
   startRemoteChmod: (input: { targets: string[]; mode: number; recursive: boolean; scope: ChmodScope }) =>
     invokeCommand<OperationStarted>(COMMANDS.startRemoteChmod, input),
   listenRemoteConnectionChanges: async (handler: (event: RemoteConnectionChanged) => void) => {

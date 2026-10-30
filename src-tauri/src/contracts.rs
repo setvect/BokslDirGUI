@@ -452,6 +452,12 @@ pub(crate) struct RemoteConnectRequest {
     pub(crate) key_path: Option<String>,
     #[serde(default)]
     pub(crate) passphrase: Option<String>,
+    /// 저장된 사이트에서 연결: 비밀값을 입력하지 않으면 자격 증명 저장소에서 읽음.
+    #[serde(default)]
+    pub(crate) site_id: Option<String>,
+    /// 연결에 성공하면 입력한 비밀값을 자격 증명 저장소에 저장.
+    #[serde(default)]
+    pub(crate) save_secret: bool,
 }
 
 /// 연결된 원격 위치. `session_id`는 원격 루트 URL(`sftp://사용자@호스트:포트/`).
@@ -466,6 +472,8 @@ pub(crate) struct RemoteSession {
     pub(crate) home_url: String,
     pub(crate) host_key_algorithm: String,
     pub(crate) host_key_fingerprint: String,
+    /// 이번 연결 요청에서 비밀값을 자격 증명 저장소에 저장했는지 여부.
+    pub(crate) secret_stored: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -474,6 +482,25 @@ pub(crate) enum RemoteConnectionState {
     Connected,
     Disconnected,
     Lost,
+}
+
+/// `~/.ssh/config` 가져오기 결과: 와일드카드가 없는 Host 항목과 지원하지 않는 설정 경고.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SshConfigImport {
+    pub(crate) entries: Vec<SshConfigEntry>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SshConfigEntry {
+    pub(crate) alias: String,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) user: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) key_path: Option<String>,
 }
 
 /// `remote_connection_changed` 이벤트: 연결·앱 요청 해제·끊김.

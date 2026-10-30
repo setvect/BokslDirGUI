@@ -7,7 +7,7 @@ import type { RemoteSessionClient } from '../tauri/commanderClients';
 import type { PanelStateById } from './panelState';
 import {
   authPromptsOf, changedHostKeyOf, connectRequestOf, draftFromSite, draftFromUrl, emptyDraft, hostKeyQuestionOf, newSiteId,
-  siteFromDraft, startUrlFor, validateDraft, type AuthPrompts, type HostKeyQuestion, type RemoteConnectDraft, type RemoteSecrets,
+  siteFromDraft, startUrlFor, usesSecret, validateDraft, type AuthPrompts, type HostKeyQuestion, type RemoteConnectDraft, type RemoteSecrets,
 } from './remoteConnectModel';
 import { remoteStatusForPath, type RemotePanelStatus, type RemoteSessionMap } from './remoteSessionState';
 
@@ -69,9 +69,46 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
     return { ...draft, siteId: id };
   };
 
+  // 저장된 비밀값 표시 갱신: 사이트 목록의 다른 항목은 그대로
+  const markSavedSecret = (id: string, savedSecret: boolean, message: string | null) => {
+    if (!sites().some((site) => site.id === id && site.savedSecret !== savedSecret)) return;
+    void saveSites(sites().map((site) => (site.id === id ? { ...site, savedSecret } : site)), message);
+  };
+
+  const forgetSecret = async (id: string) => {
+    const site = sites().find((candidate) => candidate.id === id);
+    if (!site) return;
+    const result = await dependencies.client.remoteForgetSecret({ siteId: id });
+    if (!result.ok) {
+      dependencies.setStatusMessage(formatUserErrorMessage(dependencies.language, result.error));
+      return;
+    }
+    markSavedSecret(id, false, text().secretForgotten(site.name));
+  };
+
+  // SSH 설정의 Host 항목을 사이트로 추가(FR-34.9). 같은 사용자·호스트·포트의 사이트는 건너뜀
+  const importSshConfig = async () => {
+    const result = await dependencies.client.remoteImportSshConfig();
+    if (!result.ok) {
+      dependencies.setStatusMessage(formatUserErrorMessage(dependencies.language, result.error));
+      return;
+    }
+    const existing = sites();
+    const added = result.data.entries
+      .filter((entry) => !existing.some((site) => site.user === entry.user && site.host === entry.host && site.port === entry.port))
+      .map((entry): RemoteSite => ({
+        id: newSiteId(), name: entry.alias.slice(0, 120), host: entry.host, port: entry.port, user: entry.user,
+        authMethod: entry.keyPath ? 'publicKey' : 'agent', ...(entry.keyPath ? { keyPath: entry.keyPath } : {}), savedSecret: false,
+      }));
+    if (added.length) void saveSites([...existing, ...added], null);
+    dependencies.setStatusMessage(text().imported(added.length, result.data.warnings));
+    setFlow((current) => (current?.stage === 'sites' && added[0] ? { ...current, selectedId: added[0].id } : current));
+  };
+
   const deleteSite = (id: string) => {
     const site = sites().find((candidate) => candidate.id === id);
     if (!site) return;
+    void dependencies.client.remoteForgetSecret({ siteId: id });
     const next = sites().filter((candidate) => candidate.id !== id);
     void saveSites(next, text().siteDeleted(site.name));
     setFlow((current) => (current?.stage === 'sites' ? { ...current, selectedId: next[0]?.id ?? null } : current));
@@ -91,6 +128,10 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
     if (result.ok) {
       secretsRef.current = {};
       dependencies.recordSession(result.data);
+      if (draft.siteId && result.data.secretStored) markSavedSecret(draft.siteId, true, null);
+      if (draft.siteId && draft.saveSite && draft.saveSecret && usesSecret(draft.authMethod) && !result.data.secretStored && !draft.hasSavedSecret) {
+        dependencies.setStatusMessage(text().secretSaveFailed);
+      }
       setFlow(null);
       const currentPath = dependencies.panelStateRef.current?.[panelId].path ?? null;
       if (currentPath && !isRemotePath(currentPath)) localPathBeforeRemote.current[panelId] = currentPath;
@@ -179,10 +220,12 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
     close();
   };
 
+  // 입력 없이 연결할 수 있는 사이트: 에이전트, 저장된 비밀값, 키 파일(키 암호가 필요하면 연결 창으로)
+  const connectsWithoutInput = (site: RemoteSite) => site.authMethod === 'agent' || site.authMethod === 'publicKey' || (site.savedSecret && usesSecret(site.authMethod));
+
   const connectSite = (panelId: PanelId, site: RemoteSite) => {
     const draft = draftFromSite(site);
-    // 에이전트는 입력할 비밀값이 없어 바로 연결, 그 밖은 연결 창에서 암호·키 암호 입력
-    if (site.authMethod === 'agent') {
+    if (connectsWithoutInput(site)) {
       secretsRef.current = {};
       setFlow({ stage: 'form', panelId, draft, targetUrl: null, error: null, pending: true });
       void connect(panelId, draft, null);
@@ -229,12 +272,23 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
     const draft = draftFromUrl(path, sites());
     if (!draft) return;
     const site = draft.siteId ? sites().find((candidate) => candidate.id === draft.siteId) : undefined;
-    if (site?.authMethod === 'agent') {
+    if (site && connectsWithoutInput(site)) {
       setFlow({ stage: 'form', panelId, draft, targetUrl: path, error: null, pending: true });
       void connect(panelId, draft, path);
       return;
     }
     openForm(panelId, draft, path);
+  };
+
+  // 시작 때 원격 탭 복원(FR-36.9): 입력 없이 연결할 수 있는 사이트만 조용히 연결, 그 밖은 false
+  const reconnectForPath = async (path: string) => {
+    const draft = draftFromUrl(path, sites());
+    const site = draft?.siteId ? sites().find((candidate) => candidate.id === draft.siteId) : undefined;
+    if (!draft || !site || !connectsWithoutInput(site)) return false;
+    const result = await dependencies.client.remoteConnect({ request: connectRequestOf(draft, {}) });
+    if (!result.ok) return false;
+    dependencies.recordSession(result.data);
+    return true;
   };
 
   const showInfo = (panelId: PanelId) => {
@@ -245,6 +299,6 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
 
   return {
     flow, setFlow, close, cancel, openForm, openSites, openForUrl, submitForm, saveOnly, trustHostKey, respondPrompts,
-    connectSite, deleteSite, duplicateSite, disconnect, reconnect, showInfo,
+    connectSite, deleteSite, duplicateSite, forgetSecret, importSshConfig, disconnect, reconnect, reconnectForPath, showInfo,
   };
 }

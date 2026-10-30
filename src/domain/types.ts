@@ -312,6 +312,10 @@ export interface RemoteConnectRequest {
   password?: string;
   keyPath?: string;
   passphrase?: string;
+  // 저장된 사이트에서 연결: 비밀값을 비우면 자격 증명 저장소의 값 사용
+  siteId?: string;
+  // 연결에 성공하면 입력한 비밀값을 자격 증명 저장소에 저장
+  saveSecret?: boolean;
 }
 
 // sessionId는 원격 루트 URL(`sftp://사용자@호스트:포트/`), `remoteLocationKey`와 같은 값
@@ -324,6 +328,22 @@ export interface RemoteSession {
   homeUrl: string;
   hostKeyAlgorithm: string;
   hostKeyFingerprint: string;
+  // 이번 연결 요청에서 비밀값을 저장했는지 여부
+  secretStored: boolean;
+}
+
+// `~/.ssh/config` 가져오기 결과(FR-34.9)
+export interface SshConfigEntry {
+  alias: string;
+  host: string;
+  port: number;
+  user: string;
+  keyPath?: string;
+}
+
+export interface SshConfigImport {
+  entries: SshConfigEntry[];
+  warnings: string[];
 }
 
 export type RemoteConnectionState = 'connected' | 'disconnected' | 'lost';

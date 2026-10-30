@@ -2,9 +2,11 @@
 //! 원격 요청은 전용 비동기 런타임에서 실행. 명령은 `run`, 동기 작업 스레드는 `block_on` 사용.
 pub(crate) mod bulk_rename;
 pub(crate) mod connection;
+pub(crate) mod credentials;
 pub(crate) mod listing;
 pub(crate) mod ops;
 pub(crate) mod path;
+pub(crate) mod ssh_config;
 #[cfg(test)]
 pub(crate) mod test_server;
 #[cfg(test)]

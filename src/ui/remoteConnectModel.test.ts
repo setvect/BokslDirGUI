@@ -3,7 +3,7 @@ import type { AppError, RemoteSession, RemoteSite } from '../domain/types';
 import { authPromptsOf, changedHostKeyOf, connectRequestOf, draftFromUrl, emptyDraft, hostKeyQuestionOf, siteFromDraft, startUrlFor, validateDraft } from './remoteConnectModel';
 
 const site: RemoteSite = { id: 'site-1', name: '배포', host: 'example.com', port: 2222, user: 'boksl', authMethod: 'publicKey', keyPath: '~/.ssh/deploy', startPath: '/srv', savedSecret: false };
-const session: RemoteSession = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x' };
+const session: RemoteSession = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x', secretStored: false };
 const error = (code: string, details: Record<string, string>): AppError => ({ code, messageKey: `errors.${code}`, path: null, details, recoverable: true });
 
 describe('remote connect model', () => {
@@ -23,6 +23,9 @@ describe('remote connect model', () => {
     expect(connectRequestOf({ ...draft, authMethod: 'publicKey', keyPath: '~/.ssh/id' }, { password: 'pw', passphrase: '' }))
       .toEqual({ host: 'example.com', port: 2222, user: 'boksl', authMethod: 'publicKey', keyPath: '~/.ssh/id' });
     expect(connectRequestOf({ ...draft, authMethod: 'agent' }, { password: 'pw' })).toEqual({ host: 'example.com', port: 2222, user: 'boksl', authMethod: 'agent' });
+    const savedSite = { ...draft, siteId: 'site-9', saveSite: true, saveSecret: true };
+    expect(connectRequestOf(savedSite, { password: '' })).toEqual({ siteId: 'site-9', saveSecret: true, host: 'example.com', port: 2222, user: 'boksl', authMethod: 'password', password: '' });
+    expect(connectRequestOf({ ...savedSite, authMethod: 'agent' }, {})).toEqual({ siteId: 'site-9', host: 'example.com', port: 2222, user: 'boksl', authMethod: 'agent' });
     const saved = siteFromDraft({ ...draft, name: ' 운영 ', authMethod: 'agent', startPath: '' }, 'site-2', false);
     expect(saved).toEqual({ id: 'site-2', name: '운영', host: 'example.com', port: 2222, user: 'boksl', authMethod: 'agent', savedSecret: false });
     expect(JSON.stringify(saved)).not.toContain('pw');

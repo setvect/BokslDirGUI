@@ -59,7 +59,7 @@ export type LongRunningOperationClient = Pick<TauriClient, 'startCopy' | 'startM
 
 export type RemoteSessionClient = Pick<TauriClient,
   | 'remoteConnect' | 'remoteAuthRespond' | 'remoteAuthCancel' | 'remoteTrustHostKey' | 'remoteDisconnect' | 'remoteSessions'
-  | 'listenRemoteConnectionChanges'
+  | 'listenRemoteConnectionChanges' | 'remoteForgetSecret' | 'remoteImportSshConfig'
 >;
 
 export const showNativeDropOverlay = () => invoke<void>('show_drop_overlay');

@@ -9,7 +9,7 @@ import {
   type NavigationListItem,
   type NavigationListState
 } from './CommanderOverlays';
-import { navigationItemsFromLocations } from './navigationItems';
+import { navigationItemsFromLocations, REMOTE_SITE_ITEM_PREFIX } from './navigationItems';
 import { type PanelDataSource } from './panelDataSource';
 import { panelIdLabel } from './panelPresentation';
 import type { PanelNavigationState, PanelStateById } from './panelState';
@@ -30,6 +30,8 @@ interface NavigationMenusDependencies {
   readonly panelStateRef: RefObject<PanelStateById>;
   readonly dataSource: PanelDataSource;
   readonly gotoPanelPath: (panelId: PanelId, path: string) => Promise<AppError | null | undefined>;
+  /** 위치 목록의 원격 사이트 선택: 연결 흐름 시작 */
+  readonly connectRemoteSite?: (panelId: PanelId, siteId: string) => void;
 }
 export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
 
@@ -156,6 +158,10 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
     if (state.kind === 'tabs') {
       const index = state.items.findIndex((candidate) => candidate.id === item.id);
       dependencies.activateTab(state.panelId, index);
+      return;
+    }
+    if (item.group === 'remote site' && dependencies.connectRemoteSite) {
+      dependencies.connectRemoteSite(state.panelId, item.id.slice(REMOTE_SITE_ITEM_PREFIX.length));
       return;
     }
     void dependencies.gotoPanelPath(state.panelId, item.path);

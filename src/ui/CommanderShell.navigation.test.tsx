@@ -43,7 +43,7 @@ describe('CommanderShell navigation', () => {
     dataSource.unwatchPath = vi.fn(async () => ({ ok: true as const, data: undefined }));
     dataSource.listenDirectoryChanges = vi.fn(async () => () => undefined);
     let changed: ((event: RemoteConnectionChanged) => void) | null = null;
-    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x' };
+    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x', secretStored: false };
     const remoteClient = remoteClientStub({
       remoteSessions: vi.fn(async () => ({ ok: true as const, data: [session] })),
       listenRemoteConnectionChanges: vi.fn(async (handler: (event: RemoteConnectionChanged) => void) => { changed = handler; return () => undefined; }),

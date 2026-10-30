@@ -141,10 +141,15 @@ export function CommanderShell({
     get setArchivePasswordRequest() { return setArchivePasswordRequest; },
     get saveSettingsPatch() { return saveSettingsPatch; },
     get settingsLoaded() { return settingsLoaded; },
+    reconnectForPath: (path) => remote.reconnectForPath(path),
   });
   const { openLocationsList, openTabList, openHistoryList, addBookmark, openBookmarkList, renameBookmarkForPanel, closeOverlays: closeNavigationOverlays, bookmarkRenameRequest, applyBookmarkRename, navigationList, chooseNavigationItem, closeNavigationTab, deleteNavigationBookmark } = useNavigationMenus({
     activateTab,
     closeTab,
+    connectRemoteSite: (panelId, siteId) => {
+      const site = remoteSettingsOf(settings).sites.find((candidate) => candidate.id === siteId);
+      if (site) remote.connectSite(panelId, site);
+    },
     get panelState() { return panelState; },
     get settings() { return settings; },
     get settingsRef() { return settingsRef; },
@@ -556,7 +561,8 @@ export function CommanderShell({
           onConnect={(site) => remote.connectSite(remoteFlow.panelId, site)}
           onNew={() => remote.openForm(remoteFlow.panelId, { ...emptyDraft(), saveSite: true })}
           onEdit={(site) => remote.openForm(remoteFlow.panelId, draftFromSite(site))}
-          onDuplicate={(site) => remote.duplicateSite(site.id)} onDelete={(site) => remote.deleteSite(site.id)} onClose={remote.close} />
+          onDuplicate={(site) => remote.duplicateSite(site.id)} onDelete={(site) => remote.deleteSite(site.id)}
+          onForgetSecret={(site) => { void remote.forgetSecret(site.id); }} onImport={() => { void remote.importSshConfig(); }} onClose={remote.close} />
       ) : null}
       {remoteFlow?.stage === 'info' ? (
         <RemoteInfoDialog language={settings.language} status={remoteFlow.status} session={remoteFlow.session} onClose={remote.close} />

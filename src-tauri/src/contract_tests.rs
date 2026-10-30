@@ -137,6 +137,7 @@ fn remote_connection_contract_matches_the_frontend_fixture() {
         serde_json::from_value(fixture()["remoteConnectRequest"].clone()).unwrap();
     assert_eq!(request.auth_method, crate::contracts::RemoteAuthMethod::PublicKey);
     assert_eq!(request.passphrase.as_deref(), Some("fixture-passphrase"));
+    assert_eq!((request.site_id.as_deref(), request.save_secret), (Some("site-fixture"), true));
     let session = crate::contracts::RemoteSession {
         session_id: "sftp://boksl@example.com:2222/".into(),
         user: "boksl".into(),
@@ -146,6 +147,7 @@ fn remote_connection_contract_matches_the_frontend_fixture() {
         home_url: "sftp://boksl@example.com:2222/home/boksl".into(),
         host_key_algorithm: "ssh-ed25519".into(),
         host_key_fingerprint: "SHA256:fixture".into(),
+        secret_stored: false,
     };
     assert_eq!(serde_json::to_value(&session).unwrap(), fixture()["remoteSession"]);
     let changed = crate::contracts::RemoteConnectionChanged {

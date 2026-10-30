@@ -27,6 +27,8 @@ export const remoteClientStub = <T extends Partial<RemoteSessionClient> = object
   remoteDisconnect: vi.fn(),
   remoteSessions: vi.fn(async () => ({ ok: true as const, data: [] })),
   listenRemoteConnectionChanges: vi.fn(async () => () => undefined),
+  remoteForgetSecret: vi.fn(async () => ({ ok: true as const, data: undefined })),
+  remoteImportSshConfig: vi.fn(async () => ({ ok: true as const, data: { entries: [], warnings: [] } })),
   ...overrides,
 });
 

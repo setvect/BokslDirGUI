@@ -27,6 +27,7 @@ fn options(port: u16, credential: RemoteCredential, dir: &TempDir, listener: Opt
         keepalive: Duration::from_secs(30),
         known_hosts: known_hosts(dir),
         listener,
+        recipe: None,
     }
 }
 
@@ -300,18 +301,93 @@ fn connect_requests_map_to_validated_options_without_keeping_empty_secrets() {
         password: Some("pw".into()),
         key_path: key_path.map(str::to_string),
         passphrase: Some(String::new()),
+        site_id: None,
+        save_secret: false,
     };
     let settings = RemoteSettings { keepalive_seconds: 45, connect_timeout_seconds: 9, ..Default::default() };
     let paths = KnownHostsPaths { app: "known_hosts".into(), user: None };
-    let options = ConnectOptions::from_request(request(RemoteAuthMethod::PublicKey, Some("~/.ssh/id")), &settings, paths.clone(), None).unwrap();
+    let store = super::credentials::MemorySecretStore::default();
+    let (options, pending) = ConnectOptions::from_request(request(RemoteAuthMethod::PublicKey, Some("~/.ssh/id")), &settings, paths.clone(), None, &store).unwrap();
     assert_eq!(options.location, RemoteLocation::new("boksl", "::1", 2222).unwrap());
     assert_eq!((options.connect_timeout, options.keepalive), (Duration::from_secs(9), Duration::from_secs(45)));
     assert!(matches!(options.credential, RemoteCredential::KeyFile { ref path, passphrase: None } if path == "~/.ssh/id"));
-    let missing_key = ConnectOptions::from_request(request(RemoteAuthMethod::PublicKey, Some(" ")), &settings, paths.clone(), None);
+    assert!(pending.is_none());
+    let missing_key = ConnectOptions::from_request(request(RemoteAuthMethod::PublicKey, Some(" ")), &settings, paths.clone(), None, &store);
     assert_eq!(missing_key.err().unwrap().code, "remote_key_unreadable");
     let mut invalid = request(RemoteAuthMethod::Password, None);
     invalid.host = "a b".into();
-    assert_eq!(ConnectOptions::from_request(invalid, &settings, paths, None).err().unwrap().code, "invalid_path");
+    assert_eq!(ConnectOptions::from_request(invalid, &settings, paths, None, &store).err().unwrap().code, "invalid_path");
+}
+
+#[test]
+fn site_secrets_are_saved_only_on_request_and_reused_when_not_typed() {
+    use super::credentials::{account, MemorySecretStore, SecretKind, SecretStore};
+    let store = MemorySecretStore::default();
+    let paths = KnownHostsPaths { app: "known_hosts".into(), user: None };
+    let settings = RemoteSettings::default();
+    let request = |password: Option<&str>, save_secret| RemoteConnectRequest {
+        host: "example.com".into(),
+        port: 22,
+        user: "boksl".into(),
+        auth_method: RemoteAuthMethod::Password,
+        password: password.map(str::to_string),
+        key_path: None,
+        passphrase: None,
+        site_id: Some("site-1".into()),
+        save_secret,
+    };
+    let (_, unsaved) = ConnectOptions::from_request(request(Some("typed"), false), &settings, paths.clone(), None, &store).unwrap();
+    assert!(unsaved.is_none());
+    let (_, pending) = ConnectOptions::from_request(request(Some("typed"), true), &settings, paths.clone(), None, &store).unwrap();
+    let pending = pending.unwrap();
+    assert_eq!(format!("{pending:?}"), "PendingSecret(Password)");
+    pending.store(&store).unwrap();
+    assert_eq!(store.get(&account("site-1", SecretKind::Password)).unwrap().as_deref(), Some("typed"));
+    let (options, again) = ConnectOptions::from_request(request(None, true), &settings, paths, None, &store).unwrap();
+    assert!(again.is_none());
+    assert!(matches!(options.credential, RemoteCredential::Password(ref secret) if secret == "typed"));
+}
+
+#[test]
+fn lost_connections_reconnect_once_with_saved_credentials_but_not_after_disconnect() {
+    use super::credentials::{account, store, SecretKind};
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-reconnect");
+    trust(&server, &dir);
+    std::fs::create_dir(server.root().join("docs")).unwrap();
+    let site_id = format!("site-reconnect-{}", server.port());
+    store().set(&account(&site_id, SecretKind::Password), "pw").unwrap();
+    let request = RemoteConnectRequest {
+        host: "127.0.0.1".into(),
+        port: server.port(),
+        user: "tester".into(),
+        auth_method: RemoteAuthMethod::Password,
+        password: None,
+        key_path: None,
+        passphrase: None,
+        site_id: Some(site_id.clone()),
+        save_secret: false,
+    };
+    let (options, _) = ConnectOptions::from_request(request, &RemoteSettings::default(), known_hosts(&dir), None, store()).unwrap();
+    let first = connect(options).unwrap();
+    let location = first.location.clone();
+    // 서버 쪽 끊김: 읽기 요청에서 서버가 TCP 연결을 끊음
+    std::fs::write(server.root().join("docs/a.txt"), b"abc").unwrap();
+    server.faults().set_disconnect_after_bytes(1);
+    assert!(super::block_on(first.sftp.read("/docs/a.txt")).is_err());
+    drop(first);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while connection::connection(&location).is_ok() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(connection::connection(&location).is_err());
+    server.faults().reset();
+    let listing = list(&format!("{}docs", root_url(&server)), false, None).unwrap();
+    assert_eq!(names(&listing), ["..", "a.txt"]);
+    assert!(connection::connection(&location).is_ok());
+
+    super::block_on(connection::disconnect(&location));
+    assert_eq!(list(&root_url(&server), false, None).unwrap_err().code, "remote_not_connected");
 }
 
 fn connected(server: &TestSftpServer, dir: &TempDir) -> Arc<RemoteConnection> {

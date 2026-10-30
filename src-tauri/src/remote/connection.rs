@@ -1,5 +1,6 @@
 //! SSH 연결과 SFTP 세션: 위치(사용자·호스트·포트)마다 연결 하나, 호스트 키 확인, 인증 방식별 로그인.
 //! 비밀값(암호·키 암호·질문 응답)은 연결 요청 동안 메모리에만 두고 출력·직렬화·오류 상세에 남기지 않음.
+use super::credentials::{account, SecretKind, SecretStore};
 use super::path::RemoteLocation;
 use crate::contracts::{
     AppError, CommandResult, RemoteAuthMethod, RemoteConnectRequest, RemoteConnectionChanged,
@@ -68,36 +69,105 @@ pub(crate) struct ConnectOptions {
     pub(crate) keepalive: Duration,
     pub(crate) known_hosts: KnownHostsPaths,
     pub(crate) listener: Option<ConnectionListener>,
+    /// 끊긴 뒤 자동 재연결 방법(FR-34.8). 없으면 재연결하지 않음.
+    pub(crate) recipe: Option<ReconnectRecipe>,
+}
+
+/// 끊긴 뒤 다시 연결할 방법. 비밀값은 담지 않고 필요할 때 자격 증명 저장소에서 다시 읽음.
+#[derive(Clone)]
+pub(crate) struct ReconnectRecipe {
+    pub(crate) site_id: Option<String>,
+    pub(crate) auth_method: RemoteAuthMethod,
+    pub(crate) key_path: Option<String>,
+    pub(crate) connect_timeout: Duration,
+    pub(crate) keepalive: Duration,
+    pub(crate) known_hosts: KnownHostsPaths,
+    pub(crate) listener: Option<ConnectionListener>,
+}
+
+impl ReconnectRecipe {
+    /// 사용자 입력 없이 만들 수 있는 인증 정보: 에이전트, 저장된 암호, 키 파일(저장된 키 암호 포함). 그 밖은 없음.
+    fn credential(&self, store: &dyn SecretStore) -> Option<RemoteCredential> {
+        let saved = |kind| self.site_id.as_deref().and_then(|id| store.get(&account(id, kind)).ok().flatten());
+        match self.auth_method {
+            RemoteAuthMethod::Agent => Some(RemoteCredential::Agent),
+            RemoteAuthMethod::Password => saved(SecretKind::Password).map(RemoteCredential::Password),
+            RemoteAuthMethod::PublicKey => self
+                .key_path
+                .clone()
+                .map(|path| RemoteCredential::KeyFile { path, passphrase: saved(SecretKind::Passphrase) }),
+            RemoteAuthMethod::KeyboardInteractive => None,
+        }
+    }
+}
+
+/// 연결 성공 뒤 저장할 비밀값(사용자가 저장을 선택한 경우). `Debug`는 내용 없이 종류만 표시.
+pub(crate) struct PendingSecret {
+    site_id: String,
+    kind: SecretKind,
+    secret: String,
+}
+
+impl std::fmt::Debug for PendingSecret {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "PendingSecret({:?})", self.kind)
+    }
+}
+
+impl PendingSecret {
+    pub(crate) fn store(self, store: &dyn SecretStore) -> CommandResult<()> {
+        store.set(&account(&self.site_id, self.kind), &self.secret)
+    }
 }
 
 impl ConnectOptions {
+    /// 연결 창 요청을 연결 옵션으로 변환. 비밀값을 입력하지 않았고 사이트에 저장된 값이 있으면 저장소에서 읽음.
     pub(crate) fn from_request(
         request: RemoteConnectRequest,
         settings: &RemoteSettings,
         known_hosts: KnownHostsPaths,
         listener: Option<ConnectionListener>,
-    ) -> CommandResult<Self> {
+        store: &dyn SecretStore,
+    ) -> CommandResult<(Self, Option<PendingSecret>)> {
         let location = RemoteLocation::new(&request.user, &request.host, request.port)?;
-        let credential = match request.auth_method {
-            RemoteAuthMethod::Password => RemoteCredential::Password(request.password.unwrap_or_default()),
-            RemoteAuthMethod::PublicKey => RemoteCredential::KeyFile {
-                path: request
-                    .key_path
-                    .filter(|path| !path.trim().is_empty())
-                    .ok_or_else(|| AppError::new("remote_key_unreadable", "errors.remoteKeyUnreadable", None, true))?,
-                passphrase: request.passphrase.filter(|passphrase| !passphrase.is_empty()),
-            },
-            RemoteAuthMethod::Agent => RemoteCredential::Agent,
-            RemoteAuthMethod::KeyboardInteractive => RemoteCredential::KeyboardInteractive,
+        let site_id = request.site_id.filter(|id| !id.trim().is_empty());
+        let saved = |kind| site_id.as_deref().and_then(|id| store.get(&account(id, kind)).ok().flatten());
+        let pending = |typed: &Option<String>, kind| match (typed, &site_id) {
+            (Some(secret), Some(id)) if request.save_secret => {
+                Some(PendingSecret { site_id: id.clone(), kind, secret: secret.clone() })
+            }
+            _ => None,
         };
-        Ok(Self {
-            location,
-            credential,
-            connect_timeout: Duration::from_secs(settings.connect_timeout_seconds.into()),
-            keepalive: Duration::from_secs(settings.keepalive_seconds.into()),
-            known_hosts,
-            listener,
-        })
+        let key_path = request.key_path.filter(|path| !path.trim().is_empty());
+        let (credential, pending) = match request.auth_method {
+            RemoteAuthMethod::Password => {
+                let typed = request.password.filter(|password| !password.is_empty());
+                let pending = pending(&typed, SecretKind::Password);
+                (RemoteCredential::Password(typed.or_else(|| saved(SecretKind::Password)).unwrap_or_default()), pending)
+            }
+            RemoteAuthMethod::PublicKey => {
+                let path = key_path
+                    .clone()
+                    .ok_or_else(|| AppError::new("remote_key_unreadable", "errors.remoteKeyUnreadable", None, true))?;
+                let typed = request.passphrase.filter(|passphrase| !passphrase.is_empty());
+                let pending = pending(&typed, SecretKind::Passphrase);
+                (RemoteCredential::KeyFile { path, passphrase: typed.or_else(|| saved(SecretKind::Passphrase)) }, pending)
+            }
+            RemoteAuthMethod::Agent => (RemoteCredential::Agent, None),
+            RemoteAuthMethod::KeyboardInteractive => (RemoteCredential::KeyboardInteractive, None),
+        };
+        let connect_timeout = Duration::from_secs(settings.connect_timeout_seconds.into());
+        let keepalive = Duration::from_secs(settings.keepalive_seconds.into());
+        let recipe = ReconnectRecipe {
+            site_id,
+            auth_method: request.auth_method,
+            key_path,
+            connect_timeout,
+            keepalive,
+            known_hosts: known_hosts.clone(),
+            listener: listener.clone(),
+        };
+        Ok((Self { location, credential, connect_timeout, keepalive, known_hosts, listener, recipe: Some(recipe) }, pending))
     }
 }
 
@@ -213,6 +283,7 @@ impl RemoteConnection {
             home_url: self.location.url(&self.home),
             host_key_algorithm: self.host_key.algorithm.clone(),
             host_key_fingerprint: self.host_key.fingerprint.clone(),
+            secret_stored: false,
         }
     }
 }
@@ -227,6 +298,12 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 fn registry() -> &'static Mutex<HashMap<RemoteLocation, Arc<RemoteConnection>>> {
     static CONNECTIONS: OnceLock<Mutex<HashMap<RemoteLocation, Arc<RemoteConnection>>>> = OnceLock::new();
     CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// 위치별 자동 재연결 방법. 앱이 연결을 해제하면 지움.
+fn recipes() -> &'static Mutex<HashMap<RemoteLocation, ReconnectRecipe>> {
+    static RECIPES: OnceLock<Mutex<HashMap<RemoteLocation, ReconnectRecipe>>> = OnceLock::new();
+    RECIPES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 /// 신뢰 확인을 기다리는 호스트 키. 사용자가 본 지문과 같은 키만 기록.
@@ -278,6 +355,33 @@ pub(crate) fn connection(location: &RemoteLocation) -> CommandResult<Arc<RemoteC
     }
 }
 
+/// 연결 조회, 끊겼으면 저장된 방법으로 한 번 다시 연결(FR-34.8). 사용자 입력이 필요하면 `remote_not_connected`.
+pub(crate) async fn ensure(location: &RemoteLocation) -> CommandResult<Arc<RemoteConnection>> {
+    if let Ok(existing) = connection(location) {
+        return Ok(existing);
+    }
+    let Some(recipe) = lock(recipes()).get(location).cloned() else {
+        return Err(not_connected(location));
+    };
+    // 키체인 접근은 사용자 허용 창으로 오래 걸릴 수 있어 작업 스레드에서 읽음
+    let reader = recipe.clone();
+    let credential = tokio::task::spawn_blocking(move || reader.credential(super::credentials::store()))
+        .await
+        .ok()
+        .flatten()
+        .ok_or_else(|| not_connected(location))?;
+    connect(ConnectOptions {
+        location: location.clone(),
+        credential,
+        connect_timeout: recipe.connect_timeout,
+        keepalive: recipe.keepalive,
+        known_hosts: recipe.known_hosts.clone(),
+        listener: recipe.listener.clone(),
+        recipe: Some(recipe),
+    })
+    .await
+}
+
 pub(crate) fn sessions() -> Vec<RemoteSession> {
     let mut sessions: Vec<RemoteSession> = lock(registry())
         .values()
@@ -293,7 +397,7 @@ pub(crate) async fn connect(options: ConnectOptions) -> CommandResult<Arc<Remote
     if let Ok(existing) = connection(&options.location) {
         return Ok(existing);
     }
-    let ConnectOptions { location, credential, connect_timeout, keepalive, known_hosts, listener } = options;
+    let ConnectOptions { location, credential, connect_timeout, keepalive, known_hosts, listener, recipe } = options;
     let deadline = tokio::time::Instant::now() + connect_timeout;
     let stream = tokio::time::timeout_at(deadline, open_tcp(&location))
         .await
@@ -323,7 +427,7 @@ pub(crate) async fn connect(options: ConnectOptions) -> CommandResult<Arc<Remote
         abandon(&handle).await;
         return Err(connect_failed(&location, "host key was not verified"));
     };
-    let mut session = Authenticating { id, location, host_key, handle, listener, timeout: connect_timeout };
+    let mut session = Authenticating { id, location, host_key, handle, listener, timeout: connect_timeout, recipe };
     let outcome = match tokio::time::timeout_at(deadline, session.authenticate(credential)).await {
         Ok(outcome) => outcome,
         Err(_) => Err(timed_out(&session.location)),
@@ -401,6 +505,7 @@ fn record_host_key(path: &Path, host: &str, port: u16, key: &ssh_key::PublicKey)
 
 /// 앱 요청 연결 해제. 연결되어 있었으면 `disconnected` 알림.
 pub(crate) async fn disconnect(location: &RemoteLocation) -> bool {
+    lock(recipes()).remove(location);
     let removed = lock(registry()).remove(location);
     let Some(connection) = removed else {
         return false;
@@ -430,6 +535,7 @@ struct Authenticating {
     handle: Handle<ClientHandler>,
     listener: Option<ConnectionListener>,
     timeout: Duration,
+    recipe: Option<ReconnectRecipe>,
 }
 
 impl Authenticating {
@@ -633,7 +739,7 @@ impl Authenticating {
                 return Err(error);
             }
         };
-        let Self { id, location, host_key, handle, listener, .. } = self;
+        let Self { id, location, host_key, handle, listener, recipe, .. } = self;
         let connection = Arc::new(RemoteConnection {
             id,
             location: location.clone(),
@@ -658,6 +764,9 @@ impl Authenticating {
         if let Some(existing) = existing {
             abandon(&connection.handle).await;
             return Ok(existing);
+        }
+        if let Some(recipe) = recipe {
+            lock(recipes()).insert(location.clone(), recipe);
         }
         notify(connection.listener.as_ref(), &location, RemoteConnectionState::Connected, None);
         Ok(connection)

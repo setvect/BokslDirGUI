@@ -2,7 +2,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import type { RemoteAuthMethod, RemoteSession, RemoteSite } from '../domain/types';
 import { REMOTE_CONNECT_TEXT, type SupportedLanguage } from '../i18n-resources';
 import { CommanderOverlayDialog } from './CommanderOverlays';
-import type { AuthPrompts, HostKeyQuestion, RemoteConnectDraft, RemoteSecrets } from './remoteConnectModel';
+import { usesSecret, type AuthPrompts, type HostKeyQuestion, type RemoteConnectDraft, type RemoteSecrets } from './remoteConnectModel';
 import { remoteAddressOf, type RemotePanelStatus } from './remoteSessionState';
 
 const AUTH_METHODS: readonly RemoteAuthMethod[] = ['password', 'publicKey', 'agent', 'keyboardInteractive'];
@@ -25,6 +25,7 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
 }) {
   const text = REMOTE_CONNECT_TEXT[language];
   const [draft, setDraft] = useState(initial);
+  const [portText, setPortText] = useState(String(initial.port));
   const [password, setPassword] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const firstInput = useRef<HTMLInputElement>(null);
@@ -40,8 +41,8 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
         <div className="remote-connect-grid">
           <label>{text.host}<input ref={draft.host ? undefined : firstInput} value={draft.host} disabled={pending} autoComplete="off" spellCheck={false}
             onChange={(event) => update({ host: event.currentTarget.value })} /></label>
-          <label>{text.port}<input type="number" min={1} max={65535} value={draft.port} disabled={pending}
-            onChange={(event) => update({ port: event.currentTarget.valueAsNumber })} /></label>
+          <label>{text.port}<input inputMode="numeric" maxLength={5} value={portText} disabled={pending}
+            onChange={(event) => { const value = event.currentTarget.value.replace(/\D/g, ''); setPortText(value); update({ port: Number.parseInt(value, 10) }); }} /></label>
           <label>{text.user}<input value={draft.user} disabled={pending} autoComplete="off" spellCheck={false}
             onChange={(event) => update({ user: event.currentTarget.value })} /></label>
           <label>{text.authMethod}<select value={draft.authMethod} disabled={pending}
@@ -51,6 +52,7 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
         </div>
         {draft.authMethod === 'password' ? (
           <label>{text.password}<input ref={draft.host ? firstInput : undefined} type="password" value={password} disabled={pending} autoComplete="off"
+            placeholder={draft.hasSavedSecret ? text.savedSecretHint : undefined}
             onChange={(event) => setPassword(event.currentTarget.value)} /></label>
         ) : null}
         {draft.authMethod === 'publicKey' ? (
@@ -58,6 +60,7 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
             <label>{text.keyPath}<input value={draft.keyPath} disabled={pending} spellCheck={false}
               onChange={(event) => update({ keyPath: event.currentTarget.value })} /></label>
             <label>{text.passphrase}<input ref={draft.host ? firstInput : undefined} type="password" value={passphrase} disabled={pending} autoComplete="off"
+              placeholder={draft.hasSavedSecret ? text.savedSecretHint : undefined}
               onChange={(event) => setPassphrase(event.currentTarget.value)} /></label>
           </>
         ) : null}
@@ -68,6 +71,10 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
         {draft.saveSite ? (
           <label>{text.siteName}<input value={draft.name} maxLength={120} disabled={pending}
             onChange={(event) => update({ name: event.currentTarget.value })} /></label>
+        ) : null}
+        {draft.saveSite && usesSecret(draft.authMethod) ? (
+          <label className="remote-connect-check"><input type="checkbox" checked={draft.saveSecret} disabled={pending}
+            onChange={(event) => update({ saveSecret: event.currentTarget.checked })} />{text.saveSecret}</label>
         ) : null}
         <p className="operation-muted">{text.secretNote}</p>
         {error ? <p className="operation-error" role="alert">{error}</p> : null}
@@ -135,7 +142,7 @@ export function RemoteAuthPromptDialog({ language, prompts, error, pending, onSu
 }
 
 // 저장된 사이트 목록: 연결·추가·편집·복제·삭제(FR-34.3). 위·아래 키로 선택, Enter로 연결
-export function RemoteSitesDialog({ language, sites, selectedId, onSelect, onConnect, onNew, onEdit, onDuplicate, onDelete, onClose }: {
+export function RemoteSitesDialog({ language, sites, selectedId, onSelect, onConnect, onNew, onEdit, onDuplicate, onDelete, onForgetSecret, onImport, onClose }: {
   language: SupportedLanguage;
   sites: readonly RemoteSite[];
   selectedId: string | null;
@@ -145,6 +152,8 @@ export function RemoteSitesDialog({ language, sites, selectedId, onSelect, onCon
   onEdit(site: RemoteSite): void;
   onDuplicate(site: RemoteSite): void;
   onDelete(site: RemoteSite): void;
+  onForgetSecret(site: RemoteSite): void;
+  onImport(): void;
   onClose(): void;
 }) {
   const text = REMOTE_CONNECT_TEXT[language];
@@ -186,6 +195,8 @@ export function RemoteSitesDialog({ language, sites, selectedId, onSelect, onCon
         {selected && confirmingDelete === selected.id
           ? <button type="button" className="danger" onClick={() => { setConfirmingDelete(null); onDelete(selected); }}>{text.deleteConfirm}</button>
           : <button type="button" disabled={!selected} onClick={() => selected && setConfirmingDelete(selected.id)}>{text.delete}</button>}
+        <button type="button" disabled={!selected?.savedSecret} onClick={() => selected && onForgetSecret(selected)}>{text.forgetSecret}</button>
+        <button type="button" onClick={onImport}>{text.importSshConfig}</button>
         <button type="button" onClick={onClose}>{text.close}</button>
         <button type="button" className="primary" disabled={!selected} onClick={() => selected && onConnect(selected)}>{text.connect}</button>
       </div>

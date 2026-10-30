@@ -98,7 +98,7 @@ describe('CommanderShell remote panels', () => {
   });
   it('adds a site, trusts the shown host key, connects and opens the remote home in the active panel', async () => {
     const user = userEvent.setup();
-    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:fixture' };
+    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:fixture', secretStored: false };
     const hostKeyError = { code: 'host_key_unknown', messageKey: 'errors.remoteHostKeyUnknown', path: session.sessionId, recoverable: true,
       details: { hostName: 'example.com', port: '2222', algorithm: 'ssh-ed25519', fingerprint: 'SHA256:fixture' } };
     const remoteConnect = vi.fn()
@@ -131,7 +131,7 @@ describe('CommanderShell remote panels', () => {
 
     await waitFor(() => expect(remoteTrustHostKey).toHaveBeenCalledWith({ host: 'example.com', port: 2222, fingerprint: 'SHA256:fixture' }));
     await waitFor(() => expect(remoteConnect).toHaveBeenCalledTimes(2));
-    expect(remoteConnect).toHaveBeenLastCalledWith({ request: { host: 'example.com', port: 2222, user: 'boksl', authMethod: 'password', password: 'secret-pw' } });
+    expect(remoteConnect).toHaveBeenLastCalledWith({ request: { siteId: expect.any(String), host: 'example.com', port: 2222, user: 'boksl', authMethod: 'password', password: 'secret-pw' } });
     await waitFor(() => expect(dataSource.gotoPath).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right', path: session.homeUrl })));
     const savedPatch = saveSettings.mock.calls.map(([input]) => JSON.stringify(input.patch)).find((patch) => patch.includes('배포 서버'));
     expect(savedPatch).toBeTruthy();
@@ -171,7 +171,7 @@ describe('CommanderShell remote panels', () => {
 
   it('disconnects a connected remote panel back to a local folder and offers reconnect when lost', async () => {
     const user = userEvent.setup();
-    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x' };
+    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x', secretStored: false };
     const remoteDisconnect = vi.fn(async () => ({ ok: true as const, data: true }));
     const remoteClient = remoteClientStub({ remoteDisconnect, remoteSessions: vi.fn(async () => ({ ok: true as const, data: [session] })) });
     const operationClient = operationClientStub();
@@ -205,5 +205,87 @@ describe('CommanderShell remote panels', () => {
     expect((within(form).getByLabelText('포트') as HTMLInputElement).value).toBe('2200');
     expect((within(form).getByLabelText('사용자') as HTMLInputElement).value).toBe('deploy');
     expect(screen.queryByRole('dialog', { name: '경로 이동' })).toBeNull();
+  });
+  it('stores the typed password only when asked and marks the saved site', async () => {
+    const user = userEvent.setup();
+    const site = { id: 'site-pw', name: '운영', host: 'example.com', port: 22, user: 'boksl', authMethod: 'password' as const, savedSecret: false };
+    const session = { sessionId: 'sftp://boksl@example.com/', user: 'boksl', host: 'example.com', port: 22, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x', secretStored: true };
+    const remoteConnect = vi.fn(async () => ({ ok: true as const, data: session }));
+    const saveSettings = vi.fn(async (input: { patch: Partial<Settings> }) => ({ ok: true as const, data: settingsFixture(input.patch) }));
+    const settings = settingsFixture({ remote: { sites: [site], keepaliveSeconds: 30, connectTimeoutSeconds: 15, linkPolicy: 'preserve' } });
+    const dataSource = createFixturePanelDataSource();
+    dataSource.gotoPath = vi.fn(async (input) => ({ ok: true as const, data: createDirectoryListing(input.panelId, input.path, []) }));
+    render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub({ saveSettings, loadSettings: vi.fn(async () => ({ ok: true as const, data: settings })) })}
+      operationClient={operationClientStub()} remoteClient={remoteClientStub({ remoteConnect })} />);
+
+    await user.keyboard('gr');
+    await user.click(within(await screen.findByRole('dialog', { name: '사이트 목록' })).getByRole('button', { name: '연결' }));
+    const form = await screen.findByRole('dialog', { name: '원격 연결' });
+    await user.type(within(form).getByLabelText('암호'), 'typed-secret');
+    await user.click(within(form).getByLabelText('암호·키 암호를 OS 자격 증명 저장소에 저장'));
+    await user.click(within(form).getByRole('button', { name: '연결' }));
+
+    await waitFor(() => expect(remoteConnect).toHaveBeenCalledWith({ request: {
+      siteId: 'site-pw', saveSecret: true, host: 'example.com', port: 22, user: 'boksl', authMethod: 'password', password: 'typed-secret',
+    } }));
+    await waitFor(() => expect(saveSettings.mock.calls.some(([input]) => input.patch.remote?.sites?.[0]?.savedSecret === true)).toBe(true));
+    expect(saveSettings.mock.calls.every(([input]) => !JSON.stringify(input.patch).includes('typed-secret'))).toBe(true);
+  });
+
+  it('forgets saved passwords, imports ssh config hosts and lists sites in locations', async () => {
+    const user = userEvent.setup();
+    const site = { id: 'site-saved', name: '배포', host: 'deploy.example.com', port: 22, user: 'boksl', authMethod: 'password' as const, savedSecret: true };
+    const remoteForgetSecret = vi.fn(async () => ({ ok: true as const, data: undefined }));
+    const remoteImportSshConfig = vi.fn(async () => ({ ok: true as const, data: {
+      entries: [{ alias: 'web', host: 'web.example.com', port: 2222, user: 'www', keyPath: '~/.ssh/web' }, { alias: 'dup', host: 'deploy.example.com', port: 22, user: 'boksl' }],
+      warnings: ['ProxyJump'],
+    } }));
+    const saveSettings = vi.fn(async (input: { patch: Partial<Settings> }) => ({ ok: true as const, data: settingsFixture(input.patch) }));
+    const settings = settingsFixture({ remote: { sites: [site], keepaliveSeconds: 30, connectTimeoutSeconds: 15, linkPolicy: 'preserve' } });
+    const { container } = render(<CommanderShell dataSource={createFixturePanelDataSource()} mutationClient={mutationClientStub({ saveSettings, loadSettings: vi.fn(async () => ({ ok: true as const, data: settings })) })}
+      operationClient={operationClientStub()} remoteClient={remoteClientStub({ remoteForgetSecret, remoteImportSshConfig })} />);
+
+    await user.keyboard('gr');
+    const sites = await screen.findByRole('dialog', { name: '사이트 목록' });
+    await user.click(within(sites).getByRole('button', { name: '저장된 암호 삭제' }));
+    await waitFor(() => expect(remoteForgetSecret).toHaveBeenCalledWith({ siteId: 'site-saved' }));
+    await waitFor(() => expect(saveSettings.mock.calls.some(([input]) => input.patch.remote?.sites?.[0]?.savedSecret === false)).toBe(true));
+
+    await user.click(within(sites).getByRole('button', { name: 'SSH 설정 가져오기' }));
+    await waitFor(() => expect(within(sites).getByText('web')).toBeTruthy());
+    expect(within(sites).getAllByRole('option')).toHaveLength(2);
+    expect(container.textContent).toContain('지원하지 않는 설정: ProxyJump');
+    await user.click(within(sites).getByRole('button', { name: '닫기' }));
+
+    await user.keyboard('gm');
+    const locations = await screen.findByRole('dialog', { name: /위치/ });
+    await user.click(within(locations).getByText('SFTP · 배포'));
+    const form = await screen.findByRole('dialog', { name: '원격 연결' });
+    expect((within(form).getByLabelText('호스트') as HTMLInputElement).value).toBe('deploy.example.com');
+  });
+
+  it('reconnects saved agent sites while restoring remote tabs at startup', async () => {
+    const site = { id: 'site-agent', name: '에이전트', host: 'agent.example.com', port: 22, user: 'boksl', authMethod: 'agent' as const, savedSecret: false };
+    const remotePath = 'sftp://boksl@agent.example.com/srv';
+    const session = { sessionId: 'sftp://boksl@agent.example.com/', user: 'boksl', host: 'agent.example.com', port: 22, home: '/home/boksl', homeUrl: 'sftp://boksl@agent.example.com/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x', secretStored: false };
+    let connected = false;
+    const remoteConnect = vi.fn(async () => { connected = true; return { ok: true as const, data: session }; });
+    const tab = (path: string) => ({ path, sort: { field: 'name' as const, direction: 'asc' as const, directoriesFirst: true }, filter: null, showHidden: false, historyBack: [], historyForward: [] });
+    const settings = settingsFixture({
+      remote: { sites: [site], keepaliveSeconds: 30, connectTimeoutSeconds: 15, linkPolicy: 'preserve' },
+      session: { leftPath: null, rightPath: null, activePanel: 'right', tabs: { left: { items: [tab(SAMPLE_LISTINGS.left.path)], activeIndex: 0 }, right: { items: [tab(remotePath)], activeIndex: 0 } } },
+    });
+    const fixture = createFixturePanelDataSource();
+    const listDir = fixture.listDir.bind(fixture);
+    const dataSource = { ...fixture, loadInitialOnMount: true };
+    dataSource.listDir = vi.fn(async (input) => input.path !== remotePath ? listDir(input)
+      : connected ? { ok: true as const, data: createDirectoryListing(input.panelId, remotePath, [remoteEntry('restored.txt')]) }
+        : { ok: false as const, error: { code: 'remote_not_connected', messageKey: 'errors.remoteNotConnected', path: session.sessionId, details: null, recoverable: true } });
+    const { container } = render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub({ loadSettings: vi.fn(async () => ({ ok: true as const, data: settings })), saveSettings: vi.fn(async () => ({ ok: true as const, data: settings })) })}
+      operationClient={operationClientStub()} remoteClient={remoteClientStub({ remoteConnect })} />);
+
+    await waitFor(() => expect(remoteConnect).toHaveBeenCalledWith({ request: { siteId: 'site-agent', host: 'agent.example.com', port: 22, user: 'boksl', authMethod: 'agent' } }));
+    await waitFor(() => expect(container.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(remotePath));
+    expect(rowByText(container, 'restored.txt')).not.toBeNull();
   });
 });

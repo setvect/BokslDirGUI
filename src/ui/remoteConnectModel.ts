@@ -15,6 +15,10 @@ export interface RemoteConnectDraft {
   keyPath: string;
   startPath: string;
   saveSite: boolean;
+  // 연결에 성공하면 입력한 암호·키 암호를 자격 증명 저장소에 저장
+  saveSecret: boolean;
+  // 사이트에 저장된 비밀값이 있음(입력란을 비우면 저장된 값 사용)
+  hasSavedSecret: boolean;
 }
 
 export interface RemoteSecrets {
@@ -24,11 +28,13 @@ export interface RemoteSecrets {
 
 export const emptyDraft = (): RemoteConnectDraft => ({
   siteId: null, name: '', host: '', port: DEFAULT_SFTP_PORT, user: '', authMethod: 'password', keyPath: DEFAULT_KEY_PATH, startPath: '', saveSite: false,
+  saveSecret: false, hasSavedSecret: false,
 });
 
 export const draftFromSite = (site: RemoteSite): RemoteConnectDraft => ({
   siteId: site.id, name: site.name, host: site.host, port: site.port, user: site.user, authMethod: site.authMethod,
   keyPath: site.keyPath ?? DEFAULT_KEY_PATH, startPath: site.startPath ?? '', saveSite: true,
+  saveSecret: site.savedSecret, hasSavedSecret: site.savedSecret,
 });
 
 // `sftp://` 주소로 연결할 때: 주소의 사용자·호스트·포트와 일치하는 사이트가 있으면 그 설정 사용
@@ -48,7 +54,12 @@ export const validateDraft = (draft: RemoteConnectDraft): 'hostRequired' | 'user
   return null;
 };
 
+// 비밀값을 쓰는 방식(암호·키 파일)만 저장 대상
+export const usesSecret = (method: RemoteAuthMethod) => method === 'password' || method === 'publicKey';
+
 export const connectRequestOf = (draft: RemoteConnectDraft, secrets: RemoteSecrets): RemoteConnectRequest => ({
+  ...(draft.siteId ? { siteId: draft.siteId } : {}),
+  ...(draft.siteId && draft.saveSite && draft.saveSecret && usesSecret(draft.authMethod) ? { saveSecret: true } : {}),
   host: draft.host.trim(),
   port: draft.port,
   user: draft.user,

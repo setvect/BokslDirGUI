@@ -1,4 +1,5 @@
-import type { LocationList, Settings } from '../domain/types';
+import { remoteUrl } from '../domain/remotePath';
+import { remoteSettingsOf, type LocationList, type Settings } from '../domain/types';
 import {
   COMMANDER_NAVIGATION_TEXT
 } from '../i18n-resources';
@@ -6,6 +7,8 @@ import {
   type NavigationListItem
 } from './CommanderOverlays';
 import { shortenPath } from './textLayout';
+
+export const REMOTE_SITE_ITEM_PREFIX = 'remote-site-';
 
 const uniqueNavigationItems = (items: readonly NavigationListItem[]) => {
   const seen = new Set<string>();
@@ -48,6 +51,13 @@ export const navigationItemsFromLocations = (locations: LocationList, settings: 
         label: bookmark.label,
         path: bookmark.path,
         group: 'bookmark',
+      })),
+      // 저장된 원격 사이트(FR-36.7): 고르면 연결 흐름으로 진행
+      ...remoteSettingsOf(settings).sites.map((site) => ({
+        id: `${REMOTE_SITE_ITEM_PREFIX}${site.id}`,
+        label: `SFTP · ${site.name}`,
+        path: remoteUrl(site, site.startPath?.startsWith('/') ? site.startPath : '/'),
+        group: 'remote site',
       })),
     ])
   );

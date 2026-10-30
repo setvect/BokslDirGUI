@@ -372,10 +372,31 @@ pub(crate) async fn remote_connect(
     app: tauri::AppHandle,
     request: crate::contracts::RemoteConnectRequest,
 ) -> CommandResult<crate::contracts::RemoteSession> {
-    let settings = settings_service::load_settings().map(|settings| settings.remote).unwrap_or_default();
-    let known_hosts = crate::remote::connection::KnownHostsPaths::standard()?;
-    let options = crate::remote::connection::ConnectOptions::from_request(request, &settings, known_hosts, Some(remote_listener(app)))?;
-    crate::remote::run(async move { Ok(crate::remote::connection::connect(options).await?.session()) }).await
+    let listener = remote_listener(app);
+    // 설정·자격 증명 저장소 읽기는 사용자 허용 창으로 오래 걸릴 수 있어 작업 스레드에서 실행
+    let (options, pending) = run_blocking(None, move || {
+        let settings = settings_service::load_settings().map(|settings| settings.remote).unwrap_or_default();
+        let known_hosts = crate::remote::connection::KnownHostsPaths::standard()?;
+        crate::remote::connection::ConnectOptions::from_request(request, &settings, known_hosts, Some(listener), crate::remote::credentials::store())
+    })
+    .await?;
+    let mut session = crate::remote::run(async move { Ok(crate::remote::connection::connect(options).await?.session()) }).await?;
+    if let Some(pending) = pending {
+        session.secret_stored = run_blocking(None, move || pending.store(crate::remote::credentials::store())).await.is_ok();
+    }
+    Ok(session)
+}
+
+/// 사이트의 저장된 비밀값 삭제(FR-35.6).
+#[tauri::command]
+pub(crate) async fn remote_forget_secret(site_id: String) -> CommandResult<()> {
+    run_blocking(None, move || crate::remote::credentials::forget(&site_id)).await
+}
+
+/// `~/.ssh/config`의 Host 항목 읽기(FR-34.9).
+#[tauri::command]
+pub(crate) async fn remote_import_ssh_config() -> CommandResult<crate::contracts::SshConfigImport> {
+    run_blocking(None, crate::remote::ssh_config::import_user_config).await
 }
 
 /// keyboard-interactive 추가 질문 응답.

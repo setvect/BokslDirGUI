@@ -110,6 +110,8 @@ pub fn run() {
             commands::remote_trust_host_key,
             commands::remote_disconnect,
             commands::remote_sessions,
+            commands::remote_forget_secret,
+            commands::remote_import_ssh_config,
             commands::start_remote_chmod
         ])
         .run(context)

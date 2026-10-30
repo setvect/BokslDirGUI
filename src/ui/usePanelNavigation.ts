@@ -55,6 +55,8 @@ interface PanelNavigationDependencies {
   readonly setArchivePasswordRequest: Dispatch<SetStateAction<ArchivePasswordRequest | null>>;
   readonly saveSettingsPatch: (patch: Partial<Settings>, successMessage: string | null, options?: { silent?: boolean; }) => Promise<void>;
   readonly settingsLoaded: boolean;
+  /** 시작 때 원격 탭 복원: 입력 없이 연결할 수 있으면 연결하고 true(FR-36.9) */
+  readonly reconnectForPath?: (path: string) => Promise<boolean>;
 }
 export function usePanelNavigation(runtime: PanelNavigationDependencies) {
 
@@ -560,6 +562,9 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
         ? listArchiveVirtualPanel(panelId, path, tab.showHidden, tab.sort, tab.filter, false, false)
         : runtime.dataSource.listDir({ panelId, path, showHidden: tab.showHidden, sort: tab.sort, filter: tab.filter });
       let result = await load(tab.path);
+      if (!result.ok && result.error.code === 'remote_not_connected' && isRemotePath(tab.path) && await runtime.reconnectForPath?.(tab.path)) {
+        result = await load(tab.path);
+      }
       if (!result.ok) {
         unavailable.push(tab.path);
         // 암호를 저장하지 않으며 잠긴 압축 탭은 유지하여 사용자가 다시 열 수 있도록 표시.

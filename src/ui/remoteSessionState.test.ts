@@ -10,7 +10,7 @@ const session: RemoteSession = {
   home: '/home/boksl',
   homeUrl: 'sftp://boksl@example.com:2222/home/boksl',
   hostKeyAlgorithm: 'ssh-ed25519',
-  hostKeyFingerprint: 'SHA256:fixture',
+  hostKeyFingerprint: 'SHA256:fixture', secretStored: false,
 };
 
 const site: RemoteSite = { id: 'site-1', name: '배포 서버', host: 'example.com', port: 2222, user: 'boksl', authMethod: 'password', savedSecret: false };
