@@ -387,6 +387,7 @@ export function CommanderShell({
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
           onEntryPointerDown={(event, entry) => handleEntryPointerDown(event, 'left', entry)}
           dropIntent={dragOverPanel?.panelId === 'left' ? dragOverPanel.intent : null}
+          dropFolderPath={dragOverPanel?.panelId === 'left' ? dragOverPanel.folderPath : null}
           onPanelDragOver={(event) => handlePanelDragOver(event, 'left')}
           onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'left' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'left')}
@@ -418,6 +419,7 @@ export function CommanderShell({
           onRestoreFocus={() => shellRef.current?.focus({ preventScroll: true })}
           onEntryPointerDown={(event, entry) => handleEntryPointerDown(event, 'right', entry)}
           dropIntent={dragOverPanel?.panelId === 'right' ? dragOverPanel.intent : null}
+          dropFolderPath={dragOverPanel?.panelId === 'right' ? dragOverPanel.folderPath : null}
           onPanelDragOver={(event) => handlePanelDragOver(event, 'right')}
           onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'right' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'right')}

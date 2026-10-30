@@ -267,6 +267,11 @@ button {
   outline-offset: -3px;
 }
 
+.file-row.is-drop-target {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
 .file-panel.is-drop-blocked {
   outline: 2px solid var(--danger);
   outline-offset: -3px;

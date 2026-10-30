@@ -22,6 +22,7 @@ import {
 } from './archiveVirtual';
 import { DirectoryComparisonState, directoryComparisonLabel } from './directoryComparison';
 import { MiddleEllipsisEntryName } from './EntryName';
+import { basenameFromPath } from './fileActionPlans';
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
 import { BlankContextMenuContent, EntryContextMenuContent } from './PanelContextMenus';
 import { PanelHeader } from './PanelHeader';
@@ -59,6 +60,8 @@ interface FilePanelProps {
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
   onEntryPointerDown(event: ReactPointerEvent<HTMLElement>, entry: FileEntry): void;
   dropIntent: 'copy' | 'move' | 'import' | 'blocked' | null;
+  // 같은 패널 하위 폴더 행에 놓을 때 그 폴더 경로(FR-29.2)
+  dropFolderPath?: string | null;
   onPanelDragOver(event: DragEvent<HTMLElement>): void;
   onPanelDragLeave(): void;
   onPanelDrop(event: DragEvent<HTMLElement>): void;
@@ -91,6 +94,7 @@ export function FilePanel({
   onOpenAction,
   onEntryPointerDown,
   dropIntent,
+  dropFolderPath = null,
   onPanelDragOver,
   onPanelDragLeave,
   onPanelDrop,
@@ -279,9 +283,9 @@ export function FilePanel({
       {dropIntent ? (
         <span className="panel-drop-indicator" role="status">
           {dropIntent === 'copy'
-            ? labels.dropCopy
+            ? dropFolderPath ? `${labels.dropCopyInto} · ${basenameFromPath(dropFolderPath)}` : labels.dropCopy
             : dropIntent === 'move'
-              ? labels.dropMove
+              ? dropFolderPath ? `${labels.dropMoveInto} · ${basenameFromPath(dropFolderPath)}` : labels.dropMove
               : dropIntent === 'import'
                 ? labels.dropImport
                 : labels.dropBlocked}
@@ -339,7 +343,8 @@ export function FilePanel({
                             aria-selected={selected}
                             aria-current={focused ? 'true' : undefined}
                             data-color-group={fileColorGroup(entry)}
-                            className={`file-table-row file-row ${columnLayout.cssClass} entry-row-kind-${entry.kind} ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''} ${comparisonState ? `is-compare-${comparisonState}` : ''}`}
+                            data-entry-index={virtualRow.index}
+                            className={`file-table-row file-row ${columnLayout.cssClass} entry-row-kind-${entry.kind} ${focused ? 'is-focused' : ''} ${selected ? 'is-selected' : ''} ${comparisonState ? `is-compare-${comparisonState}` : ''} ${dropFolderPath === entry.path ? 'is-drop-target' : ''}`}
                             data-compare-state={comparisonState ?? undefined}
                             style={{ transform: `translateY(${virtualRow.start}px)` }}
                             title={tooltip}

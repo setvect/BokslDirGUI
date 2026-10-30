@@ -92,6 +92,29 @@ describe('CommanderShell drag', () => {
       expect(execute).toHaveBeenCalledTimes(1);
     });
 
+    it.each([false, true])('drops onto a sub-folder row of the same panel with Shift=%s (FR-29.2)', async (shift) => {
+      const fixture = setupDrag();
+      const folderRow = [...fixture.panels.left.querySelectorAll<HTMLElement>('.file-row')].find((row) => row.textContent?.includes('images'))!;
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: vi.fn((x: number, y: number) => y === 260 ? folderRow.firstElementChild : y === 270 ? fixture.rows.left : x < 400 ? fixture.panels.left : fixture.panels.right),
+      });
+      fixture.down('left');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: 110, clientY: 270, shiftKey: shift });
+      expect(fixture.panels.left.className).toContain('is-drop-blocked');
+      fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: 110, clientY: 260, shiftKey: shift });
+      expect(fixture.panels.left.className).toContain(shift ? 'is-drop-move' : 'is-drop-copy');
+      expect(folderRow.className).toContain('is-drop-target');
+      expect(fixture.panels.left.querySelector('.panel-drop-indicator')?.textContent).toBe(`${shift ? '폴더로 이동' : '폴더에 복사'} · images`);
+      fireEvent.pointerUp(window, { pointerId: 7, button: 0, clientX: 110, clientY: 260, shiftKey: shift });
+      if (shift) fireEvent.click(await screen.findByRole('button', { name: '이동' }));
+      const execute = shift ? fixture.operationClient.startMove : fixture.operationClient.startCopy;
+      await waitFor(() => expect(execute).toHaveBeenCalledWith({
+        sources: [expect.stringContaining('Architecture.md')], targetDir: `${SAMPLE_LISTINGS.left.path}/images`, policy: 'skip',
+      }));
+      expect(folderRow.className).not.toContain('is-drop-target');
+    });
+
     it.each(['left', 'right'] as const)('blocks a drop on its own %s panel after crossing the other panel', (source) => {
       const f = setupDrag();
       f.down(source);

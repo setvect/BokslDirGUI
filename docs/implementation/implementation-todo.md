@@ -286,7 +286,8 @@
 - [x] 독립 Chrome의 실제 마우스·키보드 입력: 배율 1/2에서 총 14개 시나리오 통과(샘플 데이터와 작업 클라이언트 사용)
 - [ ] 실제 Tauri 앱 및 Finder/Chrome 간 네이티브 드롭 수락 검증
   - 이번 환경의 macOS 입력 자동화 권한 부족으로 미확인
-- [ ] 같은 패널 안의 특정 하위 폴더 행을 대상으로 하는 드롭(FR-29.2)
+- [x] 같은 패널 안의 특정 하위 폴더 행을 대상으로 하는 드롭(FR-29.2)
+  - 2026-10-30: `useFileDrag`의 행 단위 대상 판정, 테스트 `drops onto a sub-folder row of the same panel with Shift=%s (FR-29.2)`
 
 ## 8. Shell command TODO — 기본 비활성 유지
 
