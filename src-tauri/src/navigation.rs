@@ -166,6 +166,25 @@ pub(crate) fn canonical_existing_path(path: &str) -> CommandResult<PathBuf> {
         .map_err(|error| map_io_error(error, Some(&raw)))
 }
 
+/// 주소 입력 해석: `~`·`~/…`(Windows는 `~\…`도)는 홈 기준, 상대 경로는 기준 디렉터리가 있으면 그 아래로 결합.
+/// 기준 없는 상대 경로와 절대 경로는 입력 그대로 반환.
+pub(crate) fn resolve_input_path(raw: &str, base: Option<&str>) -> CommandResult<PathBuf> {
+    if raw == "~" {
+        return crate::platform::home_dir();
+    }
+    let home_relative = raw
+        .strip_prefix("~/")
+        .or_else(|| if cfg!(windows) { raw.strip_prefix("~\\") } else { None });
+    if let Some(rest) = home_relative {
+        return Ok(crate::platform::home_dir()?.join(rest));
+    }
+    let path = PathBuf::from(raw);
+    match base {
+        Some(base) if !path.is_absolute() && !raw.is_empty() => Ok(PathBuf::from(base).join(path)),
+        _ => Ok(path),
+    }
+}
+
 /// 존재하는 디렉터리 경로 정규화, 파일이면 not_directory 오류.
 pub(crate) fn canonical_existing_directory(path: &str) -> CommandResult<PathBuf> {
     let path = canonical_existing_path(path)?;

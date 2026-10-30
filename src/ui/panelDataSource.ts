@@ -10,7 +10,8 @@ export interface PanelDataSource {
   readonly loadInitialOnMount: boolean;
   loadInitialListings(): Promise<PanelInitialLoadResult>;
   listDir(input: ListDirInput): Promise<TauriResult<DirectoryListing>>;
-  gotoPath(input: { panelId: PanelId; path: string }): Promise<TauriResult<DirectoryListing>>;
+  // base: `~`·상대 경로 해석 기준인 활성 패널의 실제 디렉터리(압축 내부면 생략)
+  gotoPath(input: { panelId: PanelId; path: string; base?: string }): Promise<TauriResult<DirectoryListing>>;
   listLocations(): Promise<TauriResult<LocationList>>;
 }
 

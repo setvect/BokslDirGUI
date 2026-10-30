@@ -224,10 +224,12 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     if (isArchiveVirtualPath(path)) {
       return listPanel(panelId, path, { pushHistory: true, focusFallback: 'first-concrete' });
     }
+    const currentPath = panelStateRef.current[panelId].path;
+    const base = isArchiveVirtualPath(currentPath) ? undefined : currentPath;
     const requestId = beginPanelRequest(panelId);
     setActivePanel(panelId);
     setPanelState((current) => ({ ...current, [panelId]: markPanelLoading(current[panelId]) }));
-    const result = await runtime.dataSource.gotoPath({ panelId, path });
+    const result = await runtime.dataSource.gotoPath({ panelId, path, base });
     if (!isCurrentPanelRequest(panelId, requestId)) {
       return undefined;
     }

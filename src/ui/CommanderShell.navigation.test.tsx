@@ -16,6 +16,21 @@ import { activePanelLabel, emptyListings, focusedRow, focusedRowText, mockedPane
 
 describe('CommanderShell navigation', () => {
 
+  it('passes the active real directory as the base for home and relative path input', async () => {
+    const user = userEvent.setup();
+    const dataSource = createFixturePanelDataSource();
+    dataSource.gotoPath = vi.fn(async (input) => ({ ok: true as const, data: createDirectoryListing(input.panelId, `${input.base}/${input.path}`, []) }));
+    renderCommander(dataSource);
+
+    await user.keyboard('gp');
+    const input = screen.getByRole('textbox', { name: '경로' });
+    await user.clear(input);
+    await user.type(input, '../문서 폴더');
+    await user.click(screen.getByRole('button', { name: '이동' }));
+
+    await waitFor(() => expect(dataSource.gotoPath).toHaveBeenCalledWith({ panelId: 'right', path: '../문서 폴더', base: SAMPLE_LISTINGS.right.path }));
+  });
+
   it('keeps an invalid path in the prompt and leaves the panel listing unchanged until a valid path succeeds', async () => {
     const user = userEvent.setup();
     const dataSource = createFixturePanelDataSource();

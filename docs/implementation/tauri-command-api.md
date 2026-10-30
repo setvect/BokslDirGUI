@@ -96,7 +96,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `get_metadata` | `{ path }` | `FileMetadata` | 속성/preview; 폴더는 내부 파일 크기·파일 수·하위 폴더 수를 조회 시 계산 |
 | `prepare_native_file_drag` | `{ paths: string[] }` | `string[]` | Windows 내부 드래그 준비용; 별도 스레드에서 전체 원본·재파싱 지점 검증 후 링크 자체를 보존한 Shell 호환 경로 반환, 다른 OS 미지원 |
 | `watch_path` | `{ panelId, path }` | `WatchAck` | 현재: 경로 검증/version ACK; 실제 변경 이벤트 구독은 미구현 |
-| `goto_path` | `{ panelId, path }` | `DirectoryListing` | 주소 입력/북마크/히스토리 이동 |
+| `goto_path` | `{ panelId, path, base? }` | `DirectoryListing` | 주소 입력/북마크/히스토리 이동, `~`는 홈·상대 경로는 `base`(활성 패널의 실제 디렉터리) 기준 해석(FR-26.4) |
 | `list_locations` | `{}` | `LocationList` | 홈/드라이브/마운트 quick access |
 | `create_dir` | `{ parent, name }` | `FileEntry` | 이름 검증 |
 | `rename_entry` | `{ path, newName }` | `FileEntry` | 같은 parent 내 rename |

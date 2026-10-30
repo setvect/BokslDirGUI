@@ -362,6 +362,7 @@
   - 근거: `operation/shell.rs`의 취소 확인(`is_cancelled`)·출력 16KiB(`OUTPUT_LIMIT`)·5분 제한(`COMMAND_TIMEOUT`), 테스트 `command_summary_retains_output_on_success_failure_and_timeout`(2026-10-30 확인)
   - terminal editor 실행: 2026-10-03 사용자 요청으로 제외([TUI parity](tui-parity-matrix.md)의 `open_terminal_editor`)
 - [ ] 실제 watcher, 패널 기준 상대경로/홈 확장, 플랫폼별 위치 목록
+  - 2026-10-30 패널 기준 상대 경로·홈 확장 구현(FR-26.4): `goto_path`의 `base`, Rust `resolve_input_path`, 테스트 `goto_path_resolves_home_and_panel_relative_input`
 - [ ] backend 동시 작업 gate와 종료 정책
   - 2026-10-30 동시 작업 gate 구현: `launch_operation`의 앱 작업 자리, 단위 테스트 `second_app_operation_is_rejected_until_the_first_releases_its_slot`
   - 남은 부분: OS가 직접 닫는 창 닫기 중 진행 작업 정책(차단·확인·취소 후 닫기) 결정 필요, 앱 안 종료 단축키는 작업 중 차단 유지

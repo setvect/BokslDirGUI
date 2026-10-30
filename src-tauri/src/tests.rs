@@ -1784,3 +1784,29 @@ fn shared_path_checks_report_not_directory_and_missing_entries_without_following
         assert!(metadata.file_type().is_symlink());
     }
 }
+
+#[test]
+fn goto_path_resolves_home_and_panel_relative_input() {
+    let fixture = TempFixture::new();
+    let base = fixture.root.to_string_lossy().into_owned();
+    let root = display_path(&fixture.root.canonicalize().unwrap());
+    let folder = display_path(&fixture.root.join("folder").canonicalize().unwrap());
+
+    let relative = crate::commands::goto_path(PanelId::Left, "folder".into(), Some(base.clone())).unwrap();
+    assert_eq!(relative.path, folder);
+    let parent = crate::commands::goto_path(PanelId::Left, "folder/..".into(), Some(base.clone())).unwrap();
+    assert_eq!(parent.path, root);
+    let absolute = crate::commands::goto_path(PanelId::Left, folder.clone(), Some("/missing-base".into())).unwrap();
+    assert_eq!(absolute.path, folder);
+    let home = crate::commands::goto_path(PanelId::Left, "~".into(), Some(base)).unwrap();
+    assert_eq!(home.path, display_path(&crate::platform::home_dir().unwrap().canonicalize().unwrap()));
+}
+
+#[test]
+fn input_path_resolution_keeps_absolute_and_baseless_relative_paths() {
+    let home = crate::platform::home_dir().unwrap();
+    assert_eq!(crate::navigation::resolve_input_path("~/문서 폴더", None).unwrap(), home.join("문서 폴더"));
+    assert_eq!(crate::navigation::resolve_input_path("sub dir", Some("/base")).unwrap(), Path::new("/base").join("sub dir"));
+    assert_eq!(crate::navigation::resolve_input_path("sub", None).unwrap(), PathBuf::from("sub"));
+    assert_eq!(crate::navigation::resolve_input_path("", Some("/base")).unwrap(), PathBuf::from(""));
+}

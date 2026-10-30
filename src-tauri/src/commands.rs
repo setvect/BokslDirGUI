@@ -37,9 +37,11 @@ pub(crate) fn list_dir(
     navigation::list_dir(panel_id, &path, show_hidden, sort, filter)
 }
 
+/// 주소 입력 이동. `~`는 홈, 상대 경로는 `base`(활성 패널의 실제 디렉터리) 기준으로 해석(FR-26.4).
 #[tauri::command]
-pub(crate) fn goto_path(panel_id: PanelId, path: String) -> CommandResult<DirectoryListing> {
-    navigation::list_dir(panel_id, &path, false, SortSpec::default(), None)
+pub(crate) fn goto_path(panel_id: PanelId, path: String, base: Option<String>) -> CommandResult<DirectoryListing> {
+    let resolved = navigation::resolve_input_path(&path, base.as_deref())?;
+    navigation::list_dir(panel_id, &resolved.to_string_lossy(), false, SortSpec::default(), None)
 }
 
 #[tauri::command]
