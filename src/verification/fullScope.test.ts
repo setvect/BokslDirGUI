@@ -119,6 +119,17 @@ describe('full-scope verification harness', () => {
     expect(I18N_RESOURCES.en['errors.shellCommandDisabled']).toBeTruthy();
   });
 
+  it('translates every error message key the Rust backend can return', () => {
+    const rustSources = Object.values(import.meta.glob('../../src-tauri/src/**/*.rs', { query: '?raw', import: 'default', eager: true }));
+    const keys = [...new Set(rustSources.flatMap((source) =>
+      [...String(source).matchAll(/"(errors\.[A-Za-z0-9]+)"/g)].map((match) => match[1])))];
+
+    expect(keys.length).toBeGreaterThan(20);
+    for (const language of ['ko', 'en'] as const) {
+      expect(keys.filter((key) => !I18N_RESOURCES[language][key]), language).toEqual([]);
+    }
+  });
+
   it('recognizes every required archive format as a virtual directory', () => {
     for (const name of [
       'fixture.zip', 'fixture.tar', 'fixture.tar.gz', 'fixture.tgz',

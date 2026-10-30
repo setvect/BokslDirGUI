@@ -18,10 +18,7 @@ import { isOperationInFlight } from '../operations/operationLifecycle';
 import { useOperationStore } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
 import { AppController, DEFAULT_APP_CONTROLLER, LongRunningOperationClient, NativeFileDragClient, NativeFileDropClient, SafeMutationClient } from '../tauri/commanderClients';
-import { createActionContext, resolveActionTargets } from './actionContext';
-import {
-  isArchiveVirtualPath
-} from './archiveVirtual';
+import { createPanelActionContext, resolveActionTargets, type SharedActionState } from './actionContext';
 import {
   AboutDialog,
   ArchivePasswordPrompt,
@@ -276,6 +273,7 @@ export function CommanderShell({
     setArchivePasswordRequest(null);
     pendingArchiveCopyRef.current = null;
     setNavigationList(null);
+    setBookmarkRenameRequest(null);
     setHelpSearchOpen(false);
     setAboutDialogOpen(false);
     setQuickPreview(null);
@@ -283,26 +281,23 @@ export function CommanderShell({
     shellRef.current?.focus({ preventScroll: true });
   };
 
-  const activeListing = panelState[activePanel].listing;
   const activePanelState = panelState[activePanel];
   const activeTargets = resolveActionTargets(activePanelState);
-  const context = createActionContext({
+  const sharedActionState: SharedActionState = {
     platformInfo,
-    activePanel,
-    focusedEntry: activeTargets.focusedEntry,
-    selectedCount: activeTargets.selectedCount,
-    hasConcreteFocus: activeTargets.hasConcreteFocus,
-    effectiveTargetCount: activeTargets.effectiveTargetCount,
     clipboardCount,
     trashUndoAvailable,
     clipboardMode,
-    clipboardCanMove: clipboardCanMove && !isArchiveVirtualPath(activeListing.path),
-    hasOppositePanel: true,
+    clipboardCanMove,
     shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: operationBusy || panelState.left.loading || panelState.right.loading,
     backendAvailable: runtimeBackendAvailable,
-    activePathIsArchive: isArchiveVirtualPath(activeListing.path),
-  });
+  };
+  const context = createPanelActionContext(
+    sharedActionState,
+    { panelId: activePanel, path: activePanelState.listing.path },
+    activeTargets,
+  );
 
   const activeRowDomId = rowDomId(activePanel, panelState[activePanel].focusedIndex);
   const ariaKeyShortcuts = ariaKeyShortcutsFromRegistry();
@@ -384,9 +379,7 @@ export function CommanderShell({
           sizeFormat={settings.sizeFormat}
           language={settings.language}
           showIcons={settings.view.showIcons}
-          operationBusy={operationBusy || panelState.left.loading || panelState.right.loading}
-          backendAvailable={runtimeBackendAvailable}
-          platformInfo={platformInfo}
+          actionState={sharedActionState}
           onActivate={() => setActivePanel('left')}
           onEntryFocus={(index) => recordFocusedRow('left', index)}
           onEntrySelect={(index, entry, mode) => selectEntry('left', index, entry, mode)}
@@ -417,9 +410,7 @@ export function CommanderShell({
           sizeFormat={settings.sizeFormat}
           language={settings.language}
           showIcons={settings.view.showIcons}
-          operationBusy={operationBusy || panelState.left.loading || panelState.right.loading}
-          backendAvailable={runtimeBackendAvailable}
-          platformInfo={platformInfo}
+          actionState={sharedActionState}
           onActivate={() => setActivePanel('right')}
           onEntryFocus={(index) => recordFocusedRow('right', index)}
           onEntrySelect={(index, entry, mode) => selectEntry('right', index, entry, mode)}

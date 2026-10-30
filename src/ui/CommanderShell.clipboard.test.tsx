@@ -123,6 +123,30 @@ describe('CommanderShell clipboard', () => {
     expect(operationClient.startCopy).not.toHaveBeenCalled();
   });
 
+  it('offers the prepared clipboard in the blank-area context menu like the Edit menu', async () => {
+    const user = userEvent.setup();
+    const operationClient = {
+      startCopy: vi.fn(async () => ({ ok: true as const, data: { operationId: 'op-context-paste', kind: 'copy' as const, state: 'queued' as const } })),
+      startMove: vi.fn(),
+      startDelete: vi.fn(),
+      cancelOperation: vi.fn(),
+      resolveConflict: vi.fn(),
+    };
+    const { container } = renderCommander(createFixturePanelDataSource(), undefined, operationClient);
+
+    await user.keyboard('{Meta>}c{/Meta}');
+    await user.keyboard('{Tab}');
+    fireEvent.contextMenu(container.querySelector<HTMLElement>('.file-panel.is-active .file-table-scroll')!);
+
+    expect(await screen.findByRole('menuitem', { name: /^여기로 이동/ })).toBeTruthy();
+    await user.click(screen.getByRole('menuitem', { name: /^붙여넣기/ }));
+    await waitFor(() => expect(operationClient.startCopy).toHaveBeenCalledWith({
+      sources: [SAMPLE_LISTINGS.right.entries[INITIAL_FOCUS_INDEX.right].path],
+      targetDir: SAMPLE_LISTINGS.left.path,
+      policy: 'skip',
+    }));
+  });
+
   it('uses Windows-style Ctrl+X then Ctrl+V and clears the cut list after a complete move', async () => {
     const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Windows NT 10.0)');
     try {

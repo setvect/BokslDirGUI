@@ -1,5 +1,6 @@
 import { ACTION_BY_ID, fileShortcutPlatform, isActionAvailable, type ActionContext, type ActionId, type AppAction, type ContextScope, type FileShortcutPlatform } from '../actions/registry';
 import type { FileEntry, PanelId, PlatformInfo } from '../domain/types';
+import { isArchiveVirtualPath } from './archiveVirtual';
 
 export interface ActionContextInput {
   activePanel: PanelId;
@@ -109,6 +110,32 @@ export const createActionContext = ({
     backendAvailable,
     activePathIsArchive,
   };
+};
+
+// 단축키·상단 메뉴·컨텍스트 메뉴가 함께 쓰는 패널 무관 상태
+export type SharedActionState = Pick<
+  ActionContextInput,
+  'clipboardCount' | 'trashUndoAvailable' | 'clipboardMode' | 'clipboardCanMove' | 'platformInfo' | 'shellCommandEnabled' | 'operationBusy' | 'backendAvailable'
+>;
+
+export const createPanelActionContext = (
+  shared: SharedActionState,
+  panel: { panelId: PanelId; path: string },
+  targets: Pick<ActionTargetSnapshot, 'focusedEntry' | 'selectedCount' | 'hasConcreteFocus' | 'effectiveTargetCount'>,
+): ActionContext => {
+  const activePathIsArchive = isArchiveVirtualPath(panel.path);
+  return createActionContext({
+    ...shared,
+    activePanel: panel.panelId,
+    focusedEntry: targets.focusedEntry,
+    selectedCount: targets.selectedCount,
+    hasConcreteFocus: targets.hasConcreteFocus,
+    effectiveTargetCount: targets.effectiveTargetCount,
+    // 압축 가상 경로는 읽기 전용이라 이동 붙여넣기 대상 제외
+    clipboardCanMove: Boolean(shared.clipboardCanMove) && !activePathIsArchive,
+    hasOppositePanel: true,
+    activePathIsArchive,
+  });
 };
 
 export const blocksVirtualEntryTarget = (action: AppAction, entry: FileEntry) =>

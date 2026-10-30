@@ -11,11 +11,12 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, type 
 import {
   type AppAction
 } from '../actions/registry';
-import type { FileEntry, Settings, PlatformInfo } from '../domain/types';
+import type { FileEntry, Settings } from '../domain/types';
 import {
   COMMANDER_UI_TEXT,
   formatUserErrorMessage
 } from '../i18n-resources';
+import type { SharedActionState } from './actionContext';
 import {
   isArchiveVirtualPath
 } from './archiveVirtual';
@@ -50,9 +51,7 @@ interface FilePanelProps {
   sizeFormat: Settings['sizeFormat'];
   language: Settings['language'];
   showIcons: boolean;
-  operationBusy: boolean;
-  backendAvailable: boolean;
-  platformInfo?: PlatformInfo;
+  actionState: SharedActionState;
   onActivate(): void;
   onEntryFocus(index: number): void;
   onEntrySelect(index: number, entry: FileEntry, mode: SelectionMode): void;
@@ -84,9 +83,7 @@ export function FilePanel({
   sizeFormat,
   language,
   showIcons,
-  operationBusy,
-  backendAvailable,
-  platformInfo,
+  actionState,
   onActivate,
   onEntryFocus,
   onEntrySelect,
@@ -372,9 +369,7 @@ export function FilePanel({
                             entry={entry}
                             listing={listing}
                             selectedPaths={panel.selectedPaths}
-                            operationBusy={operationBusy}
-                            backendAvailable={backendAvailable}
-                            platformInfo={platformInfo}
+                            actionState={actionState}
                             onOpenAction={onOpenAction}
                           />
                         </ContextMenu.Portal>
@@ -389,9 +384,7 @@ export function FilePanel({
             <BlankContextMenuContent
               language={language}
               listing={listing}
-              operationBusy={operationBusy}
-              backendAvailable={backendAvailable}
-              platformInfo={platformInfo}
+              actionState={actionState}
               onOpenAction={onOpenAction}
             />
           </ContextMenu.Portal>

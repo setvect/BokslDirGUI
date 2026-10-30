@@ -1,3 +1,4 @@
+import { archiveFileSuffix } from '../domain/archiveFormats';
 import type { FileEntry, SortSpec } from '../domain/types';
 import {
   isArchiveVirtualPath,
@@ -82,8 +83,9 @@ export { parseShellCommandInput } from '../actions/commandInput';
 
 export const archiveAutoExtractFolderName = (archiveName: string) => {
   const trimmed = archiveName.trim();
-  const stripped = trimmed.replace(/(\.tar\.gz|\.tar\.bz2|\.tar\.xz|\.zip|\.7z|\.rar|\.tgz|\.tbz2|\.txz)$/i, '');
-  return stripped && stripped !== trimmed ? stripped : `${trimmed || 'archive'}-extracted`;
+  const suffix = archiveFileSuffix(trimmed);
+  const stripped = suffix ? trimmed.slice(0, -suffix.length) : '';
+  return stripped || `${trimmed || 'archive'}-extracted`;
 };
 
 export const basenameFromPath = (path: string) =>

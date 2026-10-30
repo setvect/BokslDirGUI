@@ -124,6 +124,49 @@ describe('CommanderShell settings', () => {
     expect(document.body.textContent).not.toContain('renamed');
   });
 
+  it.each(['cancel button', 'Escape'])('closes the bookmark rename prompt with the %s without saving', async (closeWith) => {
+    const user = userEvent.setup();
+    const baseSettings = {
+      schemaVersion: 1,
+      theme: 'dark' as const,
+      language: 'ko' as const,
+      sizeFormat: 'binary' as const,
+      external: { editorId: null, shellCommand: { enabled: false } },
+      bookmarks: [{ id: 'bookmark-existing', label: '기존 이름', path: SAMPLE_LISTINGS.right.path }],
+      layout: { singlePanel: false, ratio: '50:50' as const },
+      session: { leftPath: null, rightPath: null, activePanel: 'right' as const },
+      view: { zoomStep: 0, density: 'compact' as const, showIcons: true },
+    };
+    const mutationClient = {
+      createDir: vi.fn(),
+      renameEntry: vi.fn(),
+      loadSettings: vi.fn(async () => ({ ok: true as const, data: baseSettings })),
+      saveSettings: vi.fn(),
+    };
+    renderCommander(createFixturePanelDataSource(), mutationClient);
+
+    await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: '이동(G)' }));
+    const goMenu = await screen.findByRole('menu', { name: '이동(G) menu' });
+    const bookmarkTrigger = within(goMenu).getAllByRole('menuitem')
+      .find((item) => item.getAttribute('aria-haspopup') === 'menu' && item.textContent?.includes('북마크'));
+    if (!bookmarkTrigger) {
+      throw new Error('bookmark submenu trigger is required');
+    }
+    fireEvent.mouseEnter(bookmarkTrigger);
+    await user.click(within(await screen.findByRole('menu', { name: '북마크 submenu' })).getByRole('menuitem', { name: '이름 변경' }));
+    expect(await screen.findByLabelText('북마크 이름')).toBeTruthy();
+
+    if (closeWith === 'Escape') {
+      await user.keyboard('{Escape}');
+    } else {
+      await user.click(screen.getByRole('button', { name: '취소' }));
+    }
+
+    await waitFor(() => expect(screen.queryByLabelText('북마크 이름')).toBeNull());
+    expect(mutationClient.saveSettings).not.toHaveBeenCalled();
+  });
+
   it('deletes bookmarks from the list by ID while keeping the dialog and panel path', async () => {
     const user = userEvent.setup();
     const bookmarks = [

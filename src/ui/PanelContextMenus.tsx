@@ -6,36 +6,24 @@ import {
   shortcutLabelForAction,
   type AppAction
 } from '../actions/registry';
-import type { DirectoryListing, FileEntry, Settings, PlatformInfo } from '../domain/types';
-import { createActionContext } from './actionContext';
-import {
-  isArchiveVirtualPath
-} from './archiveVirtual';
+import type { DirectoryListing, FileEntry, Settings } from '../domain/types';
+import { createPanelActionContext, type SharedActionState } from './actionContext';
 import { useCommanderKeyboardBoundaryProps } from './keyboardOwnership';
 import { blankContextMenuActions, contextMenuActions } from './menuModel';
 import { contextMenuSources } from './selectionModel';
 
-export function BlankContextMenuContent({ language, listing, operationBusy, backendAvailable, platformInfo, onOpenAction }: {
+export function BlankContextMenuContent({ language, listing, actionState, onOpenAction }: {
   language: Settings['language'];
   listing: DirectoryListing;
-  operationBusy: boolean;
-  backendAvailable: boolean;
-  platformInfo?: PlatformInfo;
+  actionState: SharedActionState;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
 }) {
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('context-menu');
-  const context = createActionContext({
-    activePanel: listing.panelId,
+  const context = createPanelActionContext(actionState, listing, {
     focusedEntry: null,
     selectedCount: 0,
     hasConcreteFocus: false,
     effectiveTargetCount: 0,
-    hasOppositePanel: true,
-    shellCommandEnabled: false,
-    operationBusy,
-    backendAvailable,
-    platformInfo,
-    activePathIsArchive: isArchiveVirtualPath(listing.path),
   });
   const actions = blankContextMenuActions(context, Boolean(listing.filter));
 
@@ -56,30 +44,21 @@ export function BlankContextMenuContent({ language, listing, operationBusy, back
   );
 }
 
-export function EntryContextMenuContent({ language, entry, listing, selectedPaths, operationBusy, backendAvailable, platformInfo, onOpenAction }: {
+export function EntryContextMenuContent({ language, entry, listing, selectedPaths, actionState, onOpenAction }: {
   language: Settings['language'];
   entry: FileEntry;
   listing: DirectoryListing;
   selectedPaths: readonly string[];
-  operationBusy: boolean;
-  backendAvailable: boolean;
-  platformInfo?: PlatformInfo;
+  actionState: SharedActionState;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
 }) {
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('context-menu');
   const contextSources = contextMenuSources(entry, listing, selectedPaths);
-  const context = createActionContext({
-    activePanel: listing.panelId,
+  const context = createPanelActionContext(actionState, listing, {
     focusedEntry: entry,
     selectedCount: contextSources.length,
     hasConcreteFocus: !entry.isVirtual,
     effectiveTargetCount: contextSources.length,
-    hasOppositePanel: true,
-    shellCommandEnabled: false,
-    operationBusy,
-    backendAvailable,
-    platformInfo,
-    activePathIsArchive: isArchiveVirtualPath(listing.path),
   });
 
   return (
