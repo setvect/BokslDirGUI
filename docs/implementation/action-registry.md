@@ -189,3 +189,20 @@
 - 같은 폴더에 붙여넣기는 원본 덮어쓰기를 피하도록 안내하고 실행하지 않음
 - 압축 내부 항목은 복사만 가능하고 이동은 차단
 - `y/F5`와 `x/F6`는 기존처럼 반대 패널을 대상으로 하며, 이동은 확인 다이얼로그 수행
+
+## 원격 패널 액션
+
+- 근거: [SFTP 요구사항](../requirements/07-remote-sftp.md) 4절, 2026-10-31 구현
+- 속성 `remoteSupport`: `localOnly`는 원격 패널에서 비활성, `remoteOnly`는 원격 패널에서만 활성, 생략 시 양쪽 지원
+- 판정 위치: `isActionAvailable`, 메뉴·컨텍스트 메뉴·단축키 공통
+- 컨텍스트 값: `activePathIsRemote`(활성 패널 경로), `activeRemoteConnected`(공유 상태의 연결된 세션 목록 기준)
+
+| 구분 | 액션 |
+| --- | --- |
+| 원격(R) 메뉴 | `remote.sites`(g r)·`remote.connect`·`remote.disconnect`(g d)·`remote.reconnect`·`remote.info`·`remote.chmod` |
+| 원격 빈 영역 메뉴 추가 | 연결 해제·다시 연결·연결 정보 |
+| 의미 변경 | `file.trash`(d)는 원격 패널에서 `file.deletePermanent` 확인 흐름으로 전환 |
+| 받은 뒤 실행 | `file.quickView`(앞부분만 받기), `external.openDefault`·Enter(임시 폴더로 받은 뒤 열기) |
+| 앱 내부 클립보드 | 복사·잘라내기·붙여넣기, 원격 경로는 OS 파일 클립보드에 기록하지 않음 |
+| `localOnly` | `external.openWith`·`external.reveal`·`external.openCurrentInFileManager`·`external.openCurrentInTerminal`·`external.runShellCommand`·`file.undoTrash`·`archive.*` |
+| 설정 | `settings.remoteLinksPreserve`·`settings.remoteLinksFollow`·`settings.remoteLinksSkip`(설정 > 원격 링크 처리) |

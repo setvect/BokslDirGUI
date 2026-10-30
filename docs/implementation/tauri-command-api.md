@@ -130,6 +130,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `operation_summary` | `OperationSummary` | operation service(`operation/runtime.rs`) | queue/toast/panel refresh | 구현 |
 | `boksldir://native-file-drop` | `NativeFileDropEvent` | Windows 주 창(`native_drop.rs`), macOS 드롭 오버레이(`drop-overlay.ts`) | `useFileDrag` | 구현 |
 | `dir_changed` | `{ panelId, path, version }` | watch service(`watch_service.rs`) | `usePanelNavigation` 백그라운드 새로고침(같은 version만) | 구현 |
+| `remote_connection_changed` | `RemoteConnectionChanged { sessionId, state, error }` | 원격 연결 계층(`remote/connection.rs`) | `useRemoteSessions` 머리글 상태·액션 가용성 | 구현 |
 | `settings_changed` | `Settings` | settings service | UI providers | 미구현 |
 
 - 이벤트 이름 원천: 프론트 `src/tauri/commands.ts`의 `EVENTS`, Rust의 `*_EVENT` 상수, `contract.test.ts`가 양쪽 일치와 Rust 문자열 리터럴 발행 금지 확인
@@ -259,3 +260,53 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 - Windows W0~W2에서는 위 OS 전용 기능 false 유지, 기존 내부 클립보드·공통 파일 작업 유지
 - UI 경로는 Rust에서 받은 원문 유지, Windows UNC·확장 드라이브 루트의 부모 계산 보존
 - 관련 정책·네이티브 검증: [Windows 검증](windows-validation.md) 참조
+
+## 원격(SFTP) 계약
+
+- 근거: [SFTP 요구사항](../requirements/07-remote-sftp.md) FR-34~41, 2026-10-31 구현
+- 원격 경로: `sftp://사용자@호스트:포트/절대/경로`, 사용자의 `@:/%`와 경로의 `%`만 퍼센트 인코딩, 기본 포트 22 생략, IPv6는 대괄호
+- 세션 식별자: 원격 루트 URL(`sftp://사용자@호스트:포트/`), 프론트 `remoteLocationKey`와 같은 값
+- 비밀값: 암호·키 암호·질문 응답은 요청에만 담고 설정·이벤트·오류 상세·Debug 출력·작업 요약에 기록 금지, 저장 선택 시 OS 자격 증명 저장소에만 보관
+
+### 원격 전용 명령
+
+| Command | 입력 | 출력 | 비고 |
+| --- | --- | --- | --- |
+| `remote_connect` | `{ request: RemoteConnectRequest }` | `RemoteSession` | 처음 보는 호스트 키 `host_key_unknown`(상세: hostName·port·algorithm·fingerprint), 변경된 키 `host_key_changed`(recordedFingerprint 포함), 추가 질문 `remote_auth_prompts`(상세: challengeId·instructions·prompts JSON) |
+| `remote_auth_respond` | `{ challengeId, responses }` | `RemoteSession` | keyboard-interactive 질문 응답, 같은 SSH 연결에서 인증 계속 |
+| `remote_auth_cancel` | `{ challengeId }` | `boolean` | 질문 창 취소 시 인증 중인 연결 종료 |
+| `remote_trust_host_key` | `{ host, port, fingerprint }` | `void` | 대기 중인 키와 지문이 같을 때만 앱 전용 `known_hosts`에 기록 |
+| `remote_disconnect` | `{ sessionId }` | `boolean` | 앱 요청 해제, 자동 재연결 방법도 삭제 |
+| `remote_sessions` | `{}` | `RemoteSession[]` | 연결된 세션 목록 |
+| `remote_forget_secret` | `{ siteId }` | `void` | 사이트의 저장된 암호·키 암호 삭제 |
+| `remote_import_ssh_config` | `{}` | `SshConfigImport { entries, warnings }` | `~/.ssh/config`의 와일드카드 없는 Host 항목 |
+| `remote_open_dir` | `{}` | `string` | 원격 파일을 기본 앱으로 열기 전에 받을 앱 전용 임시 폴더, 앱 종료 때 정리 |
+| `start_remote_chmod` | `{ targets, mode, recursive, scope }` | `OperationStarted` | kind=chmod, `scope`: all·files·directories, 재귀 시 링크 제외 |
+
+### 원격 경로를 받는 기존 명령
+
+| Command | 원격 동작 |
+| --- | --- |
+| `list_dir`·`goto_path`·`get_metadata`·`preview_file` | 비동기 명령, 원격 경로면 원격 런타임에서 실행, 끊겼으면 저장된 방법으로 한 번 재연결 |
+| `goto_path` | 원격 패널 기준의 `~`·상대·`/` 입력은 원격 해석, Windows 드라이브·UNC 경로만 로컬 |
+| `create_dir`·`rename_entry` | 로컬과 같은 이름 규칙, 덮어쓰기 금지 |
+| `preview_bulk_rename`·`start_bulk_rename` | 원본 표식은 크기·수정 시각·권한, 실행 직전 재검증 |
+| `start_copy`·`start_move` | 원본이나 대상이 원격이면 원격 전송, 같은 서버 이동은 서버 이름 변경 |
+| `start_delete` | 원격 대상은 `permanent`만 허용(`trash`는 `unsupported`), 원격 루트·홈 보호 |
+
+### 원격 DTO
+
+| DTO | 필드 |
+| --- | --- |
+| `RemoteConnectRequest` | host, port, user, authMethod(password·publicKey·agent·keyboardInteractive), password?, keyPath?, passphrase?, siteId?, saveSecret? |
+| `RemoteSession` | sessionId, user, host, port, home, homeUrl, hostKeyAlgorithm, hostKeyFingerprint, secretStored |
+| `RemoteConnectionChanged` | sessionId, state(connected·disconnected·lost), error? |
+| `RemoteSettings` | sites, keepaliveSeconds(5~600), connectTimeoutSeconds(3~120), linkPolicy(preserve·follow·skip) |
+| `DirectoryListing` | 원격 목록은 상한(50,000) 초과 시 totalEntries·truncated 추가 |
+
+### 원격 오류 코드
+
+- 연결: `remote_host_not_found`·`remote_connection_refused`·`remote_timeout`·`remote_connect_failed`·`remote_sftp_unavailable`
+- 호스트 키: `host_key_unknown`·`host_key_changed`·`host_key_not_pending`
+- 인증: `remote_auth_failed`(상세 allowedMethods)·`remote_auth_prompts`·`remote_auth_challenge_expired`·`remote_key_passphrase_required`·`remote_key_passphrase_invalid`·`remote_key_unreadable`·`remote_agent_unavailable`·`credential_store_failed`
+- 연결 상태·요청: `remote_not_connected`·`remote_connection_lost`·`remote_failed`(상세 serverMessage)·`unsupported`, 권한·없음은 로컬과 같은 `permission_denied`·`not_found`

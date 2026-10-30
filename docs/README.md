@@ -18,7 +18,7 @@
 | 요구사항 | [`requirements/04-gui-desktop-interactions.md`](requirements/04-gui-desktop-interactions.md) | 마우스 이벤트, 컨텍스트 메뉴, 드래그 앤 드롭, 보기 모드, 미리보기, 작업 큐 |
 | 요구사항 | [`requirements/05-customization-platform-quality.md`](requirements/05-customization-platform-quality.md) | 테마, i18n, 설정, 보안, 플랫폼, 성능/안정성/접근성 |
 | 요구사항 | [`requirements/06-validation-evidence.md`](requirements/06-validation-evidence.md) | 검증 시나리오, 회귀 테스트, 근거 파일 요약, 미확정 사항 |
-| 요구사항 | [`requirements/07-remote-sftp.md`](requirements/07-remote-sftp.md) | SFTP 원격 파일 관리 요구사항(2026-10-31 확정): 연결·인증·원격 패널·전송·결정 사항·시험 계획 |
+| 요구사항 | [`requirements/07-remote-sftp.md`](requirements/07-remote-sftp.md) | SFTP 원격 파일 관리 요구사항(2026-10-31 확정·구현 완료): 연결·인증·원격 패널·전송·결정 사항·시험 계획·구현 결과 |
 | 아키텍처 | [`architecture/BokslDirGUI_tauri_react_rust_architecture.md`](architecture/BokslDirGUI_tauri_react_rust_architecture.md) | Tauri + React + Rust 기반 구조 정의 |
 | 구현 설계 | [`implementation/README.md`](implementation/README.md) | 구현 설계 문서 인덱스와 착수 순서 |
 | 구현 설계 | [`implementation/tui-parity-map.md`](implementation/tui-parity-map.md) | 기존 TUI 기능과 GUI 구현 단위 매핑 |

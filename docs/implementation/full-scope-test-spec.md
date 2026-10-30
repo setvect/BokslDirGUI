@@ -111,6 +111,23 @@
 - 기본 화면에 persistent sidebar/inspector/large toolbar가 없음
 - bottom status/hotkey strip이 표시
 
+### 3.7 원격(SFTP)
+
+- 근거: [SFTP 요구사항](../requirements/07-remote-sftp.md) 8절·10절
+- Rust 통합: 테스트 SFTP 서버(`src-tauri/src/remote/test_server.rs`)를 127.0.0.1 임의 포트로 실행, 외부 서버·Docker 불필요
+
+| 영역 | 시험 근거 |
+| --- | --- |
+| 연결·인증·호스트 키 | `remote/tests.rs`: 처음 키 지문 확인 뒤 신뢰, 변경 키 차단, 사용자 known_hosts 읽기 전용, 암호·키 암호·keyboard-interactive, 단계별 네트워크 오류, 비밀값 미노출 |
+| 목록·이동 | 원격 URL·종류·숨김·필터, 실행 파일·링크 대상, `~`·상대·절대 입력, 위험한 이름 제외, 잘림, 권한 거부 |
+| 관리 | 새 폴더·이름 변경 규칙과 덮어쓰기 금지, 영구 삭제와 보호 경로, 링크 비추적 삭제, 권한 변경 범위, 다중 이름 변경 |
+| 전송 | 업로드·다운로드 내용·수정 시각, 충돌 건너뛰기·교체, 같은 서버 이동, 이동 실패 시 원본 보존, 끊김 임시본·이어받기·빈 구간 임시본 재전송, 취소 정리, 링크 정책 |
+| 자격 증명·재연결 | 저장 선택 시에만 저장, 저장된 값 재사용, 끊김 뒤 한 번 재연결, 앱 해제 뒤 재연결 없음 |
+| 화면 | `CommanderShell.remote.test.tsx`: 연결·호스트 키·질문·사이트·해제·복원·삭제 전환·권한 창·전송 키·열기·빠른 보기·앱 내부 클립보드, `CommanderShell.drag.test.tsx`: 드롭 업로드·끌어내기 차단 |
+| 계약 | `contract.test.ts`·`contract_tests.rs`: 원격 DTO fixture, `remote_connection_changed` 이벤트 이름 |
+
+- VM E2E: macOS(Tart)의 원격 로그인을 SFTP 서버로 사용, Windows VM은 네트워크로 같은 서버 접속, 결과는 요구사항 문서 10절에 기록
+
 ## 4. 정합성 테스트
 
 - action registry에 없는 action ID를 메뉴/도움말/컴포넌트가 참조하지 않음
