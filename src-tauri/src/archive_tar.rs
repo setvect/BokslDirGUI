@@ -336,6 +336,7 @@ mod tests {
             #[cfg(target_os = "macos")]
             {
                 let listed = std::process::Command::new("/usr/bin/tar")
+                    .env("LC_ALL", "en_US.UTF-8")
                     .arg("-tf")
                     .arg(&archive)
                     .output()

@@ -263,6 +263,17 @@ pub(crate) fn find_executable(name: &str) -> Option<String> {
     None
 }
 
+// GUI 앱이 실행한 콘솔 도구의 새 콘솔 창 생성 차단. 터미널처럼 창이 필요한 실행에는 사용 금지.
+pub(crate) fn hide_console_window(command: &mut std::process::Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    #[cfg(not(windows))]
+    let _ = command;
+}
+
 pub(crate) fn validate_path_input(path: &Path) -> CommandResult<()> {
     #[cfg(windows)]
     {

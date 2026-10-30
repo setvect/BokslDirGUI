@@ -67,19 +67,28 @@ fn list_archive_entries(
     }
 }
 
+// Apps launched from Finder inherit no LANG, and the system tar then escapes
+// UTF-8 names as octal bytes. Pin a UTF-8 locale for the listing tools.
+fn listing_tool(program: &str) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(target_os = "macos")]
+    command.env("LC_ALL", "en_US.UTF-8");
+    command
+}
+
 // macOS unzip -Z1 mangles UTF-8 filenames when the ZIP UTF-8 flag is absent.
 // The system tar (libarchive) preserves the stored names, including archives
 // written by macOS zip, while unzip still supplies the metadata below.
 pub(crate) fn zip_name_listing_command(archive: &Path) -> Command {
     #[cfg(target_os = "macos")]
     let mut command = {
-        let mut command = Command::new("tar");
+        let mut command = listing_tool("tar");
         command.arg("-tf");
         command
     };
     #[cfg(not(target_os = "macos"))]
     let mut command = {
-        let mut command = Command::new("unzip");
+        let mut command = listing_tool("unzip");
         command.arg("-Z1");
         command
     };
@@ -95,13 +104,13 @@ fn list_zip_entries_with_metadata(
         .output()
         .map_err(|error| map_io_error(error, Some(archive)))?;
     let names = parse_zip_name_output(output, archive, None)?;
-    let detail_output = Command::new("unzip")
+    let detail_output = listing_tool("unzip")
         .args(["-Z", "-T", "-l"])
         .arg(archive)
         .output()
         .map_err(|error| map_io_error(error, Some(archive)))?;
     let entries = parse_zipinfo_long_output(detail_output, archive, &names)?;
-    let encrypted = Command::new("zipinfo")
+    let encrypted = listing_tool("zipinfo")
         .arg("-v")
         .arg(archive)
         .output()
@@ -131,6 +140,7 @@ fn list_7z_entries_with_metadata(
             .with_detail("provider", "7z")
         })?;
     let mut command = Command::new(binary);
+    crate::platform::hide_console_window(&mut command);
     command.args(["l", "-slt", "-sccUTF-8"]);
     if let Some(password) = password {
         command.arg(format!("-p{password}"));
