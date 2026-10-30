@@ -18,7 +18,7 @@ import { OperationDialogHost } from '../operations/OperationDialogHost';
 import { isOperationInFlight } from '../operations/operationLifecycle';
 import { useOperationStore } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
-import { AppController, DEFAULT_APP_CONTROLLER, LongRunningOperationClient, NativeFileDragClient, NativeFileDropClient, SafeMutationClient } from '../tauri/commanderClients';
+import { AppController, DEFAULT_APP_CONTROLLER, LongRunningOperationClient, NativeFileDragClient, NativeFileDropClient, RemoteSessionClient, SafeMutationClient } from '../tauri/commanderClients';
 import { createPanelActionContext, resolveActionTargets, type SharedActionState } from './actionContext';
 import {
   AboutDialog,
@@ -41,7 +41,9 @@ import { rowDomId } from './panelPresentation';
 import {
   focusedEntryOf
 } from './panelState';
-import { clampNumber, viewMetricsForSettings } from './settingsModel';
+import { clampNumber, remoteSettingsOf, viewMetricsForSettings } from './settingsModel';
+import { remoteStatusForPath } from './remoteSessionState';
+import { useRemoteSessions } from './useRemoteSessions';
 import { BottomStatusStrip, HotkeyStrip } from './StatusStrips';
 import { TopMenuBar } from './TopMenuBar';
 import { BulkRenameDialog } from './BulkRenameDialog';
@@ -66,6 +68,7 @@ interface CommanderShellProps {
   initialSelectedPaths?: Partial<Record<PanelId, string[]>>;
   nativeFileDropClient?: NativeFileDropClient;
   nativeFileDragClient?: NativeFileDragClient;
+  remoteClient?: RemoteSessionClient;
 }
 
 export function CommanderShell({
@@ -78,8 +81,10 @@ export function CommanderShell({
   initialSelectedPaths,
   nativeFileDropClient,
   nativeFileDragClient,
+  remoteClient = tauriClient,
 }: CommanderShellProps) {
   const platformInfo = useRuntimePlatform(mutationClient, runtimeBackendAvailable);
+  const { sessions: remoteSessions } = useRemoteSessions(remoteClient, runtimeBackendAvailable);
   const openOperationDialog = useOperationStore((state) => state.openDialog);
   const startLongRunningOperation = useOperationStore((state) => state.startLongRunningOperation);
   const operationDialogOpen = useOperationStore((state) => Boolean(state.dialog));
@@ -389,6 +394,7 @@ export function CommanderShell({
           onEntryPointerDown={(event, entry) => handleEntryPointerDown(event, 'left', entry)}
           dropIntent={dragOverPanel?.panelId === 'left' ? dragOverPanel.intent : null}
           dropFolderPath={dragOverPanel?.panelId === 'left' ? dragOverPanel.folderPath : null}
+          remoteStatus={remoteStatusForPath(panelState.left.path, remoteSessions, remoteSettingsOf(settings).sites)}
           onPanelDragOver={(event) => handlePanelDragOver(event, 'left')}
           onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'left' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'left')}
@@ -421,6 +427,7 @@ export function CommanderShell({
           onEntryPointerDown={(event, entry) => handleEntryPointerDown(event, 'right', entry)}
           dropIntent={dragOverPanel?.panelId === 'right' ? dragOverPanel.intent : null}
           dropFolderPath={dragOverPanel?.panelId === 'right' ? dragOverPanel.folderPath : null}
+          remoteStatus={remoteStatusForPath(panelState.right.path, remoteSessions, remoteSettingsOf(settings).sites)}
           onPanelDragOver={(event) => handlePanelDragOver(event, 'right')}
           onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'right' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'right')}

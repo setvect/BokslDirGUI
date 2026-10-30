@@ -9,6 +9,7 @@ use crate::external;
 use crate::mutation;
 use crate::navigation;
 use crate::operation;
+use crate::remote::path::is_remote_path;
 use crate::settings_service;
 use crate::shell_command;
 use std::path::PathBuf;
@@ -24,22 +25,47 @@ pub(crate) fn health_check() -> &'static str {
     "ok"
 }
 
+/// 디렉터리 목록. `sftp://` 경로는 원격 목록, 그 밖은 로컬 목록(작업 스레드).
 #[tauri::command]
-pub(crate) fn list_dir(
+pub(crate) async fn list_dir(
     panel_id: PanelId,
     path: String,
     show_hidden: bool,
     sort: SortSpec,
     filter: Option<String>,
 ) -> CommandResult<DirectoryListing> {
-    navigation::list_dir(panel_id, &path, show_hidden, sort, filter)
+    if is_remote_path(&path) {
+        return crate::remote::run(async move {
+            crate::remote::listing::list_dir(panel_id, &path, show_hidden, sort, filter).await
+        })
+        .await;
+    }
+    run_blocking(Some(PathBuf::from(&path)), move || navigation::list_dir(panel_id, &path, show_hidden, sort, filter)).await
 }
 
 /// 주소 입력 이동. `~`는 홈, 상대 경로는 `base`(활성 패널의 실제 디렉터리) 기준으로 해석(FR-26.4).
+/// 원격 패널 기준이면 `~`·상대·`/` 경로를 원격으로 해석(FR-36.4), Windows 드라이브·UNC 경로만 로컬로 이동.
 #[tauri::command]
-pub(crate) fn goto_path(panel_id: PanelId, path: String, base: Option<String>) -> CommandResult<DirectoryListing> {
-    let resolved = navigation::resolve_input_path(&path, base.as_deref())?;
-    navigation::list_dir(panel_id, &resolved.to_string_lossy(), false, SortSpec::default(), None)
+pub(crate) async fn goto_path(panel_id: PanelId, path: String, base: Option<String>) -> CommandResult<DirectoryListing> {
+    let remote_base = base.as_deref().is_some_and(is_remote_path);
+    if is_remote_path(path.trim()) || (remote_base && !is_windows_local_path(&path)) {
+        return crate::remote::run(async move {
+            crate::remote::listing::goto_path(panel_id, &path, base.as_deref()).await
+        })
+        .await;
+    }
+    let base = base.filter(|base| !is_remote_path(base));
+    run_blocking(Some(PathBuf::from(&path)), move || {
+        let resolved = navigation::resolve_input_path(&path, base.as_deref())?;
+        navigation::list_dir(panel_id, &resolved.to_string_lossy(), false, SortSpec::default(), None)
+    })
+    .await
+}
+
+fn is_windows_local_path(path: &str) -> bool {
+    let bytes = path.trim().as_bytes();
+    let drive = bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'\\' | b'/');
+    drive || path.trim().starts_with("\\\\")
 }
 
 /// 파일 시스템·외부 도구를 기다리는 명령은 메인 스레드 대신 작업 스레드에서 실행.
@@ -55,6 +81,9 @@ async fn run_blocking<T: Send + 'static>(
 
 #[tauri::command]
 pub(crate) async fn get_metadata(path: String) -> CommandResult<FileMetadata> {
+    if is_remote_path(&path) {
+        return crate::remote::run(async move { crate::remote::listing::metadata(&path).await }).await;
+    }
     run_blocking(Some(PathBuf::from(&path)), move || navigation::get_metadata(&path)).await
 }
 

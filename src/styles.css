@@ -325,6 +325,30 @@ button {
   gap: var(--control-gap);
 }
 
+.remote-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(24ch, 20vw);
+  overflow: hidden;
+  border: 1px solid currentColor;
+  padding: 0 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(12px * var(--commander-scale));
+}
+
+.remote-chip.is-connected {
+  color: var(--green);
+}
+
+.remote-chip.is-lost {
+  color: var(--danger);
+}
+
+.remote-chip.is-disconnected {
+  color: var(--muted);
+}
+
 .panel-tabs {
   flex: none;
   white-space: nowrap;
@@ -423,12 +447,14 @@ button {
 
   .panel-tabs,
   .panel-loading,
-  .filter-chip {
+  .filter-chip,
+  .remote-chip {
     font-size: 12px;
   }
 
   .panel-tabs-label,
-  .filter-chip-label {
+  .filter-chip-label,
+  .remote-chip-name {
     display: none;
   }
 }

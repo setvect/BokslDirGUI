@@ -53,13 +53,13 @@ fn health_check_reports_ok() {
 #[test]
 fn list_dir_returns_normalized_read_only_listing() {
     let fixture = TempFixture::new();
-    let listing = list_dir(
+    let listing = tauri::async_runtime::block_on(list_dir(
         PanelId::Left,
         fixture.root.to_string_lossy().into_owned(),
         false,
         SortSpec::default(),
         None,
-    )
+    ))
     .expect("listing should succeed");
 
     assert_eq!(listing.panel_id, PanelId::Left);
@@ -96,13 +96,13 @@ fn list_dir_identifies_symlink_targets_without_changing_link_kind() {
     symlink(fixture.root.join("alpha.txt"), &file_link).unwrap();
     symlink(fixture.root.join("missing"), &broken_link).unwrap();
 
-    let listing = list_dir(
+    let listing = tauri::async_runtime::block_on(list_dir(
         PanelId::Left,
         fixture.root.to_string_lossy().into_owned(),
         false,
         SortSpec::default(),
         None,
-    )
+    ))
     .unwrap();
     for (name, target_is_directory) in [
         ("directory-link", Some(true)),
@@ -122,13 +122,13 @@ fn list_dir_identifies_symlink_targets_without_changing_link_kind() {
         );
     }
 
-    let target_listing = list_dir(
+    let target_listing = tauri::async_runtime::block_on(list_dir(
         PanelId::Left,
         directory_link.to_string_lossy().into_owned(),
         false,
         SortSpec::default(),
         None,
-    )
+    ))
     .unwrap();
     assert_eq!(
         target_listing.path,
@@ -139,13 +139,13 @@ fn list_dir_identifies_symlink_targets_without_changing_link_kind() {
 #[test]
 fn list_dir_can_include_hidden_and_filter_entries() {
     let fixture = TempFixture::new();
-    let listing = list_dir(
+    let listing = tauri::async_runtime::block_on(list_dir(
         PanelId::Right,
         fixture.root.to_string_lossy().into_owned(),
         true,
         SortSpec::default(),
         Some("hid".to_string()),
-    )
+    ))
     .expect("listing should succeed");
 
     assert!(listing.entries.iter().any(|entry| entry.name == ".hidden"));
@@ -1798,14 +1798,27 @@ fn goto_path_resolves_home_and_panel_relative_input() {
     let root = display_path(&fixture.root.canonicalize().unwrap());
     let folder = display_path(&fixture.root.join("folder").canonicalize().unwrap());
 
-    let relative = crate::commands::goto_path(PanelId::Left, "folder".into(), Some(base.clone())).unwrap();
+    let relative = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, "folder".into(), Some(base.clone()))).unwrap();
     assert_eq!(relative.path, folder);
-    let parent = crate::commands::goto_path(PanelId::Left, "folder/..".into(), Some(base.clone())).unwrap();
+    let parent = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, "folder/..".into(), Some(base.clone()))).unwrap();
     assert_eq!(parent.path, root);
-    let absolute = crate::commands::goto_path(PanelId::Left, folder.clone(), Some("/missing-base".into())).unwrap();
+    let absolute = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, folder.clone(), Some("/missing-base".into()))).unwrap();
     assert_eq!(absolute.path, folder);
-    let home = crate::commands::goto_path(PanelId::Left, "~".into(), Some(base)).unwrap();
+    let home = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, "~".into(), Some(base))).unwrap();
     assert_eq!(home.path, display_path(&crate::platform::home_dir().unwrap().canonicalize().unwrap()));
+}
+
+#[test]
+fn goto_path_from_remote_panels_treats_only_windows_local_paths_as_local() {
+    let remote_base = Some("sftp://tester@127.0.0.1:1/home".to_string());
+    for input in ["docs", "~", "/etc", "sftp://tester@127.0.0.1:1/"] {
+        let error = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, input.into(), remote_base.clone())).unwrap_err();
+        assert_eq!(error.code, "remote_not_connected", "{input}");
+    }
+    for input in [r"C:\Users", "c:/Users", r"\\server\share"] {
+        let error = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, input.into(), remote_base.clone()));
+        assert!(error.is_err_and(|error| !error.code.starts_with("remote_")), "{input}");
+    }
 }
 
 #[test]

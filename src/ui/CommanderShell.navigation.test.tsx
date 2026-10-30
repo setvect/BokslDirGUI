@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { DirectoryChanged } from '../domain/types';
+import type { DirectoryChanged, RemoteConnectionChanged } from '../domain/types';
 import { useOperationStore } from '../operations/operationStore';
 import type { ListDirInput } from '../tauri/client';
 import { INITIAL_FOCUS_INDEX, SAMPLE_LISTINGS } from './commanderFixture';
@@ -11,7 +11,7 @@ import { CommanderShell } from './CommanderShell';
 import type { PanelDataSource } from './panelDataSource';
 import { createFixturePanelDataSource } from './panelDataSource';
 import { createDirectoryListing, DEFAULT_SORT } from './panelState';
-import { mutationClientStub, operationClientStub, settingsFixture } from './testing/clientStubs';
+import { mutationClientStub, operationClientStub, remoteClientStub, settingsFixture } from './testing/clientStubs';
 import './testing/commanderTestSetup';
 import { activePanelLabel, emptyListings, focusedRow, focusedRowText, mockedPanelDataSource, renderCommander, rowByText, testEntry } from './testing/commanderTestSupport';
 
@@ -34,6 +34,31 @@ describe('CommanderShell navigation', () => {
     expect(listDir).not.toHaveBeenCalled();
     act(() => notify!({ panelId: 'right', path: SAMPLE_LISTINGS.right.path, version: 12 }));
     await waitFor(() => expect(listDir).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right', path: SAMPLE_LISTINGS.right.path })));
+  });
+
+  it('does not watch remote panels and shows their connection state in the header', async () => {
+    const remotePath = 'sftp://boksl@example.com:2222/srv';
+    const dataSource = createFixturePanelDataSource({ ...SAMPLE_LISTINGS, right: createDirectoryListing('right', remotePath, [testEntry(remotePath, 'remote.txt')]) });
+    dataSource.watchPath = vi.fn(async (input) => ({ ok: true as const, data: { ...input, version: 1 } }));
+    dataSource.unwatchPath = vi.fn(async () => ({ ok: true as const, data: undefined }));
+    dataSource.listenDirectoryChanges = vi.fn(async () => () => undefined);
+    let changed: ((event: RemoteConnectionChanged) => void) | null = null;
+    const session = { sessionId: 'sftp://boksl@example.com:2222/', user: 'boksl', host: 'example.com', port: 2222, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com:2222/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x' };
+    const remoteClient = remoteClientStub({
+      remoteSessions: vi.fn(async () => ({ ok: true as const, data: [session] })),
+      listenRemoteConnectionChanges: vi.fn(async (handler: (event: RemoteConnectionChanged) => void) => { changed = handler; return () => undefined; }),
+    });
+    const { container } = render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub()} operationClient={operationClientStub()} remoteClient={remoteClient} />);
+
+    await waitFor(() => expect(dataSource.watchPath).toHaveBeenCalledWith({ panelId: 'left', path: SAMPLE_LISTINGS.left.path }));
+    expect(dataSource.watchPath).not.toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right' }));
+    await waitFor(() => expect(container.querySelector('.remote-chip')?.textContent).toBe('SFTP 연결됨'));
+    act(() => changed!({ sessionId: session.sessionId, state: 'lost', error: null }));
+    expect(container.querySelector('.remote-chip')?.textContent).toBe('SFTP 연결 끊김');
+    expect(container.querySelector('.remote-chip')?.className).toContain('is-lost');
+    act(() => changed!({ sessionId: session.sessionId, state: 'disconnected', error: null }));
+    expect(container.querySelector('.remote-chip')?.textContent).toBe('SFTP 연결 안 됨');
+    expect(container.querySelectorAll('.remote-chip')).toHaveLength(1);
   });
 
   it('passes the active real directory as the base for home and relative path input', async () => {

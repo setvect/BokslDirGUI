@@ -3,6 +3,7 @@ import {
   COMMANDER_UI_TEXT
 } from '../i18n-resources';
 import { panelIdLabel } from './panelPresentation';
+import type { RemotePanelStatus } from './remoteSessionState';
 import { displayPath } from './textLayout';
 import {
   panelCanGoBack,
@@ -20,9 +21,11 @@ export function PanelHeader({
   onNavigateUp,
   onGotoPath,
   onRestoreFocus,
+  remoteStatus = null,
 }: {
   panel: PanelNavigationState;
   tabCount: number;
+  remoteStatus?: RemotePanelStatus | null;
   onClearFilter(): void;
   language: Settings['language'];
   onNavigateBack(): void;
@@ -33,6 +36,12 @@ export function PanelHeader({
 }) {
   const labels = COMMANDER_UI_TEXT[language];
   const pathLabel = displayPath(panel.path);
+  const remoteStateLabel = remoteStatus
+    ? { connected: labels.remoteConnected, lost: labels.remoteLost, disconnected: labels.remoteDisconnected }[remoteStatus.state]
+    : null;
+  const remoteTitle = remoteStatus
+    ? [remoteStatus.siteName, remoteStatus.address, remoteStateLabel].filter(Boolean).join(' · ')
+    : '';
   const runNavigation = (callback: () => void) => {
     callback();
     window.requestAnimationFrame(() => onRestoreFocus());
@@ -50,6 +59,11 @@ export function PanelHeader({
           <button type="button" className="filter-chip" title={panel.filter} aria-label={`${labels.filter} ${panel.filter} ${labels.target}`} onClick={onClearFilter}>
             <span className="filter-chip-label">{labels.filter.toUpperCase()} {panel.filter} </span>×
           </button>
+        ) : null}
+        {remoteStatus ? (
+          <span className={`remote-chip is-${remoteStatus.state}`} role="status" title={remoteTitle} aria-label={`SFTP ${remoteTitle}`}>
+            <span className="remote-chip-name">{remoteStatus.siteName ?? 'SFTP'} </span>{remoteStateLabel}
+          </span>
         ) : null}
         <span className={`panel-loading${panel.loading ? ' is-loading' : ''}`} aria-label={labels.loading} title={labels.loading} aria-hidden={!panel.loading}>⟳</span>
         <span className="panel-tabs" title={`${labels.tabs} ${tabCount}`} aria-label={`${labels.tabs} ${tabCount}`}><span className="panel-tabs-label">{labels.tabs} </span>{tabCount}</span>

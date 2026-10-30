@@ -313,3 +313,154 @@ fn connect_requests_map_to_validated_options_without_keeping_empty_secrets() {
     invalid.host = "a b".into();
     assert_eq!(ConnectOptions::from_request(invalid, &settings, paths, None).err().unwrap().code, "invalid_path");
 }
+
+fn connected(server: &TestSftpServer, dir: &TempDir) -> Arc<RemoteConnection> {
+    trust(server, dir);
+    connect(options(server.port(), password("pw"), dir, None)).unwrap()
+}
+
+fn root_url(server: &TestSftpServer) -> String {
+    format!("sftp://tester@127.0.0.1:{}/", server.port())
+}
+
+fn list(url: &str, show_hidden: bool, filter: Option<&str>) -> Result<crate::contracts::DirectoryListing, AppError> {
+    super::block_on(super::listing::list_dir(
+        crate::contracts::PanelId::Left,
+        url,
+        show_hidden,
+        crate::contracts::SortSpec::default(),
+        filter.map(str::to_string),
+    ))
+}
+
+fn names(listing: &crate::contracts::DirectoryListing) -> Vec<&str> {
+    listing.entries.iter().map(|entry| entry.name.as_str()).collect()
+}
+
+#[test]
+fn remote_listing_converts_entries_with_urls_kinds_and_hidden_filter() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-list");
+    std::fs::create_dir(server.root().join("docs")).unwrap();
+    std::fs::write(server.root().join("a.txt"), b"hello").unwrap();
+    std::fs::write(server.root().join(".hidden"), b"").unwrap();
+    std::fs::write(server.root().join("한글 파일.md"), b"x").unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+
+    let listing = list(&root, false, None).unwrap();
+    assert_eq!(listing.path, root);
+    assert_eq!(names(&listing), ["docs", "a.txt", "한글 파일.md"]);
+    let file = &listing.entries[1];
+    assert_eq!(file.path, format!("{root}a.txt"));
+    assert_eq!((file.kind.clone(), file.size_bytes), (crate::contracts::EntryKind::File, Some(5)));
+    assert!(file.modified_at.is_some() && file.owner.is_some());
+    assert_eq!(listing.entries[0].size_bytes, None);
+    assert_eq!(listing.entries[2].path, format!("{root}한글 파일.md"));
+    assert_eq!((listing.total_entries, listing.truncated), (None, None));
+
+    assert!(names(&list(&root, true, None).unwrap()).contains(&".hidden"));
+    assert_eq!(names(&list(&root, false, Some(" A.T ")).unwrap()), ["a.txt"]);
+
+    let inner = list(&format!("{root}docs"), false, None).unwrap();
+    assert_eq!(inner.entries.len(), 1);
+    let parent = &inner.entries[0];
+    assert!(parent.is_virtual && parent.name == ".." && parent.path == root);
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[cfg(unix)]
+#[test]
+fn remote_listing_reports_permissions_executables_and_link_targets() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-list-unix");
+    std::fs::create_dir(server.root().join("docs")).unwrap();
+    std::fs::write(server.root().join("run.sh"), b"#!/bin/sh\n").unwrap();
+    std::fs::set_permissions(server.root().join("run.sh"), std::fs::Permissions::from_mode(0o750)).unwrap();
+    symlink(server.root().join("docs"), server.root().join("docs-link")).unwrap();
+    symlink(server.root().join("absent"), server.root().join("dangling")).unwrap();
+    let connection = connected(&server, &dir);
+    let listing = list(&root_url(&server), false, None).unwrap();
+    let entry = |name: &str| listing.entries.iter().find(|entry| entry.name == name).unwrap();
+    assert_eq!(entry("run.sh").kind, crate::contracts::EntryKind::Executable);
+    assert_eq!(entry("run.sh").permissions.as_deref(), Some("-rwxr-x---"));
+    assert_eq!(entry("docs").permissions.as_deref().map(|text| &text[..1]), Some("d"));
+    assert_eq!(entry("docs-link").kind, crate::contracts::EntryKind::Symlink);
+    assert_eq!(entry("docs-link").symlink_target_is_directory, Some(true));
+    assert_eq!(entry("dangling").symlink_target_is_directory, None);
+
+    let linked = list(&format!("{}docs-link", root_url(&server)), false, None).unwrap();
+    assert_eq!(names(&linked), [".."]);
+    let info = super::block_on(super::listing::metadata(&format!("{}docs-link", root_url(&server)))).unwrap();
+    assert_eq!((info.entry.kind, info.entry.symlink_target_is_directory), (crate::contracts::EntryKind::Symlink, Some(true)));
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[test]
+fn remote_navigation_resolves_home_relative_absolute_and_parent_input() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-goto");
+    std::fs::create_dir_all(server.root().join("docs/sub")).unwrap();
+    std::fs::write(server.root().join("docs/file.txt"), b"").unwrap();
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let goto = |input: &str, base: &str| {
+        super::block_on(super::listing::goto_path(crate::contracts::PanelId::Right, input, Some(base)))
+    };
+    let sub = format!("{root}docs/sub");
+    assert_eq!(goto("docs/sub", &root).unwrap().path, sub);
+    assert_eq!(goto("..", &sub).unwrap().path, format!("{root}docs"));
+    assert_eq!(goto("~", &sub).unwrap().path, root);
+    assert_eq!(goto("/docs", &sub).unwrap().path, format!("{root}docs"));
+    assert_eq!(goto(&format!(" {sub} "), &root).unwrap().path, sub);
+    let missing = goto("missing", &root).unwrap_err();
+    assert_eq!((missing.code.as_str(), missing.path.as_deref()), ("not_found", Some(format!("{root}missing").as_str())));
+    assert_eq!(goto("docs/file.txt", &root).unwrap_err().code, "not_directory");
+    let info = super::block_on(super::listing::metadata(&format!("{root}docs/file.txt"))).unwrap();
+    assert_eq!((info.absolute_path, info.extension.as_deref()), (format!("{root}docs/file.txt"), Some("txt")));
+    super::block_on(connection::disconnect(&connection.location));
+    assert_eq!(goto("docs", &root).unwrap_err().code, "remote_not_connected");
+}
+
+#[test]
+fn remote_listing_skips_unsafe_names_batches_and_marks_truncation() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-list-names");
+    for index in 0..155 {
+        std::fs::write(server.root().join(format!("f{index:03}")), b"").unwrap();
+    }
+    server.faults().inject_readdir_names(vec!["../escape".into(), "a/b".into(), ".".into(), "..".into(), String::new(), "ok-name".into()]);
+    let connection = connected(&server, &dir);
+    let root = root_url(&server);
+    let listing = list(&root, true, None).unwrap();
+    assert_eq!(listing.entries.len(), 156);
+    assert!(listing.entries.iter().all(|entry| !entry.name.contains('/') && entry.name != ".." && !entry.name.is_empty()));
+    assert!(names(&listing).contains(&"ok-name"));
+
+    let limited = super::block_on(super::listing::list_dir_limited(
+        crate::contracts::PanelId::Left,
+        &root,
+        false,
+        crate::contracts::SortSpec::default(),
+        None,
+        10,
+    ))
+    .unwrap();
+    assert_eq!((limited.entries.len(), limited.total_entries, limited.truncated), (10, Some(156), Some(true)));
+    assert_eq!(limited.entries[0].name, "f000");
+    super::block_on(connection::disconnect(&connection.location));
+}
+
+#[test]
+fn remote_listing_reports_denied_folders_with_remote_paths() {
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-list-denied");
+    std::fs::create_dir(server.root().join("locked")).unwrap();
+    server.faults().deny_path_prefix("/locked".into());
+    let connection = connected(&server, &dir);
+    let error = list(&format!("{}locked", root_url(&server)), false, None).unwrap_err();
+    assert_eq!(error.code, "permission_denied");
+    assert_eq!(error.path.as_deref(), Some(format!("{}locked", root_url(&server)).as_str()));
+    super::block_on(connection::disconnect(&connection.location));
+}

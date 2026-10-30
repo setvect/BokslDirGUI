@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { ArchiveListing, FileEntry, PanelId, SavedTab, Settings, SortSpec } from '../domain/types';
+import { isRemotePath } from '../domain/remotePath';
 import type { CommanderStatusText } from '../i18n-resources';
 import {
   formatUserErrorMessage
@@ -347,7 +348,8 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     if (!watchPath || !unwatchPath) return;
     for (const panelId of PANEL_IDS) {
       const path = panelState[panelId].path;
-      const target = path && !isArchiveVirtualPath(path) ? path : null;
+      // 원격 패널은 외부 변경 감시 대신 새로고침 사용(FR-36.10)
+      const target = path && !isArchiveVirtualPath(path) && !isRemotePath(path) ? path : null;
       if (watchedPathRef.current[panelId] === target) continue;
       watchedPathRef.current[panelId] = target;
       watchVersionRef.current[panelId] = null;

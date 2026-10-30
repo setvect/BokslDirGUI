@@ -1,4 +1,5 @@
 import { ARCHIVE_FILE_SUFFIXES } from '../domain/archiveFormats';
+import { isRemotePath } from '../domain/remotePath';
 import type { ArchiveListing, DirectoryListing, FileEntry, PanelId, SortSpec } from '../domain/types';
 import { createDirectoryListing, parentPathOf } from './panelState';
 
@@ -21,6 +22,10 @@ export const archiveVirtualChildPath = (archivePath: string, innerPath: string) 
 };
 
 export const parseArchiveVirtualPath = (path: string): ArchiveVirtualPath | null => {
+  // 원격 압축 파일 내부 탐색은 지원하지 않음. `sftp://u@example.zip:22/`의 포트 구분자 오인 방지
+  if (isRemotePath(path)) {
+    return null;
+  }
   const match = path.match(ARCHIVE_VIRTUAL_PATH_PATTERN);
   if (!match) {
     return null;

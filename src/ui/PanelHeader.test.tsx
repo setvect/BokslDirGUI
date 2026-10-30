@@ -54,4 +54,20 @@ describe('PanelHeader', () => {
     expect(loading?.getAttribute('aria-hidden')).toBe('true');
     expect(loading?.classList.contains('is-loading')).toBe(false);
   });
+  it('labels remote panels with the site name and connection state in text', () => {
+    const panel = createPanelStateFromListing(createDirectoryListing('right', 'sftp://boksl@example.com:2222/srv'));
+    const noop = () => {};
+    const { container, rerender } = render(<PanelHeader panel={panel} tabCount={1} language="ko"
+      onClearFilter={noop} onNavigateBack={noop} onNavigateForward={noop}
+      onNavigateUp={noop} onGotoPath={noop} onRestoreFocus={noop}
+      remoteStatus={{ sessionId: 'sftp://boksl@example.com:2222/', siteName: '배포 서버', address: 'boksl@example.com:2222', state: 'lost' }} />);
+    const chip = container.querySelector('.remote-chip');
+    expect(chip?.textContent).toBe('배포 서버 연결 끊김');
+    expect(chip?.getAttribute('title')).toBe('배포 서버 · boksl@example.com:2222 · 연결 끊김');
+    rerender(<PanelHeader panel={panel} tabCount={1} language="en"
+      onClearFilter={noop} onNavigateBack={noop} onNavigateForward={noop}
+      onNavigateUp={noop} onGotoPath={noop} onRestoreFocus={noop}
+      remoteStatus={{ sessionId: 'sftp://boksl@example.com:2222/', siteName: null, address: 'boksl@example.com:2222', state: 'connected' }} />);
+    expect(container.querySelector('.remote-chip')?.textContent).toBe('SFTP Connected');
+  });
 });

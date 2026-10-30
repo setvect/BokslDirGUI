@@ -1,4 +1,5 @@
 import type { AppError, DirectoryListing, FileEntry, PanelId, SortSpec } from '../domain/types';
+import { isRemotePath, parseRemotePath, remotePathParent, remoteUrl } from '../domain/remotePath';
 
 export const PANEL_IDS: readonly PanelId[] = ['left', 'right'];
 
@@ -152,6 +153,11 @@ export const parentNavigationEntryOf = (panel: PanelNavigationState) =>
 
 export const parentPathOf = (path: string) => {
   if (!path) return '/';
+  // 원격 경로: 루트의 상위는 루트 자신
+  if (isRemotePath(path)) {
+    const remote = parseRemotePath(path);
+    return remote ? remotePathParent(remote) ?? remoteUrl(remote, '/') : path;
+  }
   // 문자열은 그대로 유지하고 루트 경계 판정에만 구분자를 통일.
   const view = path.replace(/\\/g, '/');
   const root = view.match(/^\/\/\?\/(?:[A-Za-z]:\/|UNC\/[^/]+\/[^/]+(?:\/|$))/i)

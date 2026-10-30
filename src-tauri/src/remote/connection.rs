@@ -8,7 +8,7 @@ use crate::contracts::{
 use russh::client::{self, Handle, KeyboardInteractiveAuthResponse};
 use russh::keys::{self, ssh_key, PrivateKeyWithHashAlg};
 use russh::{MethodKind, MethodSet};
-use russh_sftp::client::SftpSession;
+use russh_sftp::client::{RawSftpSession, SftpSession};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -180,13 +180,14 @@ impl client::Handler for ClientHandler {
     }
 }
 
-/// 연결된 원격 위치. 목록·단일 요청은 공유 SFTP 세션 사용.
+/// 연결된 원격 위치. 파일 요청은 `sftp`, 목록 설명(소유자 이름)·확장 요청은 별도 채널의 `raw` 사용.
 pub(crate) struct RemoteConnection {
     id: u64,
     pub(crate) location: RemoteLocation,
     pub(crate) home: String,
     pub(crate) host_key: HostKeyInfo,
     pub(crate) sftp: SftpSession,
+    pub(crate) raw: RawSftpSession,
     handle: Handle<ClientHandler>,
     listener: Option<ConnectionListener>,
 }
@@ -405,6 +406,7 @@ pub(crate) async fn disconnect(location: &RemoteLocation) -> bool {
         return false;
     };
     let _ = connection.sftp.close().await;
+    let _ = connection.raw.close_session();
     abandon(&connection.handle).await;
     notify(connection.listener.as_ref(), location, RemoteConnectionState::Disconnected, None);
     true
@@ -624,8 +626,24 @@ impl Authenticating {
                 return Err(sftp_error(&self.location, "/", &error));
             }
         };
+        let raw = match open_raw_channel(&self.handle, &self.location).await {
+            Ok(opened) => opened,
+            Err(error) => {
+                abandon(&self.handle).await;
+                return Err(error);
+            }
+        };
         let Self { id, location, host_key, handle, listener, .. } = self;
-        let connection = Arc::new(RemoteConnection { id, location: location.clone(), home, host_key, sftp, handle, listener });
+        let connection = Arc::new(RemoteConnection {
+            id,
+            location: location.clone(),
+            home,
+            host_key,
+            sftp,
+            raw,
+            handle,
+            listener,
+        });
         let existing = {
             let mut connections = lock(registry());
             match connections.get(&location) {
@@ -704,6 +722,17 @@ async fn open_sftp_channel(handle: &Handle<ClientHandler>, location: &RemoteLoca
         .map_err(|_| remote_error("remote_sftp_unavailable", "errors.remoteSftpUnavailable", location))?;
     sftp.set_timeout(SFTP_REQUEST_TIMEOUT_SECONDS);
     Ok(sftp)
+}
+
+/// 원시 SFTP 채널: READDIR 목록 설명(소유자 이름)과 확장 요청용.
+async fn open_raw_channel(handle: &Handle<ClientHandler>, location: &RemoteLocation) -> CommandResult<RawSftpSession> {
+    let unavailable = || remote_error("remote_sftp_unavailable", "errors.remoteSftpUnavailable", location);
+    let channel = handle.channel_open_session().await.map_err(|_| not_connected(location))?;
+    channel.request_subsystem(true, "sftp").await.map_err(|_| unavailable())?;
+    let raw = RawSftpSession::new(channel.into_stream());
+    raw.set_timeout(SFTP_REQUEST_TIMEOUT_SECONDS);
+    raw.init().await.map_err(|_| unavailable())?;
+    Ok(raw)
 }
 
 fn handshake_error(location: &RemoteLocation, verdict: &Mutex<Option<HostKeyVerdict>>, error: &russh::Error) -> AppError {

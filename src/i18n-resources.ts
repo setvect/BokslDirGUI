@@ -591,6 +591,9 @@ export const COMMANDER_UI_TEXT = {
     dropMoveInto: '폴더로 이동',
     dropImport: '여기로 가져오기',
     dropBlocked: '이 위치에는 놓을 수 없음',
+    remoteConnected: '연결됨',
+    remoteLost: '연결 끊김',
+    remoteDisconnected: '연결 안 됨',
   },
   en: {
     name: 'Name',
@@ -624,6 +627,9 @@ export const COMMANDER_UI_TEXT = {
     dropMoveInto: 'Move into folder',
     dropImport: 'Import here',
     dropBlocked: 'Cannot drop here',
+    remoteConnected: 'Connected',
+    remoteLost: 'Connection lost',
+    remoteDisconnected: 'Not connected',
   },
 } as const satisfies Record<SupportedLanguage, Record<string, string>>;
 

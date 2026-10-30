@@ -1,7 +1,7 @@
 // 테스트용 클라이언트 스텁과 설정·플랫폼·진행률 기본값의 단일 정의.
 import { vi } from 'vitest';
 import type { OperationProgress, PlatformInfo, Settings } from '../../domain/types';
-import type { LongRunningOperationClient, SafeMutationClient } from '../../tauri/commanderClients';
+import type { LongRunningOperationClient, RemoteSessionClient, SafeMutationClient } from '../../tauri/commanderClients';
 import platformFixtures from '../../tauri/fixtures/platform.json';
 
 export const operationClientStub = <T extends Partial<LongRunningOperationClient> = object>(overrides = {} as T) => ({
@@ -16,6 +16,17 @@ export const operationClientStub = <T extends Partial<LongRunningOperationClient
 export const mutationClientStub = <T extends Partial<SafeMutationClient> = object>(overrides = {} as T) => ({
   createDir: vi.fn(),
   renameEntry: vi.fn(),
+  ...overrides,
+});
+
+export const remoteClientStub = <T extends Partial<RemoteSessionClient> = object>(overrides = {} as T) => ({
+  remoteConnect: vi.fn(),
+  remoteAuthRespond: vi.fn(),
+  remoteAuthCancel: vi.fn(),
+  remoteTrustHostKey: vi.fn(),
+  remoteDisconnect: vi.fn(),
+  remoteSessions: vi.fn(async () => ({ ok: true as const, data: [] })),
+  listenRemoteConnectionChanges: vi.fn(async () => () => undefined),
   ...overrides,
 });
 

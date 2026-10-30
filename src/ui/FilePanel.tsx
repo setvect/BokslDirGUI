@@ -26,6 +26,7 @@ import { basenameFromPath } from './fileActionPlans';
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
 import { BlankContextMenuContent, EntryContextMenuContent } from './PanelContextMenus';
 import { PanelHeader } from './PanelHeader';
+import type { RemotePanelStatus } from './remoteSessionState';
 import { columnLayoutForPanelWidth, fileColorGroup, fileEntryAccessibleLabel, fileEntryTooltip, metadataColumnWidthsForEntries, pageMovementForViewport, rowDomId, sortMarker } from './panelPresentation';
 import {
   type PanelNavigationState
@@ -60,6 +61,7 @@ interface FilePanelProps {
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
   onEntryPointerDown(event: ReactPointerEvent<HTMLElement>, entry: FileEntry): void;
   dropIntent: 'copy' | 'move' | 'import' | 'blocked' | null;
+  remoteStatus?: RemotePanelStatus | null;
   // 같은 패널 하위 폴더 행에 놓을 때 그 폴더 경로(FR-29.2)
   dropFolderPath?: string | null;
   onPanelDragOver(event: DragEvent<HTMLElement>): void;
@@ -95,6 +97,7 @@ export function FilePanel({
   onEntryPointerDown,
   dropIntent,
   dropFolderPath = null,
+  remoteStatus = null,
   onPanelDragOver,
   onPanelDragLeave,
   onPanelDrop,
@@ -301,6 +304,7 @@ export function FilePanel({
         onNavigateUp={onNavigateUp}
         onGotoPath={onGotoPath}
         onRestoreFocus={onRestoreFocus}
+        remoteStatus={remoteStatus}
       />
       <div className="file-table" role="table" aria-rowcount={listing.entries.length} style={fileTableStyle}>
         <div className="file-table-head" role="rowgroup">

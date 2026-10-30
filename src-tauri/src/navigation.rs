@@ -58,6 +58,8 @@ pub(crate) fn list_dir(
         sort,
         filter,
         version: listing_version(&path),
+        total_entries: None,
+        truncated: None,
     })
 }
 

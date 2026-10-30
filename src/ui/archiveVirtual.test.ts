@@ -58,6 +58,11 @@ describe('archive virtual directory helpers', () => {
     }
   });
 
+  it('never reads remote paths as archive locations', () => {
+    expect(parseArchiveVirtualPath('sftp://boksl@files.zip:2222/backup')).toBeNull();
+    expect(parseArchiveVirtualPath('sftp://boksl@example.com/data/a.zip:/inner')).toBeNull();
+  });
+
   it('projects flat archive entries as directory listings', () => {
     const root = archiveListingToDirectoryListing({
       panelId: 'left',

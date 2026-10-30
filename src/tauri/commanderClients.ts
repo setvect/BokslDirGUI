@@ -57,4 +57,9 @@ export type SafeMutationClient = Pick<TauriClient, 'createDir' | 'renameEntry'> 
 export type LongRunningOperationClient = Pick<TauriClient, 'startCopy' | 'startMove' | 'startDelete' | 'cancelOperation' | 'resolveConflict'>
   & Partial<Pick<TauriClient, 'startTrashUndo' | 'startBulkRename' | 'archiveCreate' | 'archiveExtract' | 'archiveAdd'>>;
 
+export type RemoteSessionClient = Pick<TauriClient,
+  | 'remoteConnect' | 'remoteAuthRespond' | 'remoteAuthCancel' | 'remoteTrustHostKey' | 'remoteDisconnect' | 'remoteSessions'
+  | 'listenRemoteConnectionChanges'
+>;
+
 export const showNativeDropOverlay = () => invoke<void>('show_drop_overlay');

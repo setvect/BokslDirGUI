@@ -82,6 +82,11 @@ pub(crate) struct DirectoryListing {
     pub(crate) sort: SortSpec,
     pub(crate) filter: Option<String>,
     pub(crate) version: u64,
+    /// 항목 상한으로 잘린 목록의 전체 항목 수(원격 목록). 잘리지 않으면 생략.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) total_entries: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) truncated: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

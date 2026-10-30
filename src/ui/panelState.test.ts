@@ -14,6 +14,13 @@ describe('panel state path helpers', () => {
     expect(parentPathOf('C:/Users/boksl')).toBe('C:/Users');
   });
 
+  it('moves remote panels up within the same server and keeps the remote root', () => {
+    expect(parentPathOf('sftp://boksl@example.com:2222/srv/한글 폴더')).toBe('sftp://boksl@example.com:2222/srv');
+    expect(parentPathOf('sftp://boksl@example.com/srv')).toBe('sftp://boksl@example.com/');
+    expect(parentPathOf('sftp://boksl@example.com/')).toBe('sftp://boksl@example.com/');
+    expect(parentPathOf('sftp://a%40b@[::1]:2222/x/100%25')).toBe('sftp://a%40b@[::1]:2222/x');
+  });
+
   it('keeps UNC and extended Windows roots and exact whitespace', () => {
     expect(parentPathOf("\\\\server\\share")).toBe("\\\\server\\share");
     expect(parentPathOf("\\\\server\\share\\")).toBe("\\\\server\\share\\");

@@ -1,8 +1,7 @@
 //! SFTP 원격 파일 관리: 원격 경로, 연결·인증, 목록·파일 관리, 전송.
 //! 원격 요청은 전용 비동기 런타임에서 실행. 명령은 `run`, 동기 작업 스레드는 `block_on` 사용.
 pub(crate) mod connection;
-// 경로 탐색 함수는 원격 목록 계층(다음 작업 단위)에서 사용
-#[allow(dead_code)]
+pub(crate) mod listing;
 pub(crate) mod path;
 #[cfg(test)]
 pub(crate) mod test_server;
