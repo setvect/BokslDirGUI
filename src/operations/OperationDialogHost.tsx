@@ -49,7 +49,6 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
       progress: applyOperationProgress,
       conflict: applyOperationConflict,
       summary: applyOperationSummary,
-      error: applyOperationError,
     }).then((unlisten) => {
       if (disposed) {
         unlisten();

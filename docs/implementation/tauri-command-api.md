@@ -122,15 +122,17 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 ## 4. Event 목록
 
-| Event | Payload | 발행자 | 소비자 |
-| --- | --- | --- | --- |
-| `dir_changed` | `{ panelId, path, version }` | watch service | panel store |
-| `operation_progress` | `OperationProgress` | operation service | operation store/dialog |
-| `operation_conflict` | `ConflictPrompt` | operation service | conflict dialog |
-| `operation_summary` | `OperationSummary` | operation service | queue/toast/panel refresh |
-| `operation_completed` | `OperationSummary` | operation service | `operation_summary` 호환 alias |
-| `operation_error` | `OperationError` | operation service | error summary/log |
-| `settings_changed` | `Settings` | settings service | UI providers |
+| Event | Payload | 발행자 | 소비자 | 상태 |
+| --- | --- | --- | --- | --- |
+| `operation_progress` | `OperationProgress` | operation service(`operation/runtime.rs`) | operation store/dialog | 구현 |
+| `operation_conflict` | `ConflictPrompt` | operation service(`operation/runtime.rs`) | conflict dialog | 구현 |
+| `operation_summary` | `OperationSummary` | operation service(`operation/runtime.rs`) | queue/toast/panel refresh | 구현 |
+| `boksldir://native-file-drop` | `NativeFileDropEvent` | Windows 주 창(`native_drop.rs`), macOS 드롭 오버레이(`drop-overlay.ts`) | `useFileDrag` | 구현 |
+| `dir_changed` | `{ panelId, path, version }` | watch service | panel store | 미구현 |
+| `settings_changed` | `Settings` | settings service | UI providers | 미구현 |
+
+- 이벤트 이름 원천: 프론트 `src/tauri/commands.ts`의 `EVENTS`, Rust의 `*_EVENT` 상수, `contract.test.ts`가 양쪽 일치와 Rust 문자열 리터럴 발행 금지 확인
+- 2026-10-30: 발행하지 않던 `operation_error` 구독과 소비자 없는 `operation_completed` 별칭 발행 제거
 
 ## 5. 안전 규칙
 
@@ -173,12 +175,14 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 ## 구조 리팩토링의 계약 보존
 
 - 2026-09-27 기준 `src-tauri/src/contracts.rs`가 DTO와 오류 타입을, `commands.rs`가 명령 핸들러를 소유
+- 2026-10-30: 플랫폼 정보·파일 클립보드·다중 이름 변경·휴지통 되돌리기 DTO도 `contracts.rs`로 이동
 - `lib.rs`에는 앱 초기화와 기존 이름의 command 등록 유지
 - 서비스와 작업 엔진의 파일 분리는 command/event 이름, serde 필드/enum 값, 설정 JSON 형식을 변경하지 않음
 
 - 프론트엔드 명령 이름은 `src/tauri/commands.ts`, 호출과 이벤트 수신은 `client.ts`, 네이티브 드래그/창 어댑터는 `commanderClients.ts`가 담당
 - `client.ts`의 기존 명령 이름 export도 유지
 - 공통 직렬화 fixture는 `src/tauri/fixtures/contract.json`이며 `contract.test.ts`와 Rust `contract_tests.rs`에서 양쪽 형식 검증
+- 프론트 클라이언트 인터페이스(`commanderClients.ts`)는 `tauriClient` 메서드 타입에서 파생, 입력 필드 변경이 가짜 구현과 호출부에 컴파일 오류로 전파
 
 ## 다음으로 열기 계약
 

@@ -491,9 +491,12 @@ for (const token of ['COMMANDS.archiveCreate', 'COMMANDS.runShellCommand', 'cont
   addCheck(`full-scope test covers ${token}`, fullScopeTest.includes(token), 'Semantic verification beyond static smoke');
 }
 
-for (const token of ['I18N_RESOURCES', "'ko'", "'en'", 'errors.archiveFormatUnsupported', 'errors.archivePasswordRequired', 'errors.archivePasswordInvalid', 'errors.shellCommandDisabled']) {
+for (const token of ['I18N_RESOURCES', "'ko'", "'en'"]) {
   addCheck(`i18n resources include ${token}`, i18nResources.includes(token), 'message keys must have Korean and English resources');
 }
+addCheck('i18n resources translate every Rust message key', hasTest('src/verification/fullScope.test.ts', 'translates every message key the Rust backend can return'), 'Korean and English text for every errors.* and settings.* key the backend returns');
+addCheck('frontend event names match Rust event constants', hasTest('src/tauri/contract.test.ts', 'keeps frontend event names identical to the Rust event constants'), 'no subscription to events the backend never emits');
+addCheck('bulk rename and trash undo DTOs share the contract fixture', hasTest('src/tauri/contract.test.ts', 'consumes the bulk rename and trash undo contract also checked by Rust') && hasTest('src-tauri/src/contract_tests.rs', 'bulk_rename_and_trash_undo_wire_fields_are_stable'), 'src/tauri/fixtures/contract.json');
 
 const report = {
   generatedAt: new Date().toISOString(),

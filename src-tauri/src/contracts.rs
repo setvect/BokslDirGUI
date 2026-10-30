@@ -406,6 +406,74 @@ impl AppError {
 
 pub(crate) type CommandResult<T> = Result<T, AppError>;
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlatformInfo {
+    pub(crate) os: &'static str,
+    pub(crate) features: PlatformFeatures,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlatformFeatures {
+    pub(crate) open_with: bool,
+    pub(crate) current_folder_manager: bool,
+    pub(crate) current_folder_terminal: bool,
+    pub(crate) native_file_clipboard: bool,
+    pub(crate) trash_undo: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ClipboardIntent {
+    Copy,
+    Move,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FileClipboard {
+    pub(crate) change_count: i64,
+    pub(crate) paths: Vec<String>,
+    pub(crate) entries: Vec<FileEntry>,
+    pub(crate) intent: ClipboardIntent,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RenameRules {
+    pub(crate) find: String,
+    pub(crate) replacement: String,
+    pub(crate) prefix: String,
+    pub(crate) numbering: bool,
+    pub(crate) start: u64,
+    pub(crate) padding: usize,
+    pub(crate) preserve_extension: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RenameItem {
+    pub(crate) source: String,
+    pub(crate) new_name: String,
+    pub(crate) stamp: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RenamePreview {
+    pub(crate) item: RenameItem,
+    pub(crate) changed: bool,
+    pub(crate) error: Option<AppError>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrashUndoPreview {
+    pub(crate) id: String,
+    pub(crate) entries: Vec<FileEntry>,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum OperationKind {

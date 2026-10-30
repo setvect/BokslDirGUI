@@ -43,8 +43,8 @@ describe('Tauri command names', () => {
     try {
       expect(isTauriRuntime()).toBe(false);
       const cleanup = await tauriClient.listenOperationEvents({
-        error: () => {
-          throw new Error('plain browser event subscription must not emit operation errors');
+        summary: () => {
+          throw new Error('plain browser event subscription must not emit operation summaries');
         },
       });
 

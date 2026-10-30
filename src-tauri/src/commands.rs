@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use tauri::Manager;
 
 #[tauri::command]
-pub(crate) fn get_platform_info() -> crate::platform::PlatformInfo {
+pub(crate) fn get_platform_info() -> crate::contracts::PlatformInfo {
     crate::platform::info()
 }
 
@@ -290,11 +290,11 @@ pub(crate) fn show_drop_overlay(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub(crate) async fn read_file_clipboard(app: tauri::AppHandle, resolve: bool) -> CommandResult<crate::file_clipboard::FileClipboard> {
+pub(crate) async fn read_file_clipboard(app: tauri::AppHandle, resolve: bool) -> CommandResult<crate::contracts::FileClipboard> {
     run_external_service(move || crate::file_clipboard::read(&app, resolve)).await
 }
 #[tauri::command]
-pub(crate) async fn write_file_clipboard(app: tauri::AppHandle, paths: Vec<String>, intent: crate::file_clipboard::ClipboardIntent) -> CommandResult<i64> {
+pub(crate) async fn write_file_clipboard(app: tauri::AppHandle, paths: Vec<String>, intent: crate::contracts::ClipboardIntent) -> CommandResult<i64> {
     run_external_service(move || crate::file_clipboard::write(&app, paths, intent)).await
 }
 #[tauri::command]
@@ -303,18 +303,18 @@ pub(crate) async fn clear_file_clipboard(app: tauri::AppHandle, change_count: i6
 }
 
 #[tauri::command]
-pub(crate) async fn preview_bulk_rename(sources: Vec<String>, rules: crate::bulk_rename::RenameRules) -> CommandResult<Vec<crate::bulk_rename::RenamePreview>> {
+pub(crate) async fn preview_bulk_rename(sources: Vec<String>, rules: crate::contracts::RenameRules) -> CommandResult<Vec<crate::contracts::RenamePreview>> {
     tauri::async_runtime::spawn_blocking(move || crate::bulk_rename::preview(sources, rules))
         .await.map_err(|error| AppError::new("io_error", "errors.io", None, true).with_detail("message", error.to_string()))?
 }
 #[tauri::command]
-pub(crate) async fn start_bulk_rename(app: tauri::AppHandle, items: Vec<crate::bulk_rename::RenameItem>) -> CommandResult<OperationStarted> {
+pub(crate) async fn start_bulk_rename(app: tauri::AppHandle, items: Vec<crate::contracts::RenameItem>) -> CommandResult<OperationStarted> {
     tauri::async_runtime::spawn_blocking(move || operation::start_bulk_rename(Some(&app), items))
         .await.map_err(|error| AppError::new("io_error", "errors.io", None, true).with_detail("message", error.to_string()))?
 }
 
 #[tauri::command]
-pub(crate) fn preview_trash_undo() -> Option<operation::TrashUndoPreview> {
+pub(crate) fn preview_trash_undo() -> Option<crate::contracts::TrashUndoPreview> {
     operation::preview_trash_undo()
 }
 

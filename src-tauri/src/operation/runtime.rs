@@ -418,22 +418,26 @@ pub(super) fn emit_progress(
     emit_progress_payload(app, &progress);
 }
 
+// 프론트 `src/tauri/commands.ts`의 `EVENTS`와 같은 이름(contract.test.ts가 대조).
+const OPERATION_PROGRESS_EVENT: &str = "operation_progress";
+const OPERATION_CONFLICT_EVENT: &str = "operation_conflict";
+const OPERATION_SUMMARY_EVENT: &str = "operation_summary";
+
 pub(super) fn emit_progress_payload(app: Option<&tauri::AppHandle>, progress: &OperationProgress) {
     if let Some(app) = app {
-        let _ = app.emit("operation_progress", progress);
+        let _ = app.emit(OPERATION_PROGRESS_EVENT, progress);
     }
 }
 
 pub(super) fn emit_conflict(app: Option<&tauri::AppHandle>, prompt: ConflictPrompt) {
     if let Some(app) = app {
-        let _ = app.emit("operation_conflict", prompt);
+        let _ = app.emit(OPERATION_CONFLICT_EVENT, prompt);
     }
 }
 
 pub(super) fn emit_summary(app: Option<&tauri::AppHandle>, summary: &OperationSummary) {
     if let Some(app) = app {
-        let _ = app.emit("operation_summary", summary);
-        let _ = app.emit("operation_completed", summary);
+        let _ = app.emit(OPERATION_SUMMARY_EVENT, summary);
     }
 }
 

@@ -5,7 +5,7 @@ pub(crate) use bulk_rename::start as start_bulk_rename;
 mod conflict;
 mod delete;
 mod trash_restore;
-pub(crate) use trash_restore::{preview as preview_trash_undo, start as start_trash_undo, TrashUndoPreview};
+pub(crate) use trash_restore::{preview as preview_trash_undo, start as start_trash_undo};
 mod file_io;
 mod process;
 mod shell;

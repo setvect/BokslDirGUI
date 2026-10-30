@@ -1,14 +1,7 @@
 #[cfg(not(any(target_os = "macos", windows)))]
 use crate::contracts::AppError;
-use crate::contracts::{CommandResult, FileEntry};
-use serde::{Deserialize, Serialize};
+use crate::contracts::{ClipboardIntent, CommandResult, FileClipboard};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) enum ClipboardIntent {
-    Copy,
-    Move,
-}
 
 #[cfg(windows)]
 #[path = "file_clipboard/windows.rs"]
@@ -17,14 +10,6 @@ mod native_windows;
 #[path = "file_clipboard/windows_format.rs"]
 mod windows_format;
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FileClipboard {
-    change_count: i64,
-    paths: Vec<String>,
-    entries: Vec<FileEntry>,
-    intent: ClipboardIntent,
-}
 
 #[cfg(target_os = "macos")]
 mod native {

@@ -1,5 +1,6 @@
 use crate::contracts::{
     AppError, EntryKind, FileEntry, OperationKind, OperationProgress, OperationState, Settings, OperationSummary, ShellCommandResult,
+    RenameItem, RenamePreview, RenameRules, TrashUndoPreview,
 };
 use std::path::Path;
 
@@ -75,4 +76,33 @@ fn command_summary_preserves_output_and_other_summaries_omit_the_extra_field() {
     summary.kind = OperationKind::Copy;
     summary.command_result = None;
     assert!(serde_json::to_value(summary).unwrap().get("commandResult").is_none());
+}
+
+#[test]
+fn bulk_rename_and_trash_undo_wire_fields_are_stable() {
+    let rules: RenameRules = serde_json::from_value(fixture()["renameRules"].clone()).unwrap();
+    assert_eq!(
+        (rules.find.as_str(), rules.replacement.as_str(), rules.start, rules.padding, rules.numbering, rules.preserve_extension),
+        ("사진", "photo", 1, 3, true, true)
+    );
+    let item: RenameItem = serde_json::from_value(fixture()["renamePreview"]["item"].clone()).unwrap();
+    let preview = RenamePreview { item, changed: true, error: None };
+    assert_eq!(serde_json::to_value(preview).unwrap(), fixture()["renamePreview"]);
+
+    let entry = FileEntry {
+        path: "/fixture/한글/사진 1.jpg".into(),
+        name: "사진 1.jpg".into(),
+        kind: EntryKind::File,
+        symlink_target_is_directory: None,
+        size_bytes: Some(2048),
+        modified_at: None,
+        created_at: None,
+        permissions: None,
+        owner: None,
+        group: None,
+        is_hidden: false,
+        is_virtual: false,
+    };
+    let trash = TrashUndoPreview { id: "trash-fixture".into(), entries: vec![entry] };
+    assert_eq!(serde_json::to_value(trash).unwrap(), fixture()["trashUndoPreview"]);
 }

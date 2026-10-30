@@ -39,3 +39,11 @@ export const COMMANDS = {
 } as const;
 
 export type TauriCommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
+
+// Rust 이벤트 상수와 같은 이름. 대조는 contract.test.ts 담당.
+export const EVENTS = {
+  operationProgress: 'operation_progress',
+  operationConflict: 'operation_conflict',
+  operationSummary: 'operation_summary',
+  nativeFileDrop: 'boksldir://native-file-drop',
+} as const;

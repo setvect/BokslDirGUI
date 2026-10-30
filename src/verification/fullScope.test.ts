@@ -87,7 +87,7 @@ describe('full-scope verification harness', () => {
     expect(canTransitionOperation('failed', 'running')).toBe(false);
   });
 
-  it('keeps operation history and message resources available for audit and i18n surfaces', () => {
+  it('keeps operation history available for audit surfaces', () => {
     useOperationStore.setState({ operationHistory: [] });
     useOperationStore.getState().applyOperationSummary({
       operationId: 'scope-history',
@@ -99,19 +99,16 @@ describe('full-scope verification harness', () => {
     });
 
     expect(useOperationStore.getState().operationHistory[0]?.operationId).toBe('scope-history');
-    expect(I18N_RESOURCES.ko['errors.archiveFormatUnsupported']).toBeTruthy();
-    expect(I18N_RESOURCES.ko['errors.archivePasswordRequired']).toBeTruthy();
-    expect(I18N_RESOURCES.en['errors.archivePasswordInvalid']).toBeTruthy();
-    expect(I18N_RESOURCES.en['errors.archivePasswordFormatUnsupported']).toBeTruthy();
-    expect(I18N_RESOURCES.en['errors.shellCommandDisabled']).toBeTruthy();
   });
 
-  it('translates every error message key the Rust backend can return', () => {
+  it('translates every message key the Rust backend can return', () => {
     const rustSources = Object.values(import.meta.glob('../../src-tauri/src/**/*.rs', { query: '?raw', import: 'default', eager: true }));
+    // 오류 키(errors.*)와 쉘 정책 사유 같은 설정 메시지 키(settings.<영역>.<…>). 파일 이름 "settings.json"은 제외.
     const keys = [...new Set(rustSources.flatMap((source) =>
-      [...String(source).matchAll(/"(errors\.[A-Za-z0-9]+)"/g)].map((match) => match[1])))];
+      [...String(source).matchAll(/"(errors\.[A-Za-z0-9]+|settings\.[A-Za-z]+(?:\.[A-Za-z]+)+)"/g)].map((match) => match[1])))];
 
     expect(keys.length).toBeGreaterThan(20);
+    expect(keys).toContain('settings.external.shellCommand.disabledByDefault');
     for (const language of ['ko', 'en'] as const) {
       expect(keys.filter((key) => !I18N_RESOURCES[language][key]), language).toEqual([]);
     }

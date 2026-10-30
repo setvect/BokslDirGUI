@@ -1,23 +1,7 @@
 //! OS 경계만 소유. 패널 상태와 파일 작업 상태는 기존 소유자에서 유지.
-use crate::contracts::{AppError, CommandResult};
-use serde::Serialize;
+use crate::contracts::{AppError, CommandResult, PlatformFeatures, PlatformInfo};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PlatformInfo {
-    os: &'static str,
-    features: PlatformFeatures,
-}
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PlatformFeatures {
-    open_with: bool,
-    current_folder_manager: bool,
-    current_folder_terminal: bool,
-    native_file_clipboard: bool,
-    trash_undo: bool,
-}
 pub(crate) fn info() -> PlatformInfo {
     info_for_os(std::env::consts::OS)
 }

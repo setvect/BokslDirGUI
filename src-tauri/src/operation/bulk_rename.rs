@@ -2,7 +2,8 @@ use super::runtime::{
     check_cancelled, emit_progress, emit_summary, error_summary, finish_operation,
     next_operation_id, register_operation, summary_from_stats, OperationStats,
 };
-use crate::bulk_rename::{validate_plan, RenameItem};
+use crate::bulk_rename::validate_plan;
+use crate::contracts::RenameItem;
 use crate::contracts::{
     CommandResult, OperationKind, OperationStarted, OperationState, OperationSummary,
 };

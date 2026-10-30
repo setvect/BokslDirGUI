@@ -5,11 +5,10 @@ use super::runtime::{
 };
 use crate::contracts::{
     AppError, CommandResult, FileEntry, OperationKind, OperationStarted, OperationState,
-    OperationSummary,
+    OperationSummary, TrashUndoPreview,
 };
 use crate::filesystem::{file_entry_from_path, map_io_error};
 use crate::mutation::rename_no_replace;
-use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -72,12 +71,6 @@ fn stale() -> AppError {
     AppError::new("trash_undo_stale", "errors.trashUndoStale", None, true)
 }
 
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct TrashUndoPreview {
-    pub(crate) id: String,
-    pub(crate) entries: Vec<FileEntry>,
-}
 impl History {
     fn preview(&self) -> Option<TrashUndoPreview> {
         if self.restoring.is_some() {

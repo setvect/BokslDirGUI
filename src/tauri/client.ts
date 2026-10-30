@@ -26,7 +26,7 @@ import type {
   SortSpec,
   WatchAck,
 } from '../domain/types';
-import { COMMANDS, TauriCommandName } from './commands';
+import { COMMANDS, EVENTS, TauriCommandName } from './commands';
 
 export type TauriResult<T> =
   | { ok: true; data: T }
@@ -56,7 +56,6 @@ export interface OperationEventHandlers {
   progress?(progress: OperationProgress): void;
   conflict?(prompt: ConflictPrompt): void;
   summary?(summary: OperationSummary): void;
-  error?(error: AppError): void;
 }
 
 type TauriRuntimeGlobal = typeof globalThis & {
@@ -174,10 +173,9 @@ export const tauriClient = {
     }
     const unlisten: Array<() => void> = [];
     try {
-      unlisten.push(await listen<OperationProgress>('operation_progress', (event) => handlers.progress?.(event.payload)));
-      unlisten.push(await listen<ConflictPrompt>('operation_conflict', (event) => handlers.conflict?.(event.payload)));
-      unlisten.push(await listen<OperationSummary>('operation_summary', (event) => handlers.summary?.(event.payload)));
-      unlisten.push(await listen<AppError>('operation_error', (event) => handlers.error?.(event.payload)));
+      unlisten.push(await listen<OperationProgress>(EVENTS.operationProgress, (event) => handlers.progress?.(event.payload)));
+      unlisten.push(await listen<ConflictPrompt>(EVENTS.operationConflict, (event) => handlers.conflict?.(event.payload)));
+      unlisten.push(await listen<OperationSummary>(EVENTS.operationSummary, (event) => handlers.summary?.(event.payload)));
     } catch (error) {
       for (const cleanup of unlisten.splice(0)) {
         cleanup();

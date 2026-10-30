@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { APP_NAME, IMPLEMENTATION_BOUNDARY } from './foundation';
-import { I18N_RESOURCES, translateMessageKey } from './i18n-resources';
+import { translateMessageKey } from './i18n-resources';
 
 describe('BokslDirGUI foundation contract', () => {
   it('names the Tauri app and implementation source of truth', () => {
@@ -13,12 +13,7 @@ describe('BokslDirGUI foundation contract', () => {
     expect(IMPLEMENTATION_BOUNDARY.mockupUse).toBe('visual-reference-only');
   });
 
-  it('keeps Korean and English message resources for backend message keys', () => {
-    for (const language of ['ko', 'en'] as const) {
-      expect(I18N_RESOURCES[language]['errors.archiveFormatUnsupported']).toBeTruthy();
-      expect(I18N_RESOURCES[language]['errors.shellCommandDisabled']).toBeTruthy();
-      expect(I18N_RESOURCES[language]['settings.external.shellCommand.disabledByDefault']).toBeTruthy();
-    }
+  it('falls back to the message key when a translation is missing', () => {
     expect(translateMessageKey('ko', 'missing.key')).toBe('missing.key');
   });
 });

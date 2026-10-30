@@ -1,36 +1,10 @@
-use crate::contracts::{AppError, CommandResult};
+use crate::contracts::{AppError, CommandResult, RenameItem, RenamePreview, RenameRules};
 use crate::filesystem::map_io_error;
 use crate::mutation::{target_conflicts, validate_child_name};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RenameRules {
-    pub(crate) find: String,
-    pub(crate) replacement: String,
-    pub(crate) prefix: String,
-    pub(crate) numbering: bool,
-    pub(crate) start: u64,
-    pub(crate) padding: usize,
-    pub(crate) preserve_extension: bool,
-}
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RenameItem {
-    pub(crate) source: String,
-    pub(crate) new_name: String,
-    pub(crate) stamp: String,
-}
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RenamePreview {
-    pub(crate) item: RenameItem,
-    pub(crate) changed: bool,
-    pub(crate) error: Option<AppError>,
-}
 
 pub(crate) fn preview(
     sources: Vec<String>,

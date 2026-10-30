@@ -123,6 +123,10 @@
 - 타입: `commanderClients.ts` 인터페이스가 메서드 문법으로 입력 타입을 다시 적어 입력 필드 추가를 컴파일러가 못 잡음(검토 근거)
 - 제안: 이벤트 이름 상수화와 Rust emit 대조, 클라이언트 인터페이스를 `tauriClient` 타입에서 파생, fixture 확장, DTO를 `contracts.rs`로 이동
 - 위험·검증: 낮음, `npm run typecheck`, `src/tauri/contract.test.ts`, `src-tauri/src/contract_tests.rs`
+- 진행(5단계): 이벤트 이름을 `EVENTS`·Rust `*_EVENT` 상수로 모으고 `contract.test.ts`로 대조, `operation_error` 구독·`operation_completed` 발행 제거
+- 진행(5단계): DTO 4종을 `contracts.rs`로 이동, 다중 이름 변경·휴지통 되돌리기 fixture와 양쪽 계약 테스트 추가
+- 진행(5단계): `SafeMutationClient`·`LongRunningOperationClient`를 `tauriClient` 타입에서 파생
+- 진행(5단계): 표본 번역 검사 3벌을 Rust `errors.*`·`settings.*` 메시지 키 전수 검사 하나로 정리
 
 ### R08 테스트 공용 도구
 

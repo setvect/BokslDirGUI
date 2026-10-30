@@ -2,8 +2,7 @@ import { nativeDropPosition } from './ui/nativeDropPosition';
 import { emitTo } from '@tauri-apps/api/event';
 import { getCurrentWebview, type DragDropEvent } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-
-const NATIVE_FILE_DROP_EVENT = 'boksldir://native-file-drop';
+import { EVENTS } from './tauri/commands';
 
 const logicalDropEvent = (event: DragDropEvent) => {
   if (event.type === 'leave') {
@@ -18,7 +17,7 @@ const logicalDropEvent = (event: DragDropEvent) => {
 
 void getCurrentWebview().onDragDropEvent(async ({ payload }) => {
   try {
-    await emitTo('main', NATIVE_FILE_DROP_EVENT, logicalDropEvent(payload));
+    await emitTo('main', EVENTS.nativeFileDrop, logicalDropEvent(payload));
   } finally {
     if (payload.type === 'drop' || payload.type === 'leave') {
       await getCurrentWindow().hide();

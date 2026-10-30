@@ -12,12 +12,16 @@ pub(crate) fn configure_windows(windows: &mut [tauri::utils::config::WindowConfi
     }
 }
 
+// 프론트 `src/tauri/commands.ts`의 `EVENTS.nativeFileDrop`과 같은 이름(contract.test.ts가 대조).
+#[cfg(windows)]
+const NATIVE_FILE_DROP_EVENT: &str = "boksldir://native-file-drop";
+
 #[cfg(windows)]
 pub(crate) fn forward(window: &tauri::Window, event: &tauri::WindowEvent) {
     if window.label() != "main" { return; }
     let tauri::WindowEvent::DragDrop(event) = event else { return; };
     let Some(payload) = logical_event(event, window.scale_factor().unwrap_or(1.0)) else { return; };
-    let _ = window.app_handle().emit_to("main", "boksldir://native-file-drop", payload);
+    let _ = window.app_handle().emit_to("main", NATIVE_FILE_DROP_EVENT, payload);
 }
 
 #[cfg(windows)]

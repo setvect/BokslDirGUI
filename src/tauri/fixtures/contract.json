@@ -4,5 +4,8 @@
   "commandSummary": {"operationId": "op-command-fixture", "kind": "shellCommand", "state": "cancelled", "completedFiles": 0, "failedFiles": 0, "skippedFiles": 0, "errors": [], "commandResult": {"workingDir": "/fixture/한글", "exitCode": null, "stdout": "부분 출력\n", "stderr": "", "timedOut": false, "truncated": true}},
   "error": { "code": "permission_denied", "messageKey": "errors.permissionDenied", "path": "/fixture/한글", "details": { "reason": "fixture" }, "recoverable": true },
   "settings": { "schemaVersion": 1, "theme": "dark", "language": "ko", "sizeFormat": "binary", "external": { "editorId": null, "shellCommand": { "enabled": false } }, "bookmarks": [], "layout": { "singlePanel": false, "ratio": "50:50" }, "session": { "leftPath": null, "rightPath": null, "activePanel": "right" }, "view": { "zoomStep": 0, "density": "compact", "showIcons": true } },
-  "fileClipboard": {"changeCount": 42, "intent": "move", "paths": ["C:\\fixture\\한글 space.txt"], "entries": []}
+  "fileClipboard": {"changeCount": 42, "intent": "move", "paths": ["C:\\fixture\\한글 space.txt"], "entries": []},
+  "renameRules": { "find": "사진", "replacement": "photo", "prefix": "", "numbering": true, "start": 1, "padding": 3, "preserveExtension": true },
+  "renamePreview": { "item": { "source": "/fixture/한글/사진 1.jpg", "newName": "photo 1 001.jpg", "stamp": "2048:fixture" }, "changed": true, "error": null },
+  "trashUndoPreview": { "id": "trash-fixture", "entries": [ { "path": "/fixture/한글/사진 1.jpg", "name": "사진 1.jpg", "kind": "file", "symlinkTargetIsDirectory": null, "sizeBytes": 2048, "modifiedAt": null, "createdAt": null, "permissions": null, "owner": null, "group": null, "isHidden": false, "isVirtual": false } ] }
 }

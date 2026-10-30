@@ -213,7 +213,7 @@ fn windows_mutations_reject_ads_before_resolving_parent() {
             .code,
         "invalid_path"
     );
-    let rules = crate::bulk_rename::RenameRules {
+    let rules = crate::contracts::RenameRules {
         find: String::new(),
         replacement: String::new(),
         prefix: "new-".into(),

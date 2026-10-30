@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
-import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, NativeFileClipboard, Settings } from '../domain/types';
+import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, NativeFileClipboard, RenamePreview, RenameRules, Settings, TrashUndoPreview } from '../domain/types';
 import { normalizeInvokeError } from './client';
+import { EVENTS } from './commands';
 import fixture from './fixtures/contract.json';
 import platformFixtures from './fixtures/platform.json';
 
@@ -44,4 +45,23 @@ it('consumes the native clipboard copy/move contract also checked by Rust', () =
   const clipboard: NativeFileClipboard = { ...fixture.fileClipboard, intent: 'move' };
   expect(clipboard).toEqual(fixture.fileClipboard);
   expect(clipboard.paths[0]).toBe('C:\\fixture\\한글 space.txt');
+});
+
+it('consumes the bulk rename and trash undo contract also checked by Rust', () => {
+  const rules: RenameRules = fixture.renameRules;
+  const preview: RenamePreview = fixture.renamePreview;
+  const trash: TrashUndoPreview = { ...fixture.trashUndoPreview, entries: [{ ...fixture.trashUndoPreview.entries[0], kind: 'file' }] };
+  expect(rules.preserveExtension).toBe(true);
+  expect(preview.item.newName).toBe('photo 1 001.jpg');
+  expect(trash).toEqual(fixture.trashUndoPreview);
+});
+
+it('keeps frontend event names identical to the Rust event constants', () => {
+  const rustSources = Object.values(import.meta.glob('../../src-tauri/src/**/*.rs', { query: '?raw', import: 'default', eager: true })).map(String);
+  const rustEvents = rustSources.flatMap((source) => [...source.matchAll(/const [A-Z_]+_EVENT: &str = "([^"]+)";/g)].map((match) => match[1]));
+  expect([...rustEvents].sort()).toEqual(Object.values(EVENTS).sort());
+  for (const source of rustSources) {
+    expect(source).not.toMatch(/\.emit\(\s*"/);
+    expect(source).not.toMatch(/\.emit_to\([^,]+,\s*"/);
+  }
 });

@@ -2,10 +2,9 @@ import { startDrag, type DragResult as NativeDragResult } from '@crabnebula/taur
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { Settings } from '../domain/types';
 import { tauriClient } from './client';
+import { EVENTS } from './commands';
 
-const NATIVE_FILE_DROP_EVENT = 'boksldir://native-file-drop';
 export type NativeFileDragMode = 'copy' | 'move';
 export type NativeFileDropEvent =
   | { type: 'enter'; paths: string[]; position: { x: number; y: number } }
@@ -34,7 +33,7 @@ export const DEFAULT_APP_CONTROLLER: AppController = {
 };
 
 export const TAURI_NATIVE_FILE_DROP_CLIENT: NativeFileDropClient = {
-  listen: (handler) => listen<NativeFileDropEvent>(NATIVE_FILE_DROP_EVENT, (event) => handler(event.payload)),
+  listen: (handler) => listen<NativeFileDropEvent>(EVENTS.nativeFileDrop, (event) => handler(event.payload)),
 };
 
 export const TAURI_NATIVE_FILE_DRAG_CLIENT: NativeFileDragClient = {
@@ -45,41 +44,16 @@ export const TAURI_NATIVE_FILE_DRAG_CLIENT: NativeFileDragClient = {
   },
 };
 
-export interface SafeMutationClient {
-  getPlatformInfo?: typeof tauriClient.getPlatformInfo;
-  previewTrashUndo?: typeof tauriClient.previewTrashUndo;
-  previewBulkRename?: typeof tauriClient.previewBulkRename;
-  readFileClipboard?: typeof tauriClient.readFileClipboard;
-  writeFileClipboard?: typeof tauriClient.writeFileClipboard;
-  clearFileClipboard?: typeof tauriClient.clearFileClipboard;
-  createDir(input: { parent: string; name: string }): ReturnType<typeof tauriClient.createDir>;
-  renameEntry(input: { path: string; newName: string }): ReturnType<typeof tauriClient.renameEntry>;
-  getMetadata?(input: { path: string }): ReturnType<typeof tauriClient.getMetadata>;
-  previewFile?(input: { path: string; maxBytes?: number }): ReturnType<typeof tauriClient.previewFile>;
-  archiveList?(input: { archivePath: string; password?: string; limit?: number }): ReturnType<typeof tauriClient.archiveList>;
-  listOpenWithApps?(input: { path: string }): ReturnType<typeof tauriClient.listOpenWithApps>;
-  openWithApp?(input: { path: string; applicationId: string }): ReturnType<typeof tauriClient.openWithApp>;
-  openDefault?(input: { path: string }): ReturnType<typeof tauriClient.openDefault>;
-  revealInManager?(input: { path: string }): ReturnType<typeof tauriClient.revealInManager>;
-  openCurrentInFileManager?(input: { path: string }): ReturnType<typeof tauriClient.openCurrentInFileManager>;
-  openCurrentInTerminal?(input: { path: string }): ReturnType<typeof tauriClient.openCurrentInTerminal>;
-  prepareShellCommand?(input: { workingDir: string; command: string; args?: string[] }): ReturnType<typeof tauriClient.prepareShellCommand>;
-  runShellCommand?(input: { workingDir: string; command: string; args?: string[]; confirmToken: string }): ReturnType<typeof tauriClient.runShellCommand>;
-  loadSettings?(): ReturnType<typeof tauriClient.loadSettings>;
-  saveSettings?(input: { patch: Partial<Settings> }): ReturnType<typeof tauriClient.saveSettings>;
-}
+// 실제 tauriClient 메서드 타입에서 파생. 입력 필드가 바뀌면 가짜 구현과 호출부도 컴파일 오류로 확인.
+type TauriClient = typeof tauriClient;
 
-export interface LongRunningOperationClient {
-  startTrashUndo?: typeof tauriClient.startTrashUndo;
-  startBulkRename?: typeof tauriClient.startBulkRename;
-  startCopy(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startCopy>;
-  startMove(input: { sources: string[]; targetDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.startMove>;
-  startDelete(input: { targets: string[]; mode: 'trash' | 'permanent'; confirmToken?: string }): ReturnType<typeof tauriClient.startDelete>;
-  archiveCreate?(input: { sources: string[]; targetArchive: string; format: string; password?: string }): ReturnType<typeof tauriClient.archiveCreate>;
-  archiveExtract?(input: { archivePath: string; targetDir: string; password?: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel'; entries?: string[]; stripPrefix?: string }): ReturnType<typeof tauriClient.archiveExtract>;
-  archiveAdd?(input: { sources: string[]; archivePath: string; targetInnerDir: string; policy: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.archiveAdd>;
-  cancelOperation(input: { operationId: string }): ReturnType<typeof tauriClient.cancelOperation>;
-  resolveConflict(input: { operationId: string; decision: 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'cancel' }): ReturnType<typeof tauriClient.resolveConflict>;
-}
+export type SafeMutationClient = Pick<TauriClient, 'createDir' | 'renameEntry'> & Partial<Pick<TauriClient,
+  | 'getPlatformInfo' | 'previewTrashUndo' | 'previewBulkRename' | 'readFileClipboard' | 'writeFileClipboard' | 'clearFileClipboard'
+  | 'getMetadata' | 'previewFile' | 'archiveList' | 'listOpenWithApps' | 'openWithApp' | 'openDefault' | 'revealInManager'
+  | 'openCurrentInFileManager' | 'openCurrentInTerminal' | 'prepareShellCommand' | 'runShellCommand' | 'loadSettings' | 'saveSettings'
+>>;
+
+export type LongRunningOperationClient = Pick<TauriClient, 'startCopy' | 'startMove' | 'startDelete' | 'cancelOperation' | 'resolveConflict'>
+  & Partial<Pick<TauriClient, 'startTrashUndo' | 'startBulkRename' | 'archiveCreate' | 'archiveExtract' | 'archiveAdd'>>;
 
 export const showNativeDropOverlay = () => invoke<void>('show_drop_overlay');
