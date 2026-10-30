@@ -13,6 +13,7 @@ export const COMMANDS = {
   getMetadata: 'get_metadata',
   previewFile: 'preview_file',
   watchPath: 'watch_path',
+  unwatchPath: 'unwatch_path',
   gotoPath: 'goto_path',
   listLocations: 'list_locations',
   createDir: 'create_dir',
@@ -45,5 +46,6 @@ export const EVENTS = {
   operationProgress: 'operation_progress',
   operationConflict: 'operation_conflict',
   operationSummary: 'operation_summary',
+  dirChanged: 'dir_changed',
   nativeFileDrop: 'boksldir://native-file-drop',
 } as const;

@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum PanelId {
     Left,
@@ -124,6 +124,15 @@ pub(crate) struct ImageMetadataField {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WatchAck {
+    pub(crate) panel_id: PanelId,
+    pub(crate) path: String,
+    pub(crate) version: u64,
+}
+
+/// `dir_changed` 이벤트: 감시 중인 패널 디렉터리의 직접 자식이 바뀜. version은 `WatchAck.version`과 같은 감시 등록 번호.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DirectoryChanged {
     pub(crate) panel_id: PanelId,
     pub(crate) path: String,
     pub(crate) version: u64,

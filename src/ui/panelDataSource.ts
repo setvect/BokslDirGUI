@@ -1,4 +1,4 @@
-import type { AppError, DirectoryListing, FileEntry, LocationList, PanelId, SortSpec } from '../domain/types';
+import type { AppError, DirectoryChanged, DirectoryListing, FileEntry, LocationList, PanelId, SortSpec, WatchAck } from '../domain/types';
 import { type ListDirInput, tauriClient, type TauriResult } from '../tauri/client';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { createDirectoryListing, DEFAULT_SORT, PANEL_IDS, parentPathOf } from './panelState';
@@ -13,9 +13,14 @@ export interface PanelDataSource {
   // base: `~`·상대 경로 해석 기준인 활성 패널의 실제 디렉터리(압축 내부면 생략)
   gotoPath(input: { panelId: PanelId; path: string; base?: string }): Promise<TauriResult<DirectoryListing>>;
   listLocations(): Promise<TauriResult<LocationList>>;
+  // 외부 변경 감시(Tauri 실행에서만 제공): 패널마다 감시 하나, 변경 알림은 같은 version일 때만 유효
+  watchPath?(input: { panelId: PanelId; path: string }): Promise<TauriResult<WatchAck>>;
+  unwatchPath?(input: { panelId: PanelId }): Promise<TauriResult<void>>;
+  listenDirectoryChanges?(handler: (event: DirectoryChanged) => void): Promise<() => void>;
 }
 
-type TauriNavigationClient = Pick<typeof tauriClient, 'listDir' | 'gotoPath' | 'listLocations'>;
+type TauriNavigationClient = Pick<typeof tauriClient, 'listDir' | 'gotoPath' | 'listLocations'>
+  & Partial<Pick<typeof tauriClient, 'watchPath' | 'unwatchPath' | 'listenDirectoryChanges'>>;
 
 export const createTauriPanelDataSource = (
   client: TauriNavigationClient = tauriClient,
@@ -52,6 +57,9 @@ export const createTauriPanelDataSource = (
   listDir: (input) => client.listDir(input),
   gotoPath: (input) => client.gotoPath(input),
   listLocations: () => client.listLocations(),
+  ...(client.watchPath && client.unwatchPath && client.listenDirectoryChanges
+    ? { watchPath: client.watchPath, unwatchPath: client.unwatchPath, listenDirectoryChanges: client.listenDirectoryChanges }
+    : {}),
 });
 
 export const createPreviewPanelDataSource = (

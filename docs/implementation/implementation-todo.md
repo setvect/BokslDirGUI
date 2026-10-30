@@ -363,6 +363,8 @@
   - terminal editor 실행: 2026-10-03 사용자 요청으로 제외([TUI parity](tui-parity-matrix.md)의 `open_terminal_editor`)
 - [ ] 실제 watcher, 패널 기준 상대경로/홈 확장, 플랫폼별 위치 목록
   - 2026-10-30 패널 기준 상대 경로·홈 확장 구현(FR-26.4): `goto_path`의 `base`, Rust `resolve_input_path`, 테스트 `goto_path_resolves_home_and_panel_relative_input`
+  - 2026-10-30 실제 watcher 구현: `notify` 8.2.1, `watch_service.rs`(패널당 감시·300ms 병합·version), 프론트 백그라운드 새로고침, 테스트 `real_directory_watch_reports_a_new_entry`
+  - 남은 부분: 비활성 탭은 감시하지 않고 활성화 시 기존 목록 재검증 흐름 사용, 플랫폼별 위치 목록(Linux 마운트) 미보완
 - [ ] backend 동시 작업 gate와 종료 정책
   - 2026-10-30 동시 작업 gate 구현: `launch_operation`의 앱 작업 자리, 단위 테스트 `second_app_operation_is_rejected_until_the_first_releases_its_slot`
   - 남은 부분: OS가 직접 닫는 창 닫기 중 진행 작업 정책(차단·확인·취소 후 닫기) 결정 필요, 앱 안 종료 단축키는 작업 중 차단 유지

@@ -13,6 +13,7 @@ import type {
   ConflictAck,
   ConflictDecision,
   ConflictPrompt,
+  DirectoryChanged,
   DirectoryListing,
   FileEntry,
   FileMetadata,
@@ -167,6 +168,13 @@ export const tauriClient = {
     invokeCommand<OperationStarted>(COMMANDS.runShellCommand, input),
   loadSettings: () => invokeCommand<Settings>(COMMANDS.loadSettings),
   saveSettings: (input: { patch: Partial<Settings> }) => invokeCommand<Settings>(COMMANDS.saveSettings, input),
+  unwatchPath: (input: { panelId: 'left' | 'right' }) => invokeCommand<void>(COMMANDS.unwatchPath, input),
+  listenDirectoryChanges: async (handler: (event: DirectoryChanged) => void) => {
+    if (!isTauriRuntime()) {
+      return () => { };
+    }
+    return listen<DirectoryChanged>(EVENTS.dirChanged, (event) => handler(event.payload));
+  },
   listenOperationEvents: async (handlers: OperationEventHandlers) => {
     if (!isTauriRuntime()) {
       return () => { };

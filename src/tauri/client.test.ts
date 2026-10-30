@@ -14,6 +14,8 @@ describe('Tauri command names', () => {
         'list_dir',
         'get_metadata',
         'goto_path',
+        'watch_path',
+        'unwatch_path',
         'resolve_conflict',
       ]),
     );

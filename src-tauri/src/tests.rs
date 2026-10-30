@@ -3,7 +3,7 @@ use crate::commands::{
     archive_list, create_dir, get_metadata, health_check, list_dir, list_locations, load_settings,
     open_current_in_file_manager, open_current_in_terminal, open_default,
     prepare_shell_command, preview_file, rename_entry, reveal_in_manager,
-    save_settings, watch_path,
+    save_settings,
 };
 use crate::contracts::{
     ConflictDecision, DeleteMode, DirectoryStats, EntryKind, OperationKind, OperationState,
@@ -314,11 +314,17 @@ fn list_locations_returns_home_and_roots() {
 #[test]
 fn watch_path_validates_directory_and_returns_version() {
     let fixture = TempFixture::new();
-    let ack = watch_path(PanelId::Left, fixture.root.to_string_lossy().into_owned())
+    let ack = crate::watch_service::watch(PanelId::Left, &fixture.root.to_string_lossy(), |_| {})
         .expect("watch ack should succeed");
 
     assert_eq!(ack.panel_id, PanelId::Left);
     assert!(ack.version > 0);
+    let file = fixture.root.join("watched-file.txt");
+    fs::write(&file, b"x").unwrap();
+    let error = crate::watch_service::watch(PanelId::Left, &file.to_string_lossy(), |_| {})
+        .expect_err("a file cannot be watched as a panel directory");
+    assert_eq!(error.code, "not_directory");
+    crate::watch_service::unwatch(PanelId::Left);
 }
 
 #[test]

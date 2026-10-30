@@ -29,6 +29,7 @@ mod settings_service;
 mod native_drop;
 mod window_session;
 mod shell_command;
+mod watch_service;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -76,6 +77,7 @@ pub fn run() {
             commands::get_metadata,
             commands::preview_file,
             commands::watch_path,
+            commands::unwatch_path,
             commands::goto_path,
             commands::list_locations,
             commands::create_dir,

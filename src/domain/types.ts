@@ -119,6 +119,13 @@ export interface WatchAck {
   version: number;
 }
 
+// `dir_changed` 이벤트, version은 같은 패널의 WatchAck.version과 일치할 때만 유효
+export interface DirectoryChanged {
+  panelId: PanelId;
+  path: string;
+  version: number;
+}
+
 export interface LocationList {
   home: string;
   roots: string[];

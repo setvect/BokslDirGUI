@@ -337,6 +337,48 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     });
   };
 
+  // 외부 변경 감시: 실제 디렉터리를 보는 패널만, 경로가 바뀌면 감시 교체. 같은 version 알림만 백그라운드 새로고침.
+  const refreshPanelRef = useRef(refreshPanel);
+  refreshPanelRef.current = refreshPanel;
+  const watchedPathRef = useRef<Record<PanelId, string | null>>({ left: null, right: null });
+  const watchVersionRef = useRef<Record<PanelId, number | null>>({ left: null, right: null });
+  useEffect(() => {
+    const { watchPath, unwatchPath } = runtime.dataSource;
+    if (!watchPath || !unwatchPath) return;
+    for (const panelId of PANEL_IDS) {
+      const path = panelState[panelId].path;
+      const target = path && !isArchiveVirtualPath(path) ? path : null;
+      if (watchedPathRef.current[panelId] === target) continue;
+      watchedPathRef.current[panelId] = target;
+      watchVersionRef.current[panelId] = null;
+      if (!target) {
+        void unwatchPath({ panelId });
+        continue;
+      }
+      void watchPath({ panelId, path: target }).then((result) => {
+        if (result.ok && watchedPathRef.current[panelId] === target) watchVersionRef.current[panelId] = result.data.version;
+      });
+    }
+  }, [runtime.dataSource, panelState.left.path, panelState.right.path]);
+  useEffect(() => {
+    const { listenDirectoryChanges, unwatchPath } = runtime.dataSource;
+    if (!listenDirectoryChanges) return undefined;
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenDirectoryChanges((event) => {
+      if (watchVersionRef.current[event.panelId] === event.version) refreshPanelRef.current(event.panelId, true);
+    }).then((cleanup) => {
+      if (disposed) cleanup();
+      else unlisten = cleanup;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+      if (unwatchPath) for (const panelId of PANEL_IDS) void unwatchPath({ panelId });
+      watchedPathRef.current = { left: null, right: null };
+    };
+  }, [runtime.dataSource]);
+
   const refreshPanelAfterSourceInvalid = (panelId: PanelId, status: string) => {
     const panel = panelState[panelId];
     void listPanel(panelId, panel.path, {

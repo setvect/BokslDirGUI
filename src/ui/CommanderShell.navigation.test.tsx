@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { DirectoryChanged } from '../domain/types';
 import { useOperationStore } from '../operations/operationStore';
 import type { ListDirInput } from '../tauri/client';
 import { INITIAL_FOCUS_INDEX, SAMPLE_LISTINGS } from './commanderFixture';
@@ -15,6 +16,25 @@ import './testing/commanderTestSetup';
 import { activePanelLabel, emptyListings, focusedRow, focusedRowText, mockedPanelDataSource, renderCommander, rowByText, testEntry } from './testing/commanderTestSupport';
 
 describe('CommanderShell navigation', () => {
+
+  it('watches real panel directories and refreshes only for the current watch version', async () => {
+    const dataSource = createFixturePanelDataSource();
+    let notify: ((event: DirectoryChanged) => void) | null = null;
+    dataSource.watchPath = vi.fn(async (input) => ({ ok: true as const, data: { ...input, version: input.panelId === 'left' ? 11 : 12 } }));
+    dataSource.unwatchPath = vi.fn(async () => ({ ok: true as const, data: undefined }));
+    dataSource.listenDirectoryChanges = vi.fn(async (handler) => { notify = handler; return () => undefined; });
+    const listDir = vi.spyOn(dataSource, 'listDir');
+    renderCommander(dataSource);
+
+    await waitFor(() => expect(dataSource.watchPath).toHaveBeenCalledWith({ panelId: 'right', path: SAMPLE_LISTINGS.right.path }));
+    await waitFor(() => expect(notify).not.toBeNull());
+    await act(async () => {});
+    listDir.mockClear();
+    act(() => notify!({ panelId: 'right', path: SAMPLE_LISTINGS.right.path, version: 11 }));
+    expect(listDir).not.toHaveBeenCalled();
+    act(() => notify!({ panelId: 'right', path: SAMPLE_LISTINGS.right.path, version: 12 }));
+    await waitFor(() => expect(listDir).toHaveBeenCalledWith(expect.objectContaining({ panelId: 'right', path: SAMPLE_LISTINGS.right.path })));
+  });
 
   it('passes the active real directory as the base for home and relative path input', async () => {
     const user = userEvent.setup();

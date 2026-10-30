@@ -95,7 +95,8 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `list_dir` | `{ panelId, path, showHidden, sort, filter }` | `DirectoryListing` | 읽기 전용 |
 | `get_metadata` | `{ path }` | `FileMetadata` | 속성/preview; 폴더는 내부 파일 크기·파일 수·하위 폴더 수를 조회 시 계산 |
 | `prepare_native_file_drag` | `{ paths: string[] }` | `string[]` | Windows 내부 드래그 준비용; 별도 스레드에서 전체 원본·재파싱 지점 검증 후 링크 자체를 보존한 Shell 호환 경로 반환, 다른 OS 미지원 |
-| `watch_path` | `{ panelId, path }` | `WatchAck` | 현재: 경로 검증/version ACK; 실제 변경 이벤트 구독은 미구현 |
+| `watch_path` | `{ panelId, path }` | `WatchAck` | 패널 디렉터리 직접 자식 감시 등록(패널마다 하나, 교체), `version`은 감시 등록 번호, 변경이 300ms 멈추면 `dir_changed` 1회 |
+| `unwatch_path` | `{ panelId }` | `void` | 패널 감시 해제(압축 내부 이동·화면 종료) |
 | `goto_path` | `{ panelId, path, base? }` | `DirectoryListing` | 주소 입력/북마크/히스토리 이동, `~`는 홈·상대 경로는 `base`(활성 패널의 실제 디렉터리) 기준 해석(FR-26.4) |
 | `list_locations` | `{}` | `LocationList` | 홈/드라이브/마운트 quick access |
 | `create_dir` | `{ parent, name }` | `FileEntry` | 이름 검증 |
@@ -128,7 +129,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `operation_conflict` | `ConflictPrompt` | operation service(`operation/runtime.rs`) | conflict dialog | 구현 |
 | `operation_summary` | `OperationSummary` | operation service(`operation/runtime.rs`) | queue/toast/panel refresh | 구현 |
 | `boksldir://native-file-drop` | `NativeFileDropEvent` | Windows 주 창(`native_drop.rs`), macOS 드롭 오버레이(`drop-overlay.ts`) | `useFileDrag` | 구현 |
-| `dir_changed` | `{ panelId, path, version }` | watch service | panel store | 미구현 |
+| `dir_changed` | `{ panelId, path, version }` | watch service(`watch_service.rs`) | `usePanelNavigation` 백그라운드 새로고침(같은 version만) | 구현 |
 | `settings_changed` | `Settings` | settings service | UI providers | 미구현 |
 
 - 이벤트 이름 원천: 프론트 `src/tauri/commands.ts`의 `EVENTS`, Rust의 `*_EVENT` 상수, `contract.test.ts`가 양쪽 일치와 Rust 문자열 리터럴 발행 금지 확인

@@ -6,11 +6,9 @@ use crate::contracts::{
     SortSpec, WatchAck,
 };
 use crate::external;
-use crate::filesystem::listing_version;
 use crate::mutation;
 use crate::navigation;
 use crate::operation;
-use crate::path_text::display_path;
 use crate::settings_service;
 use crate::shell_command;
 use std::path::PathBuf;
@@ -61,13 +59,16 @@ pub(crate) fn preview_file(path: String, max_bytes: Option<u64>) -> CommandResul
 }
 
 #[tauri::command]
-pub(crate) fn watch_path(panel_id: PanelId, path: String) -> CommandResult<WatchAck> {
-    let path = navigation::canonical_existing_directory(&path)?;
-    Ok(WatchAck {
-        panel_id,
-        path: display_path(&path),
-        version: listing_version(&path),
+pub(crate) fn watch_path(app: tauri::AppHandle, panel_id: PanelId, path: String) -> CommandResult<WatchAck> {
+    use tauri::Emitter;
+    crate::watch_service::watch(panel_id, &path, move |changed| {
+        let _ = app.emit(crate::watch_service::DIR_CHANGED_EVENT, changed);
     })
+}
+
+#[tauri::command]
+pub(crate) fn unwatch_path(panel_id: PanelId) {
+    crate::watch_service::unwatch(panel_id);
 }
 
 #[tauri::command]
