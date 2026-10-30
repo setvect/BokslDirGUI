@@ -132,6 +132,36 @@ fn remote_settings_round_trip_without_secret_fields() {
 }
 
 #[test]
+fn remote_connection_contract_matches_the_frontend_fixture() {
+    let request: crate::contracts::RemoteConnectRequest =
+        serde_json::from_value(fixture()["remoteConnectRequest"].clone()).unwrap();
+    assert_eq!(request.auth_method, crate::contracts::RemoteAuthMethod::PublicKey);
+    assert_eq!(request.passphrase.as_deref(), Some("fixture-passphrase"));
+    let session = crate::contracts::RemoteSession {
+        session_id: "sftp://boksl@example.com:2222/".into(),
+        user: "boksl".into(),
+        host: "example.com".into(),
+        port: 2222,
+        home: "/home/boksl".into(),
+        home_url: "sftp://boksl@example.com:2222/home/boksl".into(),
+        host_key_algorithm: "ssh-ed25519".into(),
+        host_key_fingerprint: "SHA256:fixture".into(),
+    };
+    assert_eq!(serde_json::to_value(&session).unwrap(), fixture()["remoteSession"]);
+    let changed = crate::contracts::RemoteConnectionChanged {
+        session_id: session.session_id.clone(),
+        state: crate::contracts::RemoteConnectionState::Lost,
+        error: Some(crate::contracts::AppError::new(
+            "remote_connection_lost",
+            "errors.remoteConnectionLost",
+            Some(Path::new("sftp://boksl@example.com:2222/")),
+            true,
+        )),
+    };
+    assert_eq!(serde_json::to_value(&changed).unwrap(), fixture()["remoteConnectionChanged"]);
+}
+
+#[test]
 fn remote_path_cases_match_the_frontend_fixture() {
     let cases: serde_json::Value =
         serde_json::from_str(include_str!("../../src/tauri/fixtures/remote-paths.json")).unwrap();

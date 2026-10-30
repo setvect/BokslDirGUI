@@ -290,6 +290,38 @@ export interface RemoteSettings {
   connectTimeoutSeconds: number;
 }
 
+// `remote_connect` 요청. 암호·키 암호는 이 요청에만 담고 저장·로그·이벤트에 남기지 않음
+export interface RemoteConnectRequest {
+  host: string;
+  port: number;
+  user: string;
+  authMethod: RemoteAuthMethod;
+  password?: string;
+  keyPath?: string;
+  passphrase?: string;
+}
+
+// sessionId는 원격 루트 URL(`sftp://사용자@호스트:포트/`), `remoteLocationKey`와 같은 값
+export interface RemoteSession {
+  sessionId: string;
+  user: string;
+  host: string;
+  port: number;
+  home: string;
+  homeUrl: string;
+  hostKeyAlgorithm: string;
+  hostKeyFingerprint: string;
+}
+
+export type RemoteConnectionState = 'connected' | 'disconnected' | 'lost';
+
+// `remote_connection_changed` 이벤트
+export interface RemoteConnectionChanged {
+  sessionId: string;
+  state: RemoteConnectionState;
+  error: AppError | null;
+}
+
 export interface NativeFileClipboard {
   intent: 'copy' | 'move';
   changeCount: number;

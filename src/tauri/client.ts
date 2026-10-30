@@ -22,6 +22,9 @@ import type {
   OperationProgress,
   OperationStarted,
   OperationSummary,
+  RemoteConnectionChanged,
+  RemoteConnectRequest,
+  RemoteSession,
   Settings,
   ShellCommandPreview,
   SortSpec,
@@ -169,6 +172,20 @@ export const tauriClient = {
   loadSettings: () => invokeCommand<Settings>(COMMANDS.loadSettings),
   saveSettings: (input: { patch: Partial<Settings> }) => invokeCommand<Settings>(COMMANDS.saveSettings, input),
   unwatchPath: (input: { panelId: 'left' | 'right' }) => invokeCommand<void>(COMMANDS.unwatchPath, input),
+  remoteConnect: (input: { request: RemoteConnectRequest }) => invokeCommand<RemoteSession>(COMMANDS.remoteConnect, input),
+  remoteAuthRespond: (input: { challengeId: string; responses: string[] }) =>
+    invokeCommand<RemoteSession>(COMMANDS.remoteAuthRespond, input),
+  remoteAuthCancel: (input: { challengeId: string }) => invokeCommand<boolean>(COMMANDS.remoteAuthCancel, input),
+  remoteTrustHostKey: (input: { host: string; port: number; fingerprint: string }) =>
+    invokeCommand<void>(COMMANDS.remoteTrustHostKey, input),
+  remoteDisconnect: (input: { sessionId: string }) => invokeCommand<boolean>(COMMANDS.remoteDisconnect, input),
+  remoteSessions: () => invokeCommand<RemoteSession[]>(COMMANDS.remoteSessions),
+  listenRemoteConnectionChanges: async (handler: (event: RemoteConnectionChanged) => void) => {
+    if (!isTauriRuntime()) {
+      return () => { };
+    }
+    return listen<RemoteConnectionChanged>(EVENTS.remoteConnectionChanged, (event) => handler(event.payload));
+  },
   listenDirectoryChanges: async (handler: (event: DirectoryChanged) => void) => {
     if (!isTauriRuntime()) {
       return () => { };

@@ -320,3 +320,50 @@ pub(crate) fn preview_trash_undo() -> Option<crate::contracts::TrashUndoPreview>
 pub(crate) fn start_trash_undo(app: tauri::AppHandle, id: String) -> CommandResult<OperationStarted> {
     operation::start_trash_undo(Some(&app), id)
 }
+
+fn remote_listener(app: tauri::AppHandle) -> crate::remote::connection::ConnectionListener {
+    use tauri::Emitter;
+    std::sync::Arc::new(move |changed| {
+        let _ = app.emit(crate::remote::connection::REMOTE_CONNECTION_CHANGED_EVENT, changed);
+    })
+}
+
+/// 원격 연결. 시간 제한·유지 간격은 설정값 사용, 비밀값은 인증에만 쓰고 보관하지 않음.
+#[tauri::command]
+pub(crate) async fn remote_connect(
+    app: tauri::AppHandle,
+    request: crate::contracts::RemoteConnectRequest,
+) -> CommandResult<crate::contracts::RemoteSession> {
+    let settings = settings_service::load_settings().map(|settings| settings.remote).unwrap_or_default();
+    let known_hosts = crate::remote::connection::KnownHostsPaths::standard()?;
+    let options = crate::remote::connection::ConnectOptions::from_request(request, &settings, known_hosts, Some(remote_listener(app)))?;
+    crate::remote::run(async move { Ok(crate::remote::connection::connect(options).await?.session()) }).await
+}
+
+/// keyboard-interactive 추가 질문 응답.
+#[tauri::command]
+pub(crate) async fn remote_auth_respond(challenge_id: String, responses: Vec<String>) -> CommandResult<crate::contracts::RemoteSession> {
+    crate::remote::run(async move { Ok(crate::remote::connection::respond(&challenge_id, responses).await?.session()) }).await
+}
+
+#[tauri::command]
+pub(crate) async fn remote_auth_cancel(challenge_id: String) -> CommandResult<bool> {
+    crate::remote::run(async move { Ok(crate::remote::connection::cancel_challenge(&challenge_id).await) }).await
+}
+
+#[tauri::command]
+pub(crate) fn remote_trust_host_key(host: String, port: u16, fingerprint: String) -> CommandResult<()> {
+    let paths = crate::remote::connection::KnownHostsPaths::standard()?;
+    crate::remote::connection::trust_host_key(&host, port, &fingerprint, &paths)
+}
+
+#[tauri::command]
+pub(crate) async fn remote_disconnect(session_id: String) -> CommandResult<bool> {
+    let location = crate::remote::path::RemotePath::parse(&session_id)?.location;
+    crate::remote::run(async move { Ok(crate::remote::connection::disconnect(&location).await) }).await
+}
+
+#[tauri::command]
+pub(crate) fn remote_sessions() -> Vec<crate::contracts::RemoteSession> {
+    crate::remote::connection::sessions()
+}

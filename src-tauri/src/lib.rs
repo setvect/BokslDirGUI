@@ -103,7 +103,13 @@ pub fn run() {
             commands::load_settings,
             commands::save_settings,
             commands::prepare_native_file_drag,
-            commands::show_drop_overlay
+            commands::show_drop_overlay,
+            commands::remote_connect,
+            commands::remote_auth_respond,
+            commands::remote_auth_cancel,
+            commands::remote_trust_host_key,
+            commands::remote_disconnect,
+            commands::remote_sessions
         ])
         .run(context)
         .expect("failed to run BokslDirGUI Tauri application");

@@ -37,6 +37,12 @@ export const COMMANDS = {
   runShellCommand: 'run_shell_command',
   loadSettings: 'load_settings',
   saveSettings: 'save_settings',
+  remoteConnect: 'remote_connect',
+  remoteAuthRespond: 'remote_auth_respond',
+  remoteAuthCancel: 'remote_auth_cancel',
+  remoteTrustHostKey: 'remote_trust_host_key',
+  remoteDisconnect: 'remote_disconnect',
+  remoteSessions: 'remote_sessions',
 } as const;
 
 export type TauriCommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
@@ -47,5 +53,6 @@ export const EVENTS = {
   operationConflict: 'operation_conflict',
   operationSummary: 'operation_summary',
   dirChanged: 'dir_changed',
+  remoteConnectionChanged: 'remote_connection_changed',
   nativeFileDrop: 'boksldir://native-file-drop',
 } as const;

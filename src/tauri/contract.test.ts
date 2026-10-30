@@ -1,8 +1,9 @@
 import { expect, it } from 'vitest';
-import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, NativeFileClipboard, RemoteSettings, RenamePreview, RenameRules, Settings, TrashUndoPreview } from '../domain/types';
+import type { AppError, PlatformInfo, FileEntry, OperationProgress, OperationSummary, NativeFileClipboard, RemoteConnectionChanged, RemoteConnectRequest, RemoteSession, RemoteSettings, RenamePreview, RenameRules, Settings, TrashUndoPreview } from '../domain/types';
 import { normalizeInvokeError } from './client';
 import { EVENTS } from './commands';
 import { ARCHIVE_FORMATS, archiveFormatForName } from '../domain/archiveFormats';
+import { remoteLocationKey } from '../domain/remotePath';
 import archiveFormats from './fixtures/archive-formats.json';
 import fixture from './fixtures/contract.json';
 import platformFixtures from './fixtures/platform.json';
@@ -56,6 +57,15 @@ it('consumes the bulk rename and trash undo contract also checked by Rust', () =
   expect(rules.preserveExtension).toBe(true);
   expect(preview.item.newName).toBe('photo 1 001.jpg');
   expect(trash).toEqual(fixture.trashUndoPreview);
+});
+
+it('consumes the remote connection contract also checked by Rust', () => {
+  const request: RemoteConnectRequest = { ...fixture.remoteConnectRequest, authMethod: 'publicKey' };
+  const session: RemoteSession = fixture.remoteSession;
+  const changed: RemoteConnectionChanged = { ...fixture.remoteConnectionChanged, state: 'lost' };
+  expect(request).toEqual(fixture.remoteConnectRequest);
+  expect(session.sessionId).toBe(remoteLocationKey(session));
+  expect(changed).toEqual(fixture.remoteConnectionChanged);
 });
 
 it('keeps frontend event names identical to the Rust event constants', () => {

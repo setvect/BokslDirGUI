@@ -420,6 +420,53 @@ pub(crate) struct RemoteSite {
     pub(crate) saved_secret: bool,
 }
 
+/// `remote_connect` 요청. 비밀값을 담으므로 `Debug`·`Serialize` 미구현.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RemoteConnectRequest {
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) user: String,
+    pub(crate) auth_method: RemoteAuthMethod,
+    #[serde(default)]
+    pub(crate) password: Option<String>,
+    #[serde(default)]
+    pub(crate) key_path: Option<String>,
+    #[serde(default)]
+    pub(crate) passphrase: Option<String>,
+}
+
+/// 연결된 원격 위치. `session_id`는 원격 루트 URL(`sftp://사용자@호스트:포트/`).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RemoteSession {
+    pub(crate) session_id: String,
+    pub(crate) user: String,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) home: String,
+    pub(crate) home_url: String,
+    pub(crate) host_key_algorithm: String,
+    pub(crate) host_key_fingerprint: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum RemoteConnectionState {
+    Connected,
+    Disconnected,
+    Lost,
+}
+
+/// `remote_connection_changed` 이벤트: 연결·앱 요청 해제·끊김.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RemoteConnectionChanged {
+    pub(crate) session_id: String,
+    pub(crate) state: RemoteConnectionState,
+    pub(crate) error: Option<AppError>,
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {

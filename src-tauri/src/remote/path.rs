@@ -14,6 +14,25 @@ pub(crate) struct RemoteLocation {
 }
 
 impl RemoteLocation {
+    /// 연결 창 입력 검증: 빈 값·공백·경로 구분자 포함 호스트 거부, IPv6 대괄호 제거.
+    pub(crate) fn new(user: &str, host: &str, port: u16) -> CommandResult<Self> {
+        let host = host.trim();
+        let host = host.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')).unwrap_or(host);
+        let label = format!("{user}@{host}:{port}");
+        let host_valid = !host.is_empty()
+            && !host.chars().any(|ch| ch.is_whitespace() || matches!(ch, '/' | '\\' | '@' | '[' | ']' | '\0'))
+            && (!host.contains(':') || host.parse::<std::net::Ipv6Addr>().is_ok());
+        if user.is_empty() || user.contains('\0') || !host_valid || port == 0 {
+            return Err(invalid(&label));
+        }
+        let location = Self { user: user.to_string(), host: host.to_string(), port };
+        // URL로 다시 읽어 같은 위치가 되는지 확인(콜론이 섞인 호스트 이름 등 거부)
+        match RemotePath::parse(&location.url("/")) {
+            Ok(parsed) if parsed.location == location => Ok(location),
+            _ => Err(invalid(&label)),
+        }
+    }
+
     pub(crate) fn url(&self, path: &str) -> String {
         let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
         let port = if self.port == DEFAULT_PORT { String::new() } else { format!(":{}", self.port) };
@@ -188,6 +207,15 @@ mod tests {
         assert_eq!(RemotePath::parse(&path.url()).unwrap(), path);
         assert_eq!(RemotePath::new(location("u", "h", 22), "/").url(), "sftp://u@h/");
         assert!(is_remote_path("sftp://u@h/") && is_remote_path("SFTP://u@h") && !is_remote_path("sftp:/u"));
+    }
+
+    #[test]
+    fn validates_connection_dialog_locations() {
+        assert_eq!(RemoteLocation::new("a@b", " example.com ", 2222).unwrap(), location("a@b", "example.com", 2222));
+        assert_eq!(RemoteLocation::new("u", "[::1]", 22).unwrap(), location("u", "::1", 22));
+        for (user, host, port) in [("", "h", 22), ("u", "", 22), ("u", "h", 0), ("u", "a b", 22), ("u", "h/x", 22), ("u", "a:b", 22)] {
+            assert!(RemoteLocation::new(user, host, port).is_err(), "{user}@{host}:{port}");
+        }
     }
 
     #[test]
