@@ -1815,9 +1815,10 @@ fn goto_path_from_remote_panels_treats_only_windows_local_paths_as_local() {
         let error = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, input.into(), remote_base.clone())).unwrap_err();
         assert_eq!(error.code, "remote_not_connected", "{input}");
     }
+    // Windows에서는 실제 경로라 성공할 수 있으므로 원격 오류가 아니라는 점만 확인
     for input in [r"C:\Users", "c:/Users", r"\\server\share"] {
-        let error = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, input.into(), remote_base.clone()));
-        assert!(error.is_err_and(|error| !error.code.starts_with("remote_")), "{input}");
+        let result = tauri::async_runtime::block_on(crate::commands::goto_path(PanelId::Left, input.into(), remote_base.clone()));
+        assert!(!result.is_err_and(|error| error.code.starts_with("remote_")), "{input}");
     }
 }
 
