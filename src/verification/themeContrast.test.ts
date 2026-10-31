@@ -86,6 +86,8 @@ const CONTAINER_PAIRS: Array<[foreground: string, background: string, minimum: n
   ['--cyan', '--menu-bg', 4.5, '메뉴 단축키'],
   ['--menu-disabled-text', '--menu-bg', 3, '비활성 메뉴 항목(포커스 때도 같은 배경)'],
   ['--menu-disabled-kbd', '--menu-bg', 3, '비활성 메뉴 단축키'],
+  // 장식 선이라 3:1 대신 보이는지만 확인(Mdir에서 메뉴 배경과 같은 색이던 회귀)
+  ['--menu-separator', '--menu-bg', 1.5, '메뉴 묶음 구분선'],
   ['--status-message-text', '--status-bg', 4.5, '하단 상태 줄 안내'],
   ['--hotkey-more-text', '--hotkey-bg', 4.5, '단축키 줄 "+N"'],
   ['--cyan', '--hotkey-bg', 4.5, '단축키 줄 키'],
