@@ -2027,9 +2027,7 @@
       "guiActionIds": [
         "filter.clear"
       ],
-      "guiShortcutLabels": [
-        "Esc in filter"
-      ],
+      "guiShortcutLabels": [],
       "guiMenuPaths": [
         [
           "View",

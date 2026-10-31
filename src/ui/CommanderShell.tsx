@@ -334,6 +334,8 @@ export function CommanderShell({
     clipboardCanMove,
     shellCommandEnabled: settings.external.shellCommand.enabled,
     operationBusy: operationBusy || panelState.left.loading || panelState.right.loading,
+    // 원격 연결 해제는 목록 읽기가 멈춘 서버에서도 가능해야 하므로 파일 작업만 따로 전달
+    fileOperationRunning: operationBusy,
     backendAvailable: runtimeBackendAvailable,
     connectedRemoteSessions: new Set(Object.entries(remoteSessions).filter(([, entry]) => entry.state === 'connected').map(([sessionId]) => sessionId)),
   };

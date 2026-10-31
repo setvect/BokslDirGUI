@@ -85,7 +85,7 @@
 | `view.sortAsc` | view | 없음 | 없음 | View > Sort > Ascending | none | UI state + list_dir |
 | `view.sortDesc` | view | 없음 | 없음 | View > Sort > Descending | none | UI state + list_dir |
 | `filter.start` | view | / | `/` | View > Filter | none | UI state |
-| `filter.clear` | view | Esc | 없음 | View > Clear Filter | none | UI state + list_dir |
+| `filter.clear` | view | 없음 | 없음 | View > Clear Filter | none | UI state + list_dir |
 | `view.toggleHidden` | view | . | `.` | View > Hidden Files | none | UI state + list_dir |
 | `selection.invert` | selection | v | `v` | Edit > Invert Selection | none | UI state |
 | `selection.clear` | selection | u | `u` | Edit > Clear Selection | none | UI state |
@@ -132,7 +132,8 @@
 - `ActionContext`는 active panel, focused entry, selected entries, opposite panel path, operation state, settings 포함
 - action enablement는 메뉴/컨텍스트 메뉴/hotkey strip/help에서 같은 selector 사용
 - hotkey strip은 action registry의 우선순위 목록을 사용하되 화면 폭과 확대 배율에 따라 표시 개수를 동적으로 조정
-- 표시 개수 계산: 글자 폭(영문·숫자 약 9px, 한글 약 15px)과 숨긴 개수 "+N" 자리 반영, "+N"은 단축키 도움말(`help.shortcuts`) 열기 버튼
+- 표시 개수 계산: 글자 폭(영문·숫자 9.3px, 한글 16px로 넉넉히), 항목별 여백·간격·구분선(`.hotkey`), 숨긴 개수 "+N" 자리 반영
+- "+N": 단축키 도움말(`help.shortcuts`) 열기 버튼, 창 폭 720~2560px·배율 100%와 150%에서 넘침 없음을 `presentation.test.ts`로 확인
 - 좁은 화면에서는 핵심 조작만 남기고, 넓은 화면에서는 추가 action hint를 더 노출
 - destructive/irreversible action은 command 실행 전 dialog 정책을 수행; 활성화된 셸 명령은 명령 입력 후 추가 확인 없이 실행
 - 압축 가상 디렉터리는 **읽기 전용 패널**
@@ -205,7 +206,8 @@
 - 속성 `remoteSupport`: `localOnly`는 원격 패널에서 비활성, `remoteOnly`는 원격 패널에서만 활성, 생략 시 양쪽 지원
 - 판정 위치: `isActionAvailable`, 메뉴·컨텍스트 메뉴·단축키 공통
 - 컨텍스트 값: `activePathIsRemote`(활성 패널 경로), `activeRemoteConnected`(공유 상태의 연결된 세션 목록 기준)
-- `remote.disconnect`: 파일 작업이 진행 중이면 비활성(`canInvokeBackend`), 진행 중 전송이 연결 해제로 끊기지 않게 함
+- `remote.disconnect`: 파일 작업이 진행 중이면 비활성(`fileOperationRunning`), 진행 중 전송이 연결 해제로 끊기지 않게 함
+- 패널 목록 읽기 중(`operationBusy`)에는 연결 해제 허용: 응답 없는 서버에서 빠져나오는 길 유지
 
 | 구분 | 액션 |
 | --- | --- |

@@ -19,6 +19,8 @@ export interface ActionContextInput {
   hasOppositePanel: boolean;
   shellCommandEnabled: boolean;
   operationBusy: boolean;
+  /** 파일 작업만의 진행 여부(패널 목록 읽기 제외) */
+  fileOperationRunning?: boolean;
   backendAvailable?: boolean;
   activePathIsArchive?: boolean;
   activePathIsRemote?: boolean;
@@ -94,6 +96,7 @@ export const createActionContext = ({
   hasOppositePanel,
   shellCommandEnabled,
   operationBusy,
+  fileOperationRunning = false,
   backendAvailable = true,
   activePathIsArchive = false,
   activePathIsRemote = false,
@@ -115,6 +118,7 @@ export const createActionContext = ({
     hasOppositePanel,
     shellCommandEnabled,
     operationBusy,
+    fileOperationRunning,
     backendAvailable,
     activePathIsArchive,
     activePathIsRemote,
@@ -125,8 +129,8 @@ export const createActionContext = ({
 // 단축키·상단 메뉴·컨텍스트 메뉴가 함께 쓰는 패널 무관 상태
 export type SharedActionState = Pick<
   ActionContextInput,
-  'clipboardCount' | 'trashUndoAvailable' | 'clipboardMode' | 'clipboardCanMove' | 'platformInfo' | 'shellCommandEnabled' | 'operationBusy' | 'backendAvailable'
-  | 'connectedRemoteSessions'
+  'clipboardCount' | 'trashUndoAvailable' | 'clipboardMode' | 'clipboardCanMove' | 'platformInfo' | 'shellCommandEnabled' | 'operationBusy' | 'fileOperationRunning'
+  | 'backendAvailable' | 'connectedRemoteSessions'
 >;
 
 export const createPanelActionContext = (

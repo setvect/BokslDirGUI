@@ -26,19 +26,27 @@ it('shows more hotkey hints as horizontal space grows', () => {
   expect(zoomed.length).toBeLessThan(wide.length);
 });
 
-it('keeps the hidden-count button inside the strip for Korean hints', () => {
-  // 실제 렌더링 폭 모델(15px 고정폭 글꼴 실측: 영문 약 9.03px, 한글 약 15px, 항목 좌우 여백 22px)
-  const rendered = (text: string) =>
-    Array.from(text).reduce((width, char) => width + (/[\uac00-\ud7a3]/u.test(char) ? 15 : 9.03), 22);
-  for (const stripWidth of [960, 1280, 1600]) {
-    const visible = hotkeyStripActionsForWidth(stripWidth, 1, undefined, 'ko');
-    const hidden = hotkeyStripActionsFromRegistry().length - visible.length;
-    const used = visible.reduce(
-      (total, action) => total + rendered(`${shortcutLabelForAction(action)}:${hotkeyLabelForAction(action, 'ko')}`), 0,
-    ) + (hidden > 0 ? rendered(`+${hidden}`) : 0);
-    expect(hidden).toBeGreaterThan(0);
-    expect(used).toBeLessThanOrEqual(stripWidth - 24);
+it('keeps every visible hint and the hidden-count button inside the strip', () => {
+  // 실제 렌더링 폭 모델(15px 고정폭 글꼴 실측): 영문·숫자 최대 9.27px(SF Mono), 한글 최대 15px,
+  // 항목마다 좌우 여백 22px(배율 적용)+간격·구분선 5px, "+N" 버튼은 여백 22px만
+  const rendered = (text: string, scale: number, fixed: number) =>
+    Array.from(text).reduce((width, char) => width + (/[\uac00-\ud7a3]/u.test(char) ? 15 : 9.27) * scale, 22 * scale + fixed);
+  for (const language of ['ko', 'en'] as const) {
+    for (const [scale, from] of [[1, 720], [1.5, 1080]] as const) {
+      for (let stripWidth = from; stripWidth <= 2560; stripWidth += 1) {
+        const visible = hotkeyStripActionsForWidth(stripWidth, scale, undefined, language);
+        const hidden = hotkeyStripActionsFromRegistry().length - visible.length;
+        const used = visible.reduce(
+          (total, action) => total + rendered(`${shortcutLabelForAction(action)}:${hotkeyLabelForAction(action, language)}`, scale, 5), 0,
+        ) + (hidden > 0 ? rendered(`+${hidden}`, scale, 0) : 0);
+        if (used > stripWidth - 24 * scale) {
+          throw new Error(`${language} ×${scale} ${stripWidth}px: ${Math.round(used)}px > ${stripWidth - 24 * scale}px`);
+        }
+      }
+    }
   }
+  // 1280px 한국어 창: 일부만 보이고 나머지는 "+N"으로 남음
+  expect(hotkeyStripActionsForWidth(1280, 1, undefined, 'ko').length).toBeLessThan(hotkeyStripActionsFromRegistry().length);
 });
 
 it('handles the maximum archive listing size without spreading entries into function arguments', () => {

@@ -30,6 +30,8 @@ export interface ActionContext {
   activePathIsRemote?: boolean;
   /** 활성 원격 패널의 연결이 살아 있음 */
   activeRemoteConnected?: boolean;
+  /** 파일 작업(복사·이동·삭제 등)이 진행 중. 패널 목록 읽기는 제외(`operationBusy`와 달리) */
+  fileOperationRunning?: boolean;
 }
 
 /** 원격 패널 지원 여부: `localOnly`는 원격 패널에서 비활성, `remoteOnly`는 원격 패널에서만 활성 */
@@ -135,7 +137,7 @@ export const ACTIONS = [
   action({ id: 'file.bulkRename', requiresConcreteSources: true, dialogKind: 'bulkRename', category: 'file', displayLabel: 'Bulk Rename', menuEllipsis: true, menuPath: ['File', 'Bulk Rename'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startBulkRename, runPath: 'preview_bulk_rename/start_bulk_rename', isEnabled: (c) => c.effectiveTargetCount > 0 && canMutateFilesystem(c) }),
   action({ id: 'remote.sites', category: 'navigation', displayLabel: 'Sites', shortcutLabel: 'gr', keyboardBindings: ['g r'], menuEllipsis: true, menuPath: ['Remote', 'Sites'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'site list → remote_connect', isEnabled: canInvokeBackend }),
   action({ id: 'remote.connect', category: 'navigation', displayLabel: 'New Connection', menuEllipsis: true, menuPath: ['Remote', 'New Connection'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'remote_connect', isEnabled: canInvokeBackend }),
-  action({ id: 'remote.disconnect', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Disconnect', shortcutLabel: 'gd', keyboardBindings: ['g d'], menuPath: ['Remote', 'Disconnect'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.remoteDisconnect, runPath: 'remote_disconnect', isEnabled: (c) => Boolean(c.activeRemoteConnected) && canInvokeBackend(c) }),
+  action({ id: 'remote.disconnect', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Disconnect', shortcutLabel: 'gd', keyboardBindings: ['g d'], menuPath: ['Remote', 'Disconnect'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.remoteDisconnect, runPath: 'remote_disconnect', isEnabled: (c) => Boolean(c.activeRemoteConnected) && c.backendAvailable && !c.fileOperationRunning }),
   action({ id: 'remote.reconnect', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Reconnect', menuPath: ['Remote', 'Reconnect'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'remote_connect', isEnabled: (c) => !c.activeRemoteConnected && canInvokeBackend(c) }),
   action({ id: 'remote.info', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Connection Info', menuPath: ['Remote', 'Connection Info'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.remoteSessions, runPath: 'remote_sessions' }),
   action({ id: 'remote.chmod', remoteSupport: 'remoteOnly', requiresConcreteSources: true, dialogKind: 'remoteChmod', category: 'file', displayLabel: 'Change Permissions', menuEllipsis: true, menuPath: ['Remote', 'Change Permissions'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startRemoteChmod, runPath: 'start_remote_chmod', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
@@ -158,7 +160,7 @@ export const ACTIONS = [
   action({ id: 'view.sortAsc', category: 'view', menuPath: ['View', 'Sort', 'Ascending'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortDesc', category: 'view', menuPath: ['View', 'Sort', 'Descending'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'filter.start', category: 'view', displayLabel: 'Filter', shortcutLabel: '/', keyboardBindings: ['/'], menuEllipsis: true, menuPath: ['View', 'Filter'], contextScopes: ['blank'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'filter.clear', category: 'view', shortcutLabel: 'Esc', menuPath: ['View', 'Clear Filter'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
+  action({ id: 'filter.clear', category: 'view', menuPath: ['View', 'Clear Filter'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.toggleHidden', category: 'view', shortcutLabel: '.', keyboardBindings: ['.'], menuPath: ['View', 'Hidden Files'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'selection.invert', category: 'selection', hotkeyLabel: 'InvSel', shortcutLabel: 'v', keyboardBindings: ['v'], menuPath: ['Edit', 'Invert Selection'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.clear', category: 'selection', hotkeyLabel: 'Desel', shortcutLabel: 'u', keyboardBindings: ['u'], menuPath: ['Edit', 'Clear Selection'], dangerLevel: 'none', runPath: 'UI state' }),

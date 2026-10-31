@@ -214,7 +214,9 @@ describe('action registry', () => {
     };
     expect(isActionAvailable(disconnect, context)).toBe(true);
     // 진행 중인 복사·이동이 이 연결을 쓰고 있을 수 있어 작업이 끝날 때까지 끊기 금지
-    expect(isActionAvailable(disconnect, { ...context, operationBusy: true })).toBe(false);
+    expect(isActionAvailable(disconnect, { ...context, operationBusy: true, fileOperationRunning: true })).toBe(false);
+    // 목록 읽기만 진행 중(operationBusy)이면 허용: 응답 없는 서버에서 빠져나오는 길
+    expect(isActionAvailable(disconnect, { ...context, operationBusy: true, fileOperationRunning: false })).toBe(true);
     expect(isActionAvailable(disconnect, { ...context, activeRemoteConnected: false })).toBe(false);
   });
 
