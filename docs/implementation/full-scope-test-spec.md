@@ -127,7 +127,7 @@
 | 관리 | 새 폴더·이름 변경 규칙과 덮어쓰기 금지, 영구 삭제와 보호 경로, 링크 비추적 삭제, 권한 변경 범위, 다중 이름 변경 |
 | 전송 | 업로드·다운로드 내용·수정 시각, 충돌 건너뛰기·교체, 같은 서버 이동, 이동 실패 시 원본 보존, 끊김 임시본·이어받기·빈 구간 임시본 재전송, 취소 정리, 링크 정책 |
 | 자격 증명·재연결 | 저장 선택 시에만 저장, 저장된 값 재사용, 끊김 뒤 한 번 재연결, 앱 해제 뒤 재연결 없음 |
-| 화면 | `CommanderShell.remote.test.tsx`: 연결·호스트 키·질문·사이트·해제·복원·삭제 전환·권한 창·전송 키·열기·빠른 보기·앱 내부 클립보드, `CommanderShell.drag.test.tsx`: 드롭 업로드·끌어내기 차단 |
+| 화면 | `CommanderShell.remote.test.tsx`: 연결·호스트 키·질문·사이트·사이트 삭제 확인·해제·복원·삭제 전환·권한 창·전송 키·열기·빠른 보기·앱 내부 클립보드, `CommanderShell.drag.test.tsx`: 드롭 업로드·끌어내기 차단 |
 | 계약 | `contract.test.ts`·`contract_tests.rs`: 원격 DTO fixture, `remote_connection_changed` 이벤트 이름 |
 
 - VM E2E: macOS(Tart)의 원격 로그인을 SFTP 서버로 사용, Windows VM은 네트워크로 같은 서버 접속, 결과는 요구사항 문서 10절에 기록

@@ -17,6 +17,7 @@ export type RemoteFlow =
   | { stage: 'hostKey'; panelId: PanelId; draft: RemoteConnectDraft; targetUrl: string | null; question: HostKeyQuestion; pending: boolean }
   | { stage: 'prompts'; panelId: PanelId; draft: RemoteConnectDraft; targetUrl: string | null; prompts: AuthPrompts; error: string | null; pending: boolean }
   | { stage: 'sites'; panelId: PanelId; selectedId: string | null }
+  | { stage: 'deleteSite'; panelId: PanelId; site: RemoteSite }
   | { stage: 'info'; panelId: PanelId; status: RemotePanelStatus; session: RemoteSession | null };
 
 interface RemoteConnectDependencies {
@@ -105,13 +106,29 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
     setFlow((current) => (current?.stage === 'sites' && added[0] ? { ...current, selectedId: added[0].id } : current));
   };
 
-  const deleteSite = (id: string) => {
+  // 사이트 삭제는 확인 창을 거침(FR-34.3). 취소하면 같은 사이트를 고른 목록으로 복귀
+  const askDeleteSite = (id: string) => {
     const site = sites().find((candidate) => candidate.id === id);
-    if (!site) return;
-    void dependencies.client.remoteForgetSecret({ siteId: id });
-    const next = sites().filter((candidate) => candidate.id !== id);
-    void saveSites(next, text().siteDeleted(site.name));
-    setFlow((current) => (current?.stage === 'sites' ? { ...current, selectedId: next[0]?.id ?? null } : current));
+    if (flow?.stage !== 'sites' || !site) return;
+    setFlow({ stage: 'deleteSite', panelId: flow.panelId, site });
+  };
+
+  const cancelDeleteSite = () => {
+    if (flow?.stage !== 'deleteSite') return;
+    setFlow({ stage: 'sites', panelId: flow.panelId, selectedId: flow.site.id });
+  };
+
+  // 저장된 비밀값도 함께 삭제(FR-35.6). 목록에서는 지운 자리의 다음 사이트(마지막이었으면 새 마지막 사이트)를 고름
+  const deleteSite = () => {
+    if (flow?.stage !== 'deleteSite') return;
+    const { panelId, site } = flow;
+    const index = sites().findIndex((candidate) => candidate.id === site.id);
+    const next = sites().filter((candidate) => candidate.id !== site.id);
+    if (index >= 0) {
+      void dependencies.client.remoteForgetSecret({ siteId: site.id });
+      void saveSites(next, text().siteDeleted(site.name));
+    }
+    setFlow({ stage: 'sites', panelId, selectedId: next[Math.min(Math.max(index, 0), next.length - 1)]?.id ?? null });
   };
 
   const duplicateSite = (id: string) => {
@@ -308,6 +325,6 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
 
   return {
     flow, setFlow, close, cancel, openForm, openSites, openForUrl, submitForm, saveOnly, trustHostKey, respondPrompts,
-    connectSite, deleteSite, duplicateSite, forgetSecret, importSshConfig, disconnect, reconnect, reconnectForPath, showInfo,
+    connectSite, askDeleteSite, cancelDeleteSite, deleteSite, duplicateSite, forgetSecret, importSshConfig, disconnect, reconnect, reconnectForPath, showInfo,
   };
 }

@@ -1002,6 +1002,12 @@ button {
   color: var(--primary-button-text);
 }
 
+.filter-actions button.danger {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-button-text);
+}
+
 .filter-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
@@ -2392,7 +2398,9 @@ html.is-file-dragging * {
   user-select: none !important;
 }
 
-.remote-connect-dialog, .remote-sites-dialog, .remote-host-key-dialog { width: min(620px, calc(100vw - 40px)); }
+.remote-connect-dialog, .remote-host-key-dialog { width: min(620px, calc(100vw - 40px)); }
+/* 사이트 관리 버튼 줄(영어 약 620px)이 한 줄에 들어가는 폭 */
+.remote-sites-dialog { width: min(680px, calc(100vw - 40px)); }
 /* 연결 창은 인증 방식·사이트 저장 항목으로 길어질 수 있어 창 안에서 스크롤 */
 .remote-connect-dialog { top: 32px; max-height: calc(100vh - 64px); overflow-y: auto; }
 .remote-connect-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; }
@@ -2404,14 +2412,23 @@ html.is-file-dragging * {
 .remote-info-list dt { color: var(--muted); }
 .remote-info-list dd { margin: 0; overflow-wrap: anywhere; }
 .remote-fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.remote-site-list { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; border: 1px solid var(--line-strong); }
-.remote-site-list li { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; cursor: default; }
+.remote-site-list { list-style: none; margin: 0 0 10px; padding: 0; max-height: 50vh; overflow-y: auto; border: 1px solid var(--line-strong); }
+/* 사이트 항목: 이름(첫 줄)과 주소·인증 방식(둘째 줄). 한글 낱말 중간에서 줄을 바꾸지 않고 긴 이름·주소만 끊음 */
+.remote-site-list li, .remote-site-delete-target { display: grid; gap: 2px; padding: 6px 10px; word-break: keep-all; overflow-wrap: anywhere; }
+.remote-site-list li { cursor: default; }
 /* 고른 사이트: 선택 배경·글자 쌍과 청록 테두리(배경색만으로 구분하지 않게) */
 .remote-site-list li.is-selected { background: var(--selection-bg); color: var(--selection-text); box-shadow: inset 0 0 0 1px var(--cyan); }
-.remote-site-list li.is-selected :is(small, span) { color: inherit; }
+.remote-site-list li.is-selected .remote-site-detail { color: inherit; }
 .remote-site-list:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
-.remote-site-list small, .remote-site-list span { color: var(--muted); }
-.remote-site-actions { flex-wrap: wrap; }
+.remote-site-detail { color: var(--muted); }
+/* 버튼 두 줄: 목록 아래 사이트 관리(왼쪽 정렬), 구분선 아래 가져오기(왼쪽)와 닫기·연결(오른쪽) */
+.remote-site-tools { justify-content: flex-start; flex-wrap: wrap; }
+.remote-site-footer { flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.remote-site-footer .remote-site-import { margin-right: auto; }
+.remote-site-delete-dialog { width: min(480px, calc(100vw - 40px)); }
+.remote-site-delete-dialog p { margin: 0 0 10px; word-break: keep-all; overflow-wrap: anywhere; }
+.remote-site-delete-target { margin: 0 0 10px; border: 1px solid var(--line-strong); }
+.remote-site-delete-note { color: var(--muted); }
 .remote-chmod-dialog { width: min(520px, calc(100vw - 40px)); }
 .remote-chmod-targets { overflow-wrap: anywhere; color: var(--muted); }
 .remote-chmod-octal { display: flex; gap: 8px; align-items: center; }

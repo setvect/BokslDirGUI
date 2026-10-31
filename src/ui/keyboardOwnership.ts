@@ -25,6 +25,7 @@ export type CommanderKeyboardOwner =
   | 'remote-host-key'
   | 'remote-prompts'
   | 'remote-sites'
+  | 'remote-site-delete'
   | 'remote-info'
   | 'shortcut-help'
   | 'help-search'

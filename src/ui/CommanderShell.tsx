@@ -46,7 +46,7 @@ import { clampNumber, remoteSettingsOf, viewMetricsForSettings } from './setting
 import { remoteStatusForPath } from './remoteSessionState';
 import { useRemoteSessions } from './useRemoteSessions';
 import { useRemoteConnect } from './useRemoteConnect';
-import { RemoteAuthPromptDialog, RemoteConnectDialog, RemoteHostKeyDialog, RemoteInfoDialog, RemoteSitesDialog } from './RemoteDialogs';
+import { RemoteAuthPromptDialog, RemoteConnectDialog, RemoteHostKeyDialog, RemoteInfoDialog, RemoteSiteDeleteDialog, RemoteSitesDialog } from './RemoteDialogs';
 import { draftFromSite, emptyDraft } from './remoteConnectModel';
 import { isRemotePath } from '../domain/remotePath';
 import { BottomStatusStrip, HotkeyStrip } from './StatusStrips';
@@ -564,8 +564,11 @@ export function CommanderShell({
           onConnect={(site) => remote.connectSite(remoteFlow.panelId, site)}
           onNew={() => remote.openForm(remoteFlow.panelId, { ...emptyDraft(), saveSite: true })}
           onEdit={(site) => remote.openForm(remoteFlow.panelId, draftFromSite(site))}
-          onDuplicate={(site) => remote.duplicateSite(site.id)} onDelete={(site) => remote.deleteSite(site.id)}
+          onDuplicate={(site) => remote.duplicateSite(site.id)} onDelete={(site) => remote.askDeleteSite(site.id)}
           onForgetSecret={(site) => { void remote.forgetSecret(site.id); }} onImport={() => { void remote.importSshConfig(); }} onClose={remote.close} />
+      ) : null}
+      {remoteFlow?.stage === 'deleteSite' ? (
+        <RemoteSiteDeleteDialog language={settings.language} site={remoteFlow.site} onConfirm={remote.deleteSite} onCancel={remote.cancelDeleteSite} />
       ) : null}
       {remoteFlow?.stage === 'info' ? (
         <RemoteInfoDialog language={settings.language} status={remoteFlow.status} session={remoteFlow.session} onClose={remote.close} />

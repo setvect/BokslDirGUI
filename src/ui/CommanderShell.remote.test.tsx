@@ -409,6 +409,71 @@ describe('CommanderShell remote panels', () => {
     expect((within(form).getByLabelText('호스트') as HTMLInputElement).value).toBe('deploy.example.com');
   });
 
+  it('deletes sites only after a separate confirmation and keeps the list position', async () => {
+    const user = userEvent.setup();
+    const sites = [
+      { id: 'site-a', name: '가', host: 'a.example.com', port: 22, user: 'boksl', authMethod: 'password' as const, savedSecret: true },
+      { id: 'site-b', name: '나', host: 'b.example.com', port: 22, user: 'boksl', authMethod: 'agent' as const, savedSecret: false },
+      { id: 'site-c', name: '다', host: 'c.example.com', port: 2222, user: 'www', authMethod: 'publicKey' as const, savedSecret: false },
+    ];
+    const remoteForgetSecret = vi.fn(async () => ({ ok: true as const, data: undefined }));
+    const saveSettings = vi.fn(async (input: { patch: Partial<Settings> }) => ({ ok: true as const, data: settingsFixture(input.patch) }));
+    const settings = settingsFixture({ remote: { sites, keepaliveSeconds: 30, connectTimeoutSeconds: 15, linkPolicy: 'preserve' } });
+    const { container } = render(<CommanderShell dataSource={createFixturePanelDataSource()} mutationClient={mutationClientStub({ saveSettings, loadSettings: vi.fn(async () => ({ ok: true as const, data: settings })) })}
+      operationClient={operationClientStub()} remoteClient={remoteClientStub({ remoteForgetSecret })} />);
+    const sitesDialog = () => screen.findByRole('dialog', { name: '사이트 목록' });
+    const confirmDialog = () => screen.findByRole('dialog', { name: '사이트 삭제' });
+    const selectedName = async () => within(await sitesDialog()).getByRole('option', { selected: true }).querySelector('strong')?.textContent;
+    const savedNames = () => saveSettings.mock.calls.flatMap(([input]) => (input.patch.remote ? [input.patch.remote.sites.map((site) => site.name)] : []));
+    const buttonNames = (dialog: HTMLElement, selector: string) => [...dialog.querySelectorAll(`${selector} button`)].map((button) => button.textContent);
+
+    await user.keyboard('gr');
+    // 버튼은 역할별 두 줄(목록 아래 사이트 관리, 맨 아래 가져오기·닫기·연결), 항목은 이름과 주소·인증 방식 두 줄
+    expect(buttonNames(await sitesDialog(), '.remote-site-tools')).toEqual(['새 사이트', '편집', '복제', '삭제', '저장된 암호 삭제']);
+    expect(buttonNames(await sitesDialog(), '.remote-site-footer')).toEqual(['SSH 설정 가져오기', '닫기', '연결']);
+    expect(within(await sitesDialog()).getByRole('option', { name: '다 www@c.example.com:2222 · 공개 키 인증' })).toBeTruthy();
+
+    // 삭제 버튼은 이름이 바뀌지 않고 확인 창을 엶. 기본 포커스는 취소, Esc는 같은 사이트를 고른 목록으로 복귀
+    await user.click(within(await sitesDialog()).getByText('나'));
+    await user.click(within(await sitesDialog()).getByRole('button', { name: '삭제' }));
+    let confirm = await confirmDialog();
+    expect(confirm.textContent).toContain('다음 사이트를 삭제합니다.');
+    expect(within(confirm).getByText('boksl@b.example.com · SSH 에이전트')).toBeTruthy();
+    expect(confirm.textContent).not.toContain('저장된 암호·키 암호도');
+    await waitFor(() => expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: '취소' })));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: '사이트 삭제' })).toBeNull();
+    expect(await selectedName()).toBe('나');
+    await waitFor(async () => expect(document.activeElement).toBe(within(await sitesDialog()).getByRole('listbox')));
+    expect(remoteForgetSecret).not.toHaveBeenCalled();
+    expect(savedNames()).toEqual([]);
+
+    // 목록의 Delete 키도 같은 확인 창. 삭제하면 저장된 비밀값도 지우고 지운 자리의 다음 사이트를 고름
+    await user.keyboard('{Delete}');
+    await user.click(within(await confirmDialog()).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(savedNames().at(-1)).toEqual(['가', '다']));
+    expect(remoteForgetSecret).toHaveBeenCalledWith({ siteId: 'site-b' });
+    await waitFor(() => expect(container.querySelector('.status-message')?.textContent).toBe('사이트 삭제 · 나'));
+    expect(await selectedName()).toBe('다');
+    await waitFor(async () => expect(document.activeElement).toBe(within(await sitesDialog()).getByRole('listbox')));
+
+    // 저장된 비밀값이 있으면 함께 삭제됨을 안내(Backspace도 같은 확인 창). 취소 버튼은 아무것도 지우지 않음
+    await user.click(within(await sitesDialog()).getByText('가'));
+    await user.keyboard('{Backspace}');
+    confirm = await confirmDialog();
+    expect(confirm.textContent).toContain('이 사이트의 저장된 암호·키 암호도 OS 자격 증명 저장소에서 함께 삭제합니다.');
+    await user.click(within(confirm).getByRole('button', { name: '취소' }));
+    expect(await selectedName()).toBe('가');
+    expect(remoteForgetSecret).toHaveBeenCalledTimes(1);
+
+    // 마지막 사이트를 지우면 새 마지막 사이트를 고름
+    await user.click(within(await sitesDialog()).getByText('다'));
+    await user.click(within(await sitesDialog()).getByRole('button', { name: '삭제' }));
+    await user.click(within(await confirmDialog()).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(savedNames().at(-1)).toEqual(['가']));
+    expect(await selectedName()).toBe('가');
+  });
+
   it('reconnects saved agent sites while restoring remote tabs at startup', async () => {
     const site = { id: 'site-agent', name: '에이전트', host: 'agent.example.com', port: 22, user: 'boksl', authMethod: 'agent' as const, savedSecret: false };
     const remotePath = 'sftp://boksl@agent.example.com/srv';

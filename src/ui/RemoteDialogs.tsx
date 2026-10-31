@@ -147,7 +147,18 @@ export function RemoteAuthPromptDialog({ language, prompts, error, pending, onSu
   );
 }
 
-// 저장된 사이트 목록: 연결·추가·편집·복제·삭제(FR-34.3). 위·아래 키로 선택, Enter로 연결
+// 사이트 한 항목: 이름(첫 줄)과 주소·인증 방식(둘째 줄). 사이트 목록과 삭제 확인 창에서 같이 사용
+function RemoteSiteSummary({ language, site }: { language: SupportedLanguage; site: RemoteSite }) {
+  return (
+    <>
+      {/* 사이 공백: 화면 배치(그리드)에는 영향 없이 읽기 프로그램이 이름과 주소를 붙여 읽지 않게 함 */}
+      <strong>{site.name}</strong>{' '}
+      <span className="remote-site-detail">{remoteAddressOf(site.user, site.host, site.port)} · {authLabel(language, site.authMethod)}</span>
+    </>
+  );
+}
+
+// 저장된 사이트 목록: 연결·추가·편집·복제·삭제(FR-34.3). 위·아래 키로 선택, Enter로 연결, Delete·Backspace로 삭제 확인
 export function RemoteSitesDialog({ language, sites, selectedId, onSelect, onConnect, onNew, onEdit, onDuplicate, onDelete, onForgetSecret, onImport, onClose }: {
   language: SupportedLanguage;
   sites: readonly RemoteSite[];
@@ -163,20 +174,23 @@ export function RemoteSitesDialog({ language, sites, selectedId, onSelect, onCon
   onClose(): void;
 }) {
   const text = REMOTE_CONNECT_TEXT[language];
-  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const newRef = useRef<HTMLButtonElement>(null);
   const selected = sites.find((site) => site.id === selectedId) ?? null;
   const move = (step: number) => {
     if (!sites.length) return;
     const index = Math.max(0, sites.findIndex((site) => site.id === selectedId));
-    const next = sites[Math.min(sites.length - 1, Math.max(0, index + step))];
-    setConfirmingDelete(null);
-    onSelect(next.id);
+    onSelect(sites[Math.min(sites.length - 1, Math.max(0, index + step))].id);
   };
+  // 고른 사이트를 목록 안에 보이게 유지: 키 이동 때와 창이 열릴 때(삭제 확인·편집 창에서 돌아온 경우 포함).
+  // 처음 그릴 때는 포털에 내용이 아직 없어 열림 시점(onOpenAutoFocus)에 한 번 더 맞춤
+  const showSelected = () => {
+    if (selectedId) document.getElementById(`remote-site-${selectedId}`)?.scrollIntoView?.({ block: 'nearest' });
+  };
+  useEffect(() => showSelected(), [selectedId]);
   return (
     <CommanderOverlayDialog owner="remote-sites" title={text.sitesTitle} ariaLabel={text.sitesTitle} onClose={onClose}
-      className="remote-sites-dialog" onOpenAutoFocus={(event) => { event.preventDefault(); (sites.length ? listRef.current : newRef.current)?.focus(); }}>
+      className="remote-sites-dialog" onOpenAutoFocus={(event) => { event.preventDefault(); (sites.length ? listRef.current : newRef.current)?.focus(); showSelected(); }}>
       {sites.length ? (
         <ul ref={listRef} className="remote-site-list" role="listbox" aria-label={text.sitesTitle} tabIndex={0}
           aria-activedescendant={selected ? `remote-site-${selected.id}` : undefined}
@@ -184,27 +198,49 @@ export function RemoteSitesDialog({ language, sites, selectedId, onSelect, onCon
             if (event.key === 'ArrowDown') { event.preventDefault(); move(1); }
             else if (event.key === 'ArrowUp') { event.preventDefault(); move(-1); }
             else if (event.key === 'Enter' && selected) { event.preventDefault(); onConnect(selected); }
+            else if ((event.key === 'Delete' || event.key === 'Backspace') && selected) { event.preventDefault(); onDelete(selected); }
           }}>
           {sites.map((site) => (
             <li key={site.id} id={`remote-site-${site.id}`} role="option" aria-selected={site.id === selectedId}
               className={site.id === selectedId ? 'is-selected' : undefined}
-              onClick={() => { setConfirmingDelete(null); onSelect(site.id); }} onDoubleClick={() => onConnect(site)}>
-              <strong>{site.name}</strong> <span>{remoteAddressOf(site.user, site.host, site.port)}</span> <small>{authLabel(language, site.authMethod)}</small>
+              onClick={() => onSelect(site.id)} onDoubleClick={() => onConnect(site)}>
+              <RemoteSiteSummary language={language} site={site} />
             </li>
           ))}
         </ul>
       ) : <p>{text.noSites}</p>}
-      <div className="filter-actions remote-site-actions">
+      {/* 버튼은 역할별 두 줄: 목록 아래 사이트 관리, 맨 아래 가져오기(왼쪽)와 창 버튼(오른쪽) */}
+      <div className="filter-actions remote-site-tools">
         <button ref={newRef} type="button" onClick={onNew}>{text.newSite}</button>
         <button type="button" disabled={!selected} onClick={() => selected && onEdit(selected)}>{text.edit}</button>
         <button type="button" disabled={!selected} onClick={() => selected && onDuplicate(selected)}>{text.duplicate}</button>
-        {selected && confirmingDelete === selected.id
-          ? <button type="button" className="danger" onClick={() => { setConfirmingDelete(null); onDelete(selected); }}>{text.deleteConfirm}</button>
-          : <button type="button" disabled={!selected} onClick={() => selected && setConfirmingDelete(selected.id)}>{text.delete}</button>}
+        <button type="button" disabled={!selected} onClick={() => selected && onDelete(selected)}>{text.delete}</button>
         <button type="button" disabled={!selected?.savedSecret} onClick={() => selected && onForgetSecret(selected)}>{text.forgetSecret}</button>
-        <button type="button" onClick={onImport}>{text.importSshConfig}</button>
+      </div>
+      <div className="filter-actions remote-site-footer">
+        <button type="button" className="remote-site-import" onClick={onImport}>{text.importSshConfig}</button>
         <button type="button" onClick={onClose}>{text.close}</button>
         <button type="button" className="primary" disabled={!selected} onClick={() => selected && onConnect(selected)}>{text.connect}</button>
+      </div>
+    </CommanderOverlayDialog>
+  );
+}
+
+// 사이트 삭제 확인(FR-34.3, FR-35.6): 지울 사이트와 함께 지워지는 저장된 비밀값 안내. 기본 포커스는 취소, Esc는 목록으로 복귀
+export function RemoteSiteDeleteDialog({ language, site, onConfirm, onCancel }: {
+  language: SupportedLanguage; site: RemoteSite; onConfirm(): void; onCancel(): void;
+}) {
+  const text = REMOTE_CONNECT_TEXT[language];
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  return (
+    <CommanderOverlayDialog owner="remote-site-delete" title={text.deleteSiteTitle} ariaLabel={text.deleteSiteTitle} onClose={onCancel}
+      className="remote-site-delete-dialog" onOpenAutoFocus={(event) => { event.preventDefault(); cancelRef.current?.focus(); }}>
+      <p>{text.deleteSiteIntro}</p>
+      <div className="remote-site-delete-target"><RemoteSiteSummary language={language} site={site} /></div>
+      {site.savedSecret ? <p className="remote-site-delete-note">{text.deleteSiteSecretNote}</p> : null}
+      <div className="filter-actions">
+        <button ref={cancelRef} type="button" onClick={onCancel}>{text.cancel}</button>
+        <button type="button" className="danger" onClick={onConfirm}>{text.delete}</button>
       </div>
     </CommanderOverlayDialog>
   );
