@@ -615,6 +615,8 @@ export const COMMANDER_UI_TEXT = {
     loadingDirectory: '디렉터리 읽는 중...',
     errorPrefix: '오류',
     activePanelStatus: '활성 패널 상태',
+    activePanelLeft: '왼쪽 패널',
+    activePanelRight: '오른쪽 패널',
     navigationControls: '탐색 컨트롤',
     back: '뒤로',
     forward: '앞으로',
@@ -651,6 +653,8 @@ export const COMMANDER_UI_TEXT = {
     loadingDirectory: 'Loading directory...',
     errorPrefix: 'Error',
     activePanelStatus: 'active panel status',
+    activePanelLeft: 'Left panel',
+    activePanelRight: 'Right panel',
     navigationControls: 'navigation controls',
     back: 'Back',
     forward: 'Forward',
@@ -953,12 +957,12 @@ export const HOTKEY_STRIP_TEXT = {
   ko: {
     hiddenShortcuts: (count: number) => `${count}개 단축키가 도움말에 더 있습니다.`,
     allVisible: '주요 단축키가 모두 표시됩니다.',
-    hiddenShortcutLabel: (count: number) => `${count}개 숨겨진 단축키`,
+    hiddenShortcutLabel: (count: number) => `숨겨진 단축키 ${count}개 · 단축키 도움말 열기`,
   },
   en: {
     hiddenShortcuts: (count: number) => `${count} more shortcuts available in Help`,
     allVisible: 'All priority shortcuts visible',
-    hiddenShortcutLabel: (count: number) => `${count} hidden shortcuts`,
+    hiddenShortcutLabel: (count: number) => `${count} hidden shortcuts · open keyboard help`,
   },
 } as const;
 
@@ -1030,8 +1034,9 @@ export const OVERLAY_TEXT = {
     bookmarkName: '북마크 이름',
     save: '저장',
     noSearchResults: '검색 결과가 없습니다.',
-    aboutLine1: '파일 정리가 한결 가벼워지는 두 칸짜리 파일 관리자예요.',
-    aboutLine2: '키보드로 빠르게, 마우스로 편하게 파일을 찾고 옮겨보세요.',
+    aboutDialogLabel: '복슬Dir 정보',
+    aboutLine1: '파일 정리가 한결 가벼워지는 두 패널 파일 관리자입니다.',
+    aboutLine2: '키보드로 빠르게, 마우스로 편하게 파일을 찾고 옮길 수 있습니다.',
     aboutMascotAlt: '복슬Dir 강아지 마스코트',
     aboutBuildDate: '빌드 날짜',
     emptyList: '표시할 항목이 없습니다.',
@@ -1070,6 +1075,7 @@ export const OVERLAY_TEXT = {
     bookmarkName: 'Bookmark name',
     save: 'Save',
     noSearchResults: 'No results.',
+    aboutDialogLabel: 'About BokslDir',
     aboutLine1: 'A friendly two-panel space for finding and organizing your files.',
     aboutLine2: 'Move quickly with the keyboard or use your mouse to work your way.',
     aboutMascotAlt: '복슬Dir dog mascot',
@@ -1331,10 +1337,14 @@ export const formatItemCount = (language: SupportedLanguage, count: number) =>
 
 export const OPERATION_CONFIRMATION_TEXT = {
   ko: {
-    phraseInstruction: (phrase: string) => `계속하려면 “${phrase}”를 입력하세요.`,
+    phraseInstruction: (phrase: string) => `계속하려면 다음 문구를 그대로 입력하세요: “${phrase}”`,
+    deletePhrase: (count: number) => `삭제 ${count}`,
+    defaultArchiveBase: '선택 항목',
   },
   en: {
     phraseInstruction: (phrase: string) => `Type “${phrase}” to continue.`,
+    deletePhrase: (count: number) => `DELETE ${count}`,
+    defaultArchiveBase: 'Selection',
   },
 } as const;
 

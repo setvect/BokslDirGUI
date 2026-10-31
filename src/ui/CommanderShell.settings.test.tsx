@@ -353,7 +353,7 @@ describe('CommanderShell settings', () => {
     // 정보 창 제목은 앱 이름과 package.json 버전(버전을 올려도 시험 수정 불필요)
     const aboutDialog = await screen.findByRole('dialog', { name: `복슬Dir ${appPackage.version}` });
     expect(within(aboutDialog).getByRole('img', { name: '복슬Dir 강아지 마스코트' })).toBeTruthy();
-    expect(within(aboutDialog).getByText('파일 정리가 한결 가벼워지는 두 칸짜리 파일 관리자예요.')).toBeTruthy();
+    expect(within(aboutDialog).getByText('파일 정리가 한결 가벼워지는 두 패널 파일 관리자입니다.')).toBeTruthy();
     expect(within(aboutDialog).queryByText(/^목표:/)).toBeNull();
   });
 

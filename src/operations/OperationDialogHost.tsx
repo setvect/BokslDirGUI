@@ -224,7 +224,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                     ))}
                   </div>
                 ) : null}
-                {lastError && !summary ? (
+                {lastError && !summary && !(dialog.validationShown && lastError.messageKey === dialog.validationErrorKey) ? (
                   <p className="operation-error">{formatOperationError(lastError, language)}</p>
                 ) : null}
                 <div className="operation-actions" onKeyDown={handleDialogButtonGroupKeyDown}>

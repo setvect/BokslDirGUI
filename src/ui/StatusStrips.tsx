@@ -13,7 +13,6 @@ import {
 } from '../i18n-resources';
 import { formatSize } from './format';
 import { hotkeyStripActionsForWidth } from './hotkeyStripLayout';
-import { panelIdLabel } from './panelPresentation';
 import { useElementWidth } from './useElementWidth';
 
 export function BottomStatusStrip({
@@ -40,13 +39,18 @@ export function BottomStatusStrip({
         </span>
       ) : null}
       {filter ? <span className="status-filter">{labels.filter}: {filter}</span> : null}
-      <span>{panelIdLabel(activePanel, language)}</span>
+      <span className="status-panel">{activePanel === 'left' ? labels.activePanelLeft : labels.activePanelRight}</span>
       {message ? <span className="status-message" aria-live="polite">{message}</span> : null}
     </footer>
   );
 }
 
-export function HotkeyStrip({ scale, language }: { scale: number; language: Settings['language'] }) {
+export function HotkeyStrip({ scale, language, onShowAllShortcuts }: {
+  scale: number;
+  language: Settings['language'];
+  /** "+N"을 누르면 숨겨진 단축키를 볼 수 있게 단축키 도움말 열기 */
+  onShowAllShortcuts?: () => void;
+}) {
   const stripRef = useRef<HTMLElement>(null);
   const stripWidth = useElementWidth(stripRef, 960);
   const visibleActions = useMemo(
@@ -69,7 +73,12 @@ export function HotkeyStrip({ scale, language }: { scale: number; language: Sett
           </span>
         );
       })}
-      {hiddenCount > 0 ? <span className="hotkey hotkey-more" aria-label={HOTKEY_STRIP_TEXT[language].hiddenShortcutLabel(hiddenCount)}>+{hiddenCount}</span> : null}
+      {hiddenCount > 0 ? (
+        <button type="button" className="hotkey hotkey-more" tabIndex={-1} onClick={onShowAllShortcuts}
+          title={HOTKEY_STRIP_TEXT[language].hiddenShortcuts(hiddenCount)} aria-label={HOTKEY_STRIP_TEXT[language].hiddenShortcutLabel(hiddenCount)}>
+          +{hiddenCount}
+        </button>
+      ) : null}
     </footer>
   );
 }

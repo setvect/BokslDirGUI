@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { hotkeyLabelForAction, hotkeyStripActionsFromRegistry, shortcutLabelForAction } from '../actions/registry';
 import { SAMPLE_LISTINGS } from './commanderFixture';
 import { hotkeyStripActionsForWidth } from './hotkeyStripLayout';
 import { columnLayoutForPanelWidth, fileColorGroup, pageMovementForViewport } from './panelPresentation';
@@ -23,6 +24,21 @@ it('shows more hotkey hints as horizontal space grows', () => {
   expect(wide).toContain('filter.start');
   expect(wide).toContain('nav.refresh');
   expect(zoomed.length).toBeLessThan(wide.length);
+});
+
+it('keeps the hidden-count button inside the strip for Korean hints', () => {
+  // 실제 렌더링 폭 모델(15px 고정폭 글꼴 실측: 영문 약 9.03px, 한글 약 15px, 항목 좌우 여백 22px)
+  const rendered = (text: string) =>
+    Array.from(text).reduce((width, char) => width + (/[\uac00-\ud7a3]/u.test(char) ? 15 : 9.03), 22);
+  for (const stripWidth of [960, 1280, 1600]) {
+    const visible = hotkeyStripActionsForWidth(stripWidth, 1, undefined, 'ko');
+    const hidden = hotkeyStripActionsFromRegistry().length - visible.length;
+    const used = visible.reduce(
+      (total, action) => total + rendered(`${shortcutLabelForAction(action)}:${hotkeyLabelForAction(action, 'ko')}`), 0,
+    ) + (hidden > 0 ? rendered(`+${hidden}`) : 0);
+    expect(hidden).toBeGreaterThan(0);
+    expect(used).toBeLessThanOrEqual(stripWidth - 24);
+  }
 });
 
 it('handles the maximum archive listing size without spreading entries into function arguments', () => {

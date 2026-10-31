@@ -1,6 +1,7 @@
 import { parseShellCommandInput } from '../actions/commandInput';
 import { archiveFileSuffix } from '../domain/archiveFormats';
 import { DIALOG_DEFINITIONS } from './dialogDefinitions';
+import { OPERATION_CONFIRMATION_TEXT } from '../i18n-resources';
 import { ACTION_BY_ID, type ActionId } from '../actions/registry';
 import type { OperationKind } from '../domain/types';
 import { DialogExecutionMode, DialogKind, LongRunningDialogKind, OpenDialogRequest, OperationDialogDraft } from './operationTypes';
@@ -33,6 +34,7 @@ export const buildDialogDraft = (dialogKind: DialogKind, request: OpenDialogRequ
     secretValue: '',
     requiredConfirmationPhrase,
     validationErrorKey: validateDialogInput(dialogKind, inputValue, requiredConfirmationPhrase),
+    validationShown: false,
     atomicPending: false,
     operationPending: false,
     atomicExecutor: request.atomicExecutor ?? null,
@@ -78,7 +80,7 @@ const defaultArchiveCreateName = (request: OpenDialogRequest) => {
   const baseName = request.sources.length === 1
     ? request.sources[0]?.name
     : basenameOfPath(request.workingDir);
-  const base = (baseName || '선택 항목').replace(/[\\/]/g, '_');
+  const base = (baseName || OPERATION_CONFIRMATION_TEXT[request.language ?? 'ko'].defaultArchiveBase).replace(/[\\/]/g, '_');
   const extension = '.zip';
   const candidate = `${base}${extension}`;
   const existingNames = new Set((request.targetEntries ?? [])
@@ -105,11 +107,13 @@ const requiredConfirmationPhraseForDialog = (dialogKind: DialogKind, request: Op
   if (dialogKind !== 'deletePermanent') {
     return null;
   }
-  if (request.sources.length === 1 && request.sources[0]?.name) {
-    return request.sources[0].name;
-  }
-  return `DELETE ${request.sources.length}`;
+  // 항목 수가 든 짧은 문구(한국어 UI는 한/영 전환 없이 입력): 파일 이름 전체를 다시 치게 하지 않음
+  return OPERATION_CONFIRMATION_TEXT[request.language ?? 'ko'].deletePhrase(request.sources.length);
 };
+
+/** 입력하는 동안 오류를 바로 보일지: 비어 있지 않은 이름·명령만(확인 문구는 확인을 시도한 뒤에만) */
+export const showsValidationWhileTyping = (dialogKind: DialogKind, value: string) =>
+  dialogKind !== 'deletePermanent' && value.trim() !== '';
 
 export const validateDialogInput = (dialogKind: DialogKind, value: string, requiredConfirmationPhrase: string | null) => {
   const trimmed = value.trim();

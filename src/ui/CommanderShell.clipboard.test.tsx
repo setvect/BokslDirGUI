@@ -12,7 +12,7 @@ import './testing/commanderTestSetup';
 import { renderCommander } from './testing/commanderTestSupport';
 
 const selectPathText = (container: HTMLElement, panelId: 'left' | 'right', reverse = false) => {
-  const pathText = container.querySelector(`[data-panel-id="${panelId}"] .path-input`)?.firstChild;
+  const pathText = container.querySelector(`[data-panel-id="${panelId}"] .path-input-text`)?.firstChild;
   const selection = window.getSelection();
   if (!pathText || !selection) throw new Error('path selection fixture is required');
   const start = 2;

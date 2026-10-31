@@ -39,7 +39,7 @@ describe('CommanderShell rendering', () => {
     const panel = container.querySelector<HTMLElement>('.file-panel.is-active');
     const path = panel?.querySelector<HTMLElement>('.path-input');
     const table = panel?.querySelector<HTMLElement>('.file-table');
-    const pathText = path?.lastChild;
+    const pathText = path?.querySelector('.path-input-text')?.lastChild;
     const selection = window.getSelection();
     if (!panel || !path || !table || !pathText || !selection) throw new Error('path selection fixture is required');
 
@@ -69,7 +69,7 @@ describe('CommanderShell rendering', () => {
   it('stops a backward path selection at the beginning of the path', () => {
     const { container } = renderCommander();
     const panel = container.querySelector<HTMLElement>('.file-panel.is-active');
-    const pathText = panel?.querySelector('.path-input')?.firstChild;
+    const pathText = panel?.querySelector('.path-input-text')?.firstChild;
     const headerText = panel?.querySelector('.path-controls > button')?.firstChild;
     const selection = window.getSelection();
     if (!pathText || !headerText || !selection) throw new Error('path selection fixture is required');

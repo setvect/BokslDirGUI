@@ -298,7 +298,12 @@ describe('OperationDialogHost', () => {
     expect(screen.queryByText(/실제 파일 변경은 아직 연결하지 않았습니다/)).toBeNull();
     const input = screen.getByLabelText('New folder name');
     await waitFor(() => expect(document.activeElement).toBe(input));
+    // 입력 전에는 빈 칸 오류를 보이지 않고 확인 버튼만 막음
+    expect(screen.queryByText('The name is invalid.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Create Folder' })).toHaveProperty('disabled', true);
+    await user.type(input, 'a/b');
     expect(screen.getByText('The name is invalid.')).toBeTruthy();
+    await user.clear(input);
     await user.type(input, 'New Folder');
 
     expect(screen.queryByText('The name is invalid.')).toBeNull();

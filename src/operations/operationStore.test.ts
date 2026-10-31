@@ -903,16 +903,39 @@ describe('operation store', () => {
       longRunningExecutor,
     });
 
+    expect(useOperationStore.getState().dialog?.validationShown).toBe(false);
     await useOperationStore.getState().confirmDialog();
     expect(longRunningExecutor).not.toHaveBeenCalled();
     expect(useOperationStore.getState().lastError?.messageKey).toBe('errors.confirmationRequired');
+    // 확인을 시도한 뒤부터 입력란 오류 표시
+    expect(useOperationStore.getState().dialog?.validationShown).toBe(true);
 
-    expect(useOperationStore.getState().dialog?.requiredConfirmationPhrase).toBe('source.txt');
+    expect(useOperationStore.getState().dialog?.requiredConfirmationPhrase).toBe('삭제 1');
 
-    useOperationStore.getState().updateDialogInput('source.txt');
+    useOperationStore.getState().updateDialogInput('삭제 1');
     await useOperationStore.getState().confirmDialog();
 
     expect(longRunningExecutor).toHaveBeenCalledOnce();
+  });
+
+  it('uses an English delete confirmation phrase for the English interface', () => {
+    const action = ACTION_BY_ID.get('file.deletePermanent');
+    if (!action) {
+      throw new Error('file.deletePermanent action is required');
+    }
+    useOperationStore.getState().openDialog({
+      action,
+      panelId: 'left',
+      sources: [sampleEntry, { ...sampleEntry, path: '/tmp/other.txt', name: 'other.txt' }],
+      targetDir: '/tmp/target',
+      workingDir: '/tmp',
+      language: 'en',
+      longRunningExecutor: vi.fn(),
+    });
+    expect(useOperationStore.getState().dialog?.requiredConfirmationPhrase).toBe('DELETE 2');
+    // 확인 문구는 입력하는 동안 오류를 보이지 않음(확인을 시도한 뒤에만)
+    useOperationStore.getState().updateDialogInput('DEL');
+    expect(useOperationStore.getState().dialog?.validationShown).toBe(false);
   });
 
   it('does not downgrade a fast terminal summary when OperationStarted arrives later', () => {

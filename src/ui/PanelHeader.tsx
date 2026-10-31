@@ -52,7 +52,8 @@ export function PanelHeader({
       <button type="button" aria-label={labels.back} disabled={!panelCanGoBack(panel)} onClick={() => runNavigation(onNavigateBack)}>◀</button>
       <button type="button" aria-label={labels.forward} disabled={!panelCanGoForward(panel)} onClick={() => runNavigation(onNavigateForward)}>▶</button>
       <button type="button" aria-label={labels.up} onClick={() => runNavigation(onNavigateUp)}>↑</button>
-      <span className="path-input" title={pathLabel}>{pathLabel}</span>
+      {/* 긴 경로는 앞쪽을 줄여 현재 폴더 이름(끝)이 보이게 함: 바깥은 오른쪽 기준, 안쪽 글자는 왼쪽→오른쪽으로 격리 */}
+      <span className="path-input" title={pathLabel}><bdi className="path-input-text">{pathLabel}</bdi></span>
       <button type="button" aria-label={labels.gotoPath} onClick={onGotoPath}>↗</button>
       <div className="panel-header-status">
         {panel.filter ? (

@@ -1,4 +1,5 @@
 import type { AppAction, DangerLevel } from '../actions/registry';
+import type { SupportedLanguage } from '../i18n-resources';
 import type {
   AppError,
   ConflictDecision,
@@ -29,6 +30,8 @@ export interface OperationDialogDraft {
   secretValue: string;
   requiredConfirmationPhrase: string | null;
   validationErrorKey: string | null;
+  /** 입력 오류를 보일지: 비어 있지 않은 입력의 금지 문자, 또는 확인을 시도한 뒤(입력 전에는 숨김) */
+  validationShown: boolean;
   atomicPending: boolean;
   operationPending: boolean;
   atomicExecutor: AtomicCommandExecutor | null;
@@ -67,6 +70,8 @@ export interface OpenDialogRequest {
   targetDir: string | null;
   targetEntries?: FileEntry[];
   workingDir: string;
+  /** 영구 삭제 확인 문구·기본 압축 파일 이름의 언어(없으면 한국어) */
+  language?: SupportedLanguage;
   atomicExecutor?: AtomicCommandExecutor;
   longRunningExecutor?: LongRunningOperationExecutor;
   cancelExecutor?: LongRunningCancelExecutor;

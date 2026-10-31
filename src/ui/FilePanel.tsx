@@ -255,7 +255,9 @@ export function FilePanel({
       const pathRange = document.createRange();
       pathRange.selectNodeContents(pathElement);
       const focusBeforePath = pathRange.comparePoint(selection.focusNode, selection.focusOffset) < 0;
-      const boundaryText = focusBeforePath ? pathElement.firstChild : pathElement.lastChild;
+      // 경로 글자는 안쪽 격리 요소(.path-input-text)의 텍스트 노드
+      const pathText = pathElement.querySelector('.path-input-text') ?? pathElement;
+      const boundaryText = focusBeforePath ? pathText.firstChild : pathText.lastChild;
       if (!boundaryText || boundaryText.nodeType !== Node.TEXT_NODE) return;
 
       selection.setBaseAndExtent(

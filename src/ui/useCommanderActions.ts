@@ -631,6 +631,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
           ? panelListing.entries
           : undefined,
         workingDir: panelListing.path,
+        language: dependencies.settings.language,
         atomicExecutor: atomicExecutorForAction(actionId, dependencies.mutationClient),
         longRunningExecutor: archiveCopyPlan
           ? archiveCopyExecutorForPlan(archiveCopyPlan, dependencies.operationClient)

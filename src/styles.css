@@ -439,6 +439,14 @@ button {
   color: var(--path-text);
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 넘치는 경로는 앞쪽에 …: 현재 폴더 이름(경로 끝)을 보이게 함 */
+  direction: rtl;
+  text-align: left;
+}
+
+.path-input-text {
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 @container (max-width: 26em) {
@@ -712,6 +720,9 @@ button {
   color: var(--status-message-text);
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 포커스 항목·패널 정보와 작업 결과 안내를 구분 */
+  border-left: 1px solid;
+  padding-left: calc(12px * var(--commander-scale));
 }
 
 .status-focused-entry {
@@ -752,7 +763,16 @@ button {
 
 .hotkey-more {
   flex: 0 0 auto;
+  border: 0;
+  background: transparent;
   color: var(--hotkey-more-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.hotkey-more:hover {
+  color: var(--cyan);
+  text-decoration: underline;
 }
 
 .hotkey kbd,
@@ -1523,12 +1543,17 @@ button {
   color: inherit;
 }
 
+/* 긴 위치·북마크 이름은 경로 열을 덮지 않고 말줄임(전체 이름은 항목 툴팁) */
+.navigation-list-item .navigation-list-label,
 .navigation-list-item code {
   min-width: 0;
   overflow: hidden;
-  color: var(--cyan);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.navigation-list-item code {
+  color: var(--cyan);
 }
 
 .navigation-list-item small,
@@ -1537,7 +1562,7 @@ button {
 }
 
 .about-dialog {
-  width: min(720px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
   padding-block: 16px;
 }
 
@@ -1572,6 +1597,13 @@ button {
   margin: 0;
   line-height: 1.5;
   color: var(--about-text);
+  /* 한글 문장은 낱말 중간이 아닌 띄어쓰기에서 줄바꿈 */
+  word-break: keep-all;
+}
+
+/* 입력 오류 줄: 오류가 없어도 자리를 차지해 대화상자 높이가 바뀌지 않게 함 */
+.operation-field-message {
+  min-height: 1.5em;
 }
 
 .operation-source-list {
@@ -2062,6 +2094,19 @@ body[data-theme="mdir"] {
   background: transparent;
   color: inherit;
   text-decoration: underline;
+}
+
+/* 비활성 패널의 커서는 배경 없이 테두리만: 두 패널 커서가 같은 막대로 보여 활성 패널을 구분하기 어렵던 문제(UX 점검 2026-10-31).
+   커서 색 변수만 덮어써 Mdir의 파일 종류 색도 그대로 유지 */
+.commander-shell .file-panel:not(.is-active) .file-row.is-focused {
+  --row-focused-bg: transparent;
+  --row-focused-text: var(--entry-color, var(--row-text));
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.commander-shell .file-panel:not(.is-active) .file-row.is-focused.is-selected {
+  --row-focused-bg: var(--row-selected-bg);
+  --row-focused-text: var(--row-selected-text);
 }
 
 .commander-shell[data-theme="light"],

@@ -47,7 +47,7 @@ describe('CommanderShell remote panels', () => {
     await user.keyboard('d');
     expect(await screen.findByRole('dialog', { name: '영구 삭제' })).toBeTruthy();
     expect(screen.queryByRole('dialog', { name: '휴지통으로 이동' })).toBeNull();
-    await user.type(screen.getByLabelText('영구 삭제 확인 문구'), 'remote.txt');
+    await user.type(screen.getByLabelText('영구 삭제 확인 문구'), '삭제 1');
     await user.click(screen.getByRole('button', { name: '영구 삭제' }));
 
     await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({

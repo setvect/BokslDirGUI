@@ -497,7 +497,7 @@ export function CommanderShell({
         filter={activePanelState.filter}
         sizeFormat={settings.sizeFormat}
       />
-      <HotkeyStrip scale={viewMetrics.scale} language={settings.language} />
+      <HotkeyStrip scale={viewMetrics.scale} language={settings.language} onShowAllShortcuts={() => handleAction({ actionId: 'help.shortcuts' })} />
       {filterPromptPanel ? (
         <FilterPrompt
           language={settings.language}

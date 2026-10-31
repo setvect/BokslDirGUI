@@ -33,9 +33,12 @@ export function OperationInputs({ dialog, dialogInputLabel, dialogInputRef, lang
             }
           }}
         />
-        {dialog.validationErrorKey ? (
-          <span className="operation-error" role="alert">{translateUserMessageKey(language, dialog.validationErrorKey)}</span>
-        ) : null}
+        {/* 오류 줄 자리를 늘 확보해 오류가 나타나거나 사라져도 아래 버튼이 움직이지 않게 함 */}
+        <span className="operation-field-message">
+          {dialog.validationShown && dialog.validationErrorKey ? (
+            <span className="operation-error" role="alert">{translateUserMessageKey(language, dialog.validationErrorKey)}</span>
+          ) : null}
+        </span>
       </label>
     ) : null}
     {dialog.dialogKind === 'archiveCreate' || dialog.dialogKind === 'archiveExtract' ? (

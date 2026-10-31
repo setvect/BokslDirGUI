@@ -194,6 +194,20 @@ describe('action registry', () => {
     }
   });
 
+  it('keeps a remote connection while a file operation is still running', () => {
+    const disconnect = ACTION_BY_ID.get('remote.disconnect')!;
+    const context: ActionContext = {
+      activePanel: 'left', focusedEntryKind: null, selectedCount: 0,
+      hasConcreteFocus: false, effectiveTargetCount: 0,
+      hasOppositePanel: true, shellCommandEnabled: false, operationBusy: false,
+      backendAvailable: true, activePathIsArchive: false, activePathIsRemote: true, activeRemoteConnected: true,
+    };
+    expect(isActionAvailable(disconnect, context)).toBe(true);
+    // 진행 중인 복사·이동이 이 연결을 쓰고 있을 수 있어 작업이 끝날 때까지 끊기 금지
+    expect(isActionAvailable(disconnect, { ...context, operationBusy: true })).toBe(false);
+    expect(isActionAvailable(disconnect, { ...context, activeRemoteConnected: false })).toBe(false);
+  });
+
   it('lists blank-area context actions only through the blank context scope', () => {
     expect(ACTIONS.filter((action) => action.contextScopes?.includes('blank')).map((action) => action.id)).toEqual([
       'nav.refresh', 'nav.gotoPath', 'file.clipboardPaste', 'file.clipboardMovePaste', 'file.mkdir',

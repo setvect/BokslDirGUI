@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ActionId } from '../actions/registry';
-import { buildDialogDraft, dialogKindForAction, isLongRunningDialog, operationKindForDialog, validateDialogInput } from './dialogDraft';
+import { buildDialogDraft, dialogKindForAction, isLongRunningDialog, operationKindForDialog, showsValidationWhileTyping, validateDialogInput } from './dialogDraft';
 import { createOperationEventActions } from './operationEvents';
 import { appError, isOperationInFlight } from './operationLifecycle';
 import { executeLongRunningDialog } from './operationRuntime';
@@ -108,6 +108,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
         ...dialog,
         inputValue: value,
         validationErrorKey: validateDialogInput(dialog.dialogKind, value, dialog.requiredConfirmationPhrase),
+        validationShown: dialog.validationShown || showsValidationWhileTyping(dialog.dialogKind, value),
       },
       lastError: null,
     });
@@ -130,7 +131,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue, dialog.requiredConfirmationPhrase);
       if (validationErrorKey) {
         set((current) => ({
-          dialog: { ...dialog, validationErrorKey },
+          dialog: { ...dialog, validationErrorKey, validationShown: true },
           lastError: appError('invalid_name', validationErrorKey, dialog.targetDir, true),
           summary: isOperationInFlight(current) ? current.summary : null,
           progress: isOperationInFlight(current) ? current.progress : null,
@@ -211,7 +212,7 @@ export const useOperationStore = create<OperationStoreState>((set, get) => ({
       const validationErrorKey = validateDialogInput(dialog.dialogKind, dialog.inputValue, dialog.requiredConfirmationPhrase);
       if (validationErrorKey) {
         set({
-          dialog: { ...dialog, validationErrorKey },
+          dialog: { ...dialog, validationErrorKey, validationShown: true },
           lastError: appError('confirmation_required', validationErrorKey, dialog.targetDir, true),
           summary: null,
           progress: null,

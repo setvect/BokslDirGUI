@@ -209,7 +209,7 @@ function HelpSearchResult({
 export function AboutDialog({ language, onClose }: { language: SupportedLanguage; onClose(): void }) {
   const text = OVERLAY_TEXT[language];
   return (
-    <CommanderOverlayDialog owner="about-dialog" title={`${APP_NAME} ${appPackage.version}`} ariaLabel={`${APP_NAME} information`} onClose={onClose} className="about-dialog">
+    <CommanderOverlayDialog owner="about-dialog" title={`${APP_NAME} ${appPackage.version}`} ariaLabel={text.aboutDialogLabel} onClose={onClose} className="about-dialog">
       <div className="filter-form">
         <div className="about-content">
           <img className="about-mascot" src={aboutMascot} alt={text.aboutMascotAlt} />
@@ -269,9 +269,10 @@ export function NavigationListDialog({ language, state, onChoose, onCloseTab, on
                 key={item.id}
                 type="button"
                 className="navigation-list-item"
+                title={`${displayPath(item.label)}\n${displayPath(item.path)}`}
                 onClick={() => onChoose(item)}
               >
-                <span>{displayPath(item.label)}</span>
+                <span className="navigation-list-label">{displayPath(item.label)}</span>
                 <code>{displayPath(item.path)}</code>
                 <small>{NAVIGATION_GROUP_LABELS[language][item.group] ?? item.group}</small>
               </button>

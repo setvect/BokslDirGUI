@@ -387,9 +387,11 @@ describe('CommanderShell operations', () => {
     expect(await screen.findByRole('dialog', { name: '영구 삭제' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '영구 삭제' })).toHaveProperty('disabled', true);
     expect(screen.queryByText(/PERMANENT_DELETE/)).toBeNull();
-    expect(screen.getByText(/계속하려면 “generic-array-6de08afde610f112”를 입력하세요/)).toBeTruthy();
+    // 확인 문구는 파일 이름 대신 항목 수가 든 짧은 한국어 문구, 입력 전에는 오류 없음
+    expect(screen.getByText('계속하려면 다음 문구를 그대로 입력하세요: “삭제 1”')).toBeTruthy();
+    expect(screen.queryByText('표시된 확인 문구를 정확히 입력하세요.')).toBeNull();
 
-    await user.type(screen.getByLabelText('영구 삭제 확인 문구'), 'generic-array-6de08afde610f112');
+    await user.type(screen.getByLabelText('영구 삭제 확인 문구'), '삭제 1');
     await user.click(screen.getByRole('button', { name: '영구 삭제' }));
 
     await waitFor(() => expect(operationClient.startDelete).toHaveBeenCalledWith({
