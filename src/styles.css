@@ -2308,7 +2308,8 @@ html.is-file-dragging * {
 .remote-fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .remote-site-list { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; border: 1px solid var(--line-strong); }
 .remote-site-list li { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; cursor: default; }
-.remote-site-list li.is-selected { background: var(--blue-dim); }
+/* mdir 테마는 `--blue-dim`이 대화상자 배경과 같아 위치 목록 항목처럼 청록 테두리로도 표시 */
+.remote-site-list li.is-selected { background: var(--blue-dim); box-shadow: inset 0 0 0 1px var(--cyan); }
 .remote-site-list:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .remote-site-list small, .remote-site-list span { color: var(--muted); }
 .remote-site-actions { flex-wrap: wrap; }
