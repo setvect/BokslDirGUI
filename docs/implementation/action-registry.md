@@ -132,6 +132,7 @@
 - `ActionContext`는 active panel, focused entry, selected entries, opposite panel path, operation state, settings 포함
 - action enablement는 메뉴/컨텍스트 메뉴/hotkey strip/help에서 같은 selector 사용
 - hotkey strip은 action registry의 우선순위 목록을 사용하되 화면 폭과 확대 배율에 따라 표시 개수를 동적으로 조정
+- 표시 개수 계산: 글자 폭(영문·숫자 약 9px, 한글 약 15px)과 숨긴 개수 "+N" 자리 반영, "+N"은 단축키 도움말(`help.shortcuts`) 열기 버튼
 - 좁은 화면에서는 핵심 조작만 남기고, 넓은 화면에서는 추가 action hint를 더 노출
 - destructive/irreversible action은 command 실행 전 dialog 정책을 수행; 활성화된 셸 명령은 명령 입력 후 추가 확인 없이 실행
 - 압축 가상 디렉터리는 **읽기 전용 패널**
@@ -161,7 +162,13 @@
 - 단축키 도움말은 넓은 창에서 이동·패널·파일·보기 제목을 각 열의 같은 시작선에 맞추고, 남은 범주를 열 높이가 비슷하도록 배치
 - 좁은 창에서는 열 수를 줄이며, 높이가 부족하면 도움말 목록이 스크롤
 - 도움말이 열려 있는 동안 화살표·Page Up/Down·Home/End는 파일 패널 대신 목록 스크롤에 적용
-- 메뉴 구조도 registry에서 생성하거나 registry ID 참조
+- 메뉴 구조: registry의 `menuPath`로 생성, 메뉴별 표시 순서와 묶음은 `MENU_LAYOUT` 한곳에서 정의, 묶음 사이 구분선
+- 액션 정의 순서: 도움말·문서 순서로 유지, 메뉴 배치만 `MENU_LAYOUT`에서 결정
+- "…": 입력·선택 창을 여는 액션(`menuEllipsis`)만 메뉴·우클릭 메뉴에서 이름 뒤에 표시, 이름표·도움말·상태 줄에는 미표시
+- 켜고 끄는 설정 항목: 체크 표시를 이름 왼쪽에 표시
+- 이름 출처: 메뉴는 `menuPath` 마지막 마디, 도움말·기능 검색·상태 줄은 `labelForAction`
+- 하위 메뉴 안에서만 뜻이 통하는 이름(정렬의 "이름" 등): `ACTION_LABELS`에 독립된 이름 정의(예: 이름순 정렬)
+- 완료 문장: `resultLabelForAction` 사용(예: 폴더 만들기 완료), 따로 정하지 않은 동작은 `labelForAction`
 - hardcoded menu handler는 금지
 
 ## 7. 테스트 기준
@@ -170,6 +177,8 @@
 - 모든 context menu item은 scope에 맞는 enablement 보유
 - help dialog의 shortcut 목록은 registry snapshot과 일치
 - irreversible action은 confirm dialog 없이 command를 호출하지 않음
+- 메뉴 경로가 있는 액션은 `MENU_LAYOUT`의 한 묶음에 한 번씩 포함, 메뉴 경로 마디는 모든 언어의 번역 보유
+- 메뉴 항목 이름과 액션 이름 일치, 이름표 자체의 "…" 금지
 
 
 ## 복사·붙여넣기 범위
@@ -196,6 +205,7 @@
 - 속성 `remoteSupport`: `localOnly`는 원격 패널에서 비활성, `remoteOnly`는 원격 패널에서만 활성, 생략 시 양쪽 지원
 - 판정 위치: `isActionAvailable`, 메뉴·컨텍스트 메뉴·단축키 공통
 - 컨텍스트 값: `activePathIsRemote`(활성 패널 경로), `activeRemoteConnected`(공유 상태의 연결된 세션 목록 기준)
+- `remote.disconnect`: 파일 작업이 진행 중이면 비활성(`canInvokeBackend`), 진행 중 전송이 연결 해제로 끊기지 않게 함
 
 | 구분 | 액션 |
 | --- | --- |
@@ -205,4 +215,4 @@
 | 받은 뒤 실행 | `file.quickView`(앞부분만 받기), `external.openDefault`·Enter(임시 폴더로 받은 뒤 열기) |
 | 앱 내부 클립보드 | 복사·잘라내기·붙여넣기, 원격 경로는 OS 파일 클립보드에 기록하지 않음 |
 | `localOnly` | `external.openWith`·`external.reveal`·`external.openCurrentInFileManager`·`external.openCurrentInTerminal`·`external.runShellCommand`·`file.undoTrash`·`archive.*` |
-| 설정 | `settings.remoteLinksPreserve`·`settings.remoteLinksFollow`·`settings.remoteLinksSkip`(설정 > 원격 링크 처리) |
+| 설정 | `settings.remoteLinksPreserve`·`settings.remoteLinksFollow`·`settings.remoteLinksSkip`(설정 > 원격 심볼릭 링크 복사) |

@@ -110,6 +110,10 @@
 - 다이얼로그는 Esc/Enter/focus trap 지원
 - 기본 화면에 persistent sidebar/inspector/large toolbar가 없음
 - bottom status/hotkey strip이 표시
+- 네 테마의 글자·배경 대비: `themeContrast.test.ts`에서 일반 글자 4.5:1·비활성 3:1 확인, 쓰이지 않는 색 토큰 검출
+- 메뉴 배치: `registry.test.ts`에서 `MENU_LAYOUT` 누락·중복, 메뉴 경로 번역, 메뉴 이름과 액션 이름 일치 확인
+- hotkey strip: 한글 이름과 "+N" 버튼이 창 폭 안에 들어가는지 `presentation.test.ts`에서 확인
+- 입력 오류: 입력 전에는 숨기고 오류 줄 자리를 고정해 버튼 위치 유지(`OperationDialogHost.test.tsx`)
 
 ### 3.7 원격(SFTP)
 

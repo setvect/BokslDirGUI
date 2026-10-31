@@ -119,7 +119,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
 | `run_shell_command` | `{ workingDir, command, args?, confirmToken }` | `OperationStarted` | 설정·디렉터리·필수 토큰 검증 후 공통 장기 작업 시작, kind=shellCommand, 결과는 operation_summary.commandResult |
 | `load_settings` | `{}` | `Settings` | schema version 포함 |
-| `save_settings` | `{ patch }` | `Settings` | 원자적 저장 고려 |
+| `save_settings` | `{ patch }` | `Settings` | 원자적 저장 고려, macOS는 저장한 언어가 바뀌면 기본 메뉴 막대를 그 언어로 다시 생성 |
 
 ## 4. Event 목록
 
