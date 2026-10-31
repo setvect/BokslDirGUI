@@ -2,8 +2,6 @@
 import { DEFAULT_SFTP_PORT, parseRemotePath, remoteUrl } from '../domain/remotePath';
 import type { AppError, RemoteAuthMethod, RemoteConnectRequest, RemoteSession, RemoteSite } from '../domain/types';
 
-export const DEFAULT_KEY_PATH = '~/.ssh/id_ed25519';
-
 // 연결 창 입력. 비밀값(암호·키 암호)은 별도 보관하고 여기에 두지 않음
 export interface RemoteConnectDraft {
   siteId: string | null;
@@ -27,13 +25,13 @@ export interface RemoteSecrets {
 }
 
 export const emptyDraft = (): RemoteConnectDraft => ({
-  siteId: null, name: '', host: '', port: DEFAULT_SFTP_PORT, user: '', authMethod: 'password', keyPath: DEFAULT_KEY_PATH, startPath: '', saveSite: false,
+  siteId: null, name: '', host: '', port: DEFAULT_SFTP_PORT, user: '', authMethod: 'password', keyPath: '', startPath: '', saveSite: false,
   saveSecret: false, hasSavedSecret: false,
 });
 
 export const draftFromSite = (site: RemoteSite): RemoteConnectDraft => ({
   siteId: site.id, name: site.name, host: site.host, port: site.port, user: site.user, authMethod: site.authMethod,
-  keyPath: site.keyPath ?? DEFAULT_KEY_PATH, startPath: site.startPath ?? '', saveSite: true,
+  keyPath: site.keyPath ?? '', startPath: site.startPath ?? '', saveSite: true,
   saveSecret: site.savedSecret, hasSavedSecret: site.savedSecret,
 });
 
@@ -45,11 +43,12 @@ export const draftFromUrl = (url: string, sites: readonly RemoteSite[]): RemoteC
   return site ? draftFromSite(site) : { ...emptyDraft(), host: remote.host, port: remote.port, user: remote.user };
 };
 
-export const validateDraft = (draft: RemoteConnectDraft): 'hostRequired' | 'userRequired' | 'portInvalid' | 'keyRequired' | 'nameRequired' | null => {
+export const validateDraft = (draft: RemoteConnectDraft): 'hostRequired' | 'userRequired' | 'portInvalid' | 'publicKeyGiven' | 'nameRequired' | null => {
   if (!draft.host.trim()) return 'hostRequired';
   if (!draft.user) return 'userRequired';
   if (!Number.isInteger(draft.port) || draft.port < 1 || draft.port > 65535) return 'portInvalid';
-  if (draft.authMethod === 'publicKey' && !draft.keyPath.trim()) return 'keyRequired';
+  // 개인 키 경로는 비워도 됨(`~/.ssh` 기본 키 자동 탐색). 공개 키(.pub)를 넣은 흔한 실수만 막음
+  if (draft.authMethod === 'publicKey' && /\.pub$/i.test(draft.keyPath.trim())) return 'publicKeyGiven';
   if (draft.saveSite && !draft.name.trim()) return 'nameRequired';
   return null;
 };
@@ -65,7 +64,10 @@ export const connectRequestOf = (draft: RemoteConnectDraft, secrets: RemoteSecre
   user: draft.user,
   authMethod: draft.authMethod,
   ...(draft.authMethod === 'password' && secrets.password !== undefined ? { password: secrets.password } : {}),
-  ...(draft.authMethod === 'publicKey' ? { keyPath: draft.keyPath.trim(), ...(secrets.passphrase ? { passphrase: secrets.passphrase } : {}) } : {}),
+  ...(draft.authMethod === 'publicKey' ? {
+    ...(draft.keyPath.trim() ? { keyPath: draft.keyPath.trim() } : {}),
+    ...(secrets.passphrase ? { passphrase: secrets.passphrase } : {}),
+  } : {}),
 });
 
 export const siteFromDraft = (draft: RemoteConnectDraft, id: string, savedSecret: boolean): RemoteSite => ({

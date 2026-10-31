@@ -17,11 +17,17 @@ describe('remote connect model', () => {
     expect(validateDraft({ ...emptyDraft(), user: 'u' })).toBe('hostRequired');
     expect(validateDraft({ ...emptyDraft(), host: 'h', user: 'u', port: 70000 })).toBe('portInvalid');
     expect(validateDraft({ ...emptyDraft(), host: 'h', user: 'u', saveSite: true })).toBe('nameRequired');
-    expect(validateDraft({ ...emptyDraft(), host: 'h', user: 'u', authMethod: 'publicKey', keyPath: ' ' })).toBe('keyRequired');
+    // 개인 키 경로는 비워도 됨(기본 키 자동 탐색), 공개 키(.pub)만 막음
+    expect(emptyDraft().keyPath).toBe('');
+    expect(validateDraft({ ...emptyDraft(), host: 'h', user: 'u', authMethod: 'publicKey', keyPath: ' ' })).toBeNull();
+    expect(validateDraft({ ...emptyDraft(), host: 'h', user: 'u', authMethod: 'publicKey', keyPath: '~/.ssh/id_rsa.PUB' })).toBe('publicKeyGiven');
+    expect(validateDraft({ ...emptyDraft(), host: 'h', user: 'u', authMethod: 'password', keyPath: '~/.ssh/id_rsa.pub' })).toBeNull();
     const draft = { ...emptyDraft(), host: ' example.com ', user: 'boksl', port: 2222 };
     expect(connectRequestOf(draft, { password: 'pw', passphrase: 'pp' })).toEqual({ host: 'example.com', port: 2222, user: 'boksl', authMethod: 'password', password: 'pw' });
     expect(connectRequestOf({ ...draft, authMethod: 'publicKey', keyPath: '~/.ssh/id' }, { password: 'pw', passphrase: '' }))
       .toEqual({ host: 'example.com', port: 2222, user: 'boksl', authMethod: 'publicKey', keyPath: '~/.ssh/id' });
+    expect(connectRequestOf({ ...draft, authMethod: 'publicKey', keyPath: '  ' }, { passphrase: 'pp' }))
+      .toEqual({ host: 'example.com', port: 2222, user: 'boksl', authMethod: 'publicKey', passphrase: 'pp' });
     expect(connectRequestOf({ ...draft, authMethod: 'agent' }, { password: 'pw' })).toEqual({ host: 'example.com', port: 2222, user: 'boksl', authMethod: 'agent' });
     const savedSite = { ...draft, siteId: 'site-9', saveSite: true, saveSecret: true };
     expect(connectRequestOf(savedSite, { password: '' })).toEqual({ siteId: 'site-9', saveSecret: true, host: 'example.com', port: 2222, user: 'boksl', authMethod: 'password', password: '' });

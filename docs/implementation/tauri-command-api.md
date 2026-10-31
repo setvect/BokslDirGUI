@@ -298,7 +298,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 | DTO | 필드 |
 | --- | --- |
-| `RemoteConnectRequest` | host, port, user, authMethod(password·publicKey·agent·keyboardInteractive), password?, keyPath?, passphrase?, siteId?, saveSecret? |
+| `RemoteConnectRequest` | host, port, user, authMethod(password·publicKey·agent·keyboardInteractive), password?, keyPath?(publicKey에서 생략·빈 값이면 `~/.ssh`의 `id_rsa`·`id_ecdsa`·`id_ed25519`를 OpenSSH 순서로 시도), passphrase?, siteId?, saveSecret? |
 | `RemoteSession` | sessionId, user, host, port, home, homeUrl, hostKeyAlgorithm, hostKeyFingerprint, secretStored |
 | `RemoteConnectionChanged` | sessionId, state(connected·disconnected·lost), error? |
 | `RemoteSettings` | sites, keepaliveSeconds(5~600), connectTimeoutSeconds(3~120), linkPolicy(preserve·follow·skip) |
@@ -308,5 +308,5 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 - 연결: `remote_host_not_found`·`remote_connection_refused`·`remote_timeout`·`remote_connect_failed`·`remote_sftp_unavailable`
 - 호스트 키: `host_key_unknown`·`host_key_changed`·`host_key_not_pending`
-- 인증: `remote_auth_failed`(상세 allowedMethods)·`remote_auth_prompts`·`remote_auth_challenge_expired`·`remote_key_passphrase_required`·`remote_key_passphrase_invalid`·`remote_key_unreadable`·`remote_agent_unavailable`·`credential_store_failed`
+- 인증: `remote_auth_failed`(상세 allowedMethods)·`remote_auth_prompts`·`remote_auth_challenge_expired`·`remote_key_passphrase_required`·`remote_key_passphrase_invalid`·`remote_key_unreadable`·`remote_key_not_found`(기본 개인 키 없음)·`remote_public_key_given`(개인 키 자리에 공개 키 `.pub`)·`remote_agent_unavailable`·`credential_store_failed`
 - 연결 상태·요청: `remote_not_connected`·`remote_connection_lost`·`remote_failed`(상세 serverMessage)·`unsupported`, 권한·없음은 로컬과 같은 `permission_denied`·`not_found`

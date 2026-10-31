@@ -195,6 +195,82 @@ fn encrypted_private_keys_need_the_right_passphrase() {
 }
 
 #[test]
+fn default_private_keys_follow_the_openssh_order_and_skip_other_files() {
+    let dir = TempDir::new("remote-default-keys");
+    for name in ["id_ed25519", "id_rsa", "id_rsa.pub", "id_ed25519_sk", "id_dsa", "config"] {
+        std::fs::write(dir.path().join(name), "key").unwrap();
+    }
+    // 같은 이름의 폴더는 키 파일이 아님
+    std::fs::create_dir(dir.path().join("id_ecdsa")).unwrap();
+    assert_eq!(connection::identity_files_in(dir.path()), vec![dir.path().join("id_rsa"), dir.path().join("id_ed25519")]);
+    assert!(connection::identity_files_in(&dir.path().join("absent")).is_empty());
+}
+
+#[test]
+fn empty_key_path_tries_default_keys_until_the_server_accepts_one() {
+    let accepted = random_ed25519_key();
+    let server = TestSftpServer::start(TestServerOptions {
+        password: None,
+        authorized_key: Some(PublicKey::from(accepted.public_key().key_data().clone())),
+        ..Default::default()
+    });
+    let dir = TempDir::new("remote-default-key-login");
+    trust(&server, &dir);
+    let write_key = |name: &str, key: &russh::keys::PrivateKey| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, key.to_openssh(ssh_key::LineEnding::LF).unwrap().as_bytes()).unwrap();
+        path
+    };
+    let rejected_path = write_key("id_rsa", &random_ed25519_key());
+    let broken_path = dir.path().join("id_ecdsa");
+    std::fs::write(&broken_path, "not a key").unwrap();
+    let accepted_path = write_key("id_ed25519", &accepted);
+    let encrypted_path = dir.path().join("id_encrypted");
+    let encrypted = accepted.encrypt(&mut TestRng(9), "key-pass").unwrap();
+    std::fs::write(&encrypted_path, encrypted.to_openssh(ssh_key::LineEnding::LF).unwrap().as_bytes()).unwrap();
+    let default_keys = |paths: Vec<std::path::PathBuf>, passphrase: Option<&str>| RemoteCredential::DefaultKeyFiles {
+        paths,
+        passphrase: passphrase.map(str::to_string),
+    };
+
+    // 서버가 거절한 키와 읽지 못하는 키는 건너뛰고 다음 키로 로그인
+    let connected = connect(options(
+        server.port(),
+        default_keys(vec![rejected_path.clone(), broken_path.clone(), accepted_path], None),
+        &dir,
+        None,
+    ))
+    .unwrap();
+    super::block_on(connection::disconnect(&connected.location));
+    let rejected = connect(options(server.port(), default_keys(vec![rejected_path.clone()], None), &dir, None)).unwrap_err();
+    assert_eq!(rejected.code, "remote_auth_failed");
+    // 보낼 키가 없으면 키 암호 필요를 우선 안내, 기본 키가 하나도 없으면 따로 안내
+    let locked = connect(options(server.port(), default_keys(vec![broken_path, encrypted_path.clone()], None), &dir, None)).unwrap_err();
+    assert_eq!(locked.code, "remote_key_passphrase_required");
+    let none = connect(options(server.port(), default_keys(Vec::new(), None), &dir, None)).unwrap_err();
+    assert_eq!((none.code.as_str(), none.message_key.as_str()), ("remote_key_not_found", "errors.remoteKeyNotFound"));
+    let unlocked = connect(options(server.port(), default_keys(vec![rejected_path, encrypted_path], Some("key-pass")), &dir, None)).unwrap();
+    super::block_on(connection::disconnect(&unlocked.location));
+}
+
+#[test]
+fn a_public_key_file_in_the_private_key_field_points_to_its_private_key() {
+    let key = random_ed25519_key();
+    let server = TestSftpServer::start(TestServerOptions {
+        password: None,
+        authorized_key: Some(PublicKey::from(key.public_key().key_data().clone())),
+        ..Default::default()
+    });
+    let dir = TempDir::new("remote-public-key-given");
+    trust(&server, &dir);
+    let public_path = dir.path().join("id_test.pub");
+    std::fs::write(&public_path, key.public_key().to_openssh().unwrap()).unwrap();
+    let credential = RemoteCredential::KeyFile { path: public_path.to_string_lossy().into_owned(), passphrase: None };
+    let error = connect(options(server.port(), credential, &dir, None)).unwrap_err();
+    assert_eq!((error.code.as_str(), error.message_key.as_str()), ("remote_public_key_given", "errors.remotePublicKeyGiven"));
+}
+
+#[test]
 fn keyboard_interactive_prompts_continue_with_the_same_connection() {
     let server = TestSftpServer::start(TestServerOptions {
         password: None,
@@ -361,8 +437,10 @@ fn connect_requests_map_to_validated_options_without_keeping_empty_secrets() {
     assert_eq!((options.connect_timeout, options.keepalive), (Duration::from_secs(9), Duration::from_secs(45)));
     assert!(matches!(options.credential, RemoteCredential::KeyFile { ref path, passphrase: None } if path == "~/.ssh/id"));
     assert!(pending.is_none());
-    let missing_key = ConnectOptions::from_request(request(RemoteAuthMethod::PublicKey, Some(" ")), &settings, paths.clone(), None, &store);
-    assert_eq!(missing_key.err().unwrap().code, "remote_key_unreadable");
+    // 경로를 비우면 오류 대신 `~/.ssh` 기본 개인 키 탐색(OpenSSH와 같은 동작)
+    let (default_keys, _) = ConnectOptions::from_request(request(RemoteAuthMethod::PublicKey, Some(" ")), &settings, paths.clone(), None, &store).unwrap();
+    assert!(matches!(default_keys.credential, RemoteCredential::DefaultKeyFiles { passphrase: None, .. }));
+    assert_eq!(format!("{:?}", default_keys.credential), "RemoteCredential(defaultKeyFiles)");
     let mut invalid = request(RemoteAuthMethod::Password, None);
     invalid.host = "a b".into();
     assert_eq!(ConnectOptions::from_request(invalid, &settings, paths, None, &store).err().unwrap().code, "invalid_path");

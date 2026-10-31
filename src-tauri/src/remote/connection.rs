@@ -30,8 +30,29 @@ pub(crate) type ConnectionListener = Arc<dyn Fn(&RemoteConnectionChanged) + Send
 pub(crate) enum RemoteCredential {
     Password(String),
     KeyFile { path: String, passphrase: Option<String> },
+    /// 개인 키 경로를 비운 공개 키 인증: OpenSSH처럼 기본 개인 키를 차례로 시도
+    DefaultKeyFiles { paths: Vec<PathBuf>, passphrase: Option<String> },
     Agent,
     KeyboardInteractive,
+}
+
+/// 경로를 비웠을 때 시도할 개인 키 이름(OpenSSH 기본 순서). 하드웨어 보안 키(`_sk`)와 지원이 끝난 DSA는 제외.
+const DEFAULT_IDENTITY_FILES: [&str; 3] = ["id_rsa", "id_ecdsa", "id_ed25519"];
+
+/// `ssh_dir` 안의 기본 개인 키 중 실제로 있는 파일(OpenSSH 기본 순서).
+pub(crate) fn identity_files_in(ssh_dir: &Path) -> Vec<PathBuf> {
+    DEFAULT_IDENTITY_FILES.iter().map(|name| ssh_dir.join(name)).filter(|path| path.is_file()).collect()
+}
+
+/// 공개 키 인증 자격: 경로가 있으면 그 파일만, 비웠으면 `~/.ssh`의 기본 개인 키 목록.
+fn key_file_credential(path: Option<String>, passphrase: Option<String>) -> RemoteCredential {
+    match path {
+        Some(path) => RemoteCredential::KeyFile { path, passphrase },
+        None => RemoteCredential::DefaultKeyFiles {
+            paths: crate::platform::home_dir().map(|home| identity_files_in(&home.join(".ssh"))).unwrap_or_default(),
+            passphrase,
+        },
+    }
 }
 
 impl std::fmt::Debug for RemoteCredential {
@@ -39,6 +60,7 @@ impl std::fmt::Debug for RemoteCredential {
         let kind = match self {
             Self::Password(_) => "password",
             Self::KeyFile { .. } => "keyFile",
+            Self::DefaultKeyFiles { .. } => "defaultKeyFiles",
             Self::Agent => "agent",
             Self::KeyboardInteractive => "keyboardInteractive",
         };
@@ -86,16 +108,13 @@ pub(crate) struct ReconnectRecipe {
 }
 
 impl ReconnectRecipe {
-    /// 사용자 입력 없이 만들 수 있는 인증 정보: 에이전트, 저장된 암호, 키 파일(저장된 키 암호 포함). 그 밖은 없음.
+    /// 사용자 입력 없이 만들 수 있는 인증 정보: 에이전트, 저장된 암호, 키 파일·기본 키(저장된 키 암호 포함). 그 밖은 없음.
     fn credential(&self, store: &dyn SecretStore) -> Option<RemoteCredential> {
         let saved = |kind| self.site_id.as_deref().and_then(|id| store.get(&account(id, kind)).ok().flatten());
         match self.auth_method {
             RemoteAuthMethod::Agent => Some(RemoteCredential::Agent),
             RemoteAuthMethod::Password => saved(SecretKind::Password).map(RemoteCredential::Password),
-            RemoteAuthMethod::PublicKey => self
-                .key_path
-                .clone()
-                .map(|path| RemoteCredential::KeyFile { path, passphrase: saved(SecretKind::Passphrase) }),
+            RemoteAuthMethod::PublicKey => Some(key_file_credential(self.key_path.clone(), saved(SecretKind::Passphrase))),
             RemoteAuthMethod::KeyboardInteractive => None,
         }
     }
@@ -146,12 +165,9 @@ impl ConnectOptions {
                 (RemoteCredential::Password(typed.or_else(|| saved(SecretKind::Password)).unwrap_or_default()), pending)
             }
             RemoteAuthMethod::PublicKey => {
-                let path = key_path
-                    .clone()
-                    .ok_or_else(|| AppError::new("remote_key_unreadable", "errors.remoteKeyUnreadable", None, true))?;
                 let typed = request.passphrase.filter(|passphrase| !passphrase.is_empty());
                 let pending = pending(&typed, SecretKind::Passphrase);
-                (RemoteCredential::KeyFile { path, passphrase: typed.or_else(|| saved(SecretKind::Passphrase)) }, pending)
+                (key_file_credential(key_path.clone(), typed.or_else(|| saved(SecretKind::Passphrase))), pending)
             }
             RemoteAuthMethod::Agent => (RemoteCredential::Agent, None),
             RemoteAuthMethod::KeyboardInteractive => (RemoteCredential::KeyboardInteractive, None),
@@ -595,6 +611,9 @@ impl Authenticating {
                     client::AuthResult::Failure { remaining_methods, .. } => AuthOutcome::Rejected(Some(remaining_methods)),
                 })
             }
+            RemoteCredential::DefaultKeyFiles { paths, passphrase } => {
+                self.authenticate_with_default_keys(&paths, passphrase.as_deref()).await
+            }
             RemoteCredential::Agent => self.authenticate_with_agent().await,
             RemoteCredential::KeyboardInteractive => {
                 let reply = self
@@ -616,6 +635,44 @@ impl Authenticating {
             Ok(Some(hash)) => hash,
             _ => Some(ssh_key::HashAlg::Sha256),
         }
+    }
+
+    /// 기본 개인 키를 차례로 시도(OpenSSH와 같은 순서). 읽지 못하거나 키 암호가 맞지 않는 키는 건너뜀.
+    /// 서버에 보낸 키가 하나도 없으면 키 암호 필요를 우선해 그 키의 오류를 알림.
+    async fn authenticate_with_default_keys(&mut self, paths: &[PathBuf], passphrase: Option<&str>) -> CommandResult<AuthOutcome> {
+        let mut remaining = None;
+        let mut offered = false;
+        let mut load_error: Option<AppError> = None;
+        for path in paths {
+            let key = match load_key(&path.to_string_lossy(), passphrase) {
+                Ok(key) => key,
+                Err(error) => {
+                    // 첫 오류를 보관하되 키 암호가 필요한 키가 나오면 그 안내를 우선
+                    if load_error
+                        .as_ref()
+                        .is_none_or(|first| error.code == "remote_key_passphrase_required" && first.code != error.code)
+                    {
+                        load_error = Some(error);
+                    }
+                    continue;
+                }
+            };
+            offered = true;
+            let hash = self.rsa_hash(key.algorithm().is_rsa()).await;
+            match self
+                .handle
+                .authenticate_publickey(self.location.user.clone(), PrivateKeyWithHashAlg::new(Arc::new(key), hash))
+                .await
+                .map_err(|error| self.transport_error(&error))?
+            {
+                client::AuthResult::Success => return Ok(AuthOutcome::Accepted),
+                client::AuthResult::Failure { remaining_methods, .. } => remaining = Some(remaining_methods),
+            }
+        }
+        if offered {
+            return Ok(AuthOutcome::Rejected(remaining));
+        }
+        Err(load_error.unwrap_or_else(|| AppError::new("remote_key_not_found", "errors.remoteKeyNotFound", None, true)))
     }
 
     async fn authenticate_with_agent(&mut self) -> CommandResult<AuthOutcome> {
@@ -820,6 +877,10 @@ fn load_key(path: &str, passphrase: Option<&str>) -> CommandResult<keys::Private
     keys::load_secret_key(&expanded, passphrase).map_err(|error| match error {
         keys::Error::KeyIsEncrypted => key_error("remote_key_passphrase_required", "errors.remoteKeyPassphraseRequired"),
         keys::Error::IO(_) => key_error("remote_key_unreadable", "errors.remoteKeyUnreadable"),
+        // 개인 키 자리에 공개 키(.pub)를 넣은 흔한 실수: 짝이 되는 개인 키를 안내
+        _ if expanded.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("pub")) => {
+            key_error("remote_public_key_given", "errors.remotePublicKeyGiven")
+        }
         // 키 암호를 넣었는데 해독하지 못한 경우는 키 암호 오류로 안내
         _ if passphrase.is_some() => key_error("remote_key_passphrase_invalid", "errors.remoteKeyPassphraseInvalid"),
         _ => key_error("remote_key_unreadable", "errors.remoteKeyUnreadable"),

@@ -146,6 +146,39 @@ describe('CommanderShell remote panels', () => {
     expect(container.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(session.homeUrl);
   });
 
+  it('connects with default keys when the key path is empty and stops a public key file before connecting', async () => {
+    const user = userEvent.setup();
+    const remoteConnect = vi.fn(async () => ({ ok: false as const, error: {
+      code: 'remote_auth_failed', messageKey: 'errors.remoteAuthFailed', path: 'sftp://boksl@example.com/', details: null, recoverable: true,
+    } }));
+    render(<CommanderShell dataSource={createFixturePanelDataSource()} mutationClient={mutationClientStub({ loadSettings: vi.fn(async () => ({ ok: true as const, data: settingsFixture() })) })}
+      operationClient={operationClientStub()} remoteClient={remoteClientStub({ remoteConnect })} />);
+
+    await user.keyboard('gr');
+    const sites = await screen.findByRole('dialog', { name: '사이트 목록' });
+    await user.click(within(sites).getByRole('button', { name: '새 사이트' }));
+    const form = await screen.findByRole('dialog', { name: '원격 연결' });
+    await user.type(within(form).getByLabelText('호스트'), 'example.com');
+    await user.type(within(form).getByLabelText('사용자 이름'), 'boksl');
+    await user.type(within(form).getByLabelText('사이트 이름'), '키 서버');
+    await user.selectOptions(within(form).getByLabelText('인증 방식'), 'publicKey');
+    const keyPath = within(form).getByLabelText('개인 키 파일 경로(비우면 ~/.ssh의 기본 키)') as HTMLInputElement;
+    // 미리 채운 고정 경로 없이 비워 둠: 비우면 기본 키 자동 탐색
+    expect(keyPath.value).toBe('');
+
+    await user.type(keyPath, '~/.ssh/id_rsa.pub');
+    await user.click(within(form).getByRole('button', { name: '연결' }));
+    expect(await within(form).findByText('공개 키(.pub) 파일입니다. 같은 이름에서 .pub를 뺀 개인 키 파일을 지정하세요.')).toBeTruthy();
+    expect(remoteConnect).not.toHaveBeenCalled();
+
+    await user.clear(keyPath);
+    await user.click(within(form).getByRole('button', { name: '연결' }));
+    await waitFor(() => expect(remoteConnect).toHaveBeenCalledOnce());
+    const [{ request }] = remoteConnect.mock.calls[0] as unknown as [{ request: Record<string, unknown> }];
+    expect(request).toMatchObject({ host: 'example.com', user: 'boksl', authMethod: 'publicKey' });
+    expect(request).not.toHaveProperty('keyPath');
+  });
+
   it('blocks a changed host key in the connection form with both fingerprints scrolled into view', async () => {
     const user = userEvent.setup();
     // jsdom에는 scrollIntoView가 없어 시험 동안만 기록용으로 둠
