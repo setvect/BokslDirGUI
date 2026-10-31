@@ -122,23 +122,25 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
     setFlow((current) => (current?.stage === 'sites' ? { ...current, selectedId: copy.id } : current));
   };
 
-  // 연결 결과 처리: 성공이면 패널 이동, 호스트 키·추가 질문은 다음 단계, 그 밖은 연결 창에 오류
-  const handleResult = async (request: number, panelId: PanelId, draft: RemoteConnectDraft, targetUrl: string | null, result: TauriResult<RemoteSession>) => {
+  // 연결 결과 처리: 성공이면 패널 이동, 호스트 키·추가 질문은 다음 단계, 그 밖은 연결 창에 오류.
+  // `secretRequest`: 입력한 비밀값의 저장 요청 여부, 요청 때 같은 위치가 이미 연결되어 있었는지(재사용이면 저장되지 않음)
+  const handleResult = async (request: number, panelId: PanelId, draft: RemoteConnectDraft, targetUrl: string | null, result: TauriResult<RemoteSession>,
+    secretRequest: { saving: boolean; reusing: boolean } = { saving: false, reusing: false }) => {
     if (request !== requestRef.current) return;
     if (result.ok) {
       secretsRef.current = {};
       dependencies.recordSession(result.data);
       if (draft.siteId && result.data.secretStored) markSavedSecret(draft.siteId, true, null);
-      if (draft.siteId && draft.saveSite && draft.saveSecret && usesSecret(draft.authMethod) && !result.data.secretStored && !draft.hasSavedSecret) {
-        dependencies.setStatusMessage(text().secretSaveFailed);
-      }
+      const secretNotice = !secretRequest.saving || result.data.secretStored ? null
+        : secretRequest.reusing ? text().secretNotVerified : text().secretSaveFailed;
       setFlow(null);
       const currentPath = dependencies.panelStateRef.current?.[panelId].path ?? null;
       if (currentPath && !isRemotePath(currentPath)) localPathBeforeRemote.current[panelId] = currentPath;
       const target = startUrlFor(result.data, draft.startPath, targetUrl);
       const failed = await dependencies.gotoPanelPath(panelId, target);
       if (failed && target !== result.data.homeUrl) await dependencies.gotoPanelPath(panelId, result.data.homeUrl);
-      dependencies.setStatusMessage(text().connected(`${result.data.user}@${result.data.host}`));
+      // 저장하지 못한 안내는 이동 안내에 덮이지 않도록 마지막에 표시
+      dependencies.setStatusMessage(secretNotice ?? text().connected(`${result.data.user}@${result.data.host}`));
       return;
     }
     const question = hostKeyQuestionOf(result.error, draft);
@@ -163,8 +165,14 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
 
   const connect = async (panelId: PanelId, draft: RemoteConnectDraft, targetUrl: string | null) => {
     const request = ++requestRef.current;
-    const result = await dependencies.client.remoteConnect({ request: connectRequestOf(draft, secretsRef.current) });
-    await handleResult(request, panelId, draft, targetUrl, result);
+    const connectRequest = connectRequestOf(draft, secretsRef.current);
+    const secretRequest = {
+      saving: Boolean(connectRequest.saveSecret && (connectRequest.password || connectRequest.passphrase)),
+      // 이미 연결된 위치는 기존 연결을 재사용해 입력한 비밀값으로 인증하지 않음
+      reusing: dependencies.sessions[remoteLocationKey(connectRequest)]?.state === 'connected',
+    };
+    const result = await dependencies.client.remoteConnect({ request: connectRequest });
+    await handleResult(request, panelId, draft, targetUrl, result, secretRequest);
   };
 
   const submitForm = (draft: RemoteConnectDraft, secrets: RemoteSecrets) => {

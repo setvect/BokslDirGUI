@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { RemoteAuthMethod, RemoteSession, RemoteSite } from '../domain/types';
 import { REMOTE_CONNECT_TEXT, type SupportedLanguage } from '../i18n-resources';
 import { CommanderOverlayDialog } from './CommanderOverlays';
@@ -30,11 +30,16 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
   const [password, setPassword] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const firstInput = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const update = (patch: Partial<RemoteConnectDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onConnect(draft, { password, passphrase });
   };
+  // 긴 연결 창(창 안 스크롤)에서도 호스트 키 차단·인증 실패 문구가 보이도록 오류로 스크롤
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [error]);
   return (
     <CommanderOverlayDialog owner="remote-connect" title={text.connectTitle} ariaLabel={text.connectTitle} onClose={onCancel}
       className="remote-connect-dialog" onOpenAutoFocus={(event) => { if (firstInput.current) { event.preventDefault(); firstInput.current.focus(); } }}>
@@ -78,7 +83,7 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
             onChange={(event) => update({ saveSecret: event.currentTarget.checked })} />{text.saveSecret}</label>
         ) : null}
         <p className="operation-muted">{text.secretNote}</p>
-        {error ? <p className="operation-error" role="alert">{error}</p> : null}
+        {error ? <p ref={errorRef} className="operation-error" role="alert">{error}</p> : null}
         {pending ? <p role="status">{text.connecting}</p> : null}
         <div className="filter-actions">
           <button type="button" onClick={onCancel}>{text.cancel}</button>

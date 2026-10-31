@@ -272,7 +272,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 | Command | 입력 | 출력 | 비고 |
 | --- | --- | --- | --- |
-| `remote_connect` | `{ request: RemoteConnectRequest }` | `RemoteSession` | 처음 보는 호스트 키 `host_key_unknown`(상세: hostName·port·algorithm·fingerprint), 변경된 키 `host_key_changed`(recordedFingerprint 포함), 추가 질문 `remote_auth_prompts`(상세: challengeId·instructions·prompts JSON) |
+| `remote_connect` | `{ request: RemoteConnectRequest }` | `RemoteSession` | 처음 보는 호스트 키 `host_key_unknown`(상세: hostName·port·algorithm·fingerprint), 변경된 키 `host_key_changed`(recordedFingerprint 포함), 추가 질문 `remote_auth_prompts`(상세: challengeId·instructions·prompts JSON), `saveSecret`의 비밀값은 새로 인증한 연결에서만 저장(같은 위치의 기존 연결 재사용 시 저장 없음, `secretStored=false`) |
 | `remote_auth_respond` | `{ challengeId, responses }` | `RemoteSession` | keyboard-interactive 질문 응답, 같은 SSH 연결에서 인증 계속 |
 | `remote_auth_cancel` | `{ challengeId }` | `boolean` | 질문 창 취소 시 인증 중인 연결 종료 |
 | `remote_trust_host_key` | `{ host, port, fingerprint }` | `void` | 대기 중인 키와 지문이 같을 때만 앱 전용 `known_hosts`에 기록 |
@@ -288,7 +288,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | Command | 원격 동작 |
 | --- | --- |
 | `list_dir`·`goto_path`·`get_metadata`·`preview_file` | 비동기 명령, 원격 경로면 원격 런타임에서 실행, 끊겼으면 저장된 방법으로 한 번 재연결 |
-| `goto_path` | 원격 패널 기준의 `~`·상대·`/` 입력은 원격 해석, Windows 드라이브·UNC 경로만 로컬 |
+| `goto_path` | 원격 패널 기준의 `~`·상대·`/` 입력은 원격 해석, Windows 드라이브·UNC 경로만 로컬, 위치 목록·연결 해제 복귀처럼 정확한 위치는 `base` 없이 호출 |
 | `create_dir`·`rename_entry` | 로컬과 같은 이름 규칙, 덮어쓰기 금지 |
 | `preview_bulk_rename`·`start_bulk_rename` | 원본 표식은 크기·수정 시각·권한, 실행 직전 재검증 |
 | `start_copy`·`start_move` | 원본이나 대상이 원격이면 원격 전송, 같은 서버 이동은 서버 이름 변경 |

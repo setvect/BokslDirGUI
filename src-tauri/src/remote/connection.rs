@@ -392,6 +392,22 @@ pub(crate) fn sessions() -> Vec<RemoteSession> {
     sessions
 }
 
+/// 연결 창의 연결: 연결 뒤 사용자가 저장을 선택한 비밀값 저장(FR-35.2).
+/// 이미 연결된 위치는 기존 연결을 재사용해 입력한 비밀값으로 인증하지 않으므로, 확인되지 않은 값은 저장하지 않음.
+pub(crate) async fn connect_saving_secret(
+    options: ConnectOptions,
+    pending: Option<PendingSecret>,
+    store: &'static dyn SecretStore,
+) -> CommandResult<RemoteSession> {
+    let reused = connection(&options.location).is_ok();
+    let mut session = connect(options).await?.session();
+    if let Some(pending) = pending.filter(|_| !reused) {
+        // 키체인 쓰기는 사용자 허용 창으로 오래 걸릴 수 있어 작업 스레드에서 실행
+        session.secret_stored = tokio::task::spawn_blocking(move || pending.store(store).is_ok()).await.unwrap_or(false);
+    }
+    Ok(session)
+}
+
 /// 같은 위치가 이미 연결되어 있으면 그 연결 재사용. 처음 보는 호스트 키·변경된 호스트 키·추가 질문은 오류로 반환.
 pub(crate) async fn connect(options: ConnectOptions) -> CommandResult<Arc<RemoteConnection>> {
     if let Ok(existing) = connection(&options.location) {

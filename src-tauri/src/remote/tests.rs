@@ -398,6 +398,41 @@ fn site_secrets_are_saved_only_on_request_and_reused_when_not_typed() {
 }
 
 #[test]
+fn typed_secrets_are_saved_only_when_they_authenticated_a_new_connection() {
+    use super::credentials::{account, store, SecretKind};
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-reuse-secret");
+    trust(&server, &dir);
+    let site_id = format!("site-reuse-{}", server.port());
+    let connect_saving = |password: &str| {
+        let request = RemoteConnectRequest {
+            host: "127.0.0.1".into(),
+            port: server.port(),
+            user: "tester".into(),
+            auth_method: RemoteAuthMethod::Password,
+            password: Some(password.to_string()),
+            key_path: None,
+            passphrase: None,
+            site_id: Some(site_id.clone()),
+            save_secret: true,
+        };
+        let (options, pending) = ConnectOptions::from_request(request, &RemoteSettings::default(), known_hosts(&dir), None, store()).unwrap();
+        super::block_on(connection::connect_saving_secret(options, pending, store()))
+    };
+    let first = connect_saving("pw").unwrap();
+    assert!(first.secret_stored);
+    // 같은 위치가 연결된 상태: 기존 연결을 재사용해 새 암호로 인증하지 않았으므로 저장하지 않음
+    let reused = connect_saving("typo").unwrap();
+    assert_eq!(reused.session_id, first.session_id);
+    assert!(!reused.secret_stored);
+    assert_eq!(store().get(&account(&site_id, SecretKind::Password)).unwrap().as_deref(), Some("pw"));
+
+    super::block_on(connection::disconnect(&RemoteLocation::new("tester", "127.0.0.1", server.port()).unwrap()));
+    assert_eq!(connect_saving("typo").unwrap_err().code, "remote_auth_failed");
+    assert_eq!(store().get(&account(&site_id, SecretKind::Password)).unwrap().as_deref(), Some("pw"));
+}
+
+#[test]
 fn lost_connections_reconnect_once_with_saved_credentials_but_not_after_disconnect() {
     use super::credentials::{account, store, SecretKind};
     let server = TestSftpServer::start(TestServerOptions::default());

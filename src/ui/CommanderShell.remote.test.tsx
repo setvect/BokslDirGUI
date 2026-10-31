@@ -146,6 +146,31 @@ describe('CommanderShell remote panels', () => {
     expect(container.querySelector('.file-panel.is-active .path-input')?.textContent).toBe(session.homeUrl);
   });
 
+  it('blocks a changed host key in the connection form with both fingerprints scrolled into view', async () => {
+    const user = userEvent.setup();
+    // jsdom에는 scrollIntoView가 없어 시험 동안만 기록용으로 둠
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    try {
+      const site = { id: 'site-key', name: '키', host: 'example.com', port: 22, user: 'boksl', authMethod: 'publicKey' as const, keyPath: '~/.ssh/id', savedSecret: false };
+      const remoteConnect = vi.fn(async () => ({ ok: false as const, error: {
+        code: 'host_key_changed', messageKey: 'errors.remoteHostKeyChanged', path: 'sftp://boksl@example.com/',
+        details: { algorithm: 'ssh-ed25519', fingerprint: 'SHA256:new', recordedFingerprint: 'SHA256:old' }, recoverable: false,
+      } }));
+      const settings = settingsFixture({ remote: { sites: [site], keepaliveSeconds: 30, connectTimeoutSeconds: 15, linkPolicy: 'preserve' } });
+      render(<CommanderShell dataSource={createFixturePanelDataSource()} mutationClient={mutationClientStub({ loadSettings: vi.fn(async () => ({ ok: true as const, data: settings })) })}
+        operationClient={operationClientStub()} remoteClient={remoteClientStub({ remoteConnect })} />);
+
+      await user.keyboard('gr');
+      await user.click(within(await screen.findByRole('dialog', { name: '사이트 목록' })).getByRole('button', { name: '연결' }));
+      const alert = await within(await screen.findByRole('dialog', { name: '원격 연결' })).findByRole('alert');
+      expect(alert.textContent).toContain('저장된 지문 SHA256:old · 받은 지문 SHA256:new');
+      await waitFor(() => expect(scrollIntoView.mock.contexts).toContain(alert));
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
   it('answers keyboard-interactive prompts and cancels pending challenges', async () => {
     const user = userEvent.setup();
     const promptsError = { code: 'remote_auth_prompts', messageKey: 'errors.remoteAuthPrompts', path: null, recoverable: true,
@@ -285,6 +310,38 @@ describe('CommanderShell remote panels', () => {
       expect.objectContaining({ name: '새 서버', host: 'example.com', savedSecret: true }),
     ]));
     expect(saveSettings.mock.calls.every(([input]) => !JSON.stringify(input.patch).includes('typed-secret'))).toBe(true);
+  });
+
+  it('keeps the unsaved secret notice visible and explains when an existing session was reused', async () => {
+    const user = userEvent.setup();
+    const site = { id: 'site-pw', name: '운영', host: 'example.com', port: 22, user: 'boksl', authMethod: 'password' as const, savedSecret: false };
+    const session = { sessionId: 'sftp://boksl@example.com/', user: 'boksl', host: 'example.com', port: 22, home: '/home/boksl', homeUrl: 'sftp://boksl@example.com/home/boksl', hostKeyAlgorithm: 'ssh-ed25519', hostKeyFingerprint: 'SHA256:x', secretStored: false };
+    const remoteConnect = vi.fn(async () => ({ ok: true as const, data: session }));
+    const remote = { sites: [site], keepaliveSeconds: 30, connectTimeoutSeconds: 15, linkPolicy: 'preserve' as const };
+    const settings = settingsFixture({ remote });
+    // 저장 응답이 원격 사이트 설정을 잃지 않도록 기존 설정과 합침
+    const saveSettings = vi.fn(async (input: { patch: Partial<Settings> }) => ({ ok: true as const, data: settingsFixture({ remote, ...input.patch }) }));
+    const dataSource = createFixturePanelDataSource();
+    dataSource.gotoPath = vi.fn(async (input) => ({ ok: true as const, data: createDirectoryListing(input.panelId, input.path, []) }));
+    const { container } = render(<CommanderShell dataSource={dataSource} mutationClient={mutationClientStub({ saveSettings, loadSettings: vi.fn(async () => ({ ok: true as const, data: settings })) })}
+      operationClient={operationClientStub()} remoteClient={remoteClientStub({ remoteConnect })} />);
+    const connectTyping = async (secret: string) => {
+      await user.keyboard('gr');
+      await user.click(within(await screen.findByRole('dialog', { name: '사이트 목록' })).getByRole('button', { name: '연결' }));
+      const form = await screen.findByRole('dialog', { name: '원격 연결' });
+      await user.type(within(form).getByLabelText('암호'), secret);
+      await user.click(within(form).getByLabelText('암호·키 암호를 OS 자격 증명 저장소에 저장'));
+      await user.click(within(form).getByRole('button', { name: '연결' }));
+    };
+
+    // 새 연결인데 저장소 쓰기 실패: 이동 완료 안내에 덮이지 않고 실패 안내 유지
+    await connectTyping('typed-secret');
+    await waitFor(() => expect(container.querySelector('.status-message')?.textContent).toBe('연결했지만 자격 증명 저장소에 저장하지 못했습니다.'));
+
+    // 같은 위치가 이미 연결된 상태: 입력한 암호는 인증에 쓰이지 않아 저장되지 않음을 안내
+    await connectTyping('another-secret');
+    await waitFor(() => expect(container.querySelector('.status-message')?.textContent).toContain('이미 연결된 세션을 사용해 입력한 암호를 확인하지 않았으므로 저장하지 않았습니다.'));
+    expect(saveSettings.mock.calls.some(([input]) => input.patch.remote?.sites?.some((saved) => saved.savedSecret))).toBe(false);
   });
 
   it('forgets saved passwords, imports ssh config hosts and lists sites in locations', async () => {

@@ -389,11 +389,10 @@ pub(crate) async fn remote_connect(
         crate::remote::connection::ConnectOptions::from_request(request, &settings, known_hosts, Some(listener), crate::remote::credentials::store())
     })
     .await?;
-    let mut session = crate::remote::run(async move { Ok(crate::remote::connection::connect(options).await?.session()) }).await?;
-    if let Some(pending) = pending {
-        session.secret_stored = run_blocking(None, move || pending.store(crate::remote::credentials::store())).await.is_ok();
-    }
-    Ok(session)
+    crate::remote::run(async move {
+        crate::remote::connection::connect_saving_secret(options, pending, crate::remote::credentials::store()).await
+    })
+    .await
 }
 
 /// 사이트의 저장된 비밀값 삭제(FR-35.6).
