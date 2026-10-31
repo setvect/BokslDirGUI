@@ -4,8 +4,6 @@
   color: #d7d7d7;
   background: var(--bg);
   --bg: #171717;
-  --surface: #1d1d1d;
-  --surface-raised: #252528;
   --line: #3c3c3c;
   --line-strong: #0d8ae8;
   --text: #e4e4e4;
@@ -32,7 +30,7 @@
   --filter-chip-bg: rgba(5, 137, 216, 0.18);
   --filter-chip-text: #fff;
   --control-disabled-border: #2a2a2a;
-  --control-disabled-text: #555;
+  --control-disabled-text: #6e6e6e;
   --path-controls-bg: #1d1d1d;
   --control-border: #343434;
   --control-bg: #242424;
@@ -58,7 +56,7 @@
   --filter-match-text: #111;
   --panel-status-bg: #202020;
   --panel-status-text: #bdbdbd;
-  --status-bg: var(--blue);
+  --status-bg: #0565a3;
   --status-text: #fff;
   --status-message-text: #d9ecff;
   --hotkey-bg: #252529;
@@ -69,13 +67,13 @@
   --menu-submenu-bg: rgba(31, 31, 31, 0.99);
   --menu-text: #f2f2f2;
   --menu-label-text: #b7b7b7;
+  --menu-focus-bg: #006fbd;
   --menu-focus-text: #fff;
   --menu-focus-kbd: #e8f7ff;
   --menu-disabled-text: #8f8f8f;
   --menu-disabled-kbd: #7aa0b8;
   --overlay-title-text: #fff;
   --input-bg: #151515;
-  --input-text: var(--text);
   --button-border: #3d3d3d;
   --button-bg: #2b2b2b;
   --button-text: #f2f2f2;
@@ -88,6 +86,11 @@
   --pre-bg: #101010;
   --nav-item-bg: #181818;
   --nav-item-border: #2d2d2d;
+  /* 목록에서 고른 항목과 주요 버튼: 글자와 배경을 한 쌍으로 정의(대비 시험 대상) */
+  --selection-bg: #0b5f93;
+  --selection-text: #ffffff;
+  --primary-button-bg: #0b5f93;
+  --primary-button-text: #ffffff;
   --about-text: #cfcfcf;
   --warning-border: #6c4a00;
   --warning-bg: #2b2110;
@@ -106,7 +109,6 @@
   --shadow-surface: 0 12px 36px rgba(0, 0, 0, 0.42);
   --dialog-button-border: #414141;
   --dialog-button-text: #f2f2f2;
-  --dialog-button-secondary-bg: #2b2b2b;
   --danger-border: #a85545;
   --danger-bg: #4a211c;
   --danger-button-text: #ffe6df;
@@ -123,6 +125,16 @@
   --hotkey-strip-height: 29px;
   --cell-padding-x: 10px;
   --control-gap: 4px;
+}
+
+/* 다른 토큰을 가리키는 별칭은 테마가 적용되는 요소에서 정의(:root에 두면 다크 값으로 계산된 채 물려 내려감) */
+body,
+.commander-shell {
+  /* 패널 머리글(경로 줄) 위 보조 글자와 원격 연결 상태 */
+  --panel-header-muted: var(--muted);
+  --remote-connected-text: var(--green);
+  --remote-lost-text: var(--danger);
+  --remote-disconnected-text: var(--muted);
 }
 
 * {
@@ -338,21 +350,21 @@ button {
 }
 
 .remote-chip.is-connected {
-  color: var(--green);
+  color: var(--remote-connected-text);
 }
 
 .remote-chip.is-lost {
-  color: var(--danger);
+  color: var(--remote-lost-text);
 }
 
 .remote-chip.is-disconnected {
-  color: var(--muted);
+  color: var(--remote-disconnected-text);
 }
 
 .panel-tabs {
   flex: none;
   white-space: nowrap;
-  color: var(--muted);
+  color: var(--panel-header-muted);
   font-size: calc(12px * var(--commander-scale));
   letter-spacing: 0.06em;
 }
@@ -822,6 +834,11 @@ button {
   text-align: right;
 }
 
+/* 강조된 행에서는 체크 표시도 강조 글자색(청록 체크가 강조 배경에 묻히지 않게) */
+.menu-item:is(:hover, .is-focused) :is(.menu-checkmark, .menu-checkmark-inline) {
+  color: inherit;
+}
+
 .menu-entry-with-submenu {
   position: relative;
 }
@@ -864,6 +881,18 @@ button {
 }
 
 .menu-item:disabled kbd {
+  color: var(--menu-disabled-kbd);
+}
+
+/* 비활성 항목은 포커스·마우스가 올라가도 강조 배경 대신 점선만 표시(강조 배경 위 회색 글자의 대비 부족 방지) */
+.menu-item:disabled:is(:hover, .is-focused) {
+  background: transparent;
+  color: var(--menu-disabled-text);
+  outline: 1px dashed var(--menu-disabled-text);
+  outline-offset: -2px;
+}
+
+.menu-item:disabled:is(:hover, .is-focused) kbd {
   color: var(--menu-disabled-kbd);
 }
 
@@ -946,7 +975,8 @@ button {
 
 .filter-actions button.primary {
   border-color: var(--blue);
-  background: var(--blue-dim);
+  background: var(--primary-button-bg);
+  color: var(--primary-button-text);
 }
 
 .filter-actions button:disabled {
@@ -1455,7 +1485,18 @@ button {
 .navigation-path-row:focus-within,
 .navigation-path-row:hover {
   border-color: var(--cyan);
-  background: var(--blue-dim);
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+/* 고른 행 안의 경로·보조 글자는 선택 글자색으로(테마별 강조색이 선택 배경에 묻히지 않게) */
+.navigation-path-row:is(:focus-within, :hover) :is(.navigation-path-choice, .navigation-path-choice small, .navigation-path-value.is-secondary, .navigation-path-remove:not(:disabled)) {
+  color: var(--selection-text);
+}
+
+.navigation-path-row:is(:focus-within, :hover) .navigation-path-remove:disabled {
+  color: var(--selection-text);
+  opacity: 0.65;
 }
 
 .navigation-path-choice:focus-visible,
@@ -1472,8 +1513,13 @@ button {
 .navigation-list-item:hover,
 .navigation-list-item:focus {
   border-color: var(--cyan);
-  background: var(--blue-dim);
+  background: var(--selection-bg);
+  color: var(--selection-text);
   outline: none;
+}
+
+.navigation-list-item:is(:hover, :focus) :is(code, small) {
+  color: inherit;
 }
 
 .navigation-list-item code {
@@ -1524,7 +1570,7 @@ button {
 .about-dialog p {
   margin: 0;
   line-height: 1.5;
-  color: var(--path-text);
+  color: var(--about-text);
 }
 
 .operation-source-list {
@@ -1796,7 +1842,8 @@ button {
 
 .dialog-button.primary {
   border-color: var(--blue);
-  background: var(--blue-dim);
+  background: var(--primary-button-bg);
+  color: var(--primary-button-text);
 }
 
 .dialog-button.danger {
@@ -1862,12 +1909,10 @@ button {
 body[data-theme="mdir"] {
   color-scheme: dark;
   --bg: #000000;
-  --surface: #000000;
-  --surface-raised: #005555;
   --line: #00aaaa;
   --line-strong: #55ffff;
   --text: #ffffff;
-  --muted: #aaaaaa;
+  --muted: #c0c0c0;
   --blue: #ff5555;
   --blue-dim: #005555;
   --cyan: #55ffff;
@@ -1927,7 +1972,7 @@ body[data-theme="mdir"] {
   --hotkey-bg: #005555;
   --hotkey-text: #ffffff;
   --hotkey-border: #00aaaa;
-  --hotkey-more-text: #aaaaaa;
+  --hotkey-more-text: #c0c0c0;
   --menu-bg: #005555;
   --menu-submenu-bg: #005555;
   --menu-text: #ffffff;
@@ -1939,7 +1984,6 @@ body[data-theme="mdir"] {
   --menu-disabled-kbd: #aaaaaa;
   --overlay-title-text: #ffffff;
   --input-bg: #000000;
-  --input-text: #ffffff;
   --button-border: #55ffff;
   --button-bg: #005555;
   --button-text: #ffffff;
@@ -1970,7 +2014,6 @@ body[data-theme="mdir"] {
   --shadow-surface: 6px 6px 0 rgba(0, 0, 0, 0.65);
   --dialog-button-border: #55ffff;
   --dialog-button-text: #ffffff;
-  --dialog-button-secondary-bg: #005555;
   --danger-border: #ff5555;
   --danger-bg: #550000;
   --danger-button-text: #ffffff;
@@ -1978,12 +2021,15 @@ body[data-theme="mdir"] {
   --runtime-warning-border: #ffff55;
   --runtime-warning-bg: #333300;
   --runtime-warning-text: #ffff55;
-}
-
-/* Keep disabled labels readable when keyboard focus or hover highlights them. */
-.commander-shell[data-theme="mdir"] .menu-item:disabled:is(:hover, .is-focused),
-.commander-shell[data-theme="mdir"] .menu-item:disabled:is(:hover, .is-focused) kbd {
-  color: #555555;
+  /* Mdir 패널 머리글은 회색 바탕: 어두운 글자 사용 */
+  --panel-header-muted: #333333;
+  --remote-connected-text: #004000;
+  --remote-lost-text: #7a0000;
+  --remote-disconnected-text: #333333;
+  --selection-bg: #00aaaa;
+  --selection-text: #000000;
+  --primary-button-bg: #005555;
+  --primary-button-text: #ffffff;
 }
 
 /* Mdir cursor swaps the entry's normal foreground and black background. */
@@ -2021,15 +2067,13 @@ body[data-theme="mdir"] {
 body[data-theme="light"] {
   color-scheme: light;
   --bg: #f3f4f6;
-  --surface: #ffffff;
-  --surface-raised: #e9eef5;
   --line: #b8c2cc;
   --line-strong: #006cb8;
   --text: #1d2733;
   --muted: #5f6b7a;
   --blue: #005ea8;
   --blue-dim: #4a86b9;
-  --cyan: #0078c8;
+  --cyan: #006ab0;
   --green: #247a36;
   --danger: #b42318;
   --top-menu-bg: #e6ebf2;
@@ -2049,7 +2093,7 @@ body[data-theme="light"] {
   --filter-chip-bg: rgba(0, 108, 184, 0.12);
   --filter-chip-text: #063b66;
   --control-disabled-border: #d8dee7;
-  --control-disabled-text: #9aa4b2;
+  --control-disabled-text: #7d8796;
   --path-controls-bg: #f7f9fc;
   --control-border: #b8c2cc;
   --control-bg: #edf2f7;
@@ -2081,18 +2125,17 @@ body[data-theme="light"] {
   --hotkey-bg: #e8edf4;
   --hotkey-text: #475467;
   --hotkey-border: #c7d0dc;
-  --hotkey-more-text: #667085;
+  --hotkey-more-text: #556070;
   --menu-bg: #ffffff;
   --menu-submenu-bg: #ffffff;
   --menu-text: #101828;
   --menu-label-text: #52606e;
   --menu-focus-text: #ffffff;
   --menu-focus-kbd: #e8f4ff;
-  --menu-disabled-text: #98a2b3;
+  --menu-disabled-text: #848e9c;
   --menu-disabled-kbd: #667085;
   --overlay-title-text: #101828;
   --input-bg: #ffffff;
-  --input-text: #101828;
   --button-border: #b8c2cc;
   --button-bg: #edf2f7;
   --button-text: #101828;
@@ -2123,7 +2166,6 @@ body[data-theme="light"] {
   --shadow-surface: 0 12px 32px rgba(15, 23, 42, 0.18);
   --dialog-button-border: #98a2b3;
   --dialog-button-text: #101828;
-  --dialog-button-secondary-bg: #edf2f7;
   --danger-border: #d92d20;
   --danger-bg: #fef3f2;
   --danger-button-text: #7a271a;
@@ -2131,14 +2173,18 @@ body[data-theme="light"] {
   --runtime-warning-border: #b7791f;
   --runtime-warning-bg: #fff7d6;
   --runtime-warning-text: #7a4b00;
+  --selection-bg: #d6e6f5;
+  --selection-text: #101828;
+  --primary-button-bg: #005ea8;
+  --primary-button-text: #ffffff;
+  /* 다크용 :root 값 대신 이 테마의 강조색 */
+  --menu-focus-bg: var(--blue);
 }
 
 .commander-shell[data-theme="highContrast"],
 body[data-theme="highContrast"] {
   color-scheme: dark;
   --bg: #000000;
-  --surface: #050505;
-  --surface-raised: #111111;
   --line: #f0f0f0;
   --line-strong: #00ffff;
   --text: #ffffff;
@@ -2208,7 +2254,6 @@ body[data-theme="highContrast"] {
   --menu-disabled-kbd: #bdbdbd;
   --overlay-title-text: #ffffff;
   --input-bg: #000000;
-  --input-text: #ffffff;
   --button-border: #ffffff;
   --button-bg: #000000;
   --button-text: #ffffff;
@@ -2239,7 +2284,6 @@ body[data-theme="highContrast"] {
   --shadow-surface: none;
   --dialog-button-border: #ffffff;
   --dialog-button-text: #ffffff;
-  --dialog-button-secondary-bg: #000000;
   --danger-border: #ff4040;
   --danger-bg: #000000;
   --danger-button-text: #ff8080;
@@ -2247,6 +2291,12 @@ body[data-theme="highContrast"] {
   --runtime-warning-border: #ffff00;
   --runtime-warning-bg: #000000;
   --runtime-warning-text: #ffff00;
+  --selection-bg: #80dbff;
+  --selection-text: #000000;
+  --primary-button-bg: #80dbff;
+  --primary-button-text: #000000;
+  /* 다크용 :root 값 대신 이 테마의 강조색 */
+  --menu-focus-bg: var(--blue);
 }
 
 .runtime-warning {
@@ -2308,8 +2358,9 @@ html.is-file-dragging * {
 .remote-fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .remote-site-list { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; border: 1px solid var(--line-strong); }
 .remote-site-list li { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; cursor: default; }
-/* mdir 테마는 `--blue-dim`이 대화상자 배경과 같아 위치 목록 항목처럼 청록 테두리로도 표시 */
-.remote-site-list li.is-selected { background: var(--blue-dim); box-shadow: inset 0 0 0 1px var(--cyan); }
+/* 고른 사이트: 선택 배경·글자 쌍과 청록 테두리(배경색만으로 구분하지 않게) */
+.remote-site-list li.is-selected { background: var(--selection-bg); color: var(--selection-text); box-shadow: inset 0 0 0 1px var(--cyan); }
+.remote-site-list li.is-selected :is(small, span) { color: inherit; }
 .remote-site-list:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .remote-site-list small, .remote-site-list span { color: var(--muted); }
 .remote-site-actions { flex-wrap: wrap; }
