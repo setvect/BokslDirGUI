@@ -4,6 +4,7 @@ import {
   ACTION_BY_ID,
   platformAllowsAction,
   labelForAction,
+  resultLabelForAction,
   type ActionId
 } from '../actions/registry';
 import type { AppError, ChmodScope, PlatformInfo, RenameItem, FileEntry, FilePreview, OperationSummary, PanelId, Settings, SortSpec } from '../domain/types';
@@ -178,7 +179,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
     }
 
     if (isArchiveVirtualPath(entry.path)) {
-      dependencies.setStatusMessage(dependencies.statusText.archiveEntry(entry.path));
+      dependencies.setStatusMessage(dependencies.statusText.archiveEntryNotOpenable(entry.name));
       return;
     }
 
@@ -191,7 +192,11 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
   // 원격 파일 열기(FR-39.2): 앱 전용 임시 폴더로 받는 복사 작업을 거쳐 완료 뒤에만 기본 앱 실행(취소하면 열지 않음)
   const openRemoteEntry = async (panelId: PanelId, entry: FileEntry) => {
-    if (dependencies.operationBusy || !dependencies.mutationClient.remoteOpenDir || !dependencies.runtimeBackendAvailable) {
+    if (dependencies.operationBusy) {
+      dependencies.setStatusMessage(dependencies.statusText.openAfterOperation(entry.name));
+      return;
+    }
+    if (!dependencies.mutationClient.remoteOpenDir || !dependencies.runtimeBackendAvailable) {
       dependencies.setStatusMessage(dependencies.statusText.openDefaultUnavailable(entry.name));
       return;
     }
@@ -339,7 +344,7 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
       const path = panel.path;
       void openDirectory({ path }).then((result) => {
         dependencies.setStatusMessage(result.ok
-          ? dependencies.statusText.operationDone(label)
+          ? dependencies.statusText.operationDone(resultLabelForAction(action, dependencies.settings.language))
           : `${label}: ${formatUserErrorMessage(dependencies.settings.language, result.error)}`);
       });
       return;
@@ -650,10 +655,10 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
               background: true,
               forceArchiveReload: true,
             });
-            dependencies.setStatusMessage(dependencies.statusText.operationDoneWithEntry(labelForAction(action, dependencies.settings.language), entry.name));
+            dependencies.setStatusMessage(dependencies.statusText.operationDoneWithEntry(resultLabelForAction(action, dependencies.settings.language), entry.name));
             return;
           }
-          dependencies.setStatusMessage(dependencies.statusText.operationDone(labelForAction(action, dependencies.settings.language)));
+          dependencies.setStatusMessage(dependencies.statusText.operationDone(resultLabelForAction(action, dependencies.settings.language)));
         },
         onOperationSummary: (summary: OperationSummary, dialog: OperationDialogDraft) => {
           if (dialog.dialogKind === 'trash') refreshTrashUndo();

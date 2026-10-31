@@ -141,7 +141,7 @@ describe('CommanderShell keyboard', () => {
 
     expect(operationClient.startCopy).not.toHaveBeenCalled();
     expect(operationClient.startDelete).not.toHaveBeenCalled();
-    expect(await screen.findByText(/현재 컨텍스트에서는 사용할 수 없습니다/)).toBeTruthy();
+    expect(await screen.findByText(/지금은 사용할 수 없습니다/)).toBeTruthy();
   });
 
   it('groups every shortcut and scrolls the help dialog without moving a file row', async () => {
@@ -151,7 +151,7 @@ describe('CommanderShell keyboard', () => {
     await user.click(screen.getByRole('button', { name: '도움말(H)' }));
     await user.click(await screen.findByText('단축키 도움말'));
 
-    const dialog = await screen.findByRole('dialog', { name: '키보드 단축키' });
+    const dialog = await screen.findByRole('dialog', { name: '단축키 도움말' });
     const scrollArea = within(dialog).getByRole('region', { name: '단축키 목록' });
     expect(document.activeElement).toBe(scrollArea);
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(

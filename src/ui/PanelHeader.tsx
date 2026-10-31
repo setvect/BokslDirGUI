@@ -1,6 +1,8 @@
 import type { Settings } from '../domain/types';
 import {
-  COMMANDER_UI_TEXT
+  COMMANDER_UI_TEXT,
+  OVERLAY_TEXT,
+  PANEL_COUNT_TEXT
 } from '../i18n-resources';
 import { panelIdLabel } from './panelPresentation';
 import type { RemotePanelStatus } from './remoteSessionState';
@@ -57,7 +59,7 @@ export function PanelHeader({
       <button type="button" aria-label={labels.gotoPath} onClick={onGotoPath}>↗</button>
       <div className="panel-header-status">
         {panel.filter ? (
-          <button type="button" className="filter-chip" title={panel.filter} aria-label={`${labels.filter} ${panel.filter} ${labels.target}`} onClick={onClearFilter}>
+          <button type="button" className="filter-chip" title={panel.filter} aria-label={`${OVERLAY_TEXT[language].clearFilter}: ${panel.filter}`} onClick={onClearFilter}>
             <span className="filter-chip-label">{labels.filter.toUpperCase()} {panel.filter} </span>×
           </button>
         ) : null}
@@ -67,7 +69,7 @@ export function PanelHeader({
           </span>
         ) : null}
         <span className={`panel-loading${panel.loading ? ' is-loading' : ''}`} aria-label={labels.loading} title={labels.loading} aria-hidden={!panel.loading}>⟳</span>
-        <span className="panel-tabs" title={`${labels.tabs} ${tabCount}`} aria-label={`${labels.tabs} ${tabCount}`}><span className="panel-tabs-label">{labels.tabs} </span>{tabCount}</span>
+        <span className="panel-tabs" title={PANEL_COUNT_TEXT[language].tabs(tabCount)} aria-label={PANEL_COUNT_TEXT[language].tabs(tabCount)}><span className="panel-tabs-label">{labels.tabs} </span>{tabCount}{labels.tabsCountSuffix}</span>
       </div>
     </header>
   );

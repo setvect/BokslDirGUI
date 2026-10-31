@@ -68,16 +68,17 @@ export const formatThroughput = (bytesPerSecond: number | null, unknownLabel = '
   return `${formatBytes(bytesPerSecond)}/s`;
 };
 
-export const formatEta = (etaSeconds: number | null, unknownLabel = 'unknown') => {
+export const formatEta = (etaSeconds: number | null, unknownLabel = 'unknown', language: SupportedLanguage = 'en') => {
   if (etaSeconds === null) {
     return unknownLabel;
   }
+  const [minuteUnit, secondUnit] = language === 'ko' ? ['분', '초'] : ['m', 's'];
   if (etaSeconds < 60) {
-    return `${etaSeconds}s`;
+    return `${etaSeconds}${secondUnit}`;
   }
   const minutes = Math.floor(etaSeconds / 60);
   const seconds = etaSeconds % 60;
-  return `${minutes}m ${seconds}s`;
+  return `${minutes}${minuteUnit} ${seconds}${secondUnit}`;
 };
 
 export const formatOperationError = (

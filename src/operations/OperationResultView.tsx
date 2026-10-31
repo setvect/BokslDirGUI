@@ -27,7 +27,7 @@ export function OperationResultView({
     return (
       <div className="operation-result-stack">
         <dl className="operation-result-list">
-          <div><dt>{text.currentLocation}</dt><dd><code title={displayPath(value.archivePath)}>{displayPath(value.archivePath)}</code></dd></div>
+          <div><dt>{text.path}</dt><dd><code title={displayPath(value.archivePath)}>{displayPath(value.archivePath)}</code></dd></div>
           <div><dt>{text.encrypted}</dt><dd>{value.encrypted ? text.yes : text.no}</dd></div>
         </dl>
         <div>

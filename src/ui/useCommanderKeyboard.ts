@@ -8,7 +8,7 @@ import {
   type AppAction
 } from '../actions/registry';
 import type { PanelId, Settings } from '../domain/types';
-import type { CommanderStatusText } from '../i18n-resources';
+import { translateUserMessageKey, type CommanderStatusText } from '../i18n-resources';
 import type { ExecuteAction } from './actionRequest';
 import { KEYBOARD_SEQUENCE_TIMEOUT_MS, KeyboardRuntime, handleMovementKey, handleZoomKey } from './keyboardDispatch';
 import { commanderKeyboardIsSuspended, commanderKeyboardOwners, pathSelectionOwnsCopyShortcut } from './keyboardOwnership';
@@ -99,7 +99,10 @@ export function useCommanderKeyboard(dependencies: CommanderKeyboardDependencies
       }
 
       if (!isActionAvailable(shortcutAction, runtime.context)) {
-        dependencies.setStatusMessage(dependencies.statusText.unavailableInContext(labelForAction(shortcutAction, dependencies.settings.language)));
+        // 셸 명령은 설정으로 꺼 둔 것이 이유라 일반 안내 대신 그 이유를 표시
+        dependencies.setStatusMessage(shortcutAction.id === 'external.runShellCommand' && !runtime.context.shellCommandEnabled
+          ? translateUserMessageKey(dependencies.settings.language, 'errors.shellCommandDisabled')
+          : dependencies.statusText.unavailableInContext(labelForAction(shortcutAction, dependencies.settings.language)));
         dependencies.shellRef.current?.focus({ preventScroll: true });
         return;
       }

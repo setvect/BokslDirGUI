@@ -126,7 +126,7 @@ describe('CommanderShell remote panels', () => {
     const port = within(form).getByLabelText('포트');
     await user.clear(port);
     await user.type(port, '2222');
-    await user.type(within(form).getByLabelText('사용자'), 'boksl');
+    await user.type(within(form).getByLabelText('사용자 이름'), 'boksl');
     await user.type(within(form).getByLabelText('암호'), 'secret-pw');
     await user.type(within(form).getByLabelText('사이트 이름'), '배포 서버');
     await user.click(within(form).getByRole('button', { name: '연결' }));
@@ -184,7 +184,7 @@ describe('CommanderShell remote panels', () => {
     await user.click(within(await screen.findByRole('dialog', { name: '사이트 목록' })).getByRole('button', { name: '새 사이트' }));
     const form = await screen.findByRole('dialog', { name: '원격 연결' });
     await user.type(within(form).getByLabelText('호스트'), 'otp.example.com');
-    await user.type(within(form).getByLabelText('사용자'), 'boksl');
+    await user.type(within(form).getByLabelText('사용자 이름'), 'boksl');
     await user.selectOptions(within(form).getByLabelText('인증 방식'), 'keyboardInteractive');
     await user.click(within(form).getByLabelText('사이트로 저장'));
     await user.click(within(form).getByRole('button', { name: '연결' }));
@@ -254,7 +254,7 @@ describe('CommanderShell remote panels', () => {
     const form = await screen.findByRole('dialog', { name: '원격 연결' });
     expect((within(form).getByLabelText('호스트') as HTMLInputElement).value).toBe('files.example.com');
     expect((within(form).getByLabelText('포트') as HTMLInputElement).value).toBe('2200');
-    expect((within(form).getByLabelText('사용자') as HTMLInputElement).value).toBe('deploy');
+    expect((within(form).getByLabelText('사용자 이름') as HTMLInputElement).value).toBe('deploy');
     expect(screen.queryByRole('dialog', { name: '경로 이동' })).toBeNull();
   });
   it('stores the typed password only when asked and marks the saved site', async () => {
@@ -297,7 +297,7 @@ describe('CommanderShell remote panels', () => {
     await user.click(within(await screen.findByRole('dialog', { name: '사이트 목록' })).getByRole('button', { name: '새 사이트' }));
     const form = await screen.findByRole('dialog', { name: '원격 연결' });
     await user.type(within(form).getByLabelText('호스트'), 'example.com');
-    await user.type(within(form).getByLabelText('사용자'), 'boksl');
+    await user.type(within(form).getByLabelText('사용자 이름'), 'boksl');
     await user.type(within(form).getByLabelText('암호'), 'typed-secret');
     await user.type(within(form).getByLabelText('사이트 이름'), '새 서버');
     await user.click(within(form).getByLabelText('암호·키 암호를 OS 자격 증명 저장소에 저장'));
@@ -340,7 +340,7 @@ describe('CommanderShell remote panels', () => {
 
     // 같은 위치가 이미 연결된 상태: 입력한 암호는 인증에 쓰이지 않아 저장되지 않음을 안내
     await connectTyping('another-secret');
-    await waitFor(() => expect(container.querySelector('.status-message')?.textContent).toBe('기존 연결을 재사용해 입력한 암호는 저장하지 않았습니다. 해제 후 다시 연결하면 저장합니다.'));
+    await waitFor(() => expect(container.querySelector('.status-message')?.textContent).toBe('기존 연결을 재사용해 입력한 암호는 저장하지 않았습니다. 연결을 해제한 뒤 다시 연결하면 저장합니다.'));
     expect(saveSettings.mock.calls.some(([input]) => input.patch.remote?.sites?.some((saved) => saved.savedSecret))).toBe(false);
   });
 

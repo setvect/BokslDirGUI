@@ -41,7 +41,7 @@ it('opens a confirmation for recorded sources, starts once, supports cancel, and
   const shell = screen.getByRole('application');
   shell.focus();
   fireEvent.keyDown(shell, { key: 'z', code: 'KeyZ', metaKey: true });
-  expect(await screen.findByRole('dialog', { name: '휴지통에서 복원' })).toBeTruthy();
+  expect(await screen.findByRole('dialog', { name: '휴지통 이동 실행 취소' })).toBeTruthy();
   expect(useOperationStore.getState().dialog?.sources).toEqual([entry]);
   expect(operationClient.startTrashUndo).not.toHaveBeenCalled();
   await act(async () => { await useOperationStore.getState().confirmDialog(); });
@@ -69,7 +69,7 @@ it('preserves input undo and cancellation before confirmation does not restore f
   const shell = screen.getByRole('application');
   shell.focus();
   fireEvent.keyDown(shell, { key: 'z', code: 'KeyZ', metaKey: true });
-  await screen.findByRole('dialog', { name: '휴지통에서 복원' });
+  await screen.findByRole('dialog', { name: '휴지통 이동 실행 취소' });
   act(() => useOperationStore.getState().cancelOperation());
   expect(operationClient.startTrashUndo).not.toHaveBeenCalled();
   expect(useOperationStore.getState().dialog).toBeNull();
@@ -121,7 +121,7 @@ it('refreshes undo receipts after a deletion completes within one render batch',
   await act(async () => {});
   shell.focus();
   fireEvent.keyDown(shell, { key: 'z', code: 'KeyZ', metaKey: true });
-  expect(await screen.findByRole('dialog', { name: '휴지통에서 복원' })).toBeTruthy();
+  expect(await screen.findByRole('dialog', { name: '휴지통 이동 실행 취소' })).toBeTruthy();
   expect(useOperationStore.getState().dialog?.sources).toEqual([entry]);
 });
 
@@ -148,7 +148,7 @@ it('connects Windows Ctrl+Z, menu and help to the same receipt confirmation whil
   const shell = screen.getByRole('application');
   shell.focus();
   fireEvent.keyDown(shell, { key: 'z', code: 'KeyZ', ctrlKey: true });
-  await screen.findByRole('dialog', { name: '휴지통에서 복원' });
+  await screen.findByRole('dialog', { name: '휴지통 이동 실행 취소' });
   expect(operationClient.startTrashUndo).not.toHaveBeenCalled();
   await act(async () => useOperationStore.getState().confirmDialog());
   expect(operationClient.startTrashUndo).toHaveBeenCalledExactlyOnceWith({ id: 'deleted-batch' });

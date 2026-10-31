@@ -312,7 +312,7 @@ describe('CommanderShell rendering', () => {
 
     await user.keyboard('tc');
 
-    expect(screen.getByText('폴더 비교 · 동일 1 · 다름 1 · 왼쪽만 1 · 오른쪽만 1')).toBeTruthy();
+    expect(screen.getByText('폴더 비교 · 동일 1개 · 다름 1개 · 왼쪽만 1개 · 오른쪽만 1개')).toBeTruthy();
     expect(document.querySelectorAll('[data-compare-state="same"]')).toHaveLength(2);
     expect(document.querySelectorAll('[data-compare-state="different"]')).toHaveLength(2);
     expect(document.querySelectorAll('[data-compare-state="left-only"]')).toHaveLength(1);
@@ -431,6 +431,6 @@ describe('CommanderShell rendering', () => {
       loadResult: emptyListings('/empty-left', '/empty-right'),
     });
     render(<CommanderShell dataSource={emptySource} />);
-    expect((await screen.findAllByText('빈 디렉터리')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('빈 폴더')).length).toBeGreaterThan(0);
   });
 });

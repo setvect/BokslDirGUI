@@ -24,6 +24,7 @@ import {
   menuRootLabelFromRegistry,
   menuRootsFromRegistry,
   menuSegmentLabel,
+  resultLabelForAction,
   shortcutHelpLabelForAction,
   shortcutLabelForAction,
   type ActionContext,
@@ -192,6 +193,15 @@ describe('action registry', () => {
       expect(isActionAvailable(action, { ...context, platform: 'other' })).toBe(false);
       expect(isActionAvailable(action, { ...context, backendAvailable: false })).toBe(false);
     }
+  });
+
+  it('names results and sort actions so they read on their own outside menus', () => {
+    // 완료 문장: "새 폴더 완료" 대신 "폴더 만들기 완료", 따로 정하지 않은 동작은 메뉴 이름 그대로
+    expect(resultLabelForAction(ACTION_BY_ID.get('file.mkdir')!, 'ko')).toBe('폴더 만들기');
+    expect(resultLabelForAction(ACTION_BY_ID.get('file.rename')!, 'ko')).toBe('이름 변경');
+    // 단축키 도움말·기능 검색은 정렬 하위 메뉴 밖에서 보이므로 "이름"만으로는 뜻이 모호
+    expect(labelForAction(ACTION_BY_ID.get('view.sortName')!, 'ko')).toBe('이름순 정렬');
+    expect(labelForAction(ACTION_BY_ID.get('view.sortDesc')!, 'en')).toBe('Sort Descending');
   });
 
   it('keeps a remote connection while a file operation is still running', () => {

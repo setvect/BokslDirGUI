@@ -2,7 +2,7 @@ import type { DialogKind } from '../operations/dialogDefinitions';
 import type { SettingAction } from './settingActions';
 import { fileShortcutPlatform, platformSupports, type FileShortcutPlatform, type PlatformFeature } from '../domain/runtimePlatform';
 import type { PanelId, PlatformInfo } from '../domain/types';
-import { ACTION_LABELS, HOTKEY_LABELS, MENU_SEGMENT_LABELS, type SupportedLanguage } from '../i18n-resources';
+import { ACTION_LABELS, ACTION_RESULT_LABELS, HOTKEY_LABELS, MENU_SEGMENT_LABELS, type SupportedLanguage } from '../i18n-resources';
 import { COMMANDS, type TauriCommandName } from '../tauri/commands';
 
 export type ActionCategory = 'navigation' | 'selection' | 'file' | 'archive' | 'view' | 'panel' | 'settings' | 'help';
@@ -293,6 +293,10 @@ export const menuPathSegmentsForAction = (action: AppAction, language: Supported
 
 export const labelForAction = (action: AppAction, language: SupportedLanguage = 'en') =>
   ACTION_LABELS[language][action.id] ?? menuSegmentLabel(action.displayLabel, language);
+
+/** 완료 문장에 쓰는 동작 이름("새 폴더 완료" 대신 "폴더 만들기 완료") */
+export const resultLabelForAction = (action: AppAction, language: SupportedLanguage = 'en') =>
+  ACTION_RESULT_LABELS[language][action.id] ?? labelForAction(action, language);
 
 export const hotkeyLabelForAction = (action: AppAction, language: SupportedLanguage = 'en') =>
   HOTKEY_LABELS[language][action.id] ?? action.hotkeyLabel;

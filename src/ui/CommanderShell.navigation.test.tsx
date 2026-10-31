@@ -95,7 +95,7 @@ describe('CommanderShell navigation', () => {
     await user.click(screen.getByRole('button', { name: '이동' }));
 
     const dialog = await screen.findByRole('dialog', { name: '경로 이동' });
-    expect(within(dialog).getByRole('alert').textContent).toBe('대상을 찾을 수 없습니다.');
+    expect(within(dialog).getByRole('alert').textContent).toBe('파일이나 폴더를 찾을 수 없습니다.');
     expect(input).toHaveProperty('value', '/missing/directory');
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(activePanelLabel(container)).toContain(previousPath);

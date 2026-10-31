@@ -14,7 +14,8 @@ import {
 import type { FileEntry, Settings } from '../domain/types';
 import {
   COMMANDER_UI_TEXT,
-  formatUserErrorMessage
+  formatUserErrorMessage,
+  PANEL_COUNT_TEXT
 } from '../i18n-resources';
 import type { SharedActionState } from './actionContext';
 import {
@@ -402,8 +403,8 @@ export function FilePanel({
         </ContextMenu.Root>
       </div>
       <footer className="panel-status">
-        <span>{summary.files} {labels.files}, {summary.dirs} {labels.dirs}</span>
-        <span>{panel.selectedPaths.length} {labels.selected}</span>
+        <span>{PANEL_COUNT_TEXT[language].entries(summary.files, summary.dirs)}</span>
+        <span>{PANEL_COUNT_TEXT[language].selected(panel.selectedPaths.length)}</span>
         {isArchiveVirtualPath(listing.path) ? (
           <span className="panel-archive-readonly">{labels.archiveReadOnly}</span>
         ) : null}

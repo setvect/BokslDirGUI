@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTIONS, ACTION_BY_ID } from '../actions/registry';
 import type { FileEntry } from '../domain/types';
-import { dialogExecutionModeForDialog, dialogKindForAction } from './dialogDraft';
+import { dialogExecutionModeForDialog, dialogKindForAction, validateDialogInput } from './dialogDraft';
 import { canTransitionOperation, isOperationInFlight } from './operationLifecycle';
 import { useOperationStore } from './operationStore';
 
@@ -104,8 +104,18 @@ describe('operation store', () => {
     expect(useOperationStore.getState().progress).toBeNull();
     expect(useOperationStore.getState().lastError).toMatchObject({
       code: 'invalid_name',
-      messageKey: 'errors.invalidName',
+      messageKey: 'errors.nameHasSeparator',
     });
+  });
+
+  it('tells empty names apart from reserved names and path separators', () => {
+    expect(validateDialogInput('createDir', '  ', null)).toBe('errors.nameRequired');
+    expect(validateDialogInput('rename', 'a\\b', null)).toBe('errors.nameHasSeparator');
+    expect(validateDialogInput('rename', '..', null)).toBe('errors.invalidName');
+    expect(validateDialogInput('archiveCreate', '', null)).toBe('errors.nameRequired');
+    expect(validateDialogInput('archiveCreate', 'a/b.zip', null)).toBe('errors.nameHasSeparator');
+    expect(validateDialogInput('archiveCreate', 'files.rar', null)).toBe('errors.archiveFormatUnsupported');
+    expect(validateDialogInput('createDir', 'photos', null)).toBeNull();
   });
 
   it('runs connected createDir atomic commands without queuing progress', async () => {

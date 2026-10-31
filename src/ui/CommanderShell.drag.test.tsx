@@ -316,7 +316,7 @@ describe('CommanderShell drag', () => {
         messageKey: 'errors.reparsePointUnsupported', path: 'C:\\junction', recoverable: true });
       f.down('left');
       fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
-      expect(await screen.findByText(/외부 드래그 실패:.*재파싱/)).toBeTruthy();
+      expect(await screen.findByText(/외부 드래그 실패:.*연결 항목/)).toBeTruthy();
       f.down('right');
       fireEvent.pointerMove(window, { pointerId: 7, buttons: 1, clientX: window.innerWidth + 10, clientY: 200 });
       await waitFor(() => expect(f.nativeFileDragClient.start).toHaveBeenCalledTimes(2));

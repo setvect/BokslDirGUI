@@ -8,7 +8,8 @@ import type { FileEntry } from '../domain/types';
 import { tauriClient } from '../tauri/client';
 import { OperationDialogHost } from './OperationDialogHost';
 import { useOperationStore } from './operationStore';
-import { splitOperationProgressPath } from './progressPresentation';
+import { OPERATION_COUNT_TEXT, PANEL_COUNT_TEXT } from '../i18n-resources';
+import { formatEta, splitOperationProgressPath } from './progressPresentation';
 
 const sampleEntry: FileEntry = {
   path: '/tmp/source.txt',
@@ -226,7 +227,7 @@ describe('OperationDialogHost', () => {
 
     render(<OperationDialogHost language="ko" />);
 
-    expect(screen.queryByText('대상 항목')).toBeNull();
+    expect(screen.queryByText('선택 항목')).toBeNull();
     expect(screen.queryByText('현재 폴더 자체를 대상으로 하는 작업입니다.')).toBeNull();
     expect(screen.getByText('현재 위치')).toBeTruthy();
     expect(screen.getByText('/tmp')).toBeTruthy();
@@ -264,6 +265,20 @@ describe('OperationDialogHost', () => {
     });
   });
 
+  it('writes counts as "noun N개" and remaining time in Korean units', () => {
+    expect(OPERATION_COUNT_TEXT.ko.files(3, 10)).toBe('파일 3/10개');
+    expect(OPERATION_COUNT_TEXT.ko.files(3, null)).toBe('파일 3개');
+    expect(OPERATION_COUNT_TEXT.ko.results(5, 0)).toBe('성공 5개 · 실패 0개');
+    expect(OPERATION_COUNT_TEXT.en.files(1, null)).toBe('1 file');
+    expect(PANEL_COUNT_TEXT.ko.entries(2, 3)).toBe('파일 2개 · 폴더 3개');
+    expect(PANEL_COUNT_TEXT.ko.selected(0)).toBe('선택 0개');
+    expect(PANEL_COUNT_TEXT.en.entries(1, 2)).toBe('1 file, 2 folders');
+    expect(formatEta(150, '—', 'ko')).toBe('2분 30초');
+    expect(formatEta(42, '—', 'ko')).toBe('42초');
+    expect(formatEta(150, '—', 'en')).toBe('2m 30s');
+    expect(formatEta(null, '—', 'ko')).toBe('—');
+  });
+
   it('splits long operation paths with a middle ellipsis while preserving the full path metadata', () => {
     const display = splitOperationProgressPath(longOperationPath, 64);
 
@@ -299,14 +314,16 @@ describe('OperationDialogHost', () => {
     const input = screen.getByLabelText('New folder name');
     await waitFor(() => expect(document.activeElement).toBe(input));
     // 입력 전에는 빈 칸 오류를 보이지 않고 확인 버튼만 막음
-    expect(screen.queryByText('The name is invalid.')).toBeNull();
+    expect(screen.queryByText('Enter a name.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Create Folder' })).toHaveProperty('disabled', true);
     await user.type(input, 'a/b');
-    expect(screen.getByText('The name is invalid.')).toBeTruthy();
+    expect(screen.getByText('Names cannot contain / or \\.')).toBeTruthy();
     await user.clear(input);
+    // 지운 뒤에는 빈 이름 안내로 바뀜
+    expect(screen.getByText('Enter a name.')).toBeTruthy();
     await user.type(input, 'New Folder');
 
-    expect(screen.queryByText('The name is invalid.')).toBeNull();
+    expect(screen.queryByText('Enter a name.')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Create Folder' }));
 
     expect(atomicExecutor).toHaveBeenCalledOnce();
@@ -648,9 +665,9 @@ describe('OperationDialogHost', () => {
     expect(screen.getByText('Overwrite All')).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Source' }).textContent).toContain('/tmp/source.txt');
     expect(screen.getByRole('region', { name: 'Source' }).textContent).toContain('10 B');
-    expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('/tmp/target/source.txt');
-    expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('25 B');
-    expect(screen.getByRole('region', { name: 'Destination' }).textContent).toContain('2026-07-26 10:00:00');
+    expect(screen.getByRole('region', { name: 'Existing item' }).textContent).toContain('/tmp/target/source.txt');
+    expect(screen.getByRole('region', { name: 'Existing item' }).textContent).toContain('25 B');
+    expect(screen.getByRole('region', { name: 'Existing item' }).textContent).toContain('2026-07-26 10:00:00');
     expect(screen.getAllByRole('button', { name: 'Cancel' })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Skip' }).className).toContain('safe-default');
     expect(screen.getByRole('button', { name: 'Overwrite' }).className).toContain('danger');
@@ -684,7 +701,7 @@ describe('OperationDialogHost', () => {
 
     expect(screen.queryByRole('button', { name: 'Show Info' })).toBeNull();
 
-    expect(await screen.findByText('File information')).toBeTruthy();
+    expect(await screen.findByText('Name')).toBeTruthy();
     expect(await screen.findByRole('button', { name: 'Dismiss' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Show Info' })).toBeNull();

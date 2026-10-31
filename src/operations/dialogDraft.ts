@@ -115,14 +115,26 @@ const requiredConfirmationPhraseForDialog = (dialogKind: DialogKind, request: Op
 export const showsValidationWhileTyping = (dialogKind: DialogKind, value: string) =>
   dialogKind !== 'deletePermanent' && value.trim() !== '';
 
+// 이름 입력 공통 오류: 빈 이름과 경로 구분자를 서로 다른 안내로 구분
+const nameInputError = (trimmed: string) => {
+  if (!trimmed) {
+    return 'errors.nameRequired';
+  }
+  if (trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('\0')) {
+    return 'errors.nameHasSeparator';
+  }
+  return null;
+};
+
 export const validateDialogInput = (dialogKind: DialogKind, value: string, requiredConfirmationPhrase: string | null) => {
   const trimmed = value.trim();
   if (dialogKind === 'deletePermanent') {
     return requiredConfirmationPhrase && trimmed === requiredConfirmationPhrase ? null : 'errors.confirmationRequired';
   }
   if (dialogKind === 'archiveCreate') {
-    if (!trimmed || trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('\0')) {
-      return 'errors.invalidName';
+    const nameError = nameInputError(trimmed);
+    if (nameError) {
+      return nameError;
     }
     if (archiveFileSuffix(trimmed) === null) {
       return 'errors.archiveFormatUnsupported';
@@ -135,14 +147,9 @@ export const validateDialogInput = (dialogKind: DialogKind, value: string, requi
   if (dialogKind !== 'createDir' && dialogKind !== 'rename') {
     return null;
   }
-  if (!trimmed || trimmed === '.' || trimmed === '..') {
-    return 'errors.invalidName';
-  }
-  if (trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('\0')) {
-    return 'errors.invalidName';
-  }
-  return null;
+  return nameInputError(trimmed) ?? (trimmed === '.' || trimmed === '..' ? 'errors.invalidName' : null);
 };
+
 
 export const operationKindForDialog = (dialogKind: LongRunningDialogKind): OperationKind =>
   DIALOG_DEFINITIONS[dialogKind].operationKind;

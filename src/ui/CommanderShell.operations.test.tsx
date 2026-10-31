@@ -78,7 +78,7 @@ describe('CommanderShell operations', () => {
     await user.keyboard('y');
 
     expect(operationClient.startCopy).not.toHaveBeenCalled();
-    expect(await screen.findByText(/현재 컨텍스트에서는 사용할 수 없습니다/)).toBeTruthy();
+    expect(await screen.findByText(/지금은 사용할 수 없습니다/)).toBeTruthy();
   });
 
   it('requires explicit confirmation before a move reaches the operation client', async () => {
@@ -347,7 +347,7 @@ describe('CommanderShell operations', () => {
       panelId: 'right',
       path: SAMPLE_LISTINGS.right.path,
     })));
-    expect(await screen.findByText(/삭제 대상이 이미 없습니다/)).toBeTruthy();
+    expect(await screen.findByText(/삭제 · 선택한 항목이 이미 없어/)).toBeTruthy();
   });
 
   it('blocks delete on the virtual parent row before it reaches the operation client', async () => {
@@ -366,7 +366,7 @@ describe('CommanderShell operations', () => {
 
     expect(operationClient.startDelete).not.toHaveBeenCalled();
     expect(screen.queryByText('휴지통으로 이동')).toBeNull();
-    expect(await screen.findByText(/현재 컨텍스트에서는 사용할 수 없습니다/)).toBeTruthy();
+    expect(await screen.findByText(/지금은 사용할 수 없습니다/)).toBeTruthy();
   });
 
   it('requires typed confirmation before permanent delete reaches the operation client', async () => {
@@ -532,6 +532,22 @@ describe('CommanderShell operations', () => {
     await user.keyboard('e');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(mutationClient.openDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains that shell commands are turned off instead of a generic unavailable notice', async () => {
+    const user = userEvent.setup();
+    const mutationClient = mutationClientStub({
+      loadSettings: vi.fn(async () => ({
+        ok: true as const,
+        data: settingsFixture({ external: { editorId: null, shellCommand: { enabled: false } } }),
+      })),
+    });
+    const { container } = renderCommander(createFixturePanelDataSource(), mutationClient);
+
+    await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
+    await user.keyboard(':');
+    await waitFor(() => expect(container.querySelector('.status-message')?.textContent).toBe('안전을 위해 셸 명령 실행은 기본으로 꺼져 있습니다.'));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('runs an enabled shell command directly from the input dialog', async () => {

@@ -2,6 +2,7 @@ import { displayPath } from '../domain/pathDisplay';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
+  OPERATION_COUNT_TEXT,
   OPERATION_DIALOG_TEXT,
   translateUserMessageKey,
   type SupportedLanguage
@@ -18,8 +19,12 @@ import { useOperationStore } from './operationStore';
 import { ProgressPath } from './ProgressPath';
 import { formatByteProgress, formatBytes, formatEta, formatOperationError, formatThroughput, isTerminalOperationState, progressPercentLabel, progressWidth, summaryRequiresAttention } from './progressPresentation';
 
+// 아직 모르는 크기·속도·남은 시간: 문장 대신 짧은 표시로 진행 줄을 짧게 유지
+const UNKNOWN_VALUE = '—';
+
 export function OperationDialogHost({ language = 'en' }: { language?: SupportedLanguage } = {}) {
   const text = OPERATION_DIALOG_TEXT[language];
+  const counts = OPERATION_COUNT_TEXT[language];
   const dialog = useOperationStore((state) => state.dialog);
   const progress = useOperationStore((state) => state.progress);
   const conflictPrompt = useOperationStore((state) => state.conflictPrompt);
@@ -203,7 +208,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                     <div className="progress-bar" aria-label="operation progress">
                       <span style={{ width: progressWidth(dialogProgress) }} />
                     </div>
-                    <p>{operationStateLabel(language, dialogProgress.state)} · {dialogProgress.completedFiles}/{dialogProgress.totalFiles ?? text.unknown} {text.files}</p>
+                    <p>{operationStateLabel(language, dialogProgress.state)} · {counts.files(dialogProgress.completedFiles, dialogProgress.totalFiles)}</p>
                     <ProgressPath path={dialogProgress.currentPath} />
                   </div>
                 ) : null}
@@ -218,7 +223,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 {summary ? (
                   <div className="operation-section">
                     <h3>{text.summary}</h3>
-                    <p>{operationStateLabel(language, summary.state)} · {text.completed} {summary.completedFiles} · {text.failed} {summary.failedFiles}</p>
+                    <p>{operationStateLabel(language, summary.state)} · {counts.results(summary.completedFiles, summary.failedFiles)}</p>
                     {summary.errors.map((error, index) => (
                       <p className="operation-error" key={error.code + '-' + (error.path ?? '') + '-' + index}>{formatOperationError(error, language)}</p>
                     ))}
@@ -272,12 +277,12 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
                 </div> : null}
                 <Dialog.Description className="operation-progress-description">
                   <span>
-                    {operationKindLabel(language, visibleProgress.kind)} · {operationStateLabel(language, visibleProgress.state)}{visibleProgress.kind !== 'shellCommand' ? ` · ${visibleProgress.completedFiles}/${visibleProgress.totalFiles ?? text.unknown} ${text.files}` : ''}
+                    {operationKindLabel(language, visibleProgress.kind)} · {operationStateLabel(language, visibleProgress.state)}{visibleProgress.kind !== 'shellCommand' ? ` · ${counts.files(visibleProgress.completedFiles, visibleProgress.totalFiles)}` : ''}
                   </span>
                   <ProgressPath path={visibleProgress.currentPath} />
                 </Dialog.Description>
                 <p className="operation-progress-detail">
-                  {visibleProgress.kind === 'shellCommand' ? `${text.commandOutput}: ${formatBytes(visibleProgress.completedBytes)}` : <>{formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes, text.unknown)} · {progressPercentLabel(visibleProgress)}% · {formatThroughput(visibleProgress.bytesPerSecond, text.unknown)} · {text.eta} {formatEta(visibleProgress.etaSeconds, text.unknown)}</>}
+                  {visibleProgress.kind === 'shellCommand' ? `${text.commandOutput}: ${formatBytes(visibleProgress.completedBytes)}` : <>{formatByteProgress(visibleProgress.completedBytes, visibleProgress.totalBytes, UNKNOWN_VALUE)} · {progressPercentLabel(visibleProgress)}% · {formatThroughput(visibleProgress.bytesPerSecond, UNKNOWN_VALUE)} · {text.eta} {formatEta(visibleProgress.etaSeconds, UNKNOWN_VALUE, language)}</>}
                 </p>
                 <div className="operation-progress-actions" onKeyDown={handleDialogButtonGroupKeyDown}>
                   <button type="button" className="dialog-button secondary" onClick={cancelOperation}>{text.cancel}</button>
@@ -316,7 +321,7 @@ export function OperationDialogHost({ language = 'en' }: { language?: SupportedL
             {summaryNeedsAttention && summary ? (
               <div className="operation-section">
                 <Dialog.Title>{text.operationSummary}</Dialog.Title>
-                <Dialog.Description>{operationKindLabel(language, summary.kind)} · {operationStateLabel(language, summary.state)}{summary.kind !== 'shellCommand' ? ` · ${text.completed} ${summary.completedFiles} · ${text.failed} ${summary.failedFiles}` : ''}</Dialog.Description>
+                <Dialog.Description>{operationKindLabel(language, summary.kind)} · {operationStateLabel(language, summary.state)}{summary.kind !== 'shellCommand' ? ` · ${counts.results(summary.completedFiles, summary.failedFiles)}` : ''}</Dialog.Description>
                 {summary.commandResult ? <OperationResultView value={summary.commandResult} language={language} text={text} /> : null}
                 {summary.errors.map((error, index) => (
                   <p className="operation-error" key={error.code + '-' + (error.path ?? '') + '-' + index}>{formatOperationError(error, language)}</p>

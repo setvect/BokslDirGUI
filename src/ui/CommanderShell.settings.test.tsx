@@ -43,11 +43,7 @@ describe('CommanderShell settings', () => {
 
     await user.click(screen.getByRole('button', { name: '도움말(H)' }));
     await user.click(await screen.findByText('단축키 도움말'));
-    const shortcutTitle = await screen.findByText('키보드 단축키');
-    const shortcutDialog = shortcutTitle.closest<HTMLElement>('[role="dialog"]');
-    if (!shortcutDialog) {
-      throw new Error('shortcut dialog is required');
-    }
+    const shortcutDialog = await screen.findByRole('dialog', { name: '단축키 도움말' });
     expect(within(shortcutDialog).getByText('복사')).toBeTruthy();
     expect(within(shortcutDialog).getByText('반대 패널로 복사')).toBeTruthy();
     expect(within(shortcutDialog).getByText('y/F5')).toBeTruthy();
@@ -180,7 +176,7 @@ describe('CommanderShell settings', () => {
     await user.click(within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/bookmark-keep' }));
 
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { bookmarks: [] } }));
-    expect(await screen.findByText('설정 저장 실패: 설정 저장에 실패했습니다.')).toBeTruthy();
+    expect(await screen.findByText('설정 저장 실패: 설정 파일에 쓰지 못했습니다.')).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: '북마크 삭제 1: /tmp/bookmark-keep' })).toBeTruthy();
     expect(within(dialog).queryByText('표시할 항목이 없습니다.')).toBeNull();
   });
@@ -339,7 +335,7 @@ describe('CommanderShell settings', () => {
 
     await user.click(screen.getByRole('button', { name: '도움말(H)' }));
     await user.click(await screen.findByText('기능 검색…'));
-    const helpSearchInput = await screen.findByLabelText('도움말 검색어');
+    const helpSearchInput = await screen.findByLabelText('기능 검색어');
     await user.type(helpSearchInput, '정렬');
     const helpSearchDialog = screen.getByRole('dialog', { name: '기능 검색' });
     expect(within(helpSearchDialog).getByText('보기 › 정렬 › 이름')).toBeTruthy();
@@ -462,7 +458,7 @@ describe('CommanderShell settings', () => {
     fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
     await user.click(await screen.findByRole('menuitem', { name: /라이트/ }));
 
-    expect(await screen.findByText('설정 저장 실패: 설정 저장에 실패했습니다.')).toBeTruthy();
+    expect(await screen.findByText('설정 저장 실패: 설정 파일에 쓰지 못했습니다.')).toBeTruthy();
   });
 
   it('keeps browser preview settings local instead of invoking unavailable Tauri settings commands', async () => {
