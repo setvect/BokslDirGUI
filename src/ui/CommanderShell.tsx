@@ -292,7 +292,8 @@ export function CommanderShell({
   const remote = useRemoteConnect({
     get client() { return remoteClient; },
     get language() { return settings.language; },
-    get settings() { return settings; },
+    // 연결 응답 뒤에도 방금 저장한 사이트가 보이도록 렌더 시점 값 대신 최신 설정 사용
+    get settings() { return settingsRef.current; },
     get sessions() { return remoteSessions; },
     recordSession,
     saveSettingsPatch: (patch, message) => saveSettingsPatch(patch, message),

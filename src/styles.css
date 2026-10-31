@@ -949,6 +949,11 @@ button {
   background: var(--blue-dim);
 }
 
+.filter-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 @media (max-width: 1180px) {
   .top-menu {
     gap: 8px;
@@ -2290,9 +2295,13 @@ html.is-file-dragging * {
 }
 
 .remote-connect-dialog, .remote-sites-dialog, .remote-host-key-dialog { width: min(620px, calc(100vw - 40px)); }
+/* 연결 창은 인증 방식·사이트 저장 항목으로 길어질 수 있어 창 안에서 스크롤 */
+.remote-connect-dialog { top: 32px; max-height: calc(100vh - 64px); overflow-y: auto; }
 .remote-connect-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; }
 .remote-connect-form select { width: 100%; border: 1px solid var(--line-strong); background: var(--input-bg); color: var(--text); font: inherit; padding: 6px 8px; }
 .remote-connect-form .remote-connect-check { display: flex; gap: 8px; align-items: center; }
+/* 공용 `.filter-form input` 너비가 체크박스에 적용되지 않도록 */
+.remote-connect-form .remote-connect-check input { flex: none; width: auto; margin: 0; padding: 0; accent-color: var(--blue); }
 .remote-info-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 8px 0 14px; }
 .remote-info-list dt { color: var(--muted); }
 .remote-info-list dd { margin: 0; overflow-wrap: anywhere; }
@@ -2311,6 +2320,7 @@ html.is-file-dragging * {
 .remote-chmod-grid th, .remote-chmod-grid td { padding: 2px 10px; text-align: center; }
 .remote-chmod-grid th[scope='row'] { text-align: left; }
 .remote-chmod-scope { display: flex; gap: 12px; flex-wrap: wrap; border: 0; padding: 0; margin: 6px 0; }
+.remote-chmod-scope:disabled, .remote-chmod-dialog label:has(> input:disabled) { opacity: 0.48; }
 .bulk-rename-dialog { top: 32px; width: min(1000px, calc(100vw - 40px)); max-height: calc(100vh - 64px); overflow-y: auto; }
 .bulk-rename-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .bulk-rename-fields label { min-width: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

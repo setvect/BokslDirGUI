@@ -4,6 +4,7 @@ import type { FileEntry, RenameItem, RenamePreview, RenameRules } from '../domai
 import { BULK_RENAME_TEXT, formatUserErrorMessage, type SupportedLanguage } from '../i18n-resources';
 import type { SafeMutationClient } from '../tauri/commanderClients';
 import { CommanderOverlayDialog } from './CommanderOverlays';
+import { LITERAL_TEXT_INPUT_PROPS } from './textInputProps';
 
 const DEFAULT_RULES: RenameRules = { find: '', replacement: '', prefix: '', numbering: false, start: 1, padding: 3, preserveExtension: true };
 
@@ -41,7 +42,7 @@ export function BulkRenameDialog({ sources, language, client, onClose, onConfirm
     className="bulk-rename-dialog" onOpenAutoFocus={event => { event.preventDefault(); firstInput.current?.focus(); }}>
     <div className="bulk-rename-fields">
       {(['find', 'replacement', 'prefix'] as const).map((key, index) => <label key={key}>{text[key]}
-        <input ref={index === 0 ? firstInput : undefined} value={rules[key]} onChange={event => update({ [key]: event.currentTarget.value })} />
+        <input {...LITERAL_TEXT_INPUT_PROPS} ref={index === 0 ? firstInput : undefined} value={rules[key]} onChange={event => update({ [key]: event.currentTarget.value })} />
       </label>)}
       <label><input type="checkbox" checked={rules.preserveExtension} onChange={event => update({ preserveExtension: event.currentTarget.checked })} />{text.extension}</label>
       <label><input type="checkbox" checked={rules.numbering} onChange={event => update({ numbering: event.currentTarget.checked })} />{text.numbering}</label>

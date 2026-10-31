@@ -17,6 +17,7 @@ import type { PanelNavigationState } from './panelState';
 import { useCommanderKeyboardBoundaryProps, type CommanderKeyboardOwner } from './keyboardOwnership';
 import { shortenPath } from './textLayout';
 import { formatDateTime } from './format';
+import { LITERAL_TEXT_INPUT_PROPS } from './textInputProps';
 
 export interface NavigationListItem {
   id: string;
@@ -448,6 +449,7 @@ export function PathPrompt({ language, panel, onApply, onCompleted, onCancel }: 
         <label>
           <span>{text.goToPath} · {PANEL_ID_LABELS[language][panel.listing.panelId]}</span>
           <input
+            {...LITERAL_TEXT_INPUT_PROPS}
             ref={inputRef}
             aria-label={text.path}
             aria-invalid={Boolean(error)}
@@ -543,6 +545,7 @@ export function FilterPrompt({ language, panel, onApply, onCancel }: {
         <label>
           <span>{text.filter} · {displayPath(panel.path)}</span>
           <input
+            {...LITERAL_TEXT_INPUT_PROPS}
             ref={inputRef}
             aria-label={text.filterPattern}
             value={value}

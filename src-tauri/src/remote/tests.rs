@@ -258,6 +258,55 @@ fn connection_changes_are_reported_for_connect_disconnect_and_loss() {
     assert_eq!(connection::connection(&location).unwrap_err().code, "remote_not_connected");
 }
 
+/// 클라이언트 연결 하나를 서버로 중계. 알림을 받으면 클라이언트 쪽을 RST로 끊어 서버 프로세스가 죽은 상황을 재현.
+fn start_resetting_proxy(target: u16) -> (u16, Arc<tokio::sync::Notify>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let reset = Arc::new(tokio::sync::Notify::new());
+    let signal = Arc::clone(&reset);
+    super::runtime().spawn(async move {
+        let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+        let (mut client, _) = listener.accept().await.unwrap();
+        let mut server = tokio::net::TcpStream::connect(("127.0.0.1", target)).await.unwrap();
+        let reset = tokio::select! {
+            _ = tokio::io::copy_bidirectional(&mut client, &mut server) => false,
+            _ = signal.notified() => true,
+        };
+        if reset {
+            // 대기 시간 0의 SO_LINGER: 닫을 때 FIN 대신 RST
+            #[allow(deprecated)]
+            let _ = client.set_linger(Some(Duration::ZERO));
+        }
+    });
+    (port, reset)
+}
+
+#[test]
+fn server_side_reset_is_reported_as_lost_without_a_request() {
+    // 서버 프로세스가 죽어 RST로 끊긴 연결도 요청 없이 끊김 알림(FR-34.7). 위 시험은 정상 종료(FIN)만 확인
+    let (listener, events) = recorder();
+    let server = TestSftpServer::start(TestServerOptions::default());
+    let dir = TempDir::new("remote-reset");
+    let (port, reset) = start_resetting_proxy(server.port());
+    russh::keys::known_hosts::learn_known_hosts_path("127.0.0.1", port, &server.host_public_key(), dir.path().join("known_hosts"))
+        .unwrap();
+    let location = connect(options(port, password("pw"), &dir, Some(listener))).unwrap().location.clone();
+
+    reset.notify_one();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline && events.lock().unwrap().len() < 2 {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let session_id = format!("sftp://tester@127.0.0.1:{port}/");
+    assert_eq!(*events.lock().unwrap(), vec![
+        (session_id.clone(), RemoteConnectionState::Connected, None),
+        (session_id, RemoteConnectionState::Lost, Some("remote_connection_lost".to_string())),
+    ]);
+    assert_eq!(connection::connection(&location).unwrap_err().code, "remote_not_connected");
+    assert!(connection::sessions().iter().all(|session| session.port != port));
+}
+
 #[test]
 fn network_failures_are_reported_by_stage() {
     let dir = TempDir::new("remote-network");

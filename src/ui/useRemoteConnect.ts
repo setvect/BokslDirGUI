@@ -26,7 +26,7 @@ interface RemoteConnectDependencies {
   readonly sessions: RemoteSessionMap;
   readonly recordSession: (session: RemoteSession) => void;
   readonly saveSettingsPatch: (patch: Partial<Settings>, message: string | null) => Promise<void>;
-  readonly gotoPanelPath: (panelId: PanelId, path: string) => Promise<AppError | null | undefined>;
+  readonly gotoPanelPath: (panelId: PanelId, path: string, options?: { relativeToPanel?: boolean }) => Promise<AppError | null | undefined>;
   readonly panelStateRef: RefObject<PanelStateById>;
   readonly listLocations: () => Promise<TauriResult<LocationList>>;
   readonly setStatusMessage: (message: string) => void;
@@ -262,7 +262,8 @@ export function useRemoteConnect(dependencies: RemoteConnectDependencies) {
       }
       const target = localPathBeforeRemote.current[id] ?? home;
       localPathBeforeRemote.current[id] = null;
-      if (target) await dependencies.gotoPanelPath(id, target);
+      // 복귀 위치는 로컬 절대 경로: 원격 패널 기준으로 해석하면 같은 서버 경로가 됨
+      if (target) await dependencies.gotoPanelPath(id, target, { relativeToPanel: false });
     }
     dependencies.setStatusMessage(text().disconnected(status.address));
   };

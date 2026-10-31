@@ -29,7 +29,7 @@ interface NavigationMenusDependencies {
   readonly activeTab: Record<PanelId, number>;
   readonly panelStateRef: RefObject<PanelStateById>;
   readonly dataSource: PanelDataSource;
-  readonly gotoPanelPath: (panelId: PanelId, path: string) => Promise<AppError | null | undefined>;
+  readonly gotoPanelPath: (panelId: PanelId, path: string, options?: { relativeToPanel?: boolean }) => Promise<AppError | null | undefined>;
   /** 위치 목록의 원격 사이트 선택: 연결 흐름 시작 */
   readonly connectRemoteSite?: (panelId: PanelId, siteId: string) => void;
 }
@@ -164,7 +164,8 @@ export function useNavigationMenus(dependencies: NavigationMenusDependencies) {
       dependencies.connectRemoteSite(state.panelId, item.id.slice(REMOTE_SITE_ITEM_PREFIX.length));
       return;
     }
-    void dependencies.gotoPanelPath(state.panelId, item.path);
+    // 위치 항목은 정확한 경로: 원격 패널에서 고른 로컬 위치도 로컬로 이동
+    void dependencies.gotoPanelPath(state.panelId, item.path, { relativeToPanel: false });
   };
 
   const closeNavigationTab = (state: NavigationListState, item: NavigationListItem) => {

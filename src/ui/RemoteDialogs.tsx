@@ -4,6 +4,7 @@ import { REMOTE_CONNECT_TEXT, type SupportedLanguage } from '../i18n-resources';
 import { CommanderOverlayDialog } from './CommanderOverlays';
 import { usesSecret, type AuthPrompts, type HostKeyQuestion, type RemoteConnectDraft, type RemoteSecrets } from './remoteConnectModel';
 import { remoteAddressOf, type RemotePanelStatus } from './remoteSessionState';
+import { LITERAL_TEXT_INPUT_PROPS } from './textInputProps';
 
 const AUTH_METHODS: readonly RemoteAuthMethod[] = ['password', 'publicKey', 'agent', 'keyboardInteractive'];
 
@@ -39,11 +40,11 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
       className="remote-connect-dialog" onOpenAutoFocus={(event) => { if (firstInput.current) { event.preventDefault(); firstInput.current.focus(); } }}>
       <form className="filter-form remote-connect-form" onSubmit={submit}>
         <div className="remote-connect-grid">
-          <label>{text.host}<input ref={draft.host ? undefined : firstInput} value={draft.host} disabled={pending} autoComplete="off" spellCheck={false}
+          <label>{text.host}<input {...LITERAL_TEXT_INPUT_PROPS} ref={draft.host ? undefined : firstInput} value={draft.host} disabled={pending}
             onChange={(event) => update({ host: event.currentTarget.value })} /></label>
           <label>{text.port}<input inputMode="numeric" maxLength={5} value={portText} disabled={pending}
             onChange={(event) => { const value = event.currentTarget.value.replace(/\D/g, ''); setPortText(value); update({ port: Number.parseInt(value, 10) }); }} /></label>
-          <label>{text.user}<input value={draft.user} disabled={pending} autoComplete="off" spellCheck={false}
+          <label>{text.user}<input {...LITERAL_TEXT_INPUT_PROPS} value={draft.user} disabled={pending}
             onChange={(event) => update({ user: event.currentTarget.value })} /></label>
           <label>{text.authMethod}<select value={draft.authMethod} disabled={pending}
             onChange={(event) => update({ authMethod: event.currentTarget.value as RemoteAuthMethod })}>
@@ -57,19 +58,19 @@ export function RemoteConnectDialog({ language, draft: initial, error, pending, 
         ) : null}
         {draft.authMethod === 'publicKey' ? (
           <>
-            <label>{text.keyPath}<input value={draft.keyPath} disabled={pending} spellCheck={false}
+            <label>{text.keyPath}<input {...LITERAL_TEXT_INPUT_PROPS} value={draft.keyPath} disabled={pending}
               onChange={(event) => update({ keyPath: event.currentTarget.value })} /></label>
             <label>{text.passphrase}<input ref={draft.host ? firstInput : undefined} type="password" value={passphrase} disabled={pending} autoComplete="off"
               placeholder={draft.hasSavedSecret ? text.savedSecretHint : undefined}
               onChange={(event) => setPassphrase(event.currentTarget.value)} /></label>
           </>
         ) : null}
-        <label>{text.startPath}<input value={draft.startPath} disabled={pending} spellCheck={false}
+        <label>{text.startPath}<input {...LITERAL_TEXT_INPUT_PROPS} value={draft.startPath} disabled={pending}
           onChange={(event) => update({ startPath: event.currentTarget.value })} /></label>
         <label className="remote-connect-check"><input type="checkbox" checked={draft.saveSite} disabled={pending}
           onChange={(event) => update({ saveSite: event.currentTarget.checked })} />{text.saveSite}</label>
         {draft.saveSite ? (
-          <label>{text.siteName}<input value={draft.name} maxLength={120} disabled={pending}
+          <label>{text.siteName}<input {...LITERAL_TEXT_INPUT_PROPS} value={draft.name} maxLength={120} disabled={pending}
             onChange={(event) => update({ name: event.currentTarget.value })} /></label>
         ) : null}
         {draft.saveSite && usesSecret(draft.authMethod) ? (

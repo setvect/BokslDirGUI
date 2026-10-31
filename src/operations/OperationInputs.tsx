@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import { translateUserMessageKey, type OperationDialogText, type SupportedLanguage } from '../i18n-resources';
+import { LITERAL_TEXT_INPUT_PROPS } from '../ui/textInputProps';
 import type { OperationDialogDraft } from './operationTypes';
 
 interface OperationInputsProps {
@@ -20,6 +21,7 @@ export function OperationInputs({ dialog, dialogInputLabel, dialogInputRef, lang
       <label className="operation-field">
         <span>{dialogInputLabel}</span>
         <input
+          {...LITERAL_TEXT_INPUT_PROPS}
           ref={dialogInputRef}
           aria-label={dialogInputLabel}
           value={dialog.inputValue}

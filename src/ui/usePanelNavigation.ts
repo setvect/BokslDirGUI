@@ -223,12 +223,14 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
     return null;
   };
 
-  const gotoPanelPath = async (panelId: PanelId, path: string) => {
+  // 입력한 경로는 현재 패널 위치 기준으로 해석. 위치 메뉴·연결 해제 복귀처럼 정확한 위치는 `relativeToPanel: false`로
+  // 기준 없이 이동(원격 패널에서 `/Users/…`가 원격 경로로 해석되지 않도록)
+  const gotoPanelPath = async (panelId: PanelId, path: string, options: { relativeToPanel?: boolean } = {}) => {
     if (isArchiveVirtualPath(path)) {
       return listPanel(panelId, path, { pushHistory: true, focusFallback: 'first-concrete' });
     }
     const currentPath = panelStateRef.current[panelId].path;
-    const base = isArchiveVirtualPath(currentPath) ? undefined : currentPath;
+    const base = options.relativeToPanel === false || isArchiveVirtualPath(currentPath) ? undefined : currentPath;
     const requestId = beginPanelRequest(panelId);
     setActivePanel(panelId);
     setPanelState((current) => ({ ...current, [panelId]: markPanelLoading(current[panelId]) }));
