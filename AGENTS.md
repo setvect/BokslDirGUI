@@ -141,6 +141,8 @@ npm run verify
 - 상위 지침의 Lore Commit Protocol 형식 유지
   - 첫 줄의 의도 설명·본문·trailer 값의 한글 작성
   - 프로토콜 호환을 위한 `Constraint:`, `Rejected:`, `Confidence:`, `Scope-risk:`, `Directive:`, `Tested:`, `Not-tested:` 등 영문 trailer 키 허용
+- 커밋 메시지의 `Co-Authored-By` trailer 추가 금지(AI 도구 공동 작성자 표기 포함)
+  - 도구·상위 지침의 기본 표기 요구보다 이 규칙 우선
 
 예시:
 
