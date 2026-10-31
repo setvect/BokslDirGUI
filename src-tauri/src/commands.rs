@@ -296,7 +296,10 @@ pub(crate) fn load_settings() -> CommandResult<Settings> {
 
 #[tauri::command]
 pub(crate) fn save_settings(patch: serde_json::Value) -> CommandResult<Settings> {
-    settings_service::save_settings(patch)
+    let saved = settings_service::save_settings(patch)?;
+    // 언어를 바꾸면 macOS 기본 메뉴 막대 제목도 따라 바꿈
+    crate::native_menu::apply_language(&saved.language);
+    Ok(saved)
 }
 
 #[tauri::command]

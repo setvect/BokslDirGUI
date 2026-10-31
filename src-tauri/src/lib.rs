@@ -22,6 +22,7 @@ mod file_clipboard;
 mod bulk_rename;
 mod filesystem;
 mod mutation;
+mod native_menu;
 mod navigation;
 mod operation;
 mod settings_service;
@@ -47,11 +48,24 @@ pub fn run() {
         native_drop::configure_windows(&mut context.config_mut().app.windows);
         context
     };
-    tauri::Builder::default()
+    // macOS 기본 메뉴 막대는 저장된 설정 언어로 시작(설정 파일을 읽지 못하면 기본 언어)
+    #[cfg(target_os = "macos")]
+    let menu_language = settings_service::load_settings()
+        .map(|settings| settings.language)
+        .unwrap_or_else(|_| "ko".to_string());
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = {
+        let language = menu_language.clone();
+        builder.menu(move |handle| native_menu::build(handle, &language))
+    };
+    builder
         .plugin(tauri_plugin_drag::init())
-        .setup(|app| {
+        .setup(move |app| {
             archive_provider::set_resource_directory(app.path().resource_dir()?);
             window_session::restore(app.handle());
+            #[cfg(target_os = "macos")]
+            native_menu::remember(app.handle().clone(), &menu_language);
             Ok(())
         })
         .on_window_event(|window, event| {
