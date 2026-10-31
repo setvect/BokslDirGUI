@@ -47,7 +47,7 @@ describe('full-scope verification harness', () => {
     expect(rowsById.get('copy')).toMatchObject({ implementationStatus: 'implemented', priority: 'P0' });
     expect(rowsById.get('copy')?.guiMenuPaths).toContainEqual(['Edit', 'Copy']);
     expect(rowsById.get('move')).toMatchObject({ implementationStatus: 'implemented', priority: 'P0' });
-    expect(rowsById.get('move')?.guiMenuPaths).toContainEqual(['Edit', 'Move']);
+    expect(rowsById.get('move')?.guiMenuPaths).toContainEqual(['Edit', 'Move to Other Panel']);
     expect(rowsById.get('delete')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });
     expect(rowsById.get('delete')?.guiMenuPaths).toContainEqual(['File', 'Delete']);
     expect(rowsById.get('perm_delete')).toMatchObject({ implementationStatus: 'implemented', priority: 'P1' });

@@ -1,4 +1,4 @@
-import { type CSSProperties } from 'react';
+import { Fragment, type CSSProperties } from 'react';
 import {
   menuRootLabelFromRegistry,
   menuRootsFromRegistry,
@@ -89,10 +89,14 @@ function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateCh
     >
       {nodes.map((node, itemIndex) => {
         const focused = state.itemIndex === itemIndex;
+        // 묶음 사이 구분선: 키보드 이동 대상이 아니므로 항목 번호(itemIndex)와 별개로 그림
+        const separator = node.separatorBefore ? <div className="menu-separator" role="separator" /> : null;
         if (node.kind === 'submenu') {
           const submenuOpen = focused && state.submenuIndex !== null;
           return (
-            <div key={node.id} className="menu-entry-with-submenu">
+            <Fragment key={node.id}>
+            {separator}
+            <div className="menu-entry-with-submenu">
               <button
                 type="button"
                 role="menuitem"
@@ -131,15 +135,17 @@ function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateCh
                 </div>
               ) : null}
             </div>
+            </Fragment>
           );
         }
 
         return (
+          <Fragment key={node.id}>
+          {separator}
           <button
-            key={node.id}
             type="button"
             role="menuitem"
-            className={`menu-item ${focused ? 'is-focused' : ''}`}
+            className={`menu-item ${node.checkable ? 'is-checkable' : ''} ${focused ? 'is-focused' : ''}`}
             disabled={!node.enabled}
             onMouseEnter={() => onStateChange({ ...state, itemIndex, submenuIndex: null })}
             onClick={() => {
@@ -150,13 +156,12 @@ function MenuPopoverContent({ language, root, rootIndex, nodes, state, onStateCh
             data-checked={node.checkable ? (node.checked ? 'true' : 'false') : undefined}
             aria-checked={node.checkable ? node.checked : undefined}
           >
+            {/* 켜고 끄는 설정도 하위 메뉴 선택지처럼 체크를 이름 왼쪽에 표시(단축키 칸과 구분) */}
+            {node.checkable ? <span className="menu-checkmark" aria-hidden="true">{node.checked ? '✓' : ''}</span> : null}
             <span>{node.label}</span>
-            {node.checkable ? (
-              <kbd className="menu-checkmark-inline" aria-hidden="true">{node.checked ? '✓' : ''}</kbd>
-            ) : (
-              <kbd>{menuShortcutLabel(node.action)}</kbd>
-            )}
+            <kbd>{menuShortcutLabel(node.action)}</kbd>
           </button>
+          </Fragment>
         );
       })}
     </div>

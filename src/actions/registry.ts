@@ -58,6 +58,8 @@ export interface AppAction {
   shortcutPlatforms?: readonly FileShortcutPlatform[];
   /** macOS 외 플랫폼(Windows·Linux)의 단축키 표기와 실행 키 */
   windowsShortcut?: { label: string; bindings: readonly string[] };
+  /** 실행 전에 이름·경로·확인 문구·목록 선택 등을 더 받는 항목: 메뉴에서만 이름 뒤에 `…` 표시 */
+  menuEllipsis?: boolean;
   isEnabled(context: ActionContext): boolean;
 }
 
@@ -105,45 +107,45 @@ export const ACTIONS = [
   action({ id: 'panel.copyPathToOther', category: 'panel', displayLabel: 'Copy Path to Other Panel', shortcutLabel: 'tp', keyboardBindings: ['t p'], menuPath: ['View', 'Copy Path to Other Panel'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'UI state + list_dir', isEnabled: (c) => c.hasOppositePanel && !c.operationBusy }),
   action({ id: 'panel.compareDirectories', category: 'panel', displayLabel: 'Compare Directories', shortcutLabel: 'tc', keyboardBindings: ['t c'], menuPath: ['View', 'Compare Directories'], dangerLevel: 'none', runPath: 'UI state', isEnabled: (c) => c.hasOppositePanel && !c.operationBusy }),
   action({ id: 'nav.enter', category: 'navigation', displayLabel: 'Open', shortcutLabel: 'Enter/l', keyboardBindings: ['Enter', 'l'], menuPath: ['File', 'Open'], contextScopes: ['file', 'directory', 'archive'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir/open_default', isEnabled: hasFocus }),
-  action({ id: 'external.openWith', remoteSupport: 'localOnly', requiresConcreteSources: true, category: 'file', displayLabel: 'Open With…', menuPath: ['File', 'Open With…'], contextScopes: ['file', 'archive'], platformFeature: 'openWith', dangerLevel: 'safe', command: COMMANDS.listOpenWithApps, runPath: 'list_open_with_apps/open_with_app', isEnabled: (c) => c.effectiveTargetCount === 1 && (c.focusedEntryKind === 'file' || c.focusedEntryKind === 'archive') && !c.activePathIsArchive && canInvokeBackend(c) }),
+  action({ id: 'external.openWith', remoteSupport: 'localOnly', requiresConcreteSources: true, category: 'file', displayLabel: 'Open With', menuEllipsis: true, menuPath: ['File', 'Open With'], contextScopes: ['file', 'archive'], platformFeature: 'openWith', dangerLevel: 'safe', command: COMMANDS.listOpenWithApps, runPath: 'list_open_with_apps/open_with_app', isEnabled: (c) => c.effectiveTargetCount === 1 && (c.focusedEntryKind === 'file' || c.focusedEntryKind === 'archive') && !c.activePathIsArchive && canInvokeBackend(c) }),
   action({ id: 'nav.up', category: 'navigation', shortcutLabel: 'Backspace/h', keyboardBindings: ['Backspace', 'h'], menuPath: ['Go', 'Up'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.back', category: 'navigation', shortcutLabel: 'Alt+Left', keyboardBindings: ['Alt+ArrowLeft'], menuPath: ['Go', 'Back'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
   action({ id: 'nav.forward', category: 'navigation', shortcutLabel: 'Alt+Right', keyboardBindings: ['Alt+ArrowRight'], menuPath: ['Go', 'Forward'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
-  action({ id: 'nav.refresh', category: 'navigation', shortcutLabel: 'Ctrl+R', keyboardBindings: ['Ctrl+R'], menuPath: ['View', 'Refresh'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
-  action({ id: 'nav.gotoPath', category: 'navigation', shortcutLabel: 'gp', keyboardBindings: ['g p'], menuPath: ['View', 'Go To Path'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.gotoPath, runPath: 'goto_path' }),
-  action({ id: 'nav.locations', category: 'navigation', shortcutLabel: 'gm', keyboardBindings: ['g m'], menuPath: ['View', 'Mount Points'], dangerLevel: 'safe', command: COMMANDS.listLocations, runPath: 'list_locations' }),
+  action({ id: 'nav.refresh', category: 'navigation', shortcutLabel: 'Cmd+R', keyboardBindings: ['Cmd+R', 'Ctrl+R'], windowsShortcut: { label: 'Ctrl+R', bindings: ['Ctrl+R'] }, menuPath: ['View', 'Refresh'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.listDir, runPath: 'list_dir' }),
+  action({ id: 'nav.gotoPath', category: 'navigation', shortcutLabel: 'gp', keyboardBindings: ['g p'], menuEllipsis: true, menuPath: ['Go', 'Go To Path'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.gotoPath, runPath: 'goto_path' }),
+  action({ id: 'nav.locations', category: 'navigation', shortcutLabel: 'gm', keyboardBindings: ['g m'], menuEllipsis: true, menuPath: ['Go', 'Mount Points'], dangerLevel: 'safe', command: COMMANDS.listLocations, runPath: 'list_locations' }),
   action({ id: 'nav.top', category: 'navigation', displayLabel: 'Go Top', shortcutLabel: 'gg', keyboardBindings: ['g g'], menuPath: ['Go', 'Top'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'nav.bottom', category: 'navigation', displayLabel: 'Go Bottom', shortcutLabel: 'G', keyboardBindings: ['Shift+G'], menuPath: ['Go', 'Bottom'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'tab.new', category: 'panel', shortcutLabel: 'tn', keyboardBindings: ['t n'], menuPath: ['View', 'New Tab'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'tab.close', category: 'panel', shortcutLabel: 'tx', keyboardBindings: ['t x'], menuPath: ['View', 'Close Tab'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'tab.list', category: 'panel', shortcutLabel: 'tt', keyboardBindings: ['t t'], menuPath: ['View', 'Tab List'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'tab.list', category: 'panel', shortcutLabel: 'tt', keyboardBindings: ['t t'], menuEllipsis: true, menuPath: ['View', 'Tab List'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.toggle', category: 'selection', hotkeyLabel: 'Sel', shortcutLabel: 'Space', keyboardBindings: ['Space'], menuPath: ['Edit', 'Select'], dangerLevel: 'none', runPath: 'UI state', isEnabled: hasFocus }),
-  action({ id: 'selection.all', category: 'selection', hotkeyLabel: 'SelAll', shortcutLabel: 'Ctrl+A', keyboardBindings: ['Ctrl+A'], menuPath: ['Edit', 'Select All'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'selection.all', category: 'selection', hotkeyLabel: 'SelAll', shortcutLabel: 'Cmd+A', keyboardBindings: ['Cmd+A', 'Ctrl+A'], windowsShortcut: { label: 'Ctrl+A', bindings: ['Ctrl+A'] }, menuPath: ['Edit', 'Select All'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'file.undoTrash', remoteSupport: 'localOnly', dialogKind: 'undoTrash', category: 'file', displayLabel: 'Undo Move to Trash', shortcutLabel: 'Cmd+Z', keyboardBindings: ['Cmd+Z', 'Ctrl+Z'], windowsShortcut: { label: 'Ctrl+Z', bindings: ['Ctrl+Z'] }, menuPath: ['Edit', 'Undo Move to Trash'], dangerLevel: 'safe', command: COMMANDS.startTrashUndo, runPath: 'preview_trash_undo/start_trash_undo', platformFeature: 'trashUndo', isEnabled: (c) => c.trashUndoAvailable === true && canInvokeBackend(c) }),
   action({ id: 'file.clipboardCopy', requiresConcreteSources: true, category: 'file', displayLabel: 'Copy', shortcutLabel: 'Cmd+C', keyboardBindings: ['Cmd+C', 'Ctrl+C'], windowsShortcut: { label: 'Ctrl+C', bindings: ['Ctrl+C'] }, menuPath: ['Edit', 'Copy'], contextScopes: ['selection'], dangerLevel: 'safe', runPath: 'macOS/Windows write_file_clipboard / UI clipboard state', isEnabled: hasEffectiveTarget }),
   action({ id: 'file.clipboardCut', requiresConcreteSources: true, category: 'file', displayLabel: 'Cut', shortcutLabel: 'Ctrl+X', keyboardBindings: ['Ctrl+X'], menuPath: ['Edit', 'Cut'], contextScopes: ['selection'], shortcutPlatforms: ['other'], dangerLevel: 'safe', runPath: 'Windows write_file_clipboard / UI clipboard state', isEnabled: (c) => hasEffectiveTarget(c) && !c.activePathIsArchive && c.backendAvailable }),
   action({ id: 'file.clipboardPaste', category: 'file', displayLabel: 'Paste', shortcutLabel: 'Cmd+V', keyboardBindings: ['Cmd+V', 'Ctrl+V'], windowsShortcut: { label: 'Ctrl+V', bindings: ['Ctrl+V'] }, menuPath: ['Edit', 'Paste'], contextScopes: ['blank'], dangerLevel: 'safe', runPath: 'start_copy/start_move/archive_extract/archive_add', isEnabled: (c) => (c.clipboardCount ?? 0) > 0 && (c.clipboardMode !== 'move' || c.clipboardCanMove === true) && canMutate(c) }),
   action({ id: 'file.clipboardMovePaste', category: 'file', displayLabel: 'Move Here', shortcutLabel: 'Opt+Cmd+V', keyboardBindings: ['Alt+Cmd+V'], menuPath: ['Edit', 'Move Here'], contextScopes: ['blank'], shortcutPlatforms: ['mac'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move via confirmation dialog', isEnabled: (c) => (c.clipboardCount ?? 0) > 0 && c.clipboardCanMove === true && canMutate(c) }),
   action({ id: 'file.copy', requiresConcreteSources: true, dialogKind: 'copy', category: 'file', displayLabel: 'Copy', shortcutLabel: 'y/F5', keyboardBindings: ['y', 'F5'], menuPath: ['Edit', 'Copy to Other Panel'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.startCopy, runPath: 'start_copy', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutate(c) }),
-  action({ id: 'file.move', requiresConcreteSources: true, dialogKind: 'move', category: 'file', displayLabel: 'Move', shortcutLabel: 'x/F6', keyboardBindings: ['x', 'F6'], menuPath: ['Edit', 'Move'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutateFilesystem(c) }),
+  action({ id: 'file.move', requiresConcreteSources: true, dialogKind: 'move', category: 'file', displayLabel: 'Move', shortcutLabel: 'x/F6', keyboardBindings: ['x', 'F6'], menuPath: ['Edit', 'Move to Other Panel'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startMove, runPath: 'start_move', isEnabled: (c) => hasEffectiveTarget(c) && c.hasOppositePanel && canMutateFilesystem(c) }),
   action({ id: 'file.trash', requiresConcreteSources: true, dialogKind: 'trash', category: 'file', displayLabel: 'Delete', hotkeyLabel: 'Del', shortcutLabel: 'd', keyboardBindings: ['d'], menuPath: ['File', 'Delete'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startDelete, runPath: 'start_delete trash', isEnabled: (c) => hasEffectiveTarget(c) && canMutateFilesystem(c) }),
-  action({ id: 'file.deletePermanent', requiresConcreteSources: true, dialogKind: 'deletePermanent', category: 'file', displayLabel: 'Permanent Delete', hotkeyLabel: 'PermDel', shortcutLabel: 'Shift+D/Shift+Delete', keyboardBindings: ['Shift+D', 'Shift+Delete'], menuPath: ['File', 'Permanent Delete'], contextScopes: ['selection'], dangerLevel: 'irreversible', command: COMMANDS.startDelete, runPath: 'start_delete permanent', isEnabled: (c) => hasEffectiveTarget(c) && canMutateFilesystem(c) }),
-  action({ id: 'file.mkdir', dialogKind: 'createDir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutateFilesystem }),
-  action({ id: 'file.rename', requiresConcreteSources: true, dialogKind: 'rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutateFilesystem(c) }),
-  action({ id: 'file.bulkRename', requiresConcreteSources: true, dialogKind: 'bulkRename', category: 'file', displayLabel: 'Bulk Rename', menuPath: ['File', 'Bulk Rename'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startBulkRename, runPath: 'preview_bulk_rename/start_bulk_rename', isEnabled: (c) => c.effectiveTargetCount > 0 && canMutateFilesystem(c) }),
-  action({ id: 'remote.sites', category: 'navigation', displayLabel: 'Sites…', shortcutLabel: 'gr', keyboardBindings: ['g r'], menuPath: ['Remote', 'Sites…'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'site list → remote_connect', isEnabled: canInvokeBackend }),
-  action({ id: 'remote.connect', category: 'navigation', displayLabel: 'New Connection…', menuPath: ['Remote', 'New Connection…'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'remote_connect', isEnabled: canInvokeBackend }),
+  action({ id: 'file.deletePermanent', requiresConcreteSources: true, dialogKind: 'deletePermanent', category: 'file', displayLabel: 'Permanent Delete', hotkeyLabel: 'PermDel', shortcutLabel: 'Shift+D/Shift+Delete', keyboardBindings: ['Shift+D', 'Shift+Delete'], menuEllipsis: true, menuPath: ['File', 'Permanent Delete'], contextScopes: ['selection'], dangerLevel: 'irreversible', command: COMMANDS.startDelete, runPath: 'start_delete permanent', isEnabled: (c) => hasEffectiveTarget(c) && canMutateFilesystem(c) }),
+  action({ id: 'file.mkdir', dialogKind: 'createDir', category: 'file', displayLabel: 'New Folder', hotkeyLabel: 'MkDir', shortcutLabel: 'a/F7', keyboardBindings: ['a', 'F7'], menuEllipsis: true, menuPath: ['File', 'New Folder'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.createDir, runPath: 'create_dir', isEnabled: canMutateFilesystem }),
+  action({ id: 'file.rename', requiresConcreteSources: true, dialogKind: 'rename', category: 'file', displayLabel: 'Rename', hotkeyLabel: 'Ren', shortcutLabel: 'r/F2', keyboardBindings: ['r', 'F2'], menuEllipsis: true, menuPath: ['File', 'Rename'], contextScopes: ['file', 'directory'], dangerLevel: 'destructive', command: COMMANDS.renameEntry, runPath: 'rename_entry', isEnabled: (c) => hasConcreteFocus(c) && c.selectedCount <= 1 && canMutateFilesystem(c) }),
+  action({ id: 'file.bulkRename', requiresConcreteSources: true, dialogKind: 'bulkRename', category: 'file', displayLabel: 'Bulk Rename', menuEllipsis: true, menuPath: ['File', 'Bulk Rename'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startBulkRename, runPath: 'preview_bulk_rename/start_bulk_rename', isEnabled: (c) => c.effectiveTargetCount > 0 && canMutateFilesystem(c) }),
+  action({ id: 'remote.sites', category: 'navigation', displayLabel: 'Sites', shortcutLabel: 'gr', keyboardBindings: ['g r'], menuEllipsis: true, menuPath: ['Remote', 'Sites'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'site list → remote_connect', isEnabled: canInvokeBackend }),
+  action({ id: 'remote.connect', category: 'navigation', displayLabel: 'New Connection', menuEllipsis: true, menuPath: ['Remote', 'New Connection'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'remote_connect', isEnabled: canInvokeBackend }),
   action({ id: 'remote.disconnect', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Disconnect', shortcutLabel: 'gd', keyboardBindings: ['g d'], menuPath: ['Remote', 'Disconnect'], contextScopes: ['blank'], dangerLevel: 'safe', command: COMMANDS.remoteDisconnect, runPath: 'remote_disconnect', isEnabled: (c) => Boolean(c.activeRemoteConnected) && c.backendAvailable }),
   action({ id: 'remote.reconnect', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Reconnect', menuPath: ['Remote', 'Reconnect'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.remoteConnect, runPath: 'remote_connect', isEnabled: (c) => !c.activeRemoteConnected && canInvokeBackend(c) }),
   action({ id: 'remote.info', remoteSupport: 'remoteOnly', category: 'navigation', displayLabel: 'Connection Info', menuPath: ['Remote', 'Connection Info'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.remoteSessions, runPath: 'remote_sessions' }),
-  action({ id: 'remote.chmod', remoteSupport: 'remoteOnly', requiresConcreteSources: true, dialogKind: 'remoteChmod', category: 'file', displayLabel: 'Change Permissions…', menuPath: ['Remote', 'Change Permissions…'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startRemoteChmod, runPath: 'start_remote_chmod', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
+  action({ id: 'remote.chmod', remoteSupport: 'remoteOnly', requiresConcreteSources: true, dialogKind: 'remoteChmod', category: 'file', displayLabel: 'Change Permissions', menuEllipsis: true, menuPath: ['Remote', 'Change Permissions'], contextScopes: ['selection'], dangerLevel: 'destructive', command: COMMANDS.startRemoteChmod, runPath: 'start_remote_chmod', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'app.quit', category: 'file', displayLabel: 'Quit', shortcutLabel: 'Cmd+Q', keyboardBindings: ['Cmd+Q'], windowsShortcut: { label: 'Alt+F4', bindings: ['Alt+F4'] }, menuPath: ['File', 'Quit'], dangerLevel: 'none', runPath: 'getCurrentWindow().close via explicit menu/platform quit shortcut' }),
   action({ id: 'file.properties', requiresConcreteSources: true, dialogKind: 'properties', category: 'file', displayLabel: 'File Info', hotkeyLabel: 'Info', shortcutLabel: 'i', keyboardBindings: ['i'], menuPath: ['View', 'File Info'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.getMetadata, runPath: 'get_metadata', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
   action({ id: 'file.quickView', requiresConcreteSources: true, category: 'file', displayLabel: 'Quick View', hotkeyLabel: 'View', shortcutLabel: 'F3', keyboardBindings: ['F3'], menuPath: ['View', 'Quick View'], contextScopes: ['file', 'archive'], dangerLevel: 'safe', command: COMMANDS.previewFile, runPath: 'preview_file', isEnabled: (c) => hasConcreteFocus(c) && !c.activePathIsArchive && canInvokeBackend(c) }),
-  action({ id: 'archive.list', remoteSupport: 'localOnly', requiresConcreteSources: true, category: 'archive', shortcutLabel: 'Enter on archive', menuPath: ['Archive', 'Open Archive'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list virtual-directory', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
-  action({ id: 'archive.extract', remoteSupport: 'localOnly', requiresConcreteSources: true, dialogKind: 'archiveExtract', category: 'archive', displayLabel: 'Archive Extract', shortcutLabel: 'zx', keyboardBindings: ['z x'], menuPath: ['File', 'Archive Extract'], contextScopes: ['archive'], dangerLevel: 'destructive', command: COMMANDS.archiveExtract, runPath: 'archive_extract', isEnabled: (c) => hasFocus(c) && canMutate(c) }),
-  action({ id: 'archive.extractAuto', remoteSupport: 'localOnly', requiresConcreteSources: true, dialogKind: 'archiveExtract', category: 'archive', displayLabel: 'Archive Extract Auto', shortcutLabel: 'za', keyboardBindings: ['z a'], menuPath: ['File', 'Archive Extract Auto'], contextScopes: ['archive'], dangerLevel: 'destructive', command: COMMANDS.archiveExtract, runPath: 'archive_extract auto', isEnabled: (c) => hasFocus(c) && canMutate(c) }),
-  action({ id: 'archive.create', remoteSupport: 'localOnly', requiresConcreteSources: true, dialogKind: 'archiveCreate', category: 'archive', displayLabel: 'Archive Compress', hotkeyLabel: 'Archive', shortcutLabel: 'zc', keyboardBindings: ['z c'], menuPath: ['File', 'Archive Compress'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.archiveCreate, runPath: 'archive_create', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
+  action({ id: 'archive.list', remoteSupport: 'localOnly', requiresConcreteSources: true, category: 'archive', shortcutLabel: 'Enter', menuPath: ['Archive', 'Open Archive'], contextScopes: ['archive'], dangerLevel: 'safe', command: COMMANDS.archiveList, runPath: 'archive_list virtual-directory', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
+  action({ id: 'archive.extract', remoteSupport: 'localOnly', requiresConcreteSources: true, dialogKind: 'archiveExtract', category: 'archive', displayLabel: 'Archive Extract', shortcutLabel: 'zx', keyboardBindings: ['z x'], menuEllipsis: true, menuPath: ['Archive', 'Archive Extract'], contextScopes: ['archive'], dangerLevel: 'destructive', command: COMMANDS.archiveExtract, runPath: 'archive_extract', isEnabled: (c) => hasFocus(c) && canMutate(c) }),
+  action({ id: 'archive.extractAuto', remoteSupport: 'localOnly', requiresConcreteSources: true, dialogKind: 'archiveExtract', category: 'archive', displayLabel: 'Archive Extract Auto', shortcutLabel: 'za', keyboardBindings: ['z a'], menuPath: ['Archive', 'Archive Extract Auto'], contextScopes: ['archive'], dangerLevel: 'destructive', command: COMMANDS.archiveExtract, runPath: 'archive_extract auto', isEnabled: (c) => hasFocus(c) && canMutate(c) }),
+  action({ id: 'archive.create', remoteSupport: 'localOnly', requiresConcreteSources: true, dialogKind: 'archiveCreate', category: 'archive', displayLabel: 'Archive Compress', hotkeyLabel: 'Archive', shortcutLabel: 'zc', keyboardBindings: ['z c'], menuEllipsis: true, menuPath: ['Archive', 'Archive Compress'], contextScopes: ['selection'], dangerLevel: 'safe', command: COMMANDS.archiveCreate, runPath: 'archive_create', isEnabled: (c) => hasEffectiveTarget(c) && canMutate(c) }),
   action({ id: 'external.openDefault', requiresConcreteSources: true, dialogKind: 'externalOpenDefault', category: 'file', displayLabel: 'Open Default App', shortcutLabel: 'o', keyboardBindings: ['o'], menuPath: ['File', 'Open Default App'], contextScopes: ['file'], dangerLevel: 'safe', command: COMMANDS.openDefault, runPath: 'open_default', isEnabled: (c) => hasFocus(c) && canInvokeBackend(c) }),
   action({ id: 'external.reveal', remoteSupport: 'localOnly', requiresConcreteSources: true, dialogKind: 'externalReveal', category: 'file', displayLabel: 'Reveal', menuPath: ['File', 'Reveal'], contextScopes: ['file', 'directory'], dangerLevel: 'safe', command: COMMANDS.revealInManager, runPath: 'reveal_in_manager', isEnabled: (c) => hasConcreteFocus(c) && canInvokeBackend(c) }),
   action({ id: 'external.openCurrentInFileManager', remoteSupport: 'localOnly', category: 'navigation', displayLabel: 'Open Current Folder in File Manager', menuPath: ['Go', 'Open Current Folder in File Manager'], contextScopes: ['blank'], platformFeature: 'currentFolderManager', dangerLevel: 'safe', command: COMMANDS.openCurrentInFileManager, runPath: 'open_current_in_file_manager', isEnabled: (c) => !c.activePathIsArchive && canInvokeBackend(c) }),
@@ -155,8 +157,8 @@ export const ACTIONS = [
   action({ id: 'view.reverseSort', category: 'view', shortcutLabel: 'sr', keyboardBindings: ['s r'], menuPath: ['View', 'Sort', 'Reverse'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortAsc', category: 'view', menuPath: ['View', 'Sort', 'Ascending'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.sortDesc', category: 'view', menuPath: ['View', 'Sort', 'Descending'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
-  action({ id: 'filter.start', category: 'view', displayLabel: 'Filter', shortcutLabel: '/', keyboardBindings: ['/'], menuPath: ['View', 'Filter'], contextScopes: ['blank'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'filter.clear', category: 'view', shortcutLabel: 'Esc in filter', menuPath: ['View', 'Clear Filter'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
+  action({ id: 'filter.start', category: 'view', displayLabel: 'Filter', shortcutLabel: '/', keyboardBindings: ['/'], menuEllipsis: true, menuPath: ['View', 'Filter'], contextScopes: ['blank'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'filter.clear', category: 'view', shortcutLabel: 'Esc', menuPath: ['View', 'Clear Filter'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'view.toggleHidden', category: 'view', shortcutLabel: '.', keyboardBindings: ['.'], menuPath: ['View', 'Hidden Files'], contextScopes: ['blank'], dangerLevel: 'none', command: COMMANDS.listDir, runPath: 'UI state + list_dir' }),
   action({ id: 'selection.invert', category: 'selection', hotkeyLabel: 'InvSel', shortcutLabel: 'v', keyboardBindings: ['v'], menuPath: ['Edit', 'Invert Selection'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'selection.clear', category: 'selection', hotkeyLabel: 'Desel', shortcutLabel: 'u', keyboardBindings: ['u'], menuPath: ['Edit', 'Clear Selection'], dangerLevel: 'none', runPath: 'UI state' }),
@@ -164,10 +166,10 @@ export const ACTIONS = [
   action({ id: 'layout.ratio50', category: 'view', menuPath: ['View', 'Panel Ratio', '50:50'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'layout.ratio70Left', category: 'view', menuPath: ['View', 'Panel Ratio', '70:30'], dangerLevel: 'none', runPath: 'UI state' }),
   action({ id: 'layout.ratio70Right', category: 'view', menuPath: ['View', 'Panel Ratio', '30:70'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'history.list', category: 'navigation', shortcutLabel: 'th', keyboardBindings: ['t h'], menuPath: ['View', 'History List'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'bookmark.add', category: 'navigation', shortcutLabel: 'Ctrl+B', keyboardBindings: ['Ctrl+B'], menuPath: ['View', 'Bookmark Add'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
-  action({ id: 'bookmark.list', category: 'navigation', shortcutLabel: 'tb', keyboardBindings: ['t b'], menuPath: ['View', 'Bookmark List'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'bookmark.rename', category: 'navigation', menuPath: ['Go', 'Bookmark', 'Rename'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
+  action({ id: 'history.list', category: 'navigation', shortcutLabel: 'th', keyboardBindings: ['t h'], menuEllipsis: true, menuPath: ['Go', 'History List'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'bookmark.add', category: 'navigation', shortcutLabel: 'Cmd+B', keyboardBindings: ['Cmd+B', 'Ctrl+B'], windowsShortcut: { label: 'Ctrl+B', bindings: ['Ctrl+B'] }, menuPath: ['Go', 'Bookmark Add'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
+  action({ id: 'bookmark.list', category: 'navigation', shortcutLabel: 'tb', keyboardBindings: ['t b'], menuEllipsis: true, menuPath: ['Go', 'Bookmark List'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'bookmark.rename', category: 'navigation', displayLabel: 'Rename Bookmark', menuEllipsis: true, menuPath: ['Go', 'Bookmark Rename'], dangerLevel: 'safe', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'bookmark.delete', category: 'navigation', displayLabel: 'Delete Bookmark', dangerLevel: 'destructive', command: COMMANDS.saveSettings, runPath: 'bookmark list → save_settings' }),
   action({ id: 'settings.themeDark', setting: { kind: 'theme', value: 'dark' }, category: 'settings', menuPath: ['Settings', 'Theme', 'Dark'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.themeLight', setting: { kind: 'theme', value: 'light' }, category: 'settings', menuPath: ['Settings', 'Theme', 'Light'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
@@ -175,16 +177,16 @@ export const ACTIONS = [
   action({ id: 'settings.themeMdir', setting: { kind: 'theme', value: 'mdir' }, category: 'settings', menuPath: ['Settings', 'Theme', 'Mdir'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.languageEn', setting: { kind: 'language', value: 'en' }, category: 'settings', menuPath: ['Settings', 'Language', 'English'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.languageKo', setting: { kind: 'language', value: 'ko' }, category: 'settings', menuPath: ['Settings', 'Language', 'Korean'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
-  action({ id: 'settings.toggleIcons', setting: { kind: 'showIcons' }, category: 'settings', displayLabel: 'Toggle Icons', menuPath: ['Settings', 'Toggle Icons'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
+  action({ id: 'settings.toggleIcons', setting: { kind: 'showIcons' }, category: 'settings', displayLabel: 'Show File Icons', menuPath: ['Settings', 'Show File Icons'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.sizeAuto', setting: { kind: 'sizeFormat', value: 'binary' }, category: 'settings', menuPath: ['Settings', 'File Size Format', 'Auto'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.sizeBytes', setting: { kind: 'sizeFormat', value: 'decimal' }, category: 'settings', menuPath: ['Settings', 'File Size Format', 'Bytes'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.remoteLinksPreserve', setting: { kind: 'remoteLinkPolicy', value: 'preserve' }, category: 'settings', menuPath: ['Settings', 'Remote Links', 'Preserve Links'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.remoteLinksFollow', setting: { kind: 'remoteLinkPolicy', value: 'follow' }, category: 'settings', menuPath: ['Settings', 'Remote Links', 'Copy Link Targets'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
   action({ id: 'settings.remoteLinksSkip', setting: { kind: 'remoteLinkPolicy', value: 'skip' }, category: 'settings', menuPath: ['Settings', 'Remote Links', 'Skip Links'], dangerLevel: 'none', command: COMMANDS.saveSettings, runPath: 'save_settings' }),
-  action({ id: 'external.runShellCommand', remoteSupport: 'localOnly', dialogKind: 'shellCommand', category: 'file', displayLabel: 'Shell Command', shortcutLabel: ':', keyboardBindings: [':'], menuPath: ['File', 'Run Shell Command'], dangerLevel: 'destructive', command: COMMANDS.runShellCommand, runPath: 'ShellCommandDialog → prepare_shell_command → run_shell_command', isEnabled: (c) => c.shellCommandEnabled && canMutate(c) }),
+  action({ id: 'external.runShellCommand', remoteSupport: 'localOnly', dialogKind: 'shellCommand', category: 'file', displayLabel: 'Shell Command', shortcutLabel: ':', keyboardBindings: [':'], menuEllipsis: true, menuPath: ['File', 'Run Shell Command'], dangerLevel: 'destructive', command: COMMANDS.runShellCommand, runPath: 'ShellCommandDialog → prepare_shell_command → run_shell_command', isEnabled: (c) => c.shellCommandEnabled && canMutate(c) }),
   action({ id: 'help.shortcuts', category: 'help', displayLabel: 'Keyboard Help', hotkeyLabel: 'Keys', shortcutLabel: '?', keyboardBindings: ['?'], menuPath: ['Help', 'Keyboard Help'], dangerLevel: 'none', runPath: 'dialog' }),
-  action({ id: 'help.search', category: 'help', menuPath: ['Help', 'Search'], dangerLevel: 'none', runPath: 'UI state' }),
-  action({ id: 'help.about', category: 'help', menuPath: ['Help', 'About'], dangerLevel: 'none', runPath: 'dialog' }),
+  action({ id: 'help.search', category: 'help', menuEllipsis: true, menuPath: ['Help', 'Search Commands'], dangerLevel: 'none', runPath: 'UI state' }),
+  action({ id: 'help.about', category: 'help', menuPath: ['Help', 'About BokslDir'], dangerLevel: 'none', runPath: 'dialog' }),
 ] as const satisfies readonly AppAction[];
 
 export type ActionId = (typeof ACTIONS)[number]['id'];
@@ -299,8 +301,77 @@ export const actionVisibleOnPlatform = (action: AppAction, platform = fileShortc
   (!action.shortcutPlatforms || action.shortcutPlatforms.includes(platform))
   && (!action.platformFeature || platformSupports(action.platformFeature, info, platform));
 
-export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform(), info?: PlatformInfo) =>
-  ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform, info));
+/**
+ * 메뉴별 표시 순서와 묶음(묶음 사이 구분선). 액션 정의 순서는 도움말·문서에 쓰이므로 메뉴 배치는 여기서만 정함.
+ * 메뉴 경로가 있는 액션은 모두 자기 메뉴의 묶음에 한 번씩 들어감(registry 시험으로 확인).
+ */
+export const MENU_LAYOUT: Readonly<Record<string, readonly (readonly ActionId[])[]>> = {
+  File: [
+    ['nav.enter', 'external.openDefault', 'external.openWith', 'external.reveal'],
+    ['file.mkdir', 'file.rename', 'file.bulkRename'],
+    ['file.trash', 'file.deletePermanent'],
+    ['external.runShellCommand'],
+    ['app.quit'],
+  ],
+  Edit: [
+    ['file.undoTrash'],
+    ['file.clipboardCut', 'file.clipboardCopy', 'file.clipboardPaste', 'file.clipboardMovePaste'],
+    ['file.copy', 'file.move'],
+    ['selection.toggle', 'selection.all', 'selection.invert', 'selection.clear'],
+  ],
+  View: [
+    ['panel.switchActive', 'panel.swapPaths', 'panel.copyPathToOther', 'panel.compareDirectories'],
+    ['tab.new', 'tab.close', 'tab.list'],
+    ['view.sortName', 'view.sortSize', 'view.sortDate', 'view.sortExt', 'view.reverseSort', 'view.sortAsc', 'view.sortDesc', 'filter.start', 'filter.clear', 'view.toggleHidden'],
+    ['file.properties', 'file.quickView'],
+    ['layout.toggleSingleDual', 'layout.ratio50', 'layout.ratio70Left', 'layout.ratio70Right'],
+    ['nav.refresh'],
+  ],
+  Go: [
+    ['nav.up', 'nav.back', 'nav.forward', 'nav.top', 'nav.bottom'],
+    ['nav.gotoPath', 'nav.locations', 'history.list'],
+    ['bookmark.add', 'bookmark.list', 'bookmark.rename'],
+    ['external.openCurrentInFileManager', 'external.openCurrentInTerminal'],
+  ],
+  Remote: [
+    ['remote.sites', 'remote.connect'],
+    ['remote.info', 'remote.reconnect', 'remote.disconnect'],
+    ['remote.chmod'],
+  ],
+  Archive: [
+    ['archive.list'],
+    ['archive.extract', 'archive.extractAuto', 'archive.create'],
+  ],
+  Settings: [
+    [
+      'settings.themeDark', 'settings.themeLight', 'settings.themeHighContrast', 'settings.themeMdir',
+      'settings.languageEn', 'settings.languageKo', 'settings.sizeAuto', 'settings.sizeBytes',
+      'settings.remoteLinksPreserve', 'settings.remoteLinksFollow', 'settings.remoteLinksSkip',
+    ],
+    ['settings.toggleIcons'],
+  ],
+  Help: [
+    ['help.shortcuts', 'help.search'],
+    ['help.about'],
+  ],
+};
+
+const MENU_GROUP_BY_ACTION: ReadonlyMap<string, number> = new Map(
+  Object.values(MENU_LAYOUT).flatMap((groups) => groups.flatMap((group, index) => group.map((id) => [id, index] as const))),
+);
+
+/** 메뉴 안 묶음 번호. 번호가 바뀌는 자리에 구분선 */
+export const menuGroupIndexForAction = (action: AppAction) => MENU_GROUP_BY_ACTION.get(action.id) ?? Number.MAX_SAFE_INTEGER;
+
+export const actionsForMenu = (menuRoot: string, platform = fileShortcutPlatform(), info?: PlatformInfo) => {
+  const ordered = (MENU_LAYOUT[menuRoot] ?? []).flat().map((id) => getAction(id));
+  // 배치 표에 없는 메뉴 액션은 끝에(registry 시험이 누락을 막음)
+  const unplaced = ACTIONS.filter((item) => item.menuPath?.[0] === menuRoot && !MENU_GROUP_BY_ACTION.has(item.id));
+  return [...ordered, ...unplaced].filter((item) => item.menuPath?.[0] === menuRoot && actionVisibleOnPlatform(item, platform, info));
+};
+
+/** 메뉴 항목 이름: 입력을 더 받는 항목만 `…`를 붙임(상태 줄·도움말 이름에는 붙이지 않음) */
+export const menuItemLabel = (action: AppAction, label: string) => (action.menuEllipsis ? `${label}…` : label);
 
 export const menuRootLabelFromRegistry = (root: string, language: SupportedLanguage = 'en') => {
   const accelerator = MENU_ROOT_ACCELERATORS.get(root);

@@ -674,7 +674,7 @@
         ],
         [
           "Edit",
-          "Move"
+          "Move to Other Panel"
         ]
       ],
       "evidence": [
@@ -1012,12 +1012,12 @@
       ],
       "guiMenuPaths": [
         [
-          "File",
+          "Archive",
           "Archive Compress"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: archive.create maps zc/File > Archive Compress",
+        "src/actions/registry.ts: archive.create maps zc/Archive > Archive Compress",
         "src/ui/CommanderShell.archives.test.tsx: starts archive creation through the connected operation client in the source panel directory",
         "src-tauri/src/tests.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names",
         "src-tauri/src/operation/archive_ops.rs: archive create uses common_source_parent and unsafe absolute source defense",
@@ -1051,12 +1051,12 @@
       ],
       "guiMenuPaths": [
         [
-          "File",
+          "Archive",
           "Archive Extract"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: archive.extract maps zx/File > Archive Extract",
+        "src/actions/registry.ts: archive.extract maps zx/Archive > Archive Extract",
         "src/ui/fileActionExecutors.ts: archive.extract calls archiveExtract with targetDir and skip conflict policy",
         "src/ui/CommanderShell.archives.test.tsx: auto-extract path exercises archiveExtract client and panel refresh on summary",
         "src-tauri/src/tests.rs: archive_zip_create_list_extract_round_trip_uses_relative_entry_names and archive_operations_reject_passwords_and_unsafe_entries",
@@ -1090,12 +1090,12 @@
       ],
       "guiMenuPaths": [
         [
-          "File",
+          "Archive",
           "Archive Extract Auto"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: archive.extractAuto maps za/File > Archive Extract Auto",
+        "src/actions/registry.ts: archive.extractAuto maps za/Archive > Archive Extract Auto",
         "src/ui/fileActionPlans.ts: archiveAutoExtractFolderName derives target folder from archive basename",
         "src/ui/CommanderShell.keyboard.test.tsx: auto-extract derives release-bundle target folder and refreshes panels",
         "src-tauri/src/operation/archive_ops.rs: archive_extract target normalization and unsafe entry defense"
@@ -1639,7 +1639,7 @@
       "guiMenuPaths": [
         [
           "Settings",
-          "Toggle Icons"
+          "Show File Icons"
         ]
       ],
       "evidence": [
@@ -1648,7 +1648,7 @@
         "src/ui/CommanderShell.settings.test.tsx: persists bookmark/layout settings and opens registry-derived shortcut help",
         "src-tauri/src/contracts.rs: Settings.view.showIcons persistence"
       ],
-      "notes": "Settings > Toggle Icons가 settings.view.showIcons를 저장하고 파일 row icon 표시를 즉시 토글한다.",
+      "notes": "Settings > Show File Icons가 settings.view.showIcons를 저장하고 파일 row icon 표시를 즉시 토글한다.",
       "tuiId": "toggle_icons",
       "tuiLabel": "Toggle icons",
       "tuiCategory": "System",
@@ -2100,17 +2100,17 @@
       ],
       "guiMenuPaths": [
         [
-          "View",
+          "Go",
           "Mount Points"
         ]
       ],
       "evidence": [
-        "src/actions/registry.ts: nav.locations View/Mount Points",
+        "src/actions/registry.ts: nav.locations Go/Mount Points",
         "src/ui/CommanderShell.settings.test.tsx: opens path, location, tab, history, bookmark, help search, and about overlays",
         "src/ui/CommanderShell.navigation.test.tsx: ignores stale async location palette results",
         "src-tauri/src/navigation.rs: list_locations returns home/roots/recent/bookmarks"
       ],
-      "notes": "gm/View > Mount Points는 list_locations 결과를 Locations overlay로 표시하고 stale async 응답을 무시한다.",
+      "notes": "gm/Go > Mount Points는 list_locations 결과를 Locations overlay로 표시하고 stale async 응답을 무시한다.",
       "tuiId": "mount_points",
       "tuiLabel": "Mount points",
       "tuiCategory": "Navigation",
@@ -2137,7 +2137,7 @@
       ],
       "guiMenuPaths": [
         [
-          "View",
+          "Go",
           "Go To Path"
         ]
       ],
@@ -2263,7 +2263,7 @@
       ],
       "guiMenuPaths": [
         [
-          "View",
+          "Go",
           "History List"
         ]
       ],
@@ -2293,7 +2293,7 @@
       ],
       "guiMenuPaths": [
         [
-          "View",
+          "Go",
           "Bookmark Add"
         ]
       ],
@@ -2329,7 +2329,7 @@
       ],
       "guiMenuPaths": [
         [
-          "View",
+          "Go",
           "Bookmark List"
         ]
       ],
@@ -2431,7 +2431,7 @@
       "guiMenuPaths": [
         [
           "Help",
-          "About"
+          "About BokslDir"
         ]
       ],
       "evidence": [

@@ -145,7 +145,7 @@
 | `theme_contrast` | 없음 | Settings > Theme > High Contrast | `settings.themeHighContrast` | implemented | P0 | High Contrast direct menu action saves settings.theme=highContrast and updates shell data-theme. |
 | `language_en` | 없음 | Settings > Language > English | `settings.languageEn` | implemented | P0 | English language direct menu action saves settings.language=en and updates shell data-language. |
 | `language_ko` | 없음 | Settings > Language > Korean | `settings.languageKo` | implemented | P0 | Korean language direct menu action saves settings.language=ko and updates shell data-language. |
-| `toggle_icons` | 없음 | Settings > Toggle Icons | `settings.toggleIcons` | implemented | P2 | Settings > Toggle Icons가 settings.view.showIcons를 저장하고 파일 row icon 표시를 즉시 토글한다. |
+| `toggle_icons` | 없음 | Settings > Toggle Icons | `settings.toggleIcons` | implemented | P2 | Settings > Show File Icons가 settings.view.showIcons를 저장하고 파일 row icon 표시를 즉시 토글한다. |
 | `editor_preset_vi` | 없음 | Settings > Default Editor > vi | 없음 | excluded | P1 | 2026-10-03 사용자 명시 요청으로 터미널 편집기 열기와 전용 편집기 설정 제거. 원천 TUI 정보만 보존. |
 | `editor_preset_vim` | 없음 | Settings > Default Editor > vim | 없음 | excluded | P1 | 2026-10-03 사용자 명시 요청으로 터미널 편집기 열기와 전용 편집기 설정 제거. 원천 TUI 정보만 보존. |
 | `editor_preset_nano` | 없음 | Settings > Default Editor > nano | 없음 | excluded | P1 | 2026-10-03 사용자 명시 요청으로 터미널 편집기 열기와 전용 편집기 설정 제거. 원천 TUI 정보만 보존. |
@@ -159,7 +159,7 @@
 | `filter_start` | / | View > Filter | `filter.start` | implemented | P1 | 필터 입력은 list_dir filter로 전달되고 panel/status/chip 및 파일명 match highlight로 적용 상태를 표시한다. |
 | `filter_clear` | 없음 | View > Clear Filter | `filter.clear` | implemented | P1 | Clear Filter는 list_dir filter=null로 갱신하고 filter chip/status를 제거한다. |
 | `toggle_hidden` | . | View > Toggle Hidden | `view.toggleHidden` | implemented | P1 | 숨김 토글 후 list_dir 갱신 경로가 있다. |
-| `mount_points` | gm | View > Mount Points | `nav.locations` | implemented | P1 | gm/View > Mount Points는 list_locations 결과를 Locations overlay로 표시하고 stale async 응답을 무시한다. |
+| `mount_points` | gm | View > Mount Points | `nav.locations` | implemented | P1 | gm/Go > Mount Points는 list_locations 결과를 Locations overlay로 표시하고 stale async 응답을 무시한다. |
 | `goto_path` | gp | View > Go To Path | `nav.gotoPath` | implemented | P1 | gp/View > Go To Path가 Path prompt를 열고 goto_path 결과 listing으로 패널을 이동한다. |
 | `tab_list` | tt | 없음 | `tab.list` | implemented | P1 | tt는 현재 패널 tab overlay를 열고 tab_new/tab_close 결과를 확인할 수 있다. |
 | `history_back` | Alt+Left | 없음 | `nav.back` | implemented | P1 | 히스토리 state와 list_dir 재요청 경로가 있다. |

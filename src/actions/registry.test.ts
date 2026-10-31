@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { COMMANDS } from '../tauri/commands';
 import { platformInfoFixture } from '../ui/testing/clientStubs';
 import { fileShortcutPlatform } from '../domain/runtimePlatform';
+import { ACTION_LABELS, MENU_SEGMENT_LABELS } from '../i18n-resources';
 import {
   ACTIONS,
   ACTION_BY_ID,
+  MENU_LAYOUT,
   actionForKeyboardShortcut,
   actionVisibleOnPlatform,
   actionsForMenu,
@@ -17,9 +19,11 @@ import {
   keyboardBindingsForAction,
   labelForAction,
   matchKeyboardShortcut,
+  menuItemLabel,
   menuRootAcceleratorFromRegistry,
   menuRootLabelFromRegistry,
   menuRootsFromRegistry,
+  menuSegmentLabel,
   shortcutHelpLabelForAction,
   shortcutLabelForAction,
   type ActionContext,
@@ -52,14 +56,15 @@ describe('action registry', () => {
     expect(ACTION_BY_ID.get('external.openCurrentInTerminal')?.menuPath).toEqual(['Go', 'Open Terminal Here']);
     expect(ACTION_BY_ID.get('external.runShellCommand')?.menuPath).toEqual(['File', 'Run Shell Command']);
     expect(ACTION_BY_ID.get('app.quit')?.menuPath).toEqual(['File', 'Quit']);
-    expect(ACTION_BY_ID.get('nav.gotoPath')?.menuPath).toEqual(['View', 'Go To Path']);
-    expect(ACTION_BY_ID.get('nav.locations')?.menuPath).toEqual(['View', 'Mount Points']);
-    expect(ACTION_BY_ID.get('history.list')?.menuPath).toEqual(['View', 'History List']);
-    expect(ACTION_BY_ID.get('bookmark.add')?.menuPath).toEqual(['View', 'Bookmark Add']);
-    expect(ACTION_BY_ID.get('bookmark.list')?.menuPath).toEqual(['View', 'Bookmark List']);
+    // 경로·위치·히스토리·북마크는 이동(G) 메뉴(UX 점검 2026-10-31: 보기 메뉴에서 옮김)
+    expect(ACTION_BY_ID.get('nav.gotoPath')?.menuPath).toEqual(['Go', 'Go To Path']);
+    expect(ACTION_BY_ID.get('nav.locations')?.menuPath).toEqual(['Go', 'Mount Points']);
+    expect(ACTION_BY_ID.get('history.list')?.menuPath).toEqual(['Go', 'History List']);
+    expect(ACTION_BY_ID.get('bookmark.add')?.menuPath).toEqual(['Go', 'Bookmark Add']);
+    expect(ACTION_BY_ID.get('bookmark.list')?.menuPath).toEqual(['Go', 'Bookmark List']);
     expect(ACTION_BY_ID.get('layout.toggleSingleDual')?.menuPath).toEqual(['View', 'Toggle Layout']);
     expect(ACTION_BY_ID.get('help.shortcuts')?.menuPath).toEqual(['Help', 'Keyboard Help']);
-    expect(ACTION_BY_ID.get('settings.toggleIcons')?.menuPath).toEqual(['Settings', 'Toggle Icons']);
+    expect(ACTION_BY_ID.get('settings.toggleIcons')?.menuPath).toEqual(['Settings', 'Show File Icons']);
   });
 
   it('does not expose the retired current-path bookmark delete menu', () => {
@@ -124,6 +129,46 @@ describe('action registry', () => {
     expect(labelForAction(copy)).toBe('Copy to Other Panel');
     expect(labelForAction(copy, 'ko')).toBe('반대 패널로 복사');
     expect(copy.hotkeyLabel).toBe('Copy');
+  });
+
+  it('places every menu action exactly once in its own menu layout group', () => {
+    const placed = Object.entries(MENU_LAYOUT).flatMap(([root, groups]) => groups.flat().map((id) => ({ root, id })));
+    expect(new Set(placed.map(({ id }) => id)).size).toBe(placed.length);
+    for (const { root, id } of placed) expect(getAction(id).menuPath?.[0], id).toBe(root);
+    const menuActions = ACTIONS.filter((action) => action.menuPath).map((action) => action.id).sort();
+    expect(placed.map(({ id }) => id).sort()).toEqual(menuActions);
+  });
+
+  it('translates every menu path segment and names menu items like help and status messages', () => {
+    const numeric = /^\d+:\d+$/;
+    const missing = [...new Set(ACTIONS.flatMap((action) => action.menuPath ?? []))]
+      .filter((segment) => !numeric.test(segment) && !(segment in MENU_SEGMENT_LABELS.ko));
+    expect(missing).toEqual([]);
+    // 최상위 메뉴 항목 이름 = 도움말·상태 줄·우클릭 메뉴가 쓰는 액션 이름(이름 출처가 둘이라 어긋나지 않게)
+    const mismatched = ACTIONS.filter((action) => action.menuPath?.length === 2).flatMap((action) =>
+      (['ko', 'en'] as const).flatMap((language) => {
+        const menuLabel = menuSegmentLabel(action.menuPath![1], language);
+        const actionLabel = labelForAction(action, language);
+        return menuLabel === actionLabel ? [] : [`${action.id} (${language}): menu "${menuLabel}" vs action "${actionLabel}"`];
+      }));
+    expect(mismatched).toEqual([]);
+  });
+
+  it('adds the ellipsis only when drawing menus, never inside label tables', () => {
+    for (const language of ['ko', 'en'] as const) {
+      const labels = [...Object.values(MENU_SEGMENT_LABELS[language]), ...Object.values(ACTION_LABELS[language])];
+      expect(labels.filter((label) => label.includes('…'))).toEqual([]);
+    }
+    expect(menuItemLabel(getAction('file.rename'), '이름 변경')).toBe('이름 변경…');
+    expect(menuItemLabel(getAction('file.trash'), '삭제')).toBe('삭제');
+  });
+
+  it('ends the File menu with Quit in its own group and moves archive and navigation lists to their menus', () => {
+    const file = MENU_LAYOUT.File;
+    expect(file.at(-1)).toEqual(['app.quit']);
+    expect(actionsForMenu('Archive', 'mac').map((action) => action.id)).toEqual(['archive.list', 'archive.extract', 'archive.extractAuto', 'archive.create']);
+    expect(actionsForMenu('Go', 'mac').map((action) => action.id)).toEqual(expect.arrayContaining(['nav.gotoPath', 'nav.locations', 'history.list', 'bookmark.list']));
+    expect(actionsForMenu('View', 'mac').map((action) => action.id)).not.toContain('nav.gotoPath');
   });
 
   it('never falls back to raw action IDs for user-facing labels', () => {
@@ -245,7 +290,7 @@ describe('action registry', () => {
     expect(actionForKeyboardShortcut(key('q', { ctrlKey: true }))).toBeNull();
     expect(actionForKeyboardShortcut(key('q', { metaKey: true }))?.id).toBe('app.quit');
     expect(actionForKeyboardShortcut(key('q'))).toBeNull();
-    expect(ACTION_BY_ID.get('archive.list')?.shortcutLabel).toBe('Enter on archive');
+    expect(ACTION_BY_ID.get('archive.list')?.shortcutLabel).toBe('Enter');
     expect(ACTION_BY_ID.get('archive.list')?.keyboardBindings).toBeUndefined();
   });
 
@@ -280,16 +325,18 @@ describe('action registry', () => {
     const bookmarkList = matchKeyboardShortcut(key('b'), pendingTab.sequence);
     expect(bookmarkList.status).toBe('matched');
     expect(bookmarkList.action?.id).toBe('bookmark.list');
-    expect(ACTION_BY_ID.get('bookmark.add')?.keyboardBindings).toEqual(['Ctrl+B']);
+    expect(keyboardBindingsForAction(ACTION_BY_ID.get('bookmark.add')!, 'mac')).toEqual(['Cmd+B', 'Ctrl+B']);
+    expect(keyboardBindingsForAction(ACTION_BY_ID.get('bookmark.add')!, 'other')).toEqual(['Ctrl+B']);
   });
 
   it('keeps hotkey strip shortcut formatting behind a registry helper', () => {
     expect(shortcutLabelForAction(ACTION_BY_ID.get('file.copy')!)).toBe('y');
     expect(shortcutLabelForAction(ACTION_BY_ID.get('filter.start')!)).toBe('/');
-    expect(shortcutLabelForAction(ACTION_BY_ID.get('archive.list')!)).toBe('Enter on archive');
+    expect(shortcutLabelForAction(ACTION_BY_ID.get('archive.list')!)).toBe('Enter');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('file.copy')!)).toBe('y/F5');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('file.deletePermanent')!)).toBe('Shift+D/Shift+Delete');
-    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('bookmark.add')!)).toBe('Ctrl+B');
+    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('bookmark.add')!, 'mac')).toBe('Cmd+B');
+    expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('bookmark.add')!, 'other')).toBe('Ctrl+B');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('help.search')!)).toBe('');
     expect(shortcutHelpLabelForAction(ACTION_BY_ID.get('external.openWith')!)).toBe('');
     expect(actionForKeyboardShortcut(key('.'))?.id).toBe('view.toggleHidden');

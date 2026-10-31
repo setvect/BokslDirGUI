@@ -34,45 +34,45 @@
 | `panel.copyPathToOther` | panel | tp | `t p` | View > Copy Path to Other Panel | safe | UI state + list_dir |
 | `panel.compareDirectories` | panel | tc | `t c` | View > Compare Directories | none | UI state |
 | `nav.enter` | navigation | Enter/l | `Enter`, `l` | File > Open | safe | list_dir/open_default |
-| `external.openWith` | file | 없음 | 없음 | File > Open With… | safe | list_open_with_apps/open_with_app |
+| `external.openWith` | file | 없음 | 없음 | File > Open With | safe | list_open_with_apps/open_with_app |
 | `nav.up` | navigation | Backspace/h | `Backspace`, `h` | Go > Up | safe | list_dir |
 | `nav.back` | navigation | Alt+Left | `Alt+ArrowLeft` | Go > Back | safe | list_dir |
 | `nav.forward` | navigation | Alt+Right | `Alt+ArrowRight` | Go > Forward | safe | list_dir |
-| `nav.refresh` | navigation | Ctrl+R | `Ctrl+R` | View > Refresh | safe | list_dir |
-| `nav.gotoPath` | navigation | gp | `g p` | View > Go To Path | safe | goto_path |
-| `nav.locations` | navigation | gm | `g m` | View > Mount Points | safe | list_locations |
+| `nav.refresh` | navigation | Cmd+R | `Cmd+R`, `Ctrl+R` | View > Refresh | safe | list_dir |
+| `nav.gotoPath` | navigation | gp | `g p` | Go > Go To Path | safe | goto_path |
+| `nav.locations` | navigation | gm | `g m` | Go > Mount Points | safe | list_locations |
 | `nav.top` | navigation | gg | `g g` | Go > Top | none | UI state |
 | `nav.bottom` | navigation | G | `Shift+G` | Go > Bottom | none | UI state |
 | `tab.new` | panel | tn | `t n` | View > New Tab | none | UI state + list_dir |
 | `tab.close` | panel | tx | `t x` | View > Close Tab | none | UI state |
 | `tab.list` | panel | tt | `t t` | View > Tab List | none | UI state |
 | `selection.toggle` | selection | Space | `Space` | Edit > Select | none | UI state |
-| `selection.all` | selection | Ctrl+A | `Ctrl+A` | Edit > Select All | none | UI state |
+| `selection.all` | selection | Cmd+A | `Cmd+A`, `Ctrl+A` | Edit > Select All | none | UI state |
 | `file.undoTrash` | file | Cmd+Z | `Cmd+Z`, `Ctrl+Z` | Edit > Undo Move to Trash | safe | preview_trash_undo/start_trash_undo |
 | `file.clipboardCopy` | file | Cmd+C | `Cmd+C`, `Ctrl+C` | Edit > Copy | safe | macOS/Windows write_file_clipboard / UI clipboard state |
 | `file.clipboardCut` | file | Ctrl+X | `Ctrl+X` | Edit > Cut | safe | Windows write_file_clipboard / UI clipboard state |
 | `file.clipboardPaste` | file | Cmd+V | `Cmd+V`, `Ctrl+V` | Edit > Paste | safe | start_copy/start_move/archive_extract/archive_add |
 | `file.clipboardMovePaste` | file | Opt+Cmd+V | `Alt+Cmd+V` | Edit > Move Here | destructive | start_move via confirmation dialog |
 | `file.copy` | file | y/F5 | `y`, `F5` | Edit > Copy to Other Panel | safe | start_copy |
-| `file.move` | file | x/F6 | `x`, `F6` | Edit > Move | destructive | start_move |
+| `file.move` | file | x/F6 | `x`, `F6` | Edit > Move to Other Panel | destructive | start_move |
 | `file.trash` | file | d | `d` | File > Delete | destructive | start_delete trash |
 | `file.deletePermanent` | file | Shift+D/Shift+Delete | `Shift+D`, `Shift+Delete` | File > Permanent Delete | irreversible | start_delete permanent |
 | `file.mkdir` | file | a/F7 | `a`, `F7` | File > New Folder | safe | create_dir |
 | `file.rename` | file | r/F2 | `r`, `F2` | File > Rename | destructive | rename_entry |
 | `file.bulkRename` | file | 없음 | 없음 | File > Bulk Rename | destructive | preview_bulk_rename/start_bulk_rename |
-| `remote.sites` | navigation | gr | `g r` | Remote > Sites… | none | site list → remote_connect |
-| `remote.connect` | navigation | 없음 | 없음 | Remote > New Connection… | none | remote_connect |
+| `remote.sites` | navigation | gr | `g r` | Remote > Sites | none | site list → remote_connect |
+| `remote.connect` | navigation | 없음 | 없음 | Remote > New Connection | none | remote_connect |
 | `remote.disconnect` | navigation | gd | `g d` | Remote > Disconnect | safe | remote_disconnect |
 | `remote.reconnect` | navigation | 없음 | 없음 | Remote > Reconnect | none | remote_connect |
 | `remote.info` | navigation | 없음 | 없음 | Remote > Connection Info | none | remote_sessions |
-| `remote.chmod` | file | 없음 | 없음 | Remote > Change Permissions… | destructive | start_remote_chmod |
+| `remote.chmod` | file | 없음 | 없음 | Remote > Change Permissions | destructive | start_remote_chmod |
 | `app.quit` | file | Cmd+Q | `Cmd+Q` | File > Quit | none | getCurrentWindow().close via explicit menu/platform quit shortcut |
 | `file.properties` | file | i | `i` | View > File Info | safe | get_metadata |
 | `file.quickView` | file | F3 | `F3` | View > Quick View | safe | preview_file |
-| `archive.list` | archive | Enter on archive | 없음 | Archive > Open Archive | safe | archive_list virtual-directory |
-| `archive.extract` | archive | zx | `z x` | File > Archive Extract | destructive | archive_extract |
-| `archive.extractAuto` | archive | za | `z a` | File > Archive Extract Auto | destructive | archive_extract auto |
-| `archive.create` | archive | zc | `z c` | File > Archive Compress | safe | archive_create |
+| `archive.list` | archive | Enter | 없음 | Archive > Open Archive | safe | archive_list virtual-directory |
+| `archive.extract` | archive | zx | `z x` | Archive > Archive Extract | destructive | archive_extract |
+| `archive.extractAuto` | archive | za | `z a` | Archive > Archive Extract Auto | destructive | archive_extract auto |
+| `archive.create` | archive | zc | `z c` | Archive > Archive Compress | safe | archive_create |
 | `external.openDefault` | file | o | `o` | File > Open Default App | safe | open_default |
 | `external.reveal` | file | 없음 | 없음 | File > Reveal | safe | reveal_in_manager |
 | `external.openCurrentInFileManager` | navigation | 없음 | 없음 | Go > Open Current Folder in File Manager | safe | open_current_in_file_manager |
@@ -85,7 +85,7 @@
 | `view.sortAsc` | view | 없음 | 없음 | View > Sort > Ascending | none | UI state + list_dir |
 | `view.sortDesc` | view | 없음 | 없음 | View > Sort > Descending | none | UI state + list_dir |
 | `filter.start` | view | / | `/` | View > Filter | none | UI state |
-| `filter.clear` | view | Esc in filter | 없음 | View > Clear Filter | none | UI state + list_dir |
+| `filter.clear` | view | Esc | 없음 | View > Clear Filter | none | UI state + list_dir |
 | `view.toggleHidden` | view | . | `.` | View > Hidden Files | none | UI state + list_dir |
 | `selection.invert` | selection | v | `v` | Edit > Invert Selection | none | UI state |
 | `selection.clear` | selection | u | `u` | Edit > Clear Selection | none | UI state |
@@ -93,10 +93,10 @@
 | `layout.ratio50` | view | 없음 | 없음 | View > Panel Ratio > 50:50 | none | UI state |
 | `layout.ratio70Left` | view | 없음 | 없음 | View > Panel Ratio > 70:30 | none | UI state |
 | `layout.ratio70Right` | view | 없음 | 없음 | View > Panel Ratio > 30:70 | none | UI state |
-| `history.list` | navigation | th | `t h` | View > History List | none | UI state |
-| `bookmark.add` | navigation | Ctrl+B | `Ctrl+B` | View > Bookmark Add | safe | save_settings |
-| `bookmark.list` | navigation | tb | `t b` | View > Bookmark List | none | UI state |
-| `bookmark.rename` | navigation | 없음 | 없음 | Go > Bookmark > Rename | safe | save_settings |
+| `history.list` | navigation | th | `t h` | Go > History List | none | UI state |
+| `bookmark.add` | navigation | Cmd+B | `Cmd+B`, `Ctrl+B` | Go > Bookmark Add | safe | save_settings |
+| `bookmark.list` | navigation | tb | `t b` | Go > Bookmark List | none | UI state |
+| `bookmark.rename` | navigation | 없음 | 없음 | Go > Bookmark Rename | safe | save_settings |
 | `bookmark.delete` | navigation | 없음 | 없음 | 없음 | destructive | bookmark list → save_settings |
 | `settings.themeDark` | settings | 없음 | 없음 | Settings > Theme > Dark | none | save_settings |
 | `settings.themeLight` | settings | 없음 | 없음 | Settings > Theme > Light | none | save_settings |
@@ -104,7 +104,7 @@
 | `settings.themeMdir` | settings | 없음 | 없음 | Settings > Theme > Mdir | none | save_settings |
 | `settings.languageEn` | settings | 없음 | 없음 | Settings > Language > English | none | save_settings |
 | `settings.languageKo` | settings | 없음 | 없음 | Settings > Language > Korean | none | save_settings |
-| `settings.toggleIcons` | settings | 없음 | 없음 | Settings > Toggle Icons | none | save_settings |
+| `settings.toggleIcons` | settings | 없음 | 없음 | Settings > Show File Icons | none | save_settings |
 | `settings.sizeAuto` | settings | 없음 | 없음 | Settings > File Size Format > Auto | none | save_settings |
 | `settings.sizeBytes` | settings | 없음 | 없음 | Settings > File Size Format > Bytes | none | save_settings |
 | `settings.remoteLinksPreserve` | settings | 없음 | 없음 | Settings > Remote Links > Preserve Links | none | save_settings |
@@ -112,8 +112,8 @@
 | `settings.remoteLinksSkip` | settings | 없음 | 없음 | Settings > Remote Links > Skip Links | none | save_settings |
 | `external.runShellCommand` | file | : | `:` | File > Run Shell Command | destructive | ShellCommandDialog → prepare_shell_command → run_shell_command |
 | `help.shortcuts` | help | ? | `?` | Help > Keyboard Help | none | dialog |
-| `help.search` | help | 없음 | 없음 | Help > Search | none | UI state |
-| `help.about` | help | 없음 | 없음 | Help > About | none | dialog |
+| `help.search` | help | 없음 | 없음 | Help > Search Commands | none | UI state |
+| `help.about` | help | 없음 | 없음 | Help > About BokslDir | none | dialog |
 <!-- END GENERATED:action-table -->
 
 ## 4. Context rules

@@ -133,7 +133,7 @@ describe('CommanderShell drag', () => {
       f.down('left'); f.move('right');
       fireEvent.keyDown(window, { key: 'Shift', shiftKey: true });
       expect(f.panels.right.className).toContain('is-drop-move');
-      expect(f.container.querySelector('.file-drag-preview strong')?.textContent).toBe('이동');
+      expect(f.container.querySelector('.file-drag-preview strong')?.textContent).toBe('반대 패널로 이동');
       fireEvent.keyUp(window, { key: 'Shift', shiftKey: false });
       expect(f.panels.right.className).toContain('is-drop-copy');
       f.up('right', true);

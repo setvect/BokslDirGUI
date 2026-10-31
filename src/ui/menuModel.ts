@@ -5,6 +5,8 @@ import {
   actionsForMenu,
   isActionAvailable,
   labelForAction,
+  menuGroupIndexForAction,
+  menuItemLabel,
   menuPathSegmentsForAction,
   menuRootAcceleratorFromRegistry,
   menuRootsFromRegistry,
@@ -31,6 +33,8 @@ interface MenuActionNode {
   enabled: boolean;
   checkable: boolean;
   checked: boolean;
+  /** 앞 항목과 다른 묶음: 앞에 구분선 */
+  separatorBefore: boolean;
 }
 
 interface MenuSubmenuNode {
@@ -39,6 +43,7 @@ interface MenuSubmenuNode {
   label: string;
   accelerator: string | null;
   children: MenuActionNode[];
+  separatorBefore: boolean;
 }
 
 export type MenuNode = MenuActionNode | MenuSubmenuNode;
@@ -57,6 +62,14 @@ export const menuNodesForRoot = (root: string, context: ActionContext, settings:
   const language = settings.language;
   const nodes: MenuNode[] = [];
   const submenuByLabel = new Map<string, MenuSubmenuNode>();
+  let previousGroup: number | null = null;
+  // 새 최상위 항목을 넣을 때 앞 항목과 묶음이 다르면 구분선
+  const startsGroup = (action: AppAction) => {
+    const group = menuGroupIndexForAction(action);
+    const separatorBefore = previousGroup !== null && group !== previousGroup;
+    previousGroup = group;
+    return separatorBefore;
+  };
 
   for (const action of actionsForMenu(root, context.platform, context.platformInfo)) {
     const segments = menuPathSegmentsForAction(action, language)?.slice(1) ?? [];
@@ -71,6 +84,7 @@ export const menuNodesForRoot = (root: string, context: ActionContext, settings:
           label: submenuLabel,
           accelerator: menuLabelAccelerator(acceleratorSegments[0] ?? submenuLabel),
           children: [],
+          separatorBefore: startsGroup(action),
         };
         submenuByLabel.set(submenuLabel, submenu);
         nodes.push(submenu);
@@ -78,12 +92,13 @@ export const menuNodesForRoot = (root: string, context: ActionContext, settings:
       submenu.children.push({
         kind: 'action',
         id: action.id,
-        label: segments.at(-1) ?? labelForAction(action, language),
+        label: menuItemLabel(action, segments.at(-1) ?? labelForAction(action, language)),
         accelerator: menuLabelAccelerator(acceleratorSegments.at(-1) ?? action.displayLabel),
         action,
         enabled: isActionAvailable(action, context),
         checkable: Boolean(action.setting),
         checked: action.setting ? isSettingChecked(action.setting, settings) : false,
+        separatorBefore: false,
       });
       continue;
     }
@@ -91,12 +106,13 @@ export const menuNodesForRoot = (root: string, context: ActionContext, settings:
     nodes.push({
       kind: 'action',
       id: action.id,
-      label: segments[0] ?? labelForAction(action, language),
+      label: menuItemLabel(action, segments[0] ?? labelForAction(action, language)),
       accelerator: menuLabelAccelerator(acceleratorSegments[0] ?? action.displayLabel),
       action,
       enabled: isActionAvailable(action, context),
       checkable: Boolean(action.setting),
       checked: action.setting ? isSettingChecked(action.setting, settings) : false,
+      separatorBefore: startsGroup(action),
     });
   }
 

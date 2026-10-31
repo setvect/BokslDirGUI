@@ -828,15 +828,16 @@ button {
   text-align: center;
 }
 
-.menu-checkmark-inline {
-  min-width: 1.2ch;
-  color: var(--cyan);
-  text-align: right;
+/* 강조된 행에서는 체크 표시도 강조 글자색(청록 체크가 강조 배경에 묻히지 않게) */
+.menu-item:is(:hover, .is-focused) .menu-checkmark {
+  color: inherit;
 }
 
-/* 강조된 행에서는 체크 표시도 강조 글자색(청록 체크가 강조 배경에 묻히지 않게) */
-.menu-item:is(:hover, .is-focused) :is(.menu-checkmark, .menu-checkmark-inline) {
-  color: inherit;
+/* 메뉴 안 묶음 구분선 */
+.menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line-muted);
 }
 
 .menu-entry-with-submenu {

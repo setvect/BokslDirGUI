@@ -35,7 +35,7 @@ describe('CommanderShell settings', () => {
     expect(await screen.findByText('레이아웃 · 단일 패널')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
-    await user.click(await screen.findByText('아이콘 전환'));
+    await user.click(await screen.findByText('파일 아이콘 표시'));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
       patch: expect.objectContaining({ view: expect.objectContaining({ showIcons: false }) }),
     }));
@@ -52,7 +52,8 @@ describe('CommanderShell settings', () => {
     expect(within(shortcutDialog).getByText('반대 패널로 복사')).toBeTruthy();
     expect(within(shortcutDialog).getByText('y/F5')).toBeTruthy();
     expect(within(shortcutDialog).getByText('Shift+D/Shift+Delete')).toBeTruthy();
-    expect(within(shortcutDialog).getByText('Ctrl+B')).toBeTruthy();
+    // macOS 표기(Windows는 Ctrl+B): 북마크 추가는 Cmd+B
+    expect(within(shortcutDialog).getByText('Cmd+B')).toBeTruthy();
     expect(within(shortcutDialog).queryByText('file.copy')).toBeNull();
   });
 
@@ -77,15 +78,8 @@ describe('CommanderShell settings', () => {
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
     await user.click(screen.getByRole('button', { name: '이동(G)' }));
     const goMenu = await screen.findByRole('menu', { name: '이동(G) menu' });
-    const bookmarkTrigger = within(goMenu).getAllByRole('menuitem')
-      .find((item) => item.getAttribute('aria-haspopup') === 'menu' && item.textContent?.includes('북마크'));
-    if (!bookmarkTrigger) {
-      throw new Error('bookmark submenu trigger is required');
-    }
-    fireEvent.mouseEnter(bookmarkTrigger);
-    const bookmarkMenu = await screen.findByRole('menu', { name: '북마크 submenu' });
-    expect(within(bookmarkMenu).queryByRole('menuitem', { name: '삭제' })).toBeNull();
-    await user.click(within(bookmarkMenu).getByRole('menuitem', { name: '이름 변경' }));
+    expect(within(goMenu).queryByRole('menuitem', { name: /북마크 삭제/ })).toBeNull();
+    await user.click(within(goMenu).getByRole('menuitem', { name: '북마크 이름 변경…' }));
 
     const input = await screen.findByLabelText('북마크 이름');
     await user.clear(input);
@@ -116,13 +110,7 @@ describe('CommanderShell settings', () => {
     await waitFor(() => expect(mutationClient.loadSettings).toHaveBeenCalled());
     await user.click(screen.getByRole('button', { name: '이동(G)' }));
     const goMenu = await screen.findByRole('menu', { name: '이동(G) menu' });
-    const bookmarkTrigger = within(goMenu).getAllByRole('menuitem')
-      .find((item) => item.getAttribute('aria-haspopup') === 'menu' && item.textContent?.includes('북마크'));
-    if (!bookmarkTrigger) {
-      throw new Error('bookmark submenu trigger is required');
-    }
-    fireEvent.mouseEnter(bookmarkTrigger);
-    await user.click(within(await screen.findByRole('menu', { name: '북마크 submenu' })).getByRole('menuitem', { name: '이름 변경' }));
+    await user.click(within(goMenu).getByRole('menuitem', { name: '북마크 이름 변경…' }));
     expect(await screen.findByLabelText('북마크 이름')).toBeTruthy();
 
     if (closeWith === 'Escape') {
@@ -350,7 +338,7 @@ describe('CommanderShell settings', () => {
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.click(screen.getByRole('button', { name: '도움말(H)' }));
-    await user.click(await screen.findByText('검색'));
+    await user.click(await screen.findByText('기능 검색…'));
     const helpSearchInput = await screen.findByLabelText('도움말 검색어');
     await user.type(helpSearchInput, '정렬');
     const helpSearchDialog = screen.getByRole('dialog', { name: '기능 검색' });
@@ -361,7 +349,7 @@ describe('CommanderShell settings', () => {
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     await user.click(screen.getByRole('button', { name: '도움말(H)' }));
-    await user.click(await screen.findByRole('menuitem', { name: /^정보/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /^복슬Dir 정보/ }));
     // 정보 창 제목은 앱 이름과 package.json 버전(버전을 올려도 시험 수정 불필요)
     const aboutDialog = await screen.findByRole('dialog', { name: `복슬Dir ${appPackage.version}` });
     expect(within(aboutDialog).getByRole('img', { name: '복슬Dir 강아지 마스코트' })).toBeTruthy();
@@ -407,9 +395,9 @@ describe('CommanderShell settings', () => {
     const shell = screen.getByRole('application', { name: '복슬Dir file commander shell' });
 
     await user.click(screen.getByRole('button', { name: '설정(S)' }));
-    const toggleIconsItem = await screen.findByRole('menuitem', { name: /아이콘 전환/ });
+    const toggleIconsItem = await screen.findByRole('menuitem', { name: /파일 아이콘 표시/ });
     expect(toggleIconsItem.getAttribute('data-checked')).toBe('true');
-    expect(toggleIconsItem.querySelector('.menu-checkmark-inline')?.textContent).toBe('✓');
+    expect(toggleIconsItem.querySelector('.menu-checkmark')?.textContent).toBe('✓');
     fireEvent.mouseEnter(await screen.findByRole('menuitem', { name: /테마/ }));
     await user.click(await screen.findByRole('menuitem', { name: /라이트/ }));
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ patch: { theme: 'light' } }));

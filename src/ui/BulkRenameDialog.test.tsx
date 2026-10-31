@@ -55,7 +55,7 @@ it('opens from the file menu and runs through the common operation store with ca
     startBulkRename: vi.fn(async () => ({ ok: true as const, data: { operationId: 'bulk-op', kind: 'rename' as const, state: 'queued' as const } })), cancelOperation: vi.fn(async () => ({ ok: true as const, data: { operationId: 'bulk-op', state: 'cancelling' as const } })) });
   renderCommander(createFixturePanelDataSource(), client, operations);
   await user.click(screen.getByRole('button', { name: '파일(F)' }));
-  await user.click(screen.getByRole('menuitem', { name: '다중 이름 변경' }));
+  await user.click(screen.getByRole('menuitem', { name: '다중 이름 변경…' }));
   await waitFor(() => expect((screen.getByRole('button', { name: '변경 적용' }) as HTMLButtonElement).disabled).toBe(false));
   await user.click(screen.getByRole('button', { name: '변경 적용' }));
   await waitFor(() => expect(operations.startBulkRename).toHaveBeenCalledOnce());

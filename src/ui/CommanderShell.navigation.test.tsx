@@ -119,8 +119,8 @@ describe('CommanderShell navigation', () => {
     if (openedFrom === 'keyboard') {
       await user.keyboard('gp');
     } else {
-      await user.click(screen.getByRole('button', { name: '보기(V)' }));
-      await user.click(within(await screen.findByRole('menu', { name: '보기(V) menu' })).getByRole('menuitem', { name: /^경로 이동/ }));
+      await user.click(screen.getByRole('button', { name: '이동(G)' }));
+      await user.click(within(await screen.findByRole('menu', { name: '이동(G) menu' })).getByRole('menuitem', { name: /^경로 이동/ }));
     }
     expect(await screen.findByRole('dialog', { name: '경로 이동' })).toBeTruthy();
 

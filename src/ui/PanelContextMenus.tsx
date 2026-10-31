@@ -2,6 +2,7 @@ import { displayPath } from '../domain/pathDisplay';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import {
   labelForAction,
+  menuItemLabel,
   shortcutHelpLabelForAction,
   shortcutLabelForAction,
   type AppAction
@@ -36,7 +37,7 @@ export function BlankContextMenuContent({ language, listing, actionState, onOpen
           className="context-item"
           onSelect={() => onOpenAction(action, [])}
         >
-          <span>{labelForAction(action, language)}</span>
+          <span>{menuItemLabel(action, labelForAction(action, language))}</span>
           {action.shortcutLabel ? <kbd>{shortcutHelpLabelForAction(action)}</kbd> : null}
         </ContextMenu.Item>
       ))}
@@ -70,7 +71,7 @@ export function EntryContextMenuContent({ language, entry, listing, selectedPath
           className="context-item"
           onSelect={() => onOpenAction(action, contextSources)}
         >
-          <span>{labelForAction(action, language)}</span>
+          <span>{menuItemLabel(action, labelForAction(action, language))}</span>
           {shortcutHelpLabelForAction(action) ? <kbd>{shortcutLabelForAction(action)}</kbd> : null}
         </ContextMenu.Item>
       ))}
