@@ -340,7 +340,7 @@ describe('CommanderShell remote panels', () => {
 
     // 같은 위치가 이미 연결된 상태: 입력한 암호는 인증에 쓰이지 않아 저장되지 않음을 안내
     await connectTyping('another-secret');
-    await waitFor(() => expect(container.querySelector('.status-message')?.textContent).toContain('이미 연결된 세션을 사용해 입력한 암호를 확인하지 않았으므로 저장하지 않았습니다.'));
+    await waitFor(() => expect(container.querySelector('.status-message')?.textContent).toBe('기존 연결을 재사용해 입력한 암호는 저장하지 않았습니다. 해제 후 다시 연결하면 저장합니다.'));
     expect(saveSettings.mock.calls.some(([input]) => input.patch.remote?.sites?.some((saved) => saved.savedSecret))).toBe(false);
   });
 
