@@ -1,6 +1,6 @@
 [package]
 name = "boksldir-gui"
-version = "0.1.1"
+version = "0.1.2"
 description = "BokslDirGUI desktop file manager"
 authors = ["setvect <setvect@naver.com>"]
 edition = "2021"
