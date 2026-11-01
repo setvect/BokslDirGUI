@@ -38,19 +38,25 @@ export const formatSize = (entry: FileEntry, mode: 'binary' | 'decimal' = 'binar
 
 export type DateDisplayFormat = 'short' | 'long';
 
-export const formatDate = (iso: string | null, display: DateDisplayFormat = 'short') => {
+// 목록 날짜. 'short'(좁은 패널)는 올해 항목만 연도를 생략하고 다른 해 항목은 시각 대신 연도를 표시해
+// 연도 없는 날짜가 항상 올해를 뜻하게 함. 두 형태 모두 'short' 열 폭(11자) 안에 들어감
+export const formatDate = (iso: string | null, display: DateDisplayFormat = 'short', now = new Date()) => {
   if (!iso) {
     return '';
   }
   const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
   const year = String(date.getFullYear());
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   const hour = String(date.getHours()).padStart(2, '0');
   const minute = String(date.getMinutes()).padStart(2, '0');
-  return display === 'long'
-    ? `${year}-${month}-${day} ${hour}:${minute}`
-    : `${month}-${day} ${hour}:${minute}`;
+  if (display === 'long') {
+    return `${year}-${month}-${day} ${hour}:${minute}`;
+  }
+  return date.getFullYear() === now.getFullYear() ? `${month}-${day} ${hour}:${minute}` : `${year}-${month}-${day}`;
 };
 
 export const formatDateTime = (iso: string | null) => {

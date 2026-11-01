@@ -45,6 +45,7 @@
 | Commander focus 복귀 | non-modal navigation control 사용 후 다음 키 입력은 commander가 받음 | path/refresh/back/up 클릭 후 shell focus 복구, dialog/menu/input은 keyboard owner 유지 | path button click → Space 회귀 |
 | Zoom/density | 화면 배율 변경은 글자뿐 아니라 행 높이/상태줄/단축키줄/여백까지 같이 변하며 100→110→125→150 같은 preset 사용 | `Settings.view.zoomStep`, preset scale, CSS scale variables, virtualizer row estimate가 같은 row height 사용 | Cmd/Ctrl `+/-/0` preset/variable 및 settings 저장 회귀 |
 | 확대 시 컬럼 가독성 | 표시되는 size/date/permission/owner는 잘리지 않고, 공간 부족 시 낮은 우선순위 컬럼부터 숨김; dual-panel에서는 metadata보다 파일명 폭을 우선 보존 | scale/data-aware `columnLayoutForPanelWidth`, panel-level shared grid template, Unicode-safe name middle ellipsis | 150% 확대 컬럼 policy, header/body 정렬, metadata cell no ellipsis, filename suffix 보존 회귀 |
+| 좁은 패널 날짜 | 좁은 레이아웃은 연도를 뗀 `MM-DD HH:MM`, 넓은 레이아웃은 `YYYY-MM-DD HH:MM` | 넓은 패널은 TUI와 같음, 좁은 패널은 올해 항목만 `MM-DD HH:MM`이고 다른 해 항목은 같은 열 폭의 `YYYY-MM-DD`; 다른 해 항목이 올해처럼 보이던 문제로 TUI와 다르게 결정(2026-11-01) | `format.test.ts` 올해·연초의 작년 항목·다른 해·미래·잘못된 값 |
 | GUI hover 정보 | TUI 기본 목록을 해치지 않고 GUI hover/focus로 상세 파일 정보를 보조 표시 | row `title`/ARIA tooltip text | 전체 이름/경로/종류/크기/수정일/권한/소유자 tooltip 회귀 |
 | Filter 가시성 | filter pattern이 panel/status에 보이고 목록 맥락에서 인지됨 | header filter chip, panel/bottom status `Filter: ...`, filename substring highlight 표시 | filter apply/clear DOM 회귀 |
 
