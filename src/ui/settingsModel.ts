@@ -1,5 +1,5 @@
 import { normalizeSavedTabs } from './sessionState';
-import { DEFAULT_REMOTE_SETTINGS, remoteSettingsOf, type Settings } from '../domain/types';
+import { DEFAULT_REMOTE_SETTINGS, remoteSettingsOf, type FolderTreePanelSettings, type PanelId, type Settings } from '../domain/types';
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 1,
@@ -121,3 +121,24 @@ export const viewMetricsForSettings = (view: Settings['view']) => {
 };
 
 export const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+// 폴더 트리 폭(100% 배율 기준 px) 범위. Rust `contracts::FOLDER_TREE_*_WIDTH`와 같은 값(FR-42.1)
+export const FOLDER_TREE_MIN_WIDTH = 120;
+export const FOLDER_TREE_MAX_WIDTH = 800;
+export const DEFAULT_FOLDER_TREE: FolderTreePanelSettings = { visible: false, width: 220 };
+
+export const clampFolderTreeWidth = (width: number) =>
+  clampNumber(Math.round(width), FOLDER_TREE_MIN_WIDTH, FOLDER_TREE_MAX_WIDTH);
+
+const folderTreePanelOf = (value: Partial<FolderTreePanelSettings> | undefined): FolderTreePanelSettings => ({
+  visible: value?.visible === true,
+  width: typeof value?.width === 'number' && Number.isFinite(value.width)
+    ? clampFolderTreeWidth(value.width)
+    : DEFAULT_FOLDER_TREE.width,
+});
+
+// 저장 파일에 없거나 잘못된 값은 기본값(숨김, 220px)
+export const folderTreeSettingsOf = (settings: Pick<Settings, 'layout'>): Record<PanelId, FolderTreePanelSettings> => ({
+  left: folderTreePanelOf(settings.layout.folderTree?.left),
+  right: folderTreePanelOf(settings.layout.folderTree?.right),
+});

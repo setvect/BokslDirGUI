@@ -687,6 +687,18 @@ describe('CommanderShell keyboard', () => {
     expect(activePanelLabel(document.body)).toContain('generic-array-6de08afde610f112');
   });
 
+  it('opens the context menu of the row focused after moving, not the first focused row', async () => {
+    const user = userEvent.setup();
+    renderCommander();
+
+    await user.keyboard('{ArrowDown}');
+    fireEvent.keyDown(document, { key: 'F10', shiftKey: true });
+    await user.click(await screen.findByRole('menuitem', { name: /^열기/ }));
+
+    expect(await screen.findByText('README.md')).toBeTruthy();
+    expect(activePanelLabel(document.body)).toContain('generic-array-7534a23a150ae5e7');
+  });
+
   it.each(platformFixtures)('opens the file manager and terminal at the invoked panel on $os', async (platform) => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(platform.os === 'windows' ? 'Windows' : 'Macintosh');
     const user = userEvent.setup();

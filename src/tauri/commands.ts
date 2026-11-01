@@ -10,6 +10,7 @@ export const COMMANDS = {
   writeFileClipboard: 'write_file_clipboard',
   clearFileClipboard: 'clear_file_clipboard',
   listDir: 'list_dir',
+  listSubdirs: 'list_subdirs',
   getMetadata: 'get_metadata',
   previewFile: 'preview_file',
   watchPath: 'watch_path',

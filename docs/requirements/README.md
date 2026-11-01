@@ -113,3 +113,4 @@
 - 품질/플랫폼/설정/i18n/보안은 [`05-customization-platform-quality.md`](05-customization-platform-quality.md)에 배치
 - 검증 기준과 근거 파일 목록은 [`06-validation-evidence.md`](06-validation-evidence.md)에 배치
 - 원격 파일 관리(SFTP) 요구사항은 [`07-remote-sftp.md`](07-remote-sftp.md)에 배치, 2026-10-31 확정·구현 완료, 요구사항별 상태는 같은 문서 10절
+- 패널 폴더 트리 요구사항은 [`08-folder-tree.md`](08-folder-tree.md)에 배치, 2026-11-01 확정·구현 완료, 요구사항별 상태는 같은 문서 8절

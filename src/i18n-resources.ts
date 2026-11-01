@@ -282,6 +282,9 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Filter: '필터',
     'Clear Filter': '필터 해제',
     'Hidden Files': '숨김 파일',
+    'Folder Tree': '폴더 트리',
+    'Switch Tree/List': '트리·목록 전환',
+    'Open in Other Panel': '반대 패널에서 열기',
     'Invert Selection': '선택 반전',
     'Clear Selection': '선택 해제',
     'Toggle Layout': '레이아웃 전환',
@@ -371,6 +374,9 @@ export const MENU_SEGMENT_LABELS: Record<SupportedLanguage, Record<string, strin
     Filter: 'Filter',
     'Clear Filter': 'Clear Filter',
     'Hidden Files': 'Hidden Files',
+    'Folder Tree': 'Folder Tree',
+    'Switch Tree/List': 'Switch Tree/List',
+    'Open in Other Panel': 'Open in Other Panel',
     'Invert Selection': 'Invert Selection',
     'Clear Selection': 'Clear Selection',
     'Toggle Layout': 'Toggle Layout',
@@ -454,6 +460,9 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'filter.start': '필터',
     'filter.clear': '필터 해제',
     'view.toggleHidden': '숨김 파일',
+    'view.toggleFolderTree': '폴더 트리',
+    'view.focusFolderTree': '트리·목록 전환',
+    'nav.openInOtherPanel': '반대 패널에서 열기',
     'layout.toggleSingleDual': '레이아웃 전환',
     'history.list': '히스토리 목록',
     'bookmark.add': '북마크 추가',
@@ -523,6 +532,9 @@ export const ACTION_LABELS: Record<SupportedLanguage, Record<string, string>> = 
     'filter.start': 'Filter',
     'filter.clear': 'Clear Filter',
     'view.toggleHidden': 'Hidden Files',
+    'view.toggleFolderTree': 'Folder Tree',
+    'view.focusFolderTree': 'Switch Tree/List',
+    'nav.openInOtherPanel': 'Open in Other Panel',
     'layout.toggleSingleDual': 'Toggle Layout',
     'history.list': 'History List',
     'bookmark.add': 'Bookmark Add',
@@ -641,6 +653,10 @@ export const COMMANDER_UI_TEXT = {
     forward: '앞으로',
     up: '상위 폴더',
     gotoPath: '경로 이동',
+    folderTree: '폴더 트리',
+    folderTreeShow: '폴더 트리 보이기',
+    folderTreeHide: '폴더 트리 숨기기',
+    folderTreeResize: '폴더 트리 폭 조절',
     partialArchive: '일부만 표시됨',
     archiveReadOnly: '압축 내부 읽기 전용',
     dropCopy: '여기에 복사',
@@ -677,6 +693,10 @@ export const COMMANDER_UI_TEXT = {
     forward: 'Forward',
     up: 'Up',
     gotoPath: 'Go to path',
+    folderTree: 'Folder tree',
+    folderTreeShow: 'Show folder tree',
+    folderTreeHide: 'Hide folder tree',
+    folderTreeResize: 'Resize folder tree',
     partialArchive: 'PARTIAL LIST',
     archiveReadOnly: 'ARCHIVE READ-ONLY',
     dropCopy: 'Copy here',
@@ -753,6 +773,8 @@ export interface CommanderStatusText {
   archiveEntryNotOpenable(name: string): string;
   sizeFormat(format: string): string;
   icons(enabled: boolean): string;
+  folderTree(panel: string, visible: boolean): string;
+  folderGoneMovedUp(path: string): string;
   remoteLinkPolicy(policy: 'preserve' | 'follow' | 'skip'): string;
   externalDropPathRequired: string;
   externalDropUnavailable(error: string): string;
@@ -823,6 +845,8 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     archiveEntryNotOpenable: (name) => `압축 파일 안의 파일은 바로 열 수 없습니다. 복사하거나 압축을 해제한 뒤 여세요. · ${name}`,
     sizeFormat: (format) => `크기 형식 · ${format === 'bytes' ? '바이트' : '자동'}`,
     icons: (enabled) => `아이콘 · ${enabled ? '켜짐' : '꺼짐'}`,
+    folderTree: (panel, visible) => `폴더 트리 · ${panel} · ${visible ? '켜짐' : '꺼짐'}`,
+    folderGoneMovedUp: (path) => `폴더가 없어져 상위 폴더로 이동 · ${path}`,
     remoteLinkPolicy: (policy) => `원격 심볼릭 링크 복사 · ${policy === 'follow' ? '원본 파일 복사' : policy === 'skip' ? '복사 안 함' : '링크 그대로'}`,
     externalDropPathRequired: '외부 드롭은 OS 파일 경로가 확인될 때만 가져올 수 있습니다.',
     externalDropUnavailable: (error) => `외부 드롭을 시작할 수 없습니다: ${error}`,
@@ -891,6 +915,8 @@ export const COMMANDER_STATUS_TEXT: Record<SupportedLanguage, CommanderStatusTex
     archiveEntryNotOpenable: (name) => `Files inside an archive cannot be opened directly. Copy or extract them first. · ${name}`,
     sizeFormat: (format) => `Size format · ${format}`,
     icons: (enabled) => `Icons · ${enabled ? 'on' : 'off'}`,
+    folderTree: (panel, visible) => `Folder tree · ${panel} · ${visible ? 'on' : 'off'}`,
+    folderGoneMovedUp: (path) => `Folder no longer exists · moved up to ${path}`,
     remoteLinkPolicy: (policy) => `Remote Links · ${policy === 'follow' ? 'Copy Link Targets' : policy === 'skip' ? 'Skip Links' : 'Preserve Links'}`,
     externalDropPathRequired: 'External drops are allowed only when OS file paths are available.',
     externalDropUnavailable: (error) => `External drop is unavailable: ${error}`,

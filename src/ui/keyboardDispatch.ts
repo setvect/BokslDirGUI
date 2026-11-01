@@ -14,6 +14,9 @@ export interface KeyboardRuntime {
   focusBoundaryEntry(boundary: 'first' | 'last', extendSelection?: boolean): void;
   handleAction: ExecuteAction;
   handleZoom(command: ZoomCommand): void;
+  // 폴더 트리에 키보드가 있을 때의 키(FR-42.6), 커서 줄 DOM id
+  handleFolderTreeKey(event: KeyboardEvent, sequencePending: boolean): boolean;
+  activeRowDomId: string;
 }
 
 export const handleZoomKey = (

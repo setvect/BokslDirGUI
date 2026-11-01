@@ -99,6 +99,9 @@
 | `remote.disconnect` | 활성 원격 패널 연결 해제 후 연결 전 로컬 경로로 복귀(FR-34.6) |
 | `remote.reconnect` | 끊긴 원격 패널을 같은 사용자·호스트·포트로 다시 연결(FR-34.7) |
 | `remote.info` | 연결 주소·상태·원격 홈·호스트 키 알고리즘과 SHA-256 지문 표시 |
+| `view.toggleFolderTree` | 패널마다 왼쪽 폴더 트리 표시 전환, 표시 여부·폭 저장(FR-42.1) |
+| `view.focusFolderTree` | 활성 패널의 목록과 폴더 트리 사이 키보드 이동, 트리가 꺼져 있으면 켜면서 이동(FR-42.6) |
+| `nav.openInOtherPanel` | 목록·폴더 트리의 폴더를 반대 패널에서 열기(FR-42.7) |
 <!-- END GENERATED:parity-gui-extensions -->
 
 ## 전체 matrix

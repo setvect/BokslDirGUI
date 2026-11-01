@@ -21,6 +21,7 @@ import { useOperationStore } from '../operations/operationStore';
 import { tauriClient } from '../tauri/client';
 import { AppController, DEFAULT_APP_CONTROLLER, LongRunningOperationClient, NativeFileDragClient, NativeFileDropClient, RemoteSessionClient, SafeMutationClient } from '../tauri/commanderClients';
 import { createPanelActionContext, resolveActionTargets, type SharedActionState } from './actionContext';
+import type { ActionRequest } from './actionRequest';
 import {
   AboutDialog,
   ArchivePasswordPrompt,
@@ -34,12 +35,14 @@ import {
 import { QuickPreviewDialog } from './QuickPreviewDialog';
 import { ArchivePasswordRequest } from './commanderTypes';
 import { DirectoryComparison } from './directoryComparison';
-import { FilePanel, type FilePanelHandle } from './FilePanel';
+import { FilePanel, type FilePanelFolderTree, type FilePanelHandle } from './FilePanel';
+import { folderTreeActionTarget } from './folderTreeModel';
 import { entryIcon } from './format';
 import { TopMenuState } from './menuModel';
 import { createTauriPanelDataSource, type PanelDataSource } from './panelDataSource';
 import { rowDomId } from './panelPresentation';
 import {
+  createDirectoryListing,
   focusedEntryOf
 } from './panelState';
 import { clampNumber, remoteSettingsOf, viewMetricsForSettings } from './settingsModel';
@@ -58,6 +61,7 @@ import { useCommanderActions } from './useCommanderActions';
 import { useCommanderKeyboard } from './useCommanderKeyboard';
 import { useCommanderSettings } from './useCommanderSettings';
 import { useFileDrag } from './useFileDrag';
+import { useFolderTrees } from './useFolderTrees';
 import { useNavigationMenus } from './useNavigationMenus';
 import { usePanelNavigation } from './usePanelNavigation';
 import { useRuntimePlatform } from './useRuntimePlatform';
@@ -102,7 +106,8 @@ export function CommanderShell({
   const shortcutSequenceTimeoutRef = useRef<number | null>(null);
 
   const topMenuStateRef = useRef<TopMenuState | null>(null);
-  const { handleEntryPointerDown, dragOverPanel, handlePanelDragOver, setDragOverPanel, handlePanelDrop, pointerDragPreview } = useFileDrag({
+  const { handleEntryPointerDown, handleFolderTreePointerDown, dragOverPanel, handlePanelDragOver, setDragOverPanel, handlePanelDrop, pointerDragPreview } = useFileDrag({
+    get folderTreeDragHover() { return folderTrees.dragHover; },
     get runtimeBackendAvailable() { return runtimeBackendAvailable; },
     get nativeFileDropClient() { return nativeFileDropClient; },
     get nativeFileDragClient() { return nativeFileDragClient; },
@@ -127,7 +132,7 @@ export function CommanderShell({
     get setActivePanel() { return setActivePanel; },
   });
 
-  const { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordFor, retryArchiveListing, recordFocusedRow, selectEntry } = usePanelNavigation({
+  const { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordFor, retryArchiveListing, recordFocusedRow, selectEntry, archiveSubdirectories } = usePanelNavigation({
     get dataSource() { return dataSource; },
     get initialFocusIndex() { return initialFocusIndex; },
     get initialSelectedPaths() { return initialSelectedPaths; },
@@ -163,6 +168,19 @@ export function CommanderShell({
     get dataSource() { return dataSource; },
     get gotoPanelPath() { return gotoPanelPath; },
   });
+  const folderTrees = useFolderTrees({
+    get settings() { return settings; },
+    get saveSettingsPatch() { return saveSettingsPatch; },
+    get panelState() { return panelState; },
+    get panelStateRef() { return panelStateRef; },
+    get activePanel() { return activePanel; },
+    get dataSource() { return dataSource; },
+    get archiveSubdirectories() { return archiveSubdirectories; },
+    get listPanel() { return listPanel; },
+    get setActivePanel() { return setActivePanel; },
+    get statusText() { return statusText; },
+    get rowHeightPx() { return viewMetrics.rowHeightPx; },
+  });
   const { trashUndoAvailable, bulkRename, setBulkRename, confirmBulkRename, remoteChmod, setRemoteChmod, confirmRemoteChmod, openWithEntry, handleAction, closeOverlays: closeActionOverlays, resumeArchiveCopy, clipboardCount, clipboardCanMove, clipboardMode, openEntry, quickPreview } = useCommanderActions({
     clearCompletedSelection,
     get platformInfo() { return platformInfo; },
@@ -186,7 +204,7 @@ export function CommanderShell({
     get setDirectoryComparison() { return setDirectoryComparison; },
     get navigateBack() { return navigateBack; },
     get navigateForward() { return navigateForward; },
-    get refreshPanel() { return refreshPanel; },
+    get refreshPanel() { return refreshPanelWithFolderTree; },
     get setPathPromptPanel() { return setPathPromptPanel; },
     get openLocationsList() { return openLocationsList; },
     get focusEntry() { return focusEntry; },
@@ -204,6 +222,8 @@ export function CommanderShell({
     get openBookmarkList() { return openBookmarkList; },
     get renameBookmarkForPanel() { return renameBookmarkForPanel; },
     get applyLayout() { return applyLayout; },
+    get toggleFolderTree() { return folderTrees.toggleVisible; },
+    get toggleFolderTreeFocus() { return folderTrees.toggleFocus; },
     get applyDirectSetting() { return applyDirectSetting; },
     get setHelpDialogOpen() { return setHelpDialogOpen; },
     get setAboutDialogOpen() { return setAboutDialogOpen; },
@@ -324,8 +344,78 @@ export function CommanderShell({
     shellRef.current?.focus({ preventScroll: true });
   };
 
+  // 패널 새로고침과 함께 그 패널 트리의 펼친 폴더도 다시 읽음(직접 새로고침이면 드라이브·볼륨 목록 포함)
+  const refreshPanelWithFolderTree = (panelId: PanelId, background?: boolean) => {
+    refreshPanel(panelId, background);
+    folderTrees.refresh(panelId, !background);
+  };
+
+  // 키보드·상단 메뉴 요청: 폴더 트리에 키보드가 있으면 항목 대상 작업은 트리 커서의 폴더, 맨 위·맨 아래 이동은 트리 안
+  const handleCommanderAction = (request: ActionRequest) => {
+    const panelId = request.panelId ?? activePanel;
+    if (folderTrees.focusedPanel !== panelId || request.sources) {
+      handleAction(request);
+      return;
+    }
+    if (request.actionId === 'nav.top' || request.actionId === 'nav.bottom') {
+      folderTrees.moveToBoundary(panelId, request.actionId === 'nav.top' ? 'first' : 'last');
+      return;
+    }
+    const action = ACTION_BY_ID.get(request.actionId);
+    // 트리에는 다중 선택이 없어 선택 키가 보이지 않는 목록 선택을 바꾸지 않게 함
+    if (action?.category === 'selection') {
+      setStatusMessage(statusText.unavailableInContext(labelForAction(action, settings.language)));
+      return;
+    }
+    if (!action?.contextScopes?.some((scope) => scope !== 'blank')) {
+      handleAction(request);
+      return;
+    }
+    const target = folderTrees.actionTarget(panelId);
+    if (!target) {
+      setStatusMessage(statusText.unavailableInContext(labelForAction(action, settings.language)));
+      return;
+    }
+    handleAction({ ...request, panelId, sources: [target.entry], sourceListing: target.sourceListing });
+  };
+
+  const folderTreePanel = (panelId: PanelId): FilePanelFolderTree => {
+    const remoteStatus = remoteStatusForPath(panelState[panelId].path, remoteSessions, remoteSettingsOf(settings).sites);
+    return {
+      view: folderTrees.views[panelId],
+      disconnected: Boolean(remoteStatus && remoteStatus.state !== 'connected'),
+      onToggle: () => handleAction({ actionId: 'view.toggleFolderTree', panelId }),
+      onRowClick: (path) => folderTrees.activateRow(panelId, path),
+      onToggleRow: (path) => folderTrees.toggleRow(panelId, path),
+      onRowPointerDown: (event, row) => handleFolderTreePointerDown(event, panelId, row),
+      // 우클릭 메뉴: 열기는 줄 클릭과 같은 이동, 나머지는 그 폴더와 출발 목록을 공통 실행 경로로
+      onOpenAction: (action, row, sources) => {
+        if (action.id === 'nav.enter') {
+          folderTrees.activateRow(panelId, row.path);
+          return;
+        }
+        handleAction({
+          actionId: (action).id,
+          panelId,
+          sources,
+          sourceListing: folderTreeActionTarget(panelId, row)?.sourceListing ?? createDirectoryListing(panelId, row.path, [row.entry]),
+        });
+      },
+      onScrollElement: (element) => folderTrees.registerScrollElement(panelId, element),
+      onWidthChange: (width, commit) => folderTrees.setWidth(panelId, width, commit),
+      onListPointerDown: () => {
+        if (folderTrees.focusedPanel === panelId) folderTrees.blurTree();
+      },
+    };
+  };
+
   const activePanelState = panelState[activePanel];
-  const activeTargets = resolveActionTargets(activePanelState);
+  // 폴더 트리에 키보드가 있으면 트리 커서의 폴더 하나가 작업 대상(맨 위 항목·열린 압축 파일은 대상 없음)
+  const treeFocused = folderTrees.focusedPanel === activePanel;
+  const treeTarget = treeFocused ? folderTrees.actionTarget(activePanel) : null;
+  const activeTargets = treeFocused
+    ? { focusedEntry: treeTarget?.entry ?? null, selectedCount: 0, hasConcreteFocus: Boolean(treeTarget), effectiveTargetCount: treeTarget ? 1 : 0 }
+    : resolveActionTargets(activePanelState);
   const sharedActionState: SharedActionState = {
     platformInfo,
     clipboardCount,
@@ -341,16 +431,27 @@ export function CommanderShell({
   };
   const context = createPanelActionContext(
     sharedActionState,
-    { panelId: activePanel, path: activePanelState.listing.path },
+    { panelId: activePanel, path: treeTarget?.sourceListing.path ?? activePanelState.listing.path },
     activeTargets,
   );
 
-  const activeRowDomId = rowDomId(activePanel, panelState[activePanel].focusedIndex);
+  const activeRowDomId = folderTrees.activeRowDomId(activePanel) ?? rowDomId(activePanel, panelState[activePanel].focusedIndex);
   const ariaKeyShortcuts = ariaKeyShortcutsFromRegistry();
 
   useEffect(() => {
     shellRef.current?.focus({ preventScroll: true });
   }, []);
+  // 원격 패널이 다시 연결되면 연결이 끊겨 읽지 못한 트리 폴더를 다시 읽음
+  const remoteTreeConnected = (panelId: PanelId) =>
+    remoteStatusForPath(panelState[panelId].path, remoteSessions, remoteSettingsOf(settings).sites)?.state === 'connected';
+  const leftRemoteConnected = remoteTreeConnected('left');
+  const rightRemoteConnected = remoteTreeConnected('right');
+  useEffect(() => {
+    if (leftRemoteConnected) folderTrees.refresh('left');
+  }, [leftRemoteConnected]);
+  useEffect(() => {
+    if (rightRemoteConnected) folderTrees.refresh('right');
+  }, [rightRemoteConnected]);
   useCommanderKeyboard({
     get activePanel() { return activePanel; },
     get panelState() { return panelState; },
@@ -362,7 +463,9 @@ export function CommanderShell({
       panelRef.current?.moveFocusedPage(direction, extendSelection);
     },
     get focusBoundaryEntry() { return focusBoundaryEntry; },
-    get handleAction() { return handleAction; },
+    get handleAction() { return handleCommanderAction; },
+    get handleFolderTreeKey() { return folderTrees.handleKey; },
+    get activeRowDomId() { return activeRowDomId; },
     get applyZoom() { return applyZoom; },
     get settings() { return settings; },
     get topMenuStateRef() { return topMenuStateRef; },
@@ -400,7 +503,7 @@ export function CommanderShell({
         onStateChange={setTopMenuState}
         onOpenAction={(action) => {
           setTopMenuState(null);
-          handleAction({ actionId: (action).id });
+          handleCommanderAction({ actionId: (action).id });
         }}
       />
       {!runtimeBackendAvailable ? (
@@ -444,6 +547,7 @@ export function CommanderShell({
           onPanelDragOver={(event) => handlePanelDragOver(event, 'left')}
           onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'left' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'left')}
+          folderTree={folderTreePanel('left')}
         />
         <FilePanel
           ref={rightPanelRef}
@@ -477,6 +581,7 @@ export function CommanderShell({
           onPanelDragOver={(event) => handlePanelDragOver(event, 'right')}
           onPanelDragLeave={() => setDragOverPanel((current) => current?.panelId === 'right' ? null : current)}
           onPanelDrop={(event) => handlePanelDrop(event, 'right')}
+          folderTree={folderTreePanel('right')}
         />
       </section>
       {pointerDragPreview && (

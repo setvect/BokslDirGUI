@@ -132,6 +132,21 @@ fn validate_settings(settings: &Settings, path: &Path) -> CommandResult<()> {
         )
         .with_detail("field", "layout.ratio"));
     }
+    let tree_widths = crate::contracts::FOLDER_TREE_MIN_WIDTH..=crate::contracts::FOLDER_TREE_MAX_WIDTH;
+    for (field, tree) in [
+        ("layout.folderTree.left.width", &settings.layout.folder_tree.left),
+        ("layout.folderTree.right.width", &settings.layout.folder_tree.right),
+    ] {
+        if !tree_widths.contains(&tree.width) {
+            return Err(AppError::new(
+                "invalid_settings",
+                "errors.settingsInvalid",
+                Some(path),
+                true,
+            )
+            .with_detail("field", field));
+        }
+    }
     if !(-3..=5).contains(&settings.view.zoom_step) {
         return Err(AppError::new(
             "invalid_settings",

@@ -81,6 +81,12 @@ export interface DirectoryListing {
   archiveEncrypted?: boolean;
 }
 
+// 폴더 트리의 한 단계 하위 폴더(FR-42.3). 숨김 폴더 포함, 폴더를 가리키는 링크는 `kind: 'symlink'`
+export interface SubdirectoryListing {
+  path: string;
+  entries: FileEntry[];
+}
+
 export interface DirectoryStats {
   totalFileBytes: number;
   fileCount: number;
@@ -256,6 +262,8 @@ export interface Settings {
   layout: {
     singlePanel: boolean;
     ratio: '50:50' | '70:30' | '30:70';
+    // 기본값이면 저장 파일에서 생략, 읽을 때 `folderTreeSettingsOf`로 기본값 적용
+    folderTree?: Record<PanelId, FolderTreePanelSettings>;
   };
   session: {
     leftPath: string | null;
@@ -270,6 +278,12 @@ export interface Settings {
   };
   // 기본값이면 저장 파일에서 생략, 읽을 때 `remoteSettingsOf`로 기본값 적용
   remote?: RemoteSettings;
+}
+
+// 패널별 폴더 트리 표시 여부와 폭(100% 배율 기준 px, FR-42.1)
+export interface FolderTreePanelSettings {
+  visible: boolean;
+  width: number;
 }
 
 export type RemoteAuthMethod = 'password' | 'publicKey' | 'agent' | 'keyboardInteractive';

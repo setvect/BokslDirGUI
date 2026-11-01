@@ -45,13 +45,15 @@ export function BlankContextMenuContent({ language, listing, actionState, onOpen
   );
 }
 
-export function EntryContextMenuContent({ language, entry, listing, selectedPaths, actionState, onOpenAction }: {
+export function EntryContextMenuContent({ language, entry, listing, selectedPaths, actionState, onOpenAction, allowedActionIds }: {
   language: Settings['language'];
   entry: FileEntry;
   listing: DirectoryListing;
   selectedPaths: readonly string[];
   actionState: SharedActionState;
   onOpenAction(action: AppAction, sources: FileEntry[]): void;
+  // 폴더 트리의 맨 위 항목처럼 이동만 허용하는 항목의 메뉴 제한
+  allowedActionIds?: readonly string[];
 }) {
   const keyboardBoundaryProps = useCommanderKeyboardBoundaryProps('context-menu');
   const contextSources = contextMenuSources(entry, listing, selectedPaths);
@@ -65,7 +67,7 @@ export function EntryContextMenuContent({ language, entry, listing, selectedPath
   return (
     <ContextMenu.Content className="context-menu" {...keyboardBoundaryProps}>
       <ContextMenu.Label className="context-label">{entry.name}</ContextMenu.Label>
-      {contextMenuActions(entry, context).map((action) => (
+      {contextMenuActions(entry, context).filter((action) => !allowedActionIds || allowedActionIds.includes(action.id)).map((action) => (
         <ContextMenu.Item
           key={action.id}
           className="context-item"

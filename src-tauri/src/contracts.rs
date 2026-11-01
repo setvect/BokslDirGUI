@@ -89,6 +89,15 @@ pub(crate) struct DirectoryListing {
     pub(crate) truncated: Option<bool>,
 }
 
+/// 폴더 트리의 한 단계 하위 폴더(FR-42.3). 숨김 폴더 포함(`isHidden`으로 구분), 이름순.
+/// 폴더를 가리키는 심볼릭 링크는 `kind: symlink`, `symlinkTargetIsDirectory: true`로 포함.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SubdirectoryListing {
+    pub(crate) path: String,
+    pub(crate) entries: Vec<FileEntry>,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DirectoryStats {
@@ -256,6 +265,9 @@ pub(crate) struct ShellCommandEnabled {
 pub(crate) struct LayoutSettings {
     pub(crate) single_panel: bool,
     pub(crate) ratio: String,
+    /// 패널별 폴더 트리 표시·폭(FR-42.1). 기본값이면 저장 파일에서 생략
+    #[serde(default, skip_serializing_if = "FolderTreeLayout::is_default")]
+    pub(crate) folder_tree: FolderTreeLayout,
 }
 
 impl Default for LayoutSettings {
@@ -263,8 +275,48 @@ impl Default for LayoutSettings {
         Self {
             single_panel: false,
             ratio: "50:50".to_string(),
+            folder_tree: FolderTreeLayout::default(),
         }
     }
+}
+
+/// 폴더 트리 폭(100% 배율 기준 px) 허용 범위. 프론트 `src/ui/settingsModel.ts`와 같은 값
+pub(crate) const FOLDER_TREE_MIN_WIDTH: u32 = 120;
+pub(crate) const FOLDER_TREE_MAX_WIDTH: u32 = 800;
+const FOLDER_TREE_DEFAULT_WIDTH: u32 = 220;
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FolderTreeLayout {
+    #[serde(default)]
+    pub(crate) left: FolderTreePanel,
+    #[serde(default)]
+    pub(crate) right: FolderTreePanel,
+}
+
+impl FolderTreeLayout {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FolderTreePanel {
+    #[serde(default)]
+    pub(crate) visible: bool,
+    #[serde(default = "default_folder_tree_width")]
+    pub(crate) width: u32,
+}
+
+impl Default for FolderTreePanel {
+    fn default() -> Self {
+        Self { visible: false, width: FOLDER_TREE_DEFAULT_WIDTH }
+    }
+}
+
+fn default_folder_tree_width() -> u32 {
+    FOLDER_TREE_DEFAULT_WIDTH
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]

@@ -23,7 +23,8 @@ import {
 } from './archiveVirtual';
 import { NativeFileDropRuntime } from './commanderTypes';
 import { basenameFromPath } from './fileActionPlans';
-import { FileDragSource, FileDragTarget, fileEntryFromExternalDropFile, fileEntryFromExternalDropPath, panelDropPointAtClientPosition, panelIdAtClientPosition, samePathSet, uniqueAbsolutePaths } from './fileDropTargets';
+import { FileDragSource, FileDragTarget, fileEntryFromExternalDropFile, fileEntryFromExternalDropPath, folderTreePathAtElement, panelDropPointAtClientPosition, samePathSet, uniqueAbsolutePaths, type PanelDropPoint } from './fileDropTargets';
+import { folderTreeActionTarget, pathIsSameOrInside, type FolderTreeRow } from './folderTreeModel';
 import { commanderKeyboardHasOwner } from './keyboardOwnership';
 import { nativeDragPreview } from './nativeDragPreview';
 import { panelIdLabel } from './panelPresentation';
@@ -47,6 +48,8 @@ interface FileDragDependencies {
   readonly mutationClient: SafeMutationClient;
   readonly panelState: PanelStateById;
   readonly refreshPanel: (panelId: PanelId, background?: boolean) => void;
+  // 끌기 중 폴더 트리 위치(접힌 폴더 펼치기·가장자리 스크롤), 트리 밖이면 null
+  readonly folderTreeDragHover?: (panelId: PanelId | null, path: string | null, point: DragPoint | null) => void;
 }
 export function useFileDrag(runtime: FileDragDependencies) {
 
@@ -84,10 +87,10 @@ export function useFileDrag(runtime: FileDragDependencies) {
     };
   };
 
-  // 반대 패널은 그 패널의 현재 폴더, 같은 패널은 끌고 있는 항목이 아닌 실제 하위 폴더 행(FR-29.2)
-  const dragTargetAt = (source: FileDragSource, point: DragPoint): FileDragTarget | null => {
-    const drop = panelDropPointAtClientPosition(point);
+  // 폴더 트리 줄은 그 폴더, 반대 패널은 그 패널의 현재 폴더, 같은 패널은 끌고 있는 항목이 아닌 실제 하위 폴더 행(FR-29.2, FR-42.7)
+  const dragTargetFor = (source: FileDragSource, drop: PanelDropPoint | null): FileDragTarget | null => {
     if (!drop) return null;
+    if (drop.treePath) return { panelId: drop.panelId, targetDir: drop.treePath, folderPath: drop.treePath };
     const panel = runtime.panelStateRef.current[drop.panelId];
     if (drop.panelId !== source.panelId) return { panelId: drop.panelId, targetDir: panel.path, folderPath: null };
     const folder = drop.rowIndex === null ? undefined : panel.listing.entries[drop.rowIndex];
@@ -96,18 +99,23 @@ export function useFileDrag(runtime: FileDragDependencies) {
     return { panelId: drop.panelId, targetDir: folderPath ?? panel.path, folderPath };
   };
 
-  // OS 드롭은 행 위치 없이 패널 단위로만 도착
-  const panelTarget = (panelId: PanelId): FileDragTarget =>
-    ({ panelId, targetDir: runtime.panelStateRef.current[panelId].path, folderPath: null });
+  const dragTargetAt = (source: FileDragSource, point: DragPoint) => dragTargetFor(source, panelDropPointAtClientPosition(point));
+
+  // OS 드롭은 목록 행 위치 없이 패널 단위로 도착(폴더 트리 줄 위면 그 폴더)
+  const panelTarget = (panelId: PanelId, treePath: string | null = null): FileDragTarget => (treePath
+    ? { panelId, targetDir: treePath, folderPath: treePath }
+    : { panelId, targetDir: runtime.panelStateRef.current[panelId].path, folderPath: null });
 
   const dragTargetBlocked = (source: FileDragSource, target: FileDragTarget | null) => {
     if (!target || (target.panelId === source.panelId && !target.folderPath)) return true;
     const panels = runtime.panelStateRef.current;
+    // 폴더 트리에서 끈 폴더는 패널 목록이 아닌 자기 출발 목록으로 확인
     return isOperationInFlight(useOperationStore.getState()) || commanderKeyboardHasOwner()
       || panels[source.panelId].loading || panels[target.panelId].loading
-      || panels[source.panelId].path !== source.sourcePath
+      || (!source.sourceListing && panels[source.panelId].path !== source.sourcePath)
       || target.targetDir === source.sourcePath || isArchiveVirtualPath(target.targetDir)
-      || !sourcesBelongToListing(source.entries, panels[source.panelId].listing);
+      || source.entries.some((entry) => pathIsSameOrInside(target.targetDir, entry.path))
+      || !sourcesBelongToListing(source.entries, source.sourceListing ?? panels[source.panelId].listing);
   };
 
   commitPanelDragRef.current = (source, target, mode) => {
@@ -117,7 +125,10 @@ export function useFileDrag(runtime: FileDragDependencies) {
     traceFileDrag('drop', { source: source.panelId, target: target?.panelId ?? null, folder: target?.folderPath ?? null, mode, blocked, count: source.entries.length });
     if (blocked || !target) return;
     const action = ACTION_BY_ID.get(mode === 'move' ? 'file.move' : 'file.copy')!;
-    runtime.handleAction({ actionId: (action).id, panelId: source.panelId, sources: source.entries, targetDir: target.targetDir });
+    runtime.handleAction({
+      actionId: (action).id, panelId: source.panelId, sources: source.entries, targetDir: target.targetDir,
+      ...(source.sourceListing ? { sourceListing: source.sourceListing } : {}),
+    });
   };
 
   const startNativeEntryDrag = (session: FileDragSource, mode: NativeFileDragMode) => {
@@ -177,9 +188,22 @@ export function useFileDrag(runtime: FileDragDependencies) {
   };
 
   const handleEntryPointerDown = (event: ReactPointerEvent<HTMLElement>, panelId: PanelId, entry: FileEntry) => {
-    if (entry.isVirtual || event.button !== 0 || runtime.operationBusy || commanderKeyboardHasOwner()) return;
+    if (entry.isVirtual) return;
+    beginEntryDrag(event, panelId, dragEntries(panelId, entry));
+  };
+
+  // 폴더 트리 줄 끌기: 그 폴더 하나. 맨 위 항목과 열린 압축 파일은 끌 수 없음
+  const handleFolderTreePointerDown = (event: ReactPointerEvent<HTMLElement>, panelId: PanelId, row: FolderTreeRow) => {
+    const target = folderTreeActionTarget(panelId, row);
+    if (!target) return;
+    beginEntryDrag(event, panelId, {
+      panelId, sourcePath: target.sourceListing.path, mode: 'copy', entries: [target.entry], sourceListing: target.sourceListing,
+    });
+  };
+
+  const beginEntryDrag = (event: ReactPointerEvent<HTMLElement>, panelId: PanelId, source: FileDragSource) => {
+    if (event.button !== 0 || runtime.operationBusy || commanderKeyboardHasOwner()) return;
     pointerDragCleanupRef.current?.();
-    const source = dragEntries(panelId, entry);
     let previousHover = '';
     pointerDragCleanupRef.current = beginPointerFileDrag(event, {
       start: () => {
@@ -189,8 +213,10 @@ export function useFileDrag(runtime: FileDragDependencies) {
         traceFileDrag('start', { source: panelId, count: source.entries.length });
       },
       update: (point, mode) => {
-        const target = dragTargetAt(source, point);
+        const drop = panelDropPointAtClientPosition(point);
+        const target = dragTargetFor(source, drop);
         const blocked = dragTargetBlocked(source, target);
+        runtime.folderTreeDragHover?.(drop?.panelId ?? null, drop?.treePath ?? null, point);
         const hoverKey = `${target?.panelId}:${target?.folderPath}:${mode}:${blocked}`;
         if (hoverKey !== previousHover) {
           traceFileDrag('hover', { source: panelId, target: target?.panelId ?? null, folder: target?.folderPath ?? null, mode, blocked, point, pixelRatio: window.devicePixelRatio });
@@ -201,10 +227,15 @@ export function useFileDrag(runtime: FileDragDependencies) {
       },
       drop: (point, mode) => {
         traceFileDrag('release', { source: panelId, point, mode });
+        runtime.folderTreeDragHover?.(null, null, null);
         commitPanelDragRef.current(source, dragTargetAt(source, point), mode);
       },
-      external: (mode) => startNativeEntryDrag(source, mode),
+      external: (mode) => {
+        runtime.folderTreeDragHover?.(null, null, null);
+        startNativeEntryDrag(source, mode);
+      },
       cancel: () => {
+        runtime.folderTreeDragHover?.(null, null, null);
         setPointerDragPreview(null);
         setDragOverPanel(null);
         traceFileDrag('cancel', { source: panelId });
@@ -230,7 +261,9 @@ export function useFileDrag(runtime: FileDragDependencies) {
       return;
     }
     const action = ACTION_BY_ID.get('file.copy')!;
-    runtime.handleAction({ actionId: (action).id, panelId: targetPanel, sources: externalEntries, targetDir: runtime.panelStateRef.current[targetPanel].path });
+    const targetDir = folderTreePathAtElement(event.target instanceof Element ? event.target : null)
+      ?? runtime.panelStateRef.current[targetPanel].path;
+    runtime.handleAction({ actionId: (action).id, panelId: targetPanel, sources: externalEntries, targetDir });
     runtime.setStatusMessage(runtime.statusText.externalImport(externalEntries.length, panelIdLabel(targetPanel, runtime.settings.language)));
   };
 
@@ -244,11 +277,13 @@ export function useFileDrag(runtime: FileDragDependencies) {
         runtime.setStatusMessage(runtime.statusText.externalDropUnavailable(String(error)));
       });
     }
-    const blocked = runtime.operationBusy || isArchiveVirtualPath(runtime.panelStateRef.current[targetPanel].path);
-    setDragOverPanel({ panelId: targetPanel, intent: blocked ? 'blocked' : 'import' });
+    const treePath = folderTreePathAtElement(event.target instanceof Element ? event.target : null);
+    const blocked = runtime.operationBusy || isArchiveVirtualPath(treePath ?? runtime.panelStateRef.current[targetPanel].path);
+    setDragOverPanel({ panelId: targetPanel, intent: blocked ? 'blocked' : 'import', folderPath: blocked ? null : treePath });
   };
 
-  const importNativeDroppedPaths = async (paths: string[], targetPanel: PanelId, targetDir: string, nativeSource: FileDragSource | null, generation: number) => {
+  const importNativeDroppedPaths = async (paths: string[], targetPanel: PanelId, panelPath: string, treePath: string | null, nativeSource: FileDragSource | null, generation: number) => {
+    const targetDir = treePath ?? panelPath;
     const normalizedPaths = uniqueAbsolutePaths(paths);
     if (normalizedPaths.length !== paths.length) {
       runtime.setStatusMessage(runtime.statusText.externalDropPathRequired);
@@ -280,17 +315,17 @@ export function useFileDrag(runtime: FileDragDependencies) {
     }
 
     if (generation !== nativeDropGenerationRef.current
-      || runtime.panelStateRef.current[targetPanel].path !== targetDir
+      || runtime.panelStateRef.current[targetPanel].path !== panelPath
       || isOperationInFlight(useOperationStore.getState()) || commanderKeyboardHasOwner()) return;
     if (nativeSource) {
       // Compare backend-resolved paths, never display-normalize paths for identity.
       // Windows CF_HDROP may return C:\... while our listing retains \\?\C:\....
       if (samePathSet(nativeSource.entries.map(entry => entry.path), resolvedPaths)) {
-        if (dragTargetBlocked(nativeSource, panelTarget(targetPanel))) {
+        if (dragTargetBlocked(nativeSource, panelTarget(targetPanel, treePath))) {
           runtime.setStatusMessage(runtime.statusText.externalDragCancelled);
           return;
         }
-        commitPanelDragRef.current(nativeSource, panelTarget(targetPanel), nativeSource.mode);
+        commitPanelDragRef.current(nativeSource, panelTarget(targetPanel, treePath), nativeSource.mode);
       } else {
         runtime.setStatusMessage(runtime.statusText.externalDropPathRequired);
       }
@@ -308,6 +343,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
 
   const handleNativeFileDropEvent = (event: NativeFileDropEvent) => {
     if (event.type !== 'over') traceFileDrag('native-drop', { type: event.type, own: Boolean(nativeFileDragSourceRef.current) });
+    if (event.type !== 'enter' && event.type !== 'over') runtime.folderTreeDragHover?.(null, null, null);
     if (event.type === 'leave') {
       nativeDropOverlayRequestedRef.current = false;
       setDragOverPanel((current) => current?.intent === 'import' || current?.intent === 'blocked' ? null : current);
@@ -319,11 +355,14 @@ export function useFileDrag(runtime: FileDragDependencies) {
       if (nativeDropPendingRef.current) return;
     }
 
-    const targetPanel = panelIdAtClientPosition(event.position);
+    const drop = panelDropPointAtClientPosition(event.position);
+    const targetPanel = drop?.panelId ?? null;
     if (!targetPanel) {
+      runtime.folderTreeDragHover?.(null, null, null);
       setDragOverPanel(null);
       return;
     }
+    const treePath = drop?.treePath ?? null;
     const targetState = runtime.panelState[targetPanel];
     const nativeDragSource = nativeFileDragSourceRef.current;
     const isOwnNativeDrag = Boolean(
@@ -334,13 +373,16 @@ export function useFileDrag(runtime: FileDragDependencies) {
       )),
     );
     const blocked = runtime.operationBusy
-      || isArchiveVirtualPath(targetState.path)
-      || Boolean(isOwnNativeDrag && nativeDragSource?.panelId === targetPanel);
+      || isArchiveVirtualPath(treePath ?? targetState.path)
+      || Boolean(isOwnNativeDrag && nativeDragSource?.panelId === targetPanel && !treePath)
+      || Boolean(isOwnNativeDrag && treePath && nativeDragSource!.entries.some((entry) => pathIsSameOrInside(treePath, entry.path)));
 
     if (event.type === 'enter' || event.type === 'over') {
+      runtime.folderTreeDragHover?.(targetPanel, treePath, event.position);
       setDragOverPanel({
         panelId: targetPanel,
         intent: blocked ? 'blocked' : isOwnNativeDrag ? nativeDragSource!.mode : 'import',
+        folderPath: blocked ? null : treePath,
       });
       return;
     }
@@ -358,7 +400,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
     }
     if (isOwnNativeDrag && nativeDragSource) {
       nativeFileDragSourceRef.current = null;
-      commitPanelDragRef.current(nativeDragSource, panelTarget(targetPanel), nativeDragSource.mode);
+      commitPanelDragRef.current(nativeDragSource, panelTarget(targetPanel, treePath), nativeDragSource.mode);
       return;
     }
     // Claim this drop before resolving metadata; completion and duplicate events
@@ -366,7 +408,7 @@ export function useFileDrag(runtime: FileDragDependencies) {
     nativeFileDragSourceRef.current = null;
     nativeDropPendingRef.current = true;
     const generation = ++nativeDropGenerationRef.current;
-    void importNativeDroppedPaths(event.paths, targetPanel, targetState.path, nativeDragSource, generation)
+    void importNativeDroppedPaths(event.paths, targetPanel, targetState.path, treePath, nativeDragSource, generation)
       .catch((error: unknown) => {
         if (generation === nativeDropGenerationRef.current) {
           runtime.setStatusMessage(runtime.statusText.externalDropUnavailable(String(error)));
@@ -414,5 +456,5 @@ export function useFileDrag(runtime: FileDragDependencies) {
       unlisten?.();
     };
   }, [runtime.nativeFileDropClient, runtime.runtimeBackendAvailable]);
-  return { handleEntryPointerDown, dragOverPanel, handlePanelDragOver, setDragOverPanel, handlePanelDrop, pointerDragPreview };
+  return { handleEntryPointerDown, handleFolderTreePointerDown, dragOverPanel, handlePanelDragOver, setDragOverPanel, handlePanelDrop, pointerDragPreview };
 }

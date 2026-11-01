@@ -209,6 +209,18 @@
     {
       "guiActionId": "remote.info",
       "reason": "연결 주소·상태·원격 홈·호스트 키 알고리즘과 SHA-256 지문 표시"
+    },
+    {
+      "guiActionId": "view.toggleFolderTree",
+      "reason": "패널마다 왼쪽 폴더 트리 표시 전환, 표시 여부·폭 저장(FR-42.1)"
+    },
+    {
+      "guiActionId": "view.focusFolderTree",
+      "reason": "활성 패널의 목록과 폴더 트리 사이 키보드 이동, 트리가 꺼져 있으면 켜면서 이동(FR-42.6)"
+    },
+    {
+      "guiActionId": "nav.openInOtherPanel",
+      "reason": "목록·폴더 트리의 폴더를 반대 패널에서 열기(FR-42.7)"
     }
   ],
   "tuiActions": [

@@ -1,6 +1,7 @@
-import type { AppError, DirectoryChanged, DirectoryListing, FileEntry, LocationList, PanelId, SortSpec, WatchAck } from '../domain/types';
+import type { AppError, DirectoryChanged, DirectoryListing, FileEntry, LocationList, PanelId, SortSpec, SubdirectoryListing, WatchAck } from '../domain/types';
 import { type ListDirInput, tauriClient, type TauriResult } from '../tauri/client';
 import { SAMPLE_LISTINGS } from './commanderFixture';
+import { isFolderTreeEntry, sortFolderTreeEntries } from './folderTreeModel';
 import { createDirectoryListing, DEFAULT_SORT, PANEL_IDS, parentPathOf } from './panelState';
 
 export type PanelInitialLoadResult = Record<PanelId, TauriResult<DirectoryListing>>;
@@ -13,6 +14,8 @@ export interface PanelDataSource {
   // base: `~`·상대 경로 해석 기준인 활성 패널의 실제 디렉터리(압축 내부면 생략)
   gotoPath(input: { panelId: PanelId; path: string; base?: string }): Promise<TauriResult<DirectoryListing>>;
   listLocations(): Promise<TauriResult<LocationList>>;
+  // 폴더 트리의 한 단계 하위 폴더(숨김 포함, FR-42.3). 없으면 트리는 패널 경로까지만 표시
+  listSubdirs?(input: { path: string }): Promise<TauriResult<SubdirectoryListing>>;
   // 외부 변경 감시(Tauri 실행에서만 제공): 패널마다 감시 하나, 변경 알림은 같은 version일 때만 유효
   watchPath?(input: { panelId: PanelId; path: string }): Promise<TauriResult<WatchAck>>;
   unwatchPath?(input: { panelId: PanelId }): Promise<TauriResult<void>>;
@@ -20,7 +23,7 @@ export interface PanelDataSource {
 }
 
 type TauriNavigationClient = Pick<typeof tauriClient, 'listDir' | 'gotoPath' | 'listLocations'>
-  & Partial<Pick<typeof tauriClient, 'watchPath' | 'unwatchPath' | 'listenDirectoryChanges'>>;
+  & Partial<Pick<typeof tauriClient, 'listSubdirs' | 'watchPath' | 'unwatchPath' | 'listenDirectoryChanges'>>;
 
 export const createTauriPanelDataSource = (
   client: TauriNavigationClient = tauriClient,
@@ -57,6 +60,7 @@ export const createTauriPanelDataSource = (
   listDir: (input) => client.listDir(input),
   gotoPath: (input) => client.gotoPath(input),
   listLocations: () => client.listLocations(),
+  ...(client.listSubdirs ? { listSubdirs: client.listSubdirs } : {}),
   ...(client.watchPath && client.unwatchPath && client.listenDirectoryChanges
     ? { watchPath: client.watchPath, unwatchPath: client.unwatchPath, listenDirectoryChanges: client.listenDirectoryChanges }
     : {}),
@@ -96,6 +100,10 @@ export const createFixturePanelDataSource = (
       roots: [initialListings.left.path, initialListings.right.path],
       recent: [initialListings.right.path, initialListings.left.path],
       bookmarks: [],
+    }),
+    listSubdirs: async (input) => ok({
+      path: input.path,
+      entries: sortFolderTreeEntries(listingFor('left', input.path, DEFAULT_SORT, null).entries.filter(isFolderTreeEntry)),
     }),
   };
 };

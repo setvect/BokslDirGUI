@@ -3,7 +3,7 @@ use crate::contracts::{
     ActionResult, AppError, ArchiveListing, CancelAck, CommandResult, ConflictAck,
     ConflictDecision, DeleteMode, DirectoryListing, FileEntry, FileMetadata, FilePreview,
     LocationList, OpenWithApp, OperationStarted, PanelId, Settings, ShellCommandPreview,
-    SortSpec, WatchAck,
+    SortSpec, SubdirectoryListing, WatchAck,
 };
 use crate::external;
 use crate::mutation;
@@ -41,6 +41,15 @@ pub(crate) async fn list_dir(
         .await;
     }
     run_blocking(Some(PathBuf::from(&path)), move || navigation::list_dir(panel_id, &path, show_hidden, sort, filter)).await
+}
+
+/// 폴더 트리의 한 단계 하위 폴더(FR-42.3). 원격 경로는 같은 SFTP 연결로 읽음.
+#[tauri::command]
+pub(crate) async fn list_subdirs(path: String) -> CommandResult<SubdirectoryListing> {
+    if is_remote_path(&path) {
+        return crate::remote::run(async move { crate::remote::listing::list_subdirs(&path).await }).await;
+    }
+    run_blocking(Some(PathBuf::from(&path)), move || navigation::list_subdirs(&path)).await
 }
 
 /// 주소 입력 이동. `~`는 홈, 상대 경로는 `base`(활성 패널의 실제 디렉터리) 기준으로 해석(FR-26.4).

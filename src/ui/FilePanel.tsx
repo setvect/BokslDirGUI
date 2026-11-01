@@ -23,6 +23,8 @@ import {
 } from './archiveVirtual';
 import { DirectoryComparisonState, directoryComparisonLabel } from './directoryComparison';
 import { MiddleEllipsisEntryName } from './EntryName';
+import { FolderTree } from './FolderTree';
+import type { FolderTreeRow } from './folderTreeModel';
 import { basenameFromPath } from './fileActionPlans';
 import { entryIcon, formatDate, formatOwnerGroup, formatSize, summarizeEntries } from './format';
 import { BlankContextMenuContent, EntryContextMenuContent } from './PanelContextMenus';
@@ -34,8 +36,26 @@ import {
 } from './panelState';
 import { SelectionMode } from './selectionModel';
 import { useElementWidth } from './useElementWidth';
+import type { FolderTreeView } from './useFolderTrees';
 
 const FOCUSABLE_ROW_TAB_INDEX = -1;
+// 트리를 켜도 목록이 패널 폭의 60% 밑으로 줄지 않게 하는 트리 최대 비율(FR-42.2)
+const FOLDER_TREE_MAX_PANEL_RATIO = 0.4;
+
+// 패널 왼쪽 폴더 트리(FR-42). 상태는 `useFolderTrees`가 소유하고 패널은 배치와 폭 조절만 담당
+export interface FilePanelFolderTree {
+  view: FolderTreeView;
+  disconnected: boolean;
+  onToggle(): void;
+  onRowClick(path: string): void;
+  onToggleRow(path: string): void;
+  onRowPointerDown(event: ReactPointerEvent<HTMLElement>, row: FolderTreeRow): void;
+  onOpenAction(action: AppAction, row: FolderTreeRow, sources: FileEntry[]): void;
+  onScrollElement(element: HTMLElement | null): void;
+  onWidthChange(width: number, commit: boolean): void;
+  // 목록 영역을 누르면 키보드를 목록으로
+  onListPointerDown(): void;
+}
 
 export interface FilePanelHandle {
   moveFocusedPage(direction: -1 | 1, extendSelection?: boolean): void;
@@ -74,6 +94,7 @@ interface FilePanelProps {
   onGotoPath(): void;
   onClearFilter(): void;
   onRestoreFocus(): void;
+  folderTree?: FilePanelFolderTree | null;
 }
 
 export function FilePanel({
@@ -108,17 +129,25 @@ export function FilePanel({
   onGotoPath,
   onClearFilter,
   onRestoreFocus,
+  folderTree = null,
 }: FilePanelProps) {
   const { listing } = panel;
   const panelRef = useRef<HTMLElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
   const panelWidth = useElementWidth(panelRef, 760);
+  // 열 구성은 트리를 뺀 목록 영역 폭 기준
+  const listWidth = useElementWidth(tableRef, panelWidth);
+  const treeView = folderTree?.view.visible ? folderTree.view : null;
+  const treeWidthPx = treeView
+    ? Math.max(0, Math.min(Math.round(treeView.width * scale), Math.floor(panelWidth * FOLDER_TREE_MAX_PANEL_RATIO)))
+    : 0;
   const metadataColumnWidths = useMemo(
     () => metadataColumnWidthsForEntries(listing.entries, sizeFormat),
     [listing.entries, sizeFormat],
   );
   const columnLayout = useMemo(
-    () => columnLayoutForPanelWidth(panelWidth, scale, metadataColumnWidths),
-    [panelWidth, scale, metadataColumnWidths],
+    () => columnLayoutForPanelWidth(listWidth, scale, metadataColumnWidths),
+    [listWidth, scale, metadataColumnWidths],
   );
   const fileTableStyle = {
     '--file-grid-template': columnLayout.gridTemplateColumns,
@@ -273,10 +302,32 @@ export function FilePanel({
     return () => document.removeEventListener('selectionchange', keepPathSelectionInsidePath);
   }, []);
 
+  // 경계선 끌기: 끄는 동안은 화면만 바꾸고 놓을 때 저장(폭은 100% 배율 기준으로 환산)
+  const startFolderTreeResize = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!folderTree || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = treeWidthPx;
+    const maxWidth = Math.floor(panelWidth * FOLDER_TREE_MAX_PANEL_RATIO);
+    const widthAt = (clientX: number) => Math.min(maxWidth, Math.max(0, startWidth + clientX - startX)) / scale;
+    const move = (moveEvent: PointerEvent) => folderTree.onWidthChange(widthAt(moveEvent.clientX), false);
+    const finish = (endEvent: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      folderTree.onWidthChange(endEvent.type === 'pointercancel' ? startWidth / scale : widthAt(endEvent.clientX), true);
+      onRestoreFocus();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+  };
+
   return (
     <section
       ref={panelRef}
-      className={`file-panel ${active ? 'is-active' : ''} ${hiddenByLayout ? 'is-hidden-by-layout' : ''} ${dropIntent ? `is-drop-${dropIntent}` : ''}`}
+      className={`file-panel ${active ? 'is-active' : ''} ${treeView?.focused ? 'is-tree-focused' : ''} ${hiddenByLayout ? 'is-hidden-by-layout' : ''} ${dropIntent ? `is-drop-${dropIntent}` : ''}`}
       data-panel-id={listing.panelId}
       aria-label={`${listing.panelId} panel ${displayPath(listing.path)}`}
       aria-current={active ? 'true' : undefined}
@@ -308,8 +359,48 @@ export function FilePanel({
         onGotoPath={onGotoPath}
         onRestoreFocus={onRestoreFocus}
         remoteStatus={remoteStatus}
+        folderTreeVisible={Boolean(treeView)}
+        onToggleFolderTree={folderTree?.onToggle}
       />
-      <div className="file-table" role="table" aria-rowcount={listing.entries.length} style={fileTableStyle}>
+      <div
+        className={`file-panel-body${treeView ? ' has-folder-tree' : ''}`}
+        style={treeView ? { '--folder-tree-width': `${treeWidthPx}px` } as CSSProperties : undefined}
+      >
+      {folderTree && treeView ? (
+        <>
+          <FolderTree
+            panelId={listing.panelId}
+            view={treeView}
+            active={active}
+            disconnected={folderTree.disconnected}
+            rowHeightPx={rowHeightPx}
+            language={language}
+            showIcons={showIcons}
+            dropFolderPath={dropFolderPath}
+            actionState={actionState}
+            onRowClick={folderTree.onRowClick}
+            onToggleRow={folderTree.onToggleRow}
+            onRowPointerDown={folderTree.onRowPointerDown}
+            onOpenAction={folderTree.onOpenAction}
+            onScrollElement={folderTree.onScrollElement}
+          />
+          <div
+            className="folder-tree-splitter"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={labels.folderTreeResize}
+            onPointerDown={startFolderTreeResize}
+          />
+        </>
+      ) : null}
+      <div
+        ref={tableRef}
+        className="file-table"
+        role="table"
+        aria-rowcount={listing.entries.length}
+        style={fileTableStyle}
+        onMouseDown={folderTree?.onListPointerDown}
+      >
         <div className="file-table-head" role="rowgroup">
           {table.getHeaderGroups().map((headerGroup) => (
             <div className={`file-table-row file-table-heading ${columnLayout.cssClass}`} role="row" key={headerGroup.id}>
@@ -401,6 +492,7 @@ export function FilePanel({
             />
           </ContextMenu.Portal>
         </ContextMenu.Root>
+      </div>
       </div>
       <footer className="panel-status">
         <span>{PANEL_COUNT_TEXT[language].entries(summary.files, summary.dirs)}</span>

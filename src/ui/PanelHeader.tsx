@@ -24,6 +24,8 @@ export function PanelHeader({
   onGotoPath,
   onRestoreFocus,
   remoteStatus = null,
+  folderTreeVisible = false,
+  onToggleFolderTree,
 }: {
   panel: PanelNavigationState;
   tabCount: number;
@@ -35,6 +37,8 @@ export function PanelHeader({
   onNavigateUp(): void;
   onGotoPath(): void;
   onRestoreFocus(): void;
+  folderTreeVisible?: boolean;
+  onToggleFolderTree?(): void;
 }) {
   const labels = COMMANDER_UI_TEXT[language];
   const pathLabel = displayPath(panel.path);
@@ -51,6 +55,18 @@ export function PanelHeader({
 
   return (
     <header className="path-controls" aria-label={`${panelIdLabel(panel.listing.panelId, language)} ${labels.navigationControls}`}>
+      {onToggleFolderTree ? (
+        <button
+          type="button"
+          className={`folder-tree-button${folderTreeVisible ? ' is-pressed' : ''}`}
+          aria-label={labels.folderTree}
+          aria-pressed={folderTreeVisible}
+          title={folderTreeVisible ? labels.folderTreeHide : labels.folderTreeShow}
+          onClick={() => runNavigation(onToggleFolderTree)}
+        >
+          ◧
+        </button>
+      ) : null}
       <button type="button" aria-label={labels.back} disabled={!panelCanGoBack(panel)} onClick={() => runNavigation(onNavigateBack)}>◀</button>
       <button type="button" aria-label={labels.forward} disabled={!panelCanGoForward(panel)} onClick={() => runNavigation(onNavigateForward)}>▶</button>
       <button type="button" aria-label={labels.up} onClick={() => runNavigation(onNavigateUp)}>↑</button>

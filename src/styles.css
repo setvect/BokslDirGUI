@@ -481,6 +481,117 @@ button {
   }
 }
 
+/* 폴더 트리(FR-42): 경로 줄과 상태 줄 사이 본문만 트리와 목록으로 나눔 */
+.file-panel-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.file-panel-body.has-folder-tree {
+  grid-template-columns: var(--folder-tree-width) minmax(0, 1fr);
+}
+
+.folder-tree {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.folder-tree-virtual-space {
+  position: relative;
+  min-height: 100%;
+}
+
+.folder-tree-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(4px * var(--commander-scale));
+  height: var(--row-height);
+  padding: 0 calc(6px * var(--commander-scale)) 0 calc(4px * var(--commander-scale) + var(--folder-tree-depth, 0) * 1.1em);
+  color: var(--row-directory-text);
+  white-space: nowrap;
+  outline: none;
+  cursor: default;
+}
+
+.folder-tree-row:hover {
+  background: var(--row-hover-bg);
+}
+
+.folder-tree-toggle,
+.folder-tree-icon,
+.folder-tree-state {
+  flex: none;
+}
+
+.folder-tree-toggle {
+  width: 1em;
+  text-align: center;
+}
+
+.folder-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-tree-error {
+  font-weight: 700;
+}
+
+/* 패널 경로(현재 폴더)는 목록의 선택 막대, 트리에 키보드가 있을 때 커서는 목록 커서와 같은 막대 */
+.folder-tree-row.is-selected {
+  background: var(--row-selected-bg);
+  color: var(--row-selected-text);
+}
+
+.folder-tree.is-focused .folder-tree-row.is-cursor {
+  background: var(--row-focused-bg);
+  color: var(--row-focused-text);
+}
+
+.folder-tree-row.is-drop-target {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
+/* 원격 연결이 끊긴 패널의 트리는 흐리게(현재 폴더 표시는 유지) */
+.folder-tree.is-disconnected .folder-tree-row:not(.is-selected):not(.is-cursor) {
+  color: var(--muted);
+}
+
+.folder-tree-splitter {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--folder-tree-width) - 3px);
+  width: 6px;
+  cursor: col-resize;
+}
+
+.folder-tree-splitter:hover {
+  background: var(--line-strong);
+}
+
+.path-controls > .folder-tree-button.is-pressed {
+  border-color: var(--line-strong);
+  color: var(--control-hover-text);
+}
+
 .file-table {
   display: grid;
   grid-template-rows: calc(30px * var(--commander-scale)) minmax(0, 1fr);
@@ -2105,14 +2216,14 @@ body[data-theme="mdir"] {
 }
 
 /* 비활성 패널의 커서는 배경 없이 테두리만: 두 패널 커서가 같은 막대로 보여 활성 패널을 구분하기 어렵던 문제(UX 점검 2026-10-31).
-   커서 색 변수만 덮어써 Mdir의 파일 종류 색도 그대로 유지 */
-.commander-shell .file-panel:not(.is-active) .file-row.is-focused {
+   폴더 트리에 키보드가 있는 패널의 목록 커서도 같은 표시(FR-42.6). 커서 색 변수만 덮어써 Mdir의 파일 종류 색도 그대로 유지 */
+.commander-shell .file-panel:is(:not(.is-active), .is-tree-focused) .file-row.is-focused {
   --row-focused-bg: transparent;
   --row-focused-text: var(--entry-color, var(--row-text));
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 
-.commander-shell .file-panel:not(.is-active) .file-row.is-focused.is-selected {
+.commander-shell .file-panel:is(:not(.is-active), .is-tree-focused) .file-row.is-focused.is-selected {
   --row-focused-bg: var(--row-selected-bg);
   --row-focused-text: var(--row-selected-text);
 }

@@ -1,6 +1,6 @@
 use crate::contracts::{
-    AppError, CommandResult, DirectoryListing, DirectoryStats, EntryKind, FileMetadata,
-    LocationList, PanelId, SortSpec,
+    AppError, CommandResult, DirectoryListing, DirectoryStats, EntryKind, FileEntry, FileMetadata,
+    LocationList, PanelId, SortSpec, SubdirectoryListing,
 };
 use crate::filesystem::{
     file_entry_from_path, listing_version, map_io_error, mime_from_extension,
@@ -61,6 +61,47 @@ pub(crate) fn list_dir(
         total_entries: None,
         truncated: None,
     })
+}
+
+/// 폴더 트리용 한 단계 하위 폴더(FR-42.3). 파일은 종류만 보고 건너뛰어 메타데이터를 읽지 않음.
+/// 읽지 못한 항목 하나 때문에 트리 전체가 비지 않도록 그 항목만 제외.
+pub(crate) fn list_subdirs(path: &str) -> CommandResult<SubdirectoryListing> {
+    let path = canonical_existing_directory(path)?;
+    let read_dir = fs::read_dir(&path).map_err(|error| map_io_error(error, Some(&path)))?;
+    let mut entries = Vec::new();
+    for entry in read_dir.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() && !file_type.is_symlink() {
+            continue;
+        }
+        let Ok(file_entry) = file_entry_from_path(&entry.path(), false) else {
+            continue;
+        };
+        if is_tree_directory(&file_entry) {
+            entries.push(file_entry);
+        }
+    }
+    sort_entries(&mut entries, &tree_sort());
+    Ok(SubdirectoryListing {
+        path: display_path(&path),
+        entries,
+    })
+}
+
+/// 트리에 넣을 항목: 폴더, 폴더를 가리키는 심볼릭 링크
+pub(crate) fn is_tree_directory(entry: &FileEntry) -> bool {
+    entry.kind == EntryKind::Directory
+        || (entry.kind == EntryKind::Symlink && entry.symlink_target_is_directory == Some(true))
+}
+
+/// 트리는 링크 폴더도 이름 순서에 섞어 보여 줌(폴더 우선 정렬 미사용)
+pub(crate) fn tree_sort() -> SortSpec {
+    SortSpec {
+        directories_first: false,
+        ..SortSpec::default()
+    }
 }
 
 pub(crate) fn get_metadata(path: &str) -> CommandResult<FileMetadata> {

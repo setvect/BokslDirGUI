@@ -1,6 +1,6 @@
 use crate::archive;
 use crate::commands::{
-    create_dir, get_metadata, health_check, list_dir, list_locations, load_settings,
+    create_dir, get_metadata, health_check, list_dir, list_locations, list_subdirs, load_settings,
     open_current_in_file_manager, open_current_in_terminal, open_default,
     prepare_shell_command, preview_file, rename_entry, reveal_in_manager,
     save_settings,
@@ -862,6 +862,97 @@ fn save_settings_rejects_invalid_layout_ratio() {
             .and_then(|details| details.get("field").cloned()),
         Some("layout.ratio".to_string())
     );
+}
+
+#[test]
+fn folder_tree_layout_round_trips_and_omits_defaults() {
+    let _env_guard = crate::test_util::lock_env();
+    let fixture = TempFixture::new();
+    let settings_path = fixture.root.join("settings.json");
+    env::set_var("BOKSLDIRGUI_SETTINGS_PATH", &settings_path);
+
+    let initial = load_settings().expect("missing settings should use defaults");
+    assert!(!initial.layout.folder_tree.left.visible);
+    assert_eq!(initial.layout.folder_tree.right.width, 220);
+
+    let saved = save_settings(serde_json::json!({
+        "layout": { "folderTree": { "left": { "visible": true, "width": 260 } } }
+    }))
+    .expect("folder tree layout should be saved");
+    assert!(saved.layout.folder_tree.left.visible);
+    assert_eq!(saved.layout.folder_tree.left.width, 260);
+    assert!(!saved.layout.folder_tree.right.visible);
+    assert_eq!(saved.layout.folder_tree.right.width, 220);
+    assert_eq!(load_settings().unwrap().layout.folder_tree, saved.layout.folder_tree);
+
+    save_settings(serde_json::json!({
+        "layout": { "folderTree": { "left": { "visible": false, "width": 220 } } }
+    }))
+    .expect("default folder tree layout should be saved");
+    let stored: serde_json::Value = serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert!(stored["layout"].get("folderTree").is_none());
+
+    for width in [119, 801] {
+        let error = save_settings(serde_json::json!({
+            "layout": { "folderTree": { "right": { "visible": true, "width": width } } }
+        }))
+        .expect_err("out-of-range folder tree width should fail");
+        assert_eq!(
+            error.details.and_then(|details| details.get("field").cloned()),
+            Some("layout.folderTree.right.width".to_string())
+        );
+    }
+}
+
+#[test]
+fn list_subdirs_returns_only_folders_with_hidden_flag_in_name_order() {
+    let fixture = TempFixture::new();
+    fs::create_dir_all(fixture.root.join("Zeta")).unwrap();
+    fs::create_dir_all(fixture.root.join("beta")).unwrap();
+    fs::create_dir_all(fixture.root.join(".config")).unwrap();
+
+    let listing = tauri::async_runtime::block_on(list_subdirs(
+        fixture.root.to_string_lossy().into_owned(),
+    ))
+    .unwrap();
+
+    assert_eq!(listing.path, display_path(&fixture.root.canonicalize().unwrap()));
+    let names: Vec<_> = listing.entries.iter().map(|entry| entry.name.as_str()).collect();
+    assert_eq!(names, [".config", "beta", "folder", "Zeta"]);
+    assert!(listing.entries.iter().all(|entry| entry.kind == EntryKind::Directory));
+    assert!(listing.entries[0].is_hidden);
+    assert!(!listing.entries[1].is_hidden);
+    assert_eq!(
+        listing.entries[2].path,
+        display_path(&fixture.root.canonicalize().unwrap().join("folder"))
+    );
+
+    let error = tauri::async_runtime::block_on(list_subdirs(
+        fixture.root.join("alpha.txt").to_string_lossy().into_owned(),
+    ))
+    .expect_err("a file has no subfolders");
+    assert_eq!(error.code, "not_directory");
+}
+
+#[cfg(unix)]
+#[test]
+fn list_subdirs_keeps_links_to_folders_only() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = TempFixture::new();
+    symlink(fixture.root.join("folder"), fixture.root.join("folder-link")).unwrap();
+    symlink(fixture.root.join("alpha.txt"), fixture.root.join("file-link")).unwrap();
+    symlink(fixture.root.join("missing"), fixture.root.join("broken-link")).unwrap();
+
+    let listing = tauri::async_runtime::block_on(list_subdirs(
+        fixture.root.to_string_lossy().into_owned(),
+    ))
+    .unwrap();
+
+    let names: Vec<_> = listing.entries.iter().map(|entry| entry.name.as_str()).collect();
+    assert_eq!(names, ["folder", "folder-link"]);
+    assert_eq!(listing.entries[1].kind, EntryKind::Symlink);
+    assert_eq!(listing.entries[1].symlink_target_is_directory, Some(true));
 }
 
 #[test]

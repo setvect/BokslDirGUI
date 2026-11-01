@@ -93,6 +93,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | Command | 입력 | 출력 | 비고 |
 | --- | --- | --- | --- |
 | `list_dir` | `{ panelId, path, showHidden, sort, filter }` | `DirectoryListing` | 읽기 전용 |
+| `list_subdirs` | `{ path }` | `SubdirectoryListing { path, entries }` | 폴더 트리(FR-42.3)의 한 단계 하위 폴더, 숨김 포함(`isHidden`), 이름순, 폴더를 가리키는 링크는 `kind: symlink`로 포함; 파일은 종류만 보고 건너뛰고 읽지 못한 항목 하나는 제외, 읽기 전용 |
 | `get_metadata` | `{ path }` | `FileMetadata` | 속성/preview; 폴더는 내부 파일 크기·파일 수·하위 폴더 수를 조회 시 계산 |
 | `prepare_native_file_drag` | `{ paths: string[] }` | `string[]` | Windows 내부 드래그 준비용; 별도 스레드에서 전체 원본·재파싱 지점 검증 후 링크 자체를 보존한 Shell 호환 경로 반환, 다른 OS 미지원 |
 | `watch_path` | `{ panelId, path }` | `WatchAck` | 패널 디렉터리 직접 자식 감시 등록(패널마다 하나, 교체), `version`은 감시 등록 번호, 변경이 300ms 멈추면 `dir_changed` 1회 |
@@ -119,7 +120,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 | `prepare_shell_command` | `{ workingDir, command, args? }` | `ShellCommandPreview` | 설정 게이트, workingDir, command fingerprint 검증 후 짧은 TTL/one-shot `confirmToken` 발급 |
 | `run_shell_command` | `{ workingDir, command, args?, confirmToken }` | `OperationStarted` | 설정·디렉터리·필수 토큰 검증 후 공통 장기 작업 시작, kind=shellCommand, 결과는 operation_summary.commandResult |
 | `load_settings` | `{}` | `Settings` | schema version 포함 |
-| `save_settings` | `{ patch }` | `Settings` | 원자적 저장 고려, macOS는 저장한 언어가 바뀌면 기본 메뉴 막대를 그 언어로 다시 생성 |
+| `save_settings` | `{ patch }` | `Settings` | 원자적 저장 고려, macOS는 저장한 언어가 바뀌면 기본 메뉴 막대를 그 언어로 다시 생성; `layout.folderTree`(패널별 `visible`·`width`)는 폭 120~800 밖 값 거부, 기본값(숨김·220)이면 저장 파일에서 생략 |
 
 ## 4. Event 목록
 
@@ -287,7 +288,7 @@ type ConflictDecision = 'overwrite' | 'skip' | 'allOverwrite' | 'allSkip' | 'can
 
 | Command | 원격 동작 |
 | --- | --- |
-| `list_dir`·`goto_path`·`get_metadata`·`preview_file` | 비동기 명령, 원격 경로면 원격 런타임에서 실행, 끊겼으면 저장된 방법으로 한 번 재연결 |
+| `list_dir`·`list_subdirs`·`goto_path`·`get_metadata`·`preview_file` | 비동기 명령, 원격 경로면 원격 런타임에서 실행, 끊겼으면 저장된 방법으로 한 번 재연결 |
 | `goto_path` | 원격 패널 기준의 `~`·상대·`/` 입력은 원격 해석, Windows 드라이브·UNC 경로만 로컬, 위치 목록·연결 해제 복귀처럼 정확한 위치는 `base` 없이 호출 |
 | `create_dir`·`rename_entry` | 로컬과 같은 이름 규칙, 덮어쓰기 금지 |
 | `preview_bulk_rename`·`start_bulk_rename` | 원본 표식은 크기·수정 시각·권한, 실행 직전 재검증 |

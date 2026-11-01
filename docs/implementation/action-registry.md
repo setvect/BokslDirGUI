@@ -41,6 +41,7 @@
 | `nav.refresh` | navigation | Cmd+R | `Cmd+R`, `Ctrl+R` | View > Refresh | safe | list_dir |
 | `nav.gotoPath` | navigation | gp | `g p` | Go > Go To Path | safe | goto_path |
 | `nav.locations` | navigation | gm | `g m` | Go > Mount Points | safe | list_locations |
+| `nav.openInOtherPanel` | navigation | 없음 | 없음 | Go > Open in Other Panel | safe | list_dir |
 | `nav.top` | navigation | gg | `g g` | Go > Top | none | UI state |
 | `nav.bottom` | navigation | G | `Shift+G` | Go > Bottom | none | UI state |
 | `tab.new` | panel | tn | `t n` | View > New Tab | none | UI state + list_dir |
@@ -87,6 +88,8 @@
 | `filter.start` | view | / | `/` | View > Filter | none | UI state |
 | `filter.clear` | view | 없음 | 없음 | View > Clear Filter | none | UI state + list_dir |
 | `view.toggleHidden` | view | . | `.` | View > Hidden Files | none | UI state + list_dir |
+| `view.toggleFolderTree` | view | tr | `t r` | View > Folder Tree | none | UI state + save_settings |
+| `view.focusFolderTree` | view | gt | `g t` | View > Switch Tree/List | none | UI state |
 | `selection.invert` | selection | v | `v` | Edit > Invert Selection | none | UI state |
 | `selection.clear` | selection | u | `u` | Edit > Clear Selection | none | UI state |
 | `layout.toggleSingleDual` | view | Ctrl+W | `Ctrl+W` | View > Toggle Layout | none | UI state |

@@ -91,6 +91,7 @@ pub fn run() {
             commands::write_file_clipboard,
             commands::clear_file_clipboard,
             commands::list_dir,
+            commands::list_subdirs,
             commands::get_metadata,
             commands::preview_file,
             commands::watch_path,

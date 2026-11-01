@@ -81,6 +81,9 @@ interface CommanderActionsDependencies {
   readonly openBookmarkList: (panelId: PanelId) => void;
   readonly renameBookmarkForPanel: (panelId: PanelId) => void;
   readonly applyLayout: (patch: Partial<Settings["layout"]>, message: string) => void;
+  // 패널별 폴더 트리 표시 전환, 목록 ↔ 트리 전환(FR-42)
+  readonly toggleFolderTree: (panelId: PanelId) => void;
+  readonly toggleFolderTreeFocus: (panelId: PanelId) => void;
   readonly applyDirectSetting: (actionId: ActionId) => boolean;
   readonly setHelpDialogOpen: Dispatch<SetStateAction<boolean>>;
   readonly setAboutDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -371,6 +374,16 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
       dependencies.setStatusMessage(dependencies.statusText.directoryComparison(comparison));
       return;
     }
+    // 폴더를 반대 패널에서 열기(목록·폴더 트리의 폴더 공통). 압축 내부는 반대 패널 경로 열기와 같이 제외
+    if (actionId === 'nav.openInOtherPanel') {
+      if (!actionTargetEntry || actionTargetEntry.kind !== 'directory' || isArchiveVirtualPath(actionTargetEntry.path)) {
+        dependencies.setStatusMessage(dependencies.statusText.unavailableInContext(labelForAction(action, dependencies.settings.language)));
+        return;
+      }
+      void dependencies.listPanel(oppositePanel, actionTargetEntry.path, { pushHistory: true }).then(() => dependencies.setActivePanel(panelOverride));
+      return;
+    }
+
     if (actionId === 'nav.enter' && actionTargetEntry) {
       openEntry(panelOverride, actionTargetEntry);
       return;
@@ -538,6 +551,16 @@ export function useCommanderActions(dependencies: CommanderActionsDependencies) 
 
     if (actionId === 'bookmark.rename') {
       dependencies.renameBookmarkForPanel(panelOverride);
+      return;
+    }
+
+    if (actionId === 'view.toggleFolderTree') {
+      dependencies.toggleFolderTree(panelOverride);
+      return;
+    }
+
+    if (actionId === 'view.focusFolderTree') {
+      dependencies.toggleFolderTreeFocus(panelOverride);
       return;
     }
 

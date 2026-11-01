@@ -13,7 +13,6 @@ import type { ExecuteAction } from './actionRequest';
 import { KEYBOARD_SEQUENCE_TIMEOUT_MS, KeyboardRuntime, handleMovementKey, handleZoomKey } from './keyboardDispatch';
 import { commanderKeyboardIsSuspended, commanderKeyboardOwners, pathSelectionOwnsCopyShortcut } from './keyboardOwnership';
 import { TopMenuKeyboardRuntime, TopMenuState, handleTopMenuKeyDown } from './menuModel';
-import { rowDomId } from './panelPresentation';
 import type { PanelStateById } from './panelState';
 import type { ZoomCommand } from './settingsModel';
 
@@ -26,6 +25,10 @@ interface CommanderKeyboardDependencies {
   readonly moveFocusedPage: (direction: -1 | 1, extendSelection?: boolean) => void;
   readonly focusBoundaryEntry: (boundary: "first" | "last", extendSelection?: boolean) => void;
   readonly handleAction: ExecuteAction;
+  // 폴더 트리에 키보드가 있을 때의 이동·펼치기 키(처리하면 true). 다른 단축키는 공통 경로로
+  readonly handleFolderTreeKey: (event: KeyboardEvent, sequencePending: boolean) => boolean;
+  // 커서 줄(트리에 키보드가 있으면 트리 줄)의 DOM id
+  readonly activeRowDomId: string;
   readonly applyZoom: (command: ZoomCommand) => void;
   readonly settings: Settings;
   readonly topMenuStateRef: RefObject<TopMenuState | null>;
@@ -45,7 +48,8 @@ export function useCommanderKeyboard(dependencies: CommanderKeyboardDependencies
   const topMenuKeyboardRuntimeRef = useRef<TopMenuKeyboardRuntime | null>(null);
 
   const openFocusedRowContextMenu = () => {
-    const row = document.getElementById(rowDomId(dependencies.activePanel, dependencies.panelState[dependencies.activePanel].focusedIndex));
+    const runtime = keyboardRuntimeRef.current;
+    const row = runtime ? document.getElementById(runtime.activeRowDomId) : null;
     if (!row) {
       return;
     }
@@ -66,6 +70,8 @@ export function useCommanderKeyboard(dependencies: CommanderKeyboardDependencies
     focusBoundaryEntry: dependencies.focusBoundaryEntry,
     handleAction: dependencies.handleAction,
     handleZoom: dependencies.applyZoom,
+    handleFolderTreeKey: dependencies.handleFolderTreeKey,
+    activeRowDomId: dependencies.activeRowDomId,
   };
 
   topMenuKeyboardRuntimeRef.current = {
@@ -191,6 +197,12 @@ export function useCommanderKeyboard(dependencies: CommanderKeyboardDependencies
         event.stopPropagation();
         clearShortcutSequence();
         openFocusedRowContextMenu();
+        return;
+      }
+
+      if (runtime.handleFolderTreeKey(event, dependencies.shortcutSequenceRef.current.length > 0)) {
+        clearShortcutSequence();
+        dependencies.shellRef.current?.focus({ preventScroll: true });
         return;
       }
 

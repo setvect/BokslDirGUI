@@ -19,6 +19,7 @@ App
          │  ├─ FilePanel(left)
          │  │  ├─ PanelHeader
          │  │  ├─ TabStrip
+         │  │  ├─ FolderTree
          │  │  └─ FileTable
          │  └─ FilePanel(right)
          ├─ BottomStatusStrip
@@ -49,6 +50,7 @@ App
 | `FilePanel` | panel-local state binding | panel store | global operation state 소유 |
 | `PanelHeader` | 뒤로·앞으로·상위·경로 이동 버튼, 현재 경로·필터 해제·로딩·탭 개수를 한 줄에 표시 | panel/navigation state | 별도 빈 제목줄 예약, 중복 경로·활성 상태 레이블 표시 |
 | `FileTable` | virtualized rows, selection, keyboard row navigation | listing/selection state | 전체 DOM row 렌더링 |
+| `FolderTree` | 패널 왼쪽 폴더 트리 줄(가상 스크롤), 펼침 화살표, 우클릭 메뉴, 끌기 시작(FR-42) | `useFolderTrees`의 패널별 보기 상태 | 패널 경로·선택 소유, 파일 작업 직접 실행 |
 | `OperationDialog` | move/delete/archive/external 등 명시 확인이 필요한 action의 preflight/confirm shell | operation store | Rust validation 우회 |
 | `ContextMenuLayer` | row/blank/context menu | action registry | 메뉴별 별도 handler |
 | `HistoryPopover` | panel별 back/forward 목록 표시 | navigation store | 전역 단일 history 가정 |
@@ -86,13 +88,14 @@ App
 | `useFileClipboard` | 복사/잘라내기 원본 스냅샷, 붙여넣기 의도 | 공통 액션 실행에 요청 전달 |
 | `useCommanderKeyboard` | 문서 리스너, 최신 실행 참조, 시퀀스 타이머 정리 | registry 판정과 입력 소유권을 거쳐 공통 액션 호출 |
 | `useFileDrag` / `pointerFileDrag` | 내부 포인터 세션, 외부 드래그 연결과 리스너 해제 | 놓는 시점에 대상/작업 가능 여부 재검사 |
+| `useFolderTrees` | 패널별 폴더 트리의 읽은 폴더·펼침·커서·트리 키보드, 커서 따라가기 타이머, 하위 폴더 요청 버전 | 표시 전환·폭 저장은 설정 patch, 이동은 `listPanel`, 작업은 트리 폴더와 출발 목록을 공통 액션 실행에 전달 |
 | `operationStore` | 다이얼로그 초안, 진행·충돌·완료, 실제 작업 ID 연결 | 기존 공개 store API 유지, 내부 runtime/events 모듈에 상태 접근 주입 |
 | `CommanderShell` | 화면 배치, 메뉴·보조 창 표시, 컨트롤러 연결 | 화면에 필요한 상태와 의도별 콜백 전달 |
 
 - UI → 컨트롤러 → 클라이언트 → Rust command/service 방향으로 의존
 - 컨트롤러는 Shell을 import하지 않음
 - `FilePanel`, `PanelHeader`, `TopMenuBar`, `PanelContextMenus`, `StatusStrips`는 자체 파일 작업을 실행하지 않음
-- `panelPresentation`, `textLayout`, `selectionModel`, `directoryComparison`, `settingsModel`, `hotkeyStripLayout`은 독립 계산 제공
+- `panelPresentation`, `textLayout`, `selectionModel`, `directoryComparison`, `settingsModel`, `hotkeyStripLayout`, `folderTreeModel`은 독립 계산 제공
 - `OperationDialogHost`는 공통 프레임/포커스/이벤트 구독을 연결하고 `OperationInputs`, `OperationOverview`, `OperationResultView`, `ConflictResolutionView`는 표시와 의도별 콜백을 담당
 - 컨트롤러 연결의 지연 getter: 렌더 중 나중에 만들어지는 콜백 참조 목적
 - 최신 이벤트 실행 참조와 요청 버전은 해당 컨트롤러가 유지

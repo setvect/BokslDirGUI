@@ -3,6 +3,7 @@ use super::connection::{self, sftp_error, RemoteConnection};
 use super::path::{is_remote_path, RemotePath};
 use crate::contracts::{
     AppError, CommandResult, DirectoryListing, EntryKind, FileEntry, FileMetadata, FilePreview, PanelId, SortSpec,
+    SubdirectoryListing,
 };
 use crate::preview::PreviewPlan;
 use tokio::io::AsyncReadExt;
@@ -83,6 +84,36 @@ pub(crate) async fn list_dir_limited(
         version: attrs.mtime.map(u64::from).unwrap_or(1),
         total_entries: truncated.then_some(total),
         truncated: truncated.then_some(true),
+    })
+}
+
+/// 폴더 트리용 원격 하위 폴더(FR-42.3). 숨김 폴더 포함, 링크는 대상이 폴더인 것만.
+pub(crate) async fn list_subdirs(path: &str) -> CommandResult<SubdirectoryListing> {
+    let requested = RemotePath::parse(path)?;
+    let connection = connection::ensure(&requested.location).await?;
+    let (directory, _) = existing_directory(&connection, &requested).await?;
+    let mut entries = Vec::new();
+    let mut links = Vec::new();
+    for item in read_directory(&connection, &directory).await? {
+        if !is_listable_name(&item.name) {
+            continue;
+        }
+        let entry = entry_from_item(&directory, &item);
+        match entry.kind {
+            EntryKind::Directory => entries.push(entry),
+            EntryKind::Symlink => {
+                links.push(entries.len());
+                entries.push(entry);
+            }
+            _ => {}
+        }
+    }
+    resolve_link_targets(&connection, &mut entries, &links).await;
+    entries.retain(crate::navigation::is_tree_directory);
+    sort_entries(&mut entries, &crate::navigation::tree_sort());
+    Ok(SubdirectoryListing {
+        path: directory.url(),
+        entries,
     })
 }
 

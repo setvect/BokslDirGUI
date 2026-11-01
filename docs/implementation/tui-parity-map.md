@@ -59,6 +59,7 @@
 | 미리보기 패널 | 포함하되 기본 숨김 | 요구사항상 Should, UI identity 보호 | 기본 화면 침범 금지 |
 | 작업 큐 패널 | 포함하되 overlay/collapsed | 장시간 작업 visibility | panel dominance 유지 |
 | 명령 팔레트 | 후속 검토 | 생산성 확장 | action registry 기반일 때만 |
+| 패널 폴더 트리 | 포함하되 패널별 기본 숨김 | 탐색기형 폴더 상하위 탐색 요청(2026-11-01, [FR-42](../requirements/08-folder-tree.md)) | `Tab` 좌우 패널 전환 유지, 트리 이동은 `g t`, 패널 이동·파일 작업은 기존 경로 사용 |
 
 ## 5. 완료 판정
 

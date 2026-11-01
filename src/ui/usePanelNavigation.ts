@@ -16,6 +16,7 @@ import {
 } from './archiveVirtual';
 import { ARCHIVE_LIST_LIMIT, ArchivePasswordRequest, CachedArchiveListing, ListPanelOptions } from './commanderTypes';
 import { DirectoryComparison } from './directoryComparison';
+import { folderTreeParentOf, isFolderTreeEntry, sortFolderTreeEntries } from './folderTreeModel';
 import { commanderKeyboardHasOwner } from './keyboardOwnership';
 import { type PanelDataSource, type PanelInitialLoadResult } from './panelDataSource';
 import { panelIdLabel } from './panelPresentation';
@@ -339,7 +340,23 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
       preserveFocusPath: focusedEntryOf(panel)?.path,
       background,
       forceArchiveReload: true,
+    }).then((error) => {
+      if (error && (error.code === 'not_found' || error.code === 'not_directory')) void listExistingAncestor(panelId, panel.path, background);
     });
+  };
+
+  // 현재 폴더가 없어졌으면(폴더 트리·반대 패널·다른 프로그램에서 삭제·이동·이름 변경) 남아 있는 가장 가까운 상위 폴더로.
+  // 그 사이 사용자가 다른 곳으로 이동했거나 다른 오류면 중단
+  const listExistingAncestor = async (panelId: PanelId, missingPath: string, background: boolean) => {
+    for (let parent = folderTreeParentOf(missingPath); parent !== null; parent = folderTreeParentOf(parent)) {
+      if (panelStateRef.current[panelId].path !== missingPath) return;
+      const error = await listPanel(panelId, parent, { focusPath: null, focusFallback: 'first-concrete', background });
+      if (error === null) {
+        runtime.setStatusMessage(runtime.statusText.folderGoneMovedUp(parent));
+        return;
+      }
+      if (!error || (error.code !== 'not_found' && error.code !== 'not_directory')) return;
+    }
   };
 
   // 외부 변경 감시: 실제 디렉터리를 보는 패널만, 경로가 바뀌면 감시 교체. 같은 version 알림만 백그라운드 새로고침.
@@ -736,10 +753,21 @@ export function usePanelNavigation(runtime: PanelNavigationDependencies) {
   };
   const archivePasswordFor = (archivePath: string) => archivePasswordsRef.current.get(archivePath);
 
+  // 폴더 트리용: 읽어 둔 압축 목록에서 압축 안 폴더의 하위 폴더(FR-42.5). 목록이 캐시에 없으면 null
+  const archiveSubdirectories = (virtualPath: string): FileEntry[] | null => {
+    const parsed = parseArchiveVirtualPath(virtualPath);
+    const cached = parsed ? archiveListingsRef.current.get(parsed.archivePath) : undefined;
+    if (!cached) return null;
+    const listing = archiveListingToDirectoryListing({
+      panelId: 'left', virtualPath, archiveListing: cached.listing, showHidden: true, sort: DEFAULT_SORT, filter: null,
+    });
+    return sortFolderTreeEntries(listing.entries.filter(isFolderTreeEntry));
+  };
+
   const clearCompletedSelection = (panelId: PanelId, sourcePath: string) => {
     if (panelStateRef.current[panelId].path !== sourcePath) return;
     selectionAnchorRef.current[panelId] = null;
     setPanelState((current) => ({ ...current, [panelId]: { ...current[panelId], selectedPaths: [] } }));
   };
-  return { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordFor, retryArchiveListing, recordFocusedRow, selectEntry };
+  return { activateTab, clearCompletedSelection, addTab, closeTab, swapPanelPaths, moveFocusedEntry, focusBoundaryEntry, setActivePanel, panelState, panelTabs, activeTab, panelStateRef, gotoPanelPath, cancelPanelNavigation, navigateUp, listPanel, activePanel, switchActivePanel, navigateBack, navigateForward, refreshPanel, focusEntry, toggleFocusedSelection, selectAllEntries, clearSelection, invertSelection, applySort, refreshPanelAfterSourceInvalid, archivePasswordFor, retryArchiveListing, recordFocusedRow, selectEntry, archiveSubdirectories };
 }

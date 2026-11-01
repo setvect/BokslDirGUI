@@ -132,6 +132,17 @@
 
 - VM E2E: macOS(Tart)의 원격 로그인을 SFTP 서버로 사용, Windows VM은 네트워크로 같은 서버 접속, 결과는 요구사항 문서 10절에 기록
 
+### 3.8 패널 폴더 트리
+
+- 근거: [폴더 트리 요구사항](../requirements/08-folder-tree.md) 7절·8절
+
+| 영역 | 시험 근거 |
+| --- | --- |
+| 모델 | `folderTreeModel.test.ts`: 가장 가까운 맨 위 항목부터 펼치기, Windows 드라이브·UNC, 하위 폴더 갱신·제거, 숨김 폴더 유지, 압축 가상 폴더, 원격 루트, 실패 표시, 작업 대상 제외, 놓기 차단 경로 |
+| 화면 | `CommanderShell.tree.test.tsx`: 패널별 표시 전환·저장, 경로 펼치기·읽기 범위, 키보드 이동·따라가기·목록 복귀·`Tab`, 선택 키 안내, 트리 폴더 대상 단축키·우클릭 메뉴·맨 위 항목 제한, 현재 폴더가 없어졌을 때 상위 폴더 이동, 원격 트리, 트리 폴더로 놓기·자기 자신 놓기 차단 |
+| 키보드 메뉴 키 | `CommanderShell.keyboard.test.tsx`: 커서를 옮긴 뒤 `Shift+F10`이 옮긴 줄의 메뉴 열기 |
+| Rust | `tests.rs`: `list_subdirs` 폴더만·숨김 표시·이름순·파일 경로 거부·폴더 링크만 포함, `layout.folderTree` 저장·기본값 생략·폭 범위 |
+
 ## 4. 정합성 테스트
 
 - action registry에 없는 action ID를 메뉴/도움말/컴포넌트가 참조하지 않음

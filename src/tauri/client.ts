@@ -30,6 +30,7 @@ import type {
   Settings,
   ShellCommandPreview,
   SortSpec,
+  SubdirectoryListing,
   WatchAck,
 } from '../domain/types';
 import { COMMANDS, EVENTS, TauriCommandName } from './commands';
@@ -139,6 +140,7 @@ export const tauriClient = {
   writeFileClipboard: (input: { paths: string[]; intent: 'copy' | 'move' }) => invokeCommand<number>(COMMANDS.writeFileClipboard, input),
   clearFileClipboard: (input: { changeCount: number }) => invokeCommand<void>(COMMANDS.clearFileClipboard, input),
   listDir: (input: ListDirInput) => invokeCommand<DirectoryListing>(COMMANDS.listDir, input),
+  listSubdirs: (input: { path: string }) => invokeCommand<SubdirectoryListing>(COMMANDS.listSubdirs, input),
   getMetadata: (input: { path: string }) => invokeCommand<FileMetadata>(COMMANDS.getMetadata, input),
   previewFile: (input: { path: string; maxBytes?: number }) => invokeCommand<FilePreview>(COMMANDS.previewFile, input),
   watchPath: (input: { panelId: 'left' | 'right'; path: string }) => invokeCommand<WatchAck>(COMMANDS.watchPath, input),
