@@ -4,10 +4,13 @@ import appPackage from '../../package.json';
 import aboutMascot from '../assets/about-mascot.png';
 import { APP_NAME } from '../foundation';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { KEY_GUIDE_GROUP_BY_ID, keyGuideLabel, type KeyGuideGroupId } from '../actions/keyGuide';
 import { ACTIONS, actionVisibleOnPlatform, labelForAction, menuPathSegmentsForAction, shortcutHelpLabelForAction } from '../actions/registry';
+import { fileShortcutPlatform } from '../domain/runtimePlatform';
 import type { PanelId, PlatformInfo } from '../domain/types';
 import {
   ACTION_CATEGORY_LABELS,
+  KEY_GUIDE_TEXT,
   NAVIGATION_GROUP_LABELS,
   OVERLAY_TEXT,
   PANEL_ID_LABELS,
@@ -33,15 +36,21 @@ export interface NavigationListState {
   items: NavigationListItem[];
 }
 
-const SHORTCUT_HELP_COLUMNS: readonly (readonly AppActionCategory[])[] = [
-  ['navigation'],
-  ['panel', 'selection'],
-  ['file', 'help'],
-  ['view', 'archive', 'settings'],
+// 레지스트리 범주와 레지스트리 밖 키(`keyGuide`) 묶음의 열 배치. 관련 묶음을 가까이 두고 열 높이를 고르게
+type ShortcutHelpGroup = { kind: 'category'; id: AppActionCategory } | { kind: 'guide'; id: KeyGuideGroupId };
+const category = (id: AppActionCategory): ShortcutHelpGroup => ({ kind: 'category', id });
+const guide = (id: KeyGuideGroupId): ShortcutHelpGroup => ({ kind: 'guide', id });
+const SHORTCUT_HELP_COLUMNS: readonly (readonly ShortcutHelpGroup[])[] = [
+  [category('navigation'), guide('listMovement')],
+  [category('panel'), category('selection'), guide('menu'), guide('dialogs')],
+  [category('file'), category('help'), guide('zoom'), guide('contextDrag')],
+  [category('view'), category('archive'), guide('folderTree'), category('settings')],
 ];
 
 export function ShortcutHelpDialog({ language, platformInfo, onClose }: { language: SupportedLanguage; platformInfo?: PlatformInfo; onClose(): void }) {
   const text = OVERLAY_TEXT[language];
+  const guideText = KEY_GUIDE_TEXT[language];
+  const platform = fileShortcutPlatform();
   const scrollRef = useRef<HTMLDivElement>(null);
   const shortcutGroups = new Map<AppActionCategory, (typeof ACTIONS)[number][]>();
   for (const action of ACTIONS) {
@@ -100,13 +109,31 @@ export function ShortcutHelpDialog({ language, platformInfo, onClose }: { langua
         <div className="shortcut-help-scroll" ref={scrollRef} role="region" aria-label={text.shortcutListLabel} tabIndex={0}>
           <div className="shortcut-help-groups">
             {SHORTCUT_HELP_COLUMNS.map((column) => (
-              <div className="shortcut-help-column" key={column[0]}>
-                {column.map((category) => {
-                  const actions = shortcutGroups.get(category);
+              <div className="shortcut-help-column" key={column[0].id}>
+                {column.map((group) => {
+                  if (group.kind === 'guide') {
+                    const guideGroup = KEY_GUIDE_GROUP_BY_ID.get(group.id)!;
+                    return (
+                      <section className="shortcut-help-group" aria-labelledby={'shortcut-guide-' + group.id} key={group.id}>
+                        <h3 className="shortcut-help-group-title" id={'shortcut-guide-' + group.id}>
+                          {guideText.groups[group.id]}
+                        </h3>
+                        <div className="shortcut-help-entries" role="list">
+                          {guideGroup.entries.map((entry) => (
+                            <div className="shortcut-help-entry" role="listitem" key={entry.id}>
+                              <kbd>{keyGuideLabel(entry, platform)}</kbd>
+                              <span>{guideText.entries[entry.id as keyof typeof guideText.entries]}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  }
+                  const actions = shortcutGroups.get(group.id);
                   return actions ? (
-                    <section className="shortcut-help-group" aria-labelledby={'shortcut-group-' + category} key={category}>
-                      <h3 className="shortcut-help-group-title" id={'shortcut-group-' + category}>
-                        {ACTION_CATEGORY_LABELS[language][category]}
+                    <section className="shortcut-help-group" aria-labelledby={'shortcut-group-' + group.id} key={group.id}>
+                      <h3 className="shortcut-help-group-title" id={'shortcut-group-' + group.id}>
+                        {ACTION_CATEGORY_LABELS[language][group.id]}
                       </h3>
                       <div className="shortcut-help-entries" role="list">
                         {actions.map((action) => (

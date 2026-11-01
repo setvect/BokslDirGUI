@@ -163,6 +163,10 @@
 ## 6. Help/menu generation
 
 - 도움말은 registry에서 category, label, shortcut, menuPath를 읽어 생성
+- 레지스트리 밖 키: 전용 처리기가 맡는 키(목록 이동·폴더 트리 안·창·목록·화면 확대·우클릭 메뉴 키·끌기 수정 키·메뉴 안 이동)는 `src/actions/keyGuide.ts`의 표시 전용 정의로 같은 도움말에 묶음별 표시
+  - 실행 키를 새로 만들지 않음: 실제 처리는 `keyboardDispatch`·`menuModel`·`useFolderTrees`·`useCommanderKeyboard`·`pointerFileDrag`·각 대화상자 유지
+  - 플랫폼 표기(`Cmd`/`Ctrl`, `Opt`/`Alt`)는 항목별 정의, 메뉴 바로 열기 글자는 레지스트리 메뉴 이름에서 계산
+  - 도움말 기능 검색(`help.search`)은 실행 가능한 액션만 대상, 보조 키 미포함
 - 단축키 도움말은 넓은 창에서 이동·패널·파일·보기 제목을 각 열의 같은 시작선에 맞추고, 남은 범주를 열 높이가 비슷하도록 배치
 - 좁은 창에서는 열 수를 줄이며, 높이가 부족하면 도움말 목록이 스크롤
 - 도움말이 열려 있는 동안 화살표·Page Up/Down·Home/End는 파일 패널 대신 목록 스크롤에 적용
@@ -179,7 +183,8 @@
 
 - 모든 menu item은 유효한 action ID 참조
 - 모든 context menu item은 scope에 맞는 enablement 보유
-- help dialog의 shortcut 목록은 registry snapshot과 일치
+- help dialog의 shortcut 목록은 registry snapshot과 보조 키 정의의 합과 일치
+- 보조 키 정의의 목록 이동·화면 확대·메뉴 키는 실제 처리기(`handleMovementKey`·`handleZoomKey`·`handleTopMenuKeyDown`)가 처리(`keyGuide.test.ts`), 모든 항목은 한국어·영어 설명 보유
 - irreversible action은 confirm dialog 없이 command를 호출하지 않음
 - 메뉴 경로가 있는 액션은 `MENU_LAYOUT`의 한 묶음에 한 번씩 포함, 메뉴 경로 마디는 모든 언어의 번역 보유
 - 메뉴 항목 이름과 액션 이름 일치, 이름표 자체의 "…" 금지

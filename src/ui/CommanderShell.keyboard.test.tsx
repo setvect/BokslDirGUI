@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import platformFixtures from '../tauri/fixtures/platform.json';
+import { KEY_GUIDE } from '../actions/keyGuide';
 import { ACTION_BY_ID, ACTIONS, actionVisibleOnPlatform } from '../actions/registry';
 import { useOperationStore } from '../operations/operationStore';
 import { INITIAL_FOCUS_INDEX, INITIAL_SELECTED_PATHS, SAMPLE_LISTINGS } from './commanderFixture';
@@ -154,14 +155,33 @@ describe('CommanderShell keyboard', () => {
     const dialog = await screen.findByRole('dialog', { name: '단축키 도움말' });
     const scrollArea = within(dialog).getByRole('region', { name: '단축키 목록' });
     expect(document.activeElement).toBe(scrollArea);
+    // 레지스트리 단축키와 전용 처리기 키(목록 이동·폴더 트리·창·확대·우클릭 메뉴·끌기·메뉴)를 함께 표시
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(
-      ACTIONS.filter((action) => actionVisibleOnPlatform(action) && (action.shortcutLabel || action.keyboardBindings?.length)).length,
+      ACTIONS.filter((action) => actionVisibleOnPlatform(action) && (action.shortcutLabel || action.keyboardBindings?.length)).length
+      + KEY_GUIDE.reduce((count, group) => count + group.entries.length, 0),
     );
     expect(within(dialog).getByRole('heading', { name: '이동' })).toBeTruthy();
     expect(within(dialog).getByRole('heading', { name: '파일' })).toBeTruthy();
     expect([...dialog.querySelectorAll('.shortcut-help-column')].map((column) =>
-      column.querySelector('h3')?.textContent,
-    )).toEqual(['이동', '패널', '파일', '보기']);
+      [...column.querySelectorAll('h3')].map((heading) => heading.textContent),
+    )).toEqual([
+      ['이동', '목록 이동'],
+      ['패널', '선택', '메뉴', '창·목록'],
+      ['파일', '도움말', '화면 확대', '우클릭 메뉴·끌기'],
+      ['보기', '압축', '폴더 트리 안'],
+    ]);
+    const treeGroup = within(dialog).getByRole('heading', { name: '폴더 트리 안' }).closest('section')!;
+    expect([...treeGroup.querySelectorAll('.shortcut-help-entry')].map((entry) => entry.textContent)).toEqual([
+      '↑/↓/k/j폴더 이동·패널 따라감',
+      '→/l펼치기·하위 폴더로',
+      '←/h접기·상위 폴더로',
+      'PageUp/PageDown한 쪽 이동',
+      'Home/End처음·끝',
+      'Enter이동하고 목록으로',
+      'Esc취소하고 목록으로',
+    ]);
+    expect(within(dialog).getByText('Cmd+U/Cmd+D')).toBeTruthy();
+    expect(within(dialog).getByText('Opt+F/E/V/G/R/A/S/H')).toBeTruthy();
 
     Object.defineProperties(scrollArea, {
       clientHeight: { configurable: true, value: 200 },

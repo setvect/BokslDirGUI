@@ -62,7 +62,7 @@ App
 | `BottomStatusStrip` | 파일/선택/활성 패널 상태와 짧은 transient status를 한 줄로 표시 | panel/action state | 조작을 막는 팝업 표시 |
 | `HotkeyStrip` | 화면 폭/확대 배율에 따라 우선순위 action hint를 가능한 만큼 표시 | action registry + measured width | 실제 action source 중복, 고정 개수 표시 |
 | `ShellCommandDialog` | 현재 경로 기준 shell command 입력/result 표시, backend `prepare_shell_command` → `run_shell_command`의 확정 입력·단회 토큰 전달 흐름 소유 | action/operation/settings state | 설정 비활성 상태에서 명령 실행 |
-| `HelpDialog` | action registry 기반 도움말/검색/About | action registry | 하드코딩 단축키 목록 |
+| `HelpDialog` | action registry 기반 도움말/검색/About, 레지스트리 밖 키는 보조 키 정의(`keyGuide`)로 함께 표시 | action registry + key guide | 화면 안의 하드코딩 단축키 목록 |
 
 
 ### Operation UI split

@@ -176,6 +176,12 @@ describe('CommanderShell folder tree (FR-42)', () => {
     await waitFor(() => expect(panelPath('left')).toBe('/work/app'));
     expect(treeOf('left')!.className).not.toContain('is-focused');
 
+    // Esc는 목록으로 복귀
+    await user.keyboard('gt');
+    expect(treeOf('left')!.className).toContain('is-focused');
+    await user.keyboard('{Escape}');
+    expect(treeOf('left')!.className).not.toContain('is-focused');
+
     // Tab은 그대로 좌우 패널 전환, 트리 키보드는 해제
     await user.keyboard('gt');
     expect(treeOf('left')!.className).toContain('is-focused');
