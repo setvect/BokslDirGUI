@@ -33,9 +33,9 @@ const folder = (path: string): FileEntry => ({
   isHidden: nameOf(path).startsWith('.'),
 });
 // 패널 목록은 숨김 폴더 없이(숨김 파일 꺼짐)
-const listingOf = (panelId: PanelId, path: string) => createDirectoryListing(panelId, path, [
+const listingOf = (panelId: PanelId, path: string, folders = FOLDERS) => createDirectoryListing(panelId, path, [
   ...(path === '/' ? [] : [{ ...folder(parentPathOf(path)), name: '..', isVirtual: true }]),
-  ...(FOLDERS[path] ?? []).filter((child) => !nameOf(child).startsWith('.')).map(folder),
+  ...(folders[path] ?? []).filter((child) => !nameOf(child).startsWith('.')).map(folder),
   { ...testEntry(path === '/' ? '' : path, 'README.md') },
 ]);
 
@@ -48,14 +48,20 @@ const treeRow = (panelId: PanelId, name: string) =>
   treeRows(panelId).find((row) => row.querySelector('.folder-tree-name')?.textContent === name) ?? null;
 const panelPath = (panelId: PanelId) => panelOf(panelId).querySelector('.path-input')?.textContent;
 
-const setup = (treeVisible: Record<PanelId, boolean> = { left: true, right: false }, leftPath = '/work/app') => {
-  const listings = { left: listingOf('left', leftPath), right: listingOf('right', '/work/docs') };
-  const overrides = Object.fromEntries(Object.keys(FOLDERS).map((path) => [path, listingOf('left', path)]));
+const setup = ({ treeVisible = { left: true, right: false }, leftPath = '/work/app', roots = ['/'], folders = FOLDERS }: {
+  treeVisible?: Record<PanelId, boolean>;
+  leftPath?: string;
+  // 위치 목록의 맨 위 항목(macOS는 `/`와 `/Volumes/…` 볼륨)
+  roots?: string[];
+  folders?: Record<string, string[]>;
+} = {}) => {
+  const listings = { left: listingOf('left', leftPath, folders), right: listingOf('right', '/work/docs', folders) };
+  const overrides = Object.fromEntries(Object.keys(folders).map((path) => [path, listingOf('left', path, folders)]));
   const listSubdirs = vi.fn(async ({ path }: { path: string }) => ({
     ok: true as const,
-    data: { path, entries: (FOLDERS[path] ?? []).map(folder) },
+    data: { path, entries: (folders[path] ?? []).map(folder) },
   }));
-  const listLocations = vi.fn(async () => ({ ok: true as const, data: { home: '/work', roots: ['/'], recent: [], bookmarks: [] } }));
+  const listLocations = vi.fn(async () => ({ ok: true as const, data: { home: '/work', roots, recent: [], bookmarks: [] } }));
   const dataSource: PanelDataSource = { ...createFixturePanelDataSource(listings, overrides), listSubdirs, listLocations };
   const readListing = dataSource.listDir.bind(dataSource);
   const listDir = vi.spyOn(dataSource, 'listDir');
@@ -103,7 +109,7 @@ describe('CommanderShell folder tree (FR-42)', () => {
 
   it('shows each panel tree independently from its path bar button and t r, and saves visibility', async () => {
     const user = userEvent.setup();
-    const { saveSettings, settingsLoaded } = setup({ left: false, right: false });
+    const { saveSettings, settingsLoaded } = setup({ treeVisible: { left: false, right: false } });
     await settingsLoaded();
     expect(treeOf('left')).toBeNull();
 
@@ -223,8 +229,34 @@ describe('CommanderShell folder tree (FR-42)', () => {
     await waitFor(() => expect(treeRow('left', 'work')?.getAttribute('aria-selected')).toBe('true'));
   });
 
+  it('lists a volume once at the top instead of again inside its parent folder', async () => {
+    const user = userEvent.setup();
+    setup({
+      leftPath: '/Volumes/ssd/work',
+      roots: ['/', '/Volumes/ssd'],
+      folders: {
+        '/': ['/Volumes', '/work'],
+        '/Volumes': ['/Volumes/ssd'],
+        '/Volumes/ssd': ['/Volumes/ssd/work'],
+        '/Volumes/ssd/work': [],
+        '/work': [],
+        '/work/docs': [],
+      },
+    });
+    // 위치 목록을 읽기 전 임시로 `/`·Volumes를 펼치지 않음
+    await waitFor(() => expect(treeLines('left')).toEqual(['/', 'ssd', '  work']));
+
+    await user.click(treeRow('left', '/')!.querySelector('.folder-tree-toggle')!);
+    await waitFor(() => expect(treeRow('left', 'Volumes')).toBeTruthy());
+    await user.click(treeRow('left', 'Volumes')!.querySelector('.folder-tree-toggle')!);
+    await waitFor(() => expect(treeRow('left', 'Volumes')!.getAttribute('aria-expanded')).toBeNull());
+    expect(treeLines('left')).toEqual(['/', '  Volumes', '  work', 'ssd', '  work']);
+    const paths = treeRows('left').map((row) => row.dataset.treePath);
+    expect(new Set(paths).size).toBe(paths.length);
+  });
+
   it('shows a remote panel tree from the server root and dims it while not connected', async () => {
-    const { listSubdirs } = setup({ left: true, right: false }, 'sftp://me@host/home/me');
+    const { listSubdirs } = setup({ leftPath: 'sftp://me@host/home/me' });
     await waitFor(() => expect(treeLines('left')).toEqual(['me@host', '  home', '    me']));
     expect(listSubdirs.mock.calls.map(([input]) => input.path).sort()).toEqual(['sftp://me@host/', 'sftp://me@host/home']);
     expect(treeOf('left')!.className).toContain('is-disconnected');

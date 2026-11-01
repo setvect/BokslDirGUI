@@ -86,17 +86,22 @@ export function useFolderTrees(deps: FolderTreeDependencies) {
 
   const visible = { left: treeSettings.left.visible, right: treeSettings.right.visible };
   const panelPaths = { left: deps.panelState.left.path, right: deps.panelState.right.path };
+  // 로컬 트리는 위치 목록(드라이브·볼륨)을 읽은 뒤에 만듦. 먼저 만들면 맨 위 항목을 모른 채 `/`부터 펼친 상태가
+  // 남아 볼륨이 맨 위와 `/Volumes` 아래에 함께 나타남
+  const rootsReady = (key: string) => key !== LOCAL_FOLDER_TREE_SPACE || localRoots !== null;
   const rootsFor = (key: string) => (key === LOCAL_FOLDER_TREE_SPACE ? localRoots ?? [] : [key]);
 
   // 상태에 아직 없으면(처음 켠 직후) 같은 규칙으로 만든 임시 공간을 그림
   const spaceFor = (panelId: PanelId) => {
     const path = deps.panelState[panelId].path;
     const key = folderTreeSpaceKey(path);
+    if (!rootsReady(key)) return null;
     return spaces[panelId][key] ?? revealFolderTreePath(createFolderTreeSpace(key, rootsFor(key)), path);
   };
   const rowsFor = (panelId: PanelId): FolderTreeRow[] => {
     if (!visible[panelId]) return [];
     const space = spaceFor(panelId);
+    if (!space) return [];
     const panel = deps.panelState[panelId];
     return flattenFolderTree(space, { showHidden: panel.showHidden, chain: folderTreeChain(space.roots, panel.path) });
   };
@@ -171,9 +176,9 @@ export function useFolderTrees(deps: FolderTreeDependencies) {
           byKey[LOCAL_FOLDER_TREE_SPACE] = withFolderTreeRoots(local, localRoots);
           changed = true;
         }
-        if (visible[panelId]) {
-          const path = panelPaths[panelId];
-          const key = folderTreeSpaceKey(path);
+        const path = panelPaths[panelId];
+        const key = folderTreeSpaceKey(path);
+        if (visible[panelId] && rootsReady(key)) {
           const revealed = revealFolderTreePath(byKey[key] ?? createFolderTreeSpace(key, rootsFor(key)), path);
           if (revealed !== byKey[key]) {
             byKey[key] = revealed;
@@ -196,7 +201,7 @@ export function useFolderTrees(deps: FolderTreeDependencies) {
       requestsRef.current.delete(requestKeyOf(panelId, key, panel.path));
       updateSpace(panelId, key, (space) => withFolderTreeListing(space, panel.listing, panel.showHidden));
     }
-  }, [visible.left, visible.right, listings.left, listings.right, deps.panelState.left.loading, deps.panelState.right.loading]);
+  }, [visible.left, visible.right, listings.left, listings.right, deps.panelState.left.loading, deps.panelState.right.loading, localRoots]);
 
   // 펼쳐져 보이는데 아직 읽지 않은 폴더 읽기
   const showHidden = { left: deps.panelState.left.showHidden, right: deps.panelState.right.showHidden };

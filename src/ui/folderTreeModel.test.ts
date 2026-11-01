@@ -156,4 +156,22 @@ describe('folder tree model', () => {
     expect(pathIsSameOrInside('/x/a.zip:/in', '/x/a.zip:/')).toBe(true);
     expect(pathIsSameOrInside('sftp://me@host/home/me', 'sftp://me@host/home')).toBe(true);
   });
+
+  it('shows a folder that is also a top item only once, at the top', () => {
+    let space = createFolderTreeSpace('local', ['/', '/Volumes/ssd']);
+    space = setFolderTreeExpanded(space, '/', true);
+    space = withFolderTreeChildren(space, '/', [folder('/Volumes')]);
+    space = setFolderTreeExpanded(space, '/Volumes', true);
+    space = withFolderTreeChildren(space, '/Volumes', [
+      folder('/Volumes/Macintosh HD', { kind: 'symlink', symlinkTargetIsDirectory: true }),
+      folder('/Volumes/ssd'),
+    ]);
+    space = setFolderTreeExpanded(space, '/Volumes/ssd', true);
+    space = withFolderTreeChildren(space, '/Volumes/ssd', [folder('/Volumes/ssd/work')]);
+
+    const rows = flattenFolderTree(space, { showHidden: false, chain: [] });
+    expect(rows.map((row) => [row.path, row.depth])).toEqual([
+      ['/', 0], ['/Volumes', 1], ['/Volumes/Macintosh HD', 2], ['/Volumes/ssd', 0], ['/Volumes/ssd/work', 1],
+    ]);
+  });
 });

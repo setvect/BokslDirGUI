@@ -236,19 +236,24 @@ const insertByName = (paths: readonly string[], path: string, nodes: FolderTreeS
 };
 
 // 보이는 줄 목록. 숨김 폴더는 패널 설정을 따르되 패널 경로까지의 폴더는 항상 표시,
-// 읽기 전이거나 목록에 없는 경로상의 폴더(열린 압축 파일 포함)는 그 자리에 끼워 표시
+// 읽기 전이거나 목록에 없는 경로상의 폴더(열린 압축 파일 포함)는 그 자리에 끼워 표시.
+// 맨 위 항목인 폴더(macOS `/Volumes/…` 볼륨)는 상위 폴더 아래에 다시 넣지 않고, 같은 경로는 한 번만 표시
+// (화면 줄의 키가 경로라 중복되면 갱신 때 지난 줄이 남아 이름이 겹쳐 보임)
 export const flattenFolderTree = (
   space: FolderTreeSpace,
   options: { showHidden: boolean; chain: readonly string[] },
 ): FolderTreeRow[] => {
   const onChain = new Set(options.chain);
   const nextOnChain = new Map(options.chain.slice(0, -1).map((path, index) => [path, options.chain[index + 1]]));
+  const roots = new Set(space.roots);
+  const shown = new Set<string>();
   const rows: FolderTreeRow[] = [];
 
   const visibleChildren = (path: string, node: FolderTreeNode) => {
     let children = (node.children ?? []).filter((child) => {
       const childNode = space.nodes[child];
-      return Boolean(childNode) && (options.showHidden || !childNode.entry.isHidden || onChain.has(child));
+      return Boolean(childNode) && !roots.has(child)
+        && (options.showHidden || !childNode.entry.isHidden || onChain.has(child));
     });
     const forced = nextOnChain.get(path);
     if (forced && space.nodes[forced] && !children.includes(forced)) {
@@ -259,7 +264,8 @@ export const flattenFolderTree = (
 
   const visit = (path: string, depth: number, parentPath: string | null) => {
     const node = space.nodes[path];
-    if (!node || depth > MAX_TREE_DEPTH) return;
+    if (!node || depth > MAX_TREE_DEPTH || shown.has(path)) return;
+    shown.add(path);
     const isLink = node.entry.kind === 'symlink';
     const children = isLink ? [] : visibleChildren(path, node);
     const expanded = !isLink && space.expanded.has(path);
